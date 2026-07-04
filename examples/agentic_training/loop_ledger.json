@@ -6,11 +6,9 @@
       {
         "action": "approve",
         "available": false,
-        "blocked_reason_count": 3,
+        "blocked_reason_count": 1,
         "blocked_reasons": [
-          "latest_iteration_not_ready_for_governance_review",
-          "missing_promotion_decision",
-          "missing_promotion_ledger"
+          "latest_iteration_not_ready_for_governance_review"
         ],
         "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
       },
@@ -43,7 +41,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 2 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 0 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,7 +55,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 33,
+      "artifact_count": 35,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -76,7 +74,7 @@
           "group": "evidence"
         },
         {
-          "count": 0,
+          "count": 2,
           "group": "governance"
         },
         {
@@ -204,6 +202,14 @@
         {
           "count": 1,
           "role": "model_grader_gate"
+        },
+        {
+          "count": 1,
+          "role": "promotion_decision"
+        },
+        {
+          "count": 1,
+          "role": "promotion_ledger"
         },
         {
           "count": 1,
@@ -501,29 +507,27 @@
         "weights_updated_by_flight_recorder": false
       },
       "governance": {
-        "artifact_count": 0,
+        "artifact_count": 2,
         "cloud_jobs_started": false,
         "group": "governance",
         "paid_model_grader_calls_started": false,
-        "promotion_decision_present": false,
-        "promotion_ledger_present": false,
+        "promotion_decision_present": true,
+        "promotion_ledger_present": true,
         "roles_missing": [
           "agentic_loop_governance_receipt",
-          "promotion_decision",
-          "promotion_ledger",
           "promotion_alias_apply",
           "promotion_rollback_receipt"
         ],
-        "roles_present": [],
+        "roles_present": [
+          "promotion_decision",
+          "promotion_ledger"
+        ],
         "rollback_receipt_present": false,
         "weights_updated_by_flight_recorder": false
       },
       "index": 0,
       "iteration_id": "demo-loop-001",
-      "missing_phase_inputs": [
-        "promotion_decision",
-        "promotion_ledger"
-      ],
+      "missing_phase_inputs": [],
       "next_actions": {
         "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
         "requires_governance_decision": true,
@@ -534,15 +538,11 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 2,
-          "id": "blocked"
-        },
-        {
           "count": 1,
           "id": "planned"
         },
         {
-          "count": 10,
+          "count": 12,
           "id": "ready"
         }
       ],
@@ -560,8 +560,8 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "19c252d21209d5456637873e4a7f97c98188ab42810f5c1c093fabde873ef649",
-      "size_bytes": 51769,
+      "sha256": "99dc43c7710f802cb0ef5eb5efc11dd992dc0b21d93fd42ebd62bc1bf668c0cf",
+      "size_bytes": 53058,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -597,7 +597,7 @@
         "group": "evidence"
       },
       {
-        "count": 0,
+        "count": 2,
         "group": "governance"
       },
       {
@@ -628,10 +628,10 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 2,
+    "latest_missing_phase_input_count": 0,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
-    "promotion_ready_count": 0,
+    "promotion_ready_count": 1,
     "readiness_counts": [
       {
         "count": 1,
@@ -686,19 +686,14 @@
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,
-    "missing_artifact_group_count": 1,
-    "missing_artifact_groups": [
-      "governance"
-    ],
-    "missing_phase_input_count": 2,
-    "missing_phase_inputs": [
-      "promotion_decision",
-      "promotion_ledger"
-    ],
+    "missing_artifact_group_count": 0,
+    "missing_artifact_groups": [],
+    "missing_phase_input_count": 0,
+    "missing_phase_inputs": [],
     "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
     "next_action_scheduled": false,
-    "promotion_decision_present": false,
-    "promotion_ledger_present": false,
+    "promotion_decision_present": true,
+    "promotion_ledger_present": true,
     "readiness": "planned_fail_closed",
     "ready_for_governance_review": false,
     "recommendation": "collect_missing_receipts_before_live_execution",
@@ -706,7 +701,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 2 missing phase input(s) across 1 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 0 missing phase input(s) across 0 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

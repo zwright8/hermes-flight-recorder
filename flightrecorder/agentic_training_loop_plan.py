@@ -253,6 +253,7 @@ def build_agentic_training_loop_plan(
     refs = _artifact_refs(normalized_artifact_paths, preserve_paths, output_path)
     cloud_training_receipt_state = _cloud_training_receipt_state(normalized_artifact_paths)
     external_eval_receipt_state = _external_eval_receipt_state(normalized_artifact_paths)
+    promotion_governance_state = _promotion_governance_state(normalized_artifact_paths)
     cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
     phases = [_phase_row(spec, refs) for spec in PHASES]
@@ -420,9 +421,15 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "governance_required_for_promotion",
-        "promotion_decision" in refs and "promotion_ledger" in refs,
-        {"promotion_decision_present": "promotion_decision" in refs, "promotion_ledger_present": "promotion_ledger" in refs},
-        {"promotion_decision_present": True, "promotion_ledger_present": True},
+        promotion_governance_state["passed"],
+        promotion_governance_state,
+        {
+            "promotion_decision_present": True,
+            "promotion_decision_schema_valid": True,
+            "promotion_decision_passed": True,
+            "promotion_ledger_present": True,
+            "promotion_ledger_schema_valid": True,
+        },
     )
     failed_checks = [check for check in checks if not check["passed"]]
     missing_phase_inputs = sorted({missing for phase in phases for missing in phase["missing_required_artifacts"]})
@@ -779,6 +786,30 @@ def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[
         "weights_updated_by_flight_recorder": weights_updated_by_flight_recorder,
         "cost_incurred_usd": cost_incurred_usd,
         "fail_closed": fail_closed,
+    }
+
+
+def _promotion_governance_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    decision_records = _payload_records(artifact_paths, "promotion_decision")
+    ledger_records = _payload_records(artifact_paths, "promotion_ledger")
+    decision_payloads = [record["payload"] for record in decision_records]
+    ledger_payloads = [record["payload"] for record in ledger_records]
+    decision_schema_valid = bool(decision_payloads) and all(
+        payload.get("schema_version") == "hfr.promotion_decision.v1" for payload in decision_payloads
+    )
+    decision_passed = bool(decision_payloads) and all(payload.get("passed") is True for payload in decision_payloads)
+    ledger_schema_valid = bool(ledger_payloads) and all(
+        payload.get("schema_version") == "hfr.promotion_ledger.v1" for payload in ledger_payloads
+    )
+    return {
+        "promotion_decision_present": bool(decision_payloads),
+        "promotion_decision_count": len(decision_payloads),
+        "promotion_decision_schema_valid": decision_schema_valid,
+        "promotion_decision_passed": decision_passed,
+        "promotion_ledger_present": bool(ledger_payloads),
+        "promotion_ledger_count": len(ledger_payloads),
+        "promotion_ledger_schema_valid": ledger_schema_valid,
+        "passed": decision_schema_valid and decision_passed and ledger_schema_valid,
     }
 
 

@@ -322,18 +322,19 @@ flightrecorder agentic-loop plan \
   --improvement-plan examples/agentic_training/iteration_ledgers/improvement_plan.json \
   --improvement-ledger examples/agentic_training/iteration_ledgers/improvement_ledger.json \
   --action-ledger examples/agentic_training/iteration_ledgers/action_ledger.json \
+  --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_plan.json
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include promotion receipts, and because external adapter dependencies
-are intentionally not enabled. It does bind loop-local rollout plan and mock
-receipt, harness/evidence handoff artifacts, a managed mock serving lifecycle,
-nested model-grader
-review, rejection-sampling, dataset-curation, training-export,
+binds a blocked promotion decision and promotion ledger while external adapter
+dependencies are intentionally not enabled. It does bind loop-local rollout plan
+and mock receipt, harness/evidence handoff artifacts, a managed mock serving
+lifecycle, nested model-grader review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
-action-ledger, and improvement-ledger receipts without provider, dataset-write,
+action-ledger, improvement-ledger, and promotion-governance receipts without provider, dataset-write,
 benchmark-launch, or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
@@ -376,6 +377,9 @@ flightrecorder validate \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
   --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
+  --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --decision-gate examples/agentic_training/promotion_governance/promotion_decision_gate.json \
+  --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 

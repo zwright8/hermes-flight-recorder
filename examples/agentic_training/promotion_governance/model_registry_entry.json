@@ -1,0 +1,54 @@
+{
+  "candidate": {
+    "id": "local/mock-candidate",
+    "serving_profile": "examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_profile.json",
+    "source": "examples/agentic_training/completed_result.json"
+  },
+  "candidate_id": "local/mock-candidate",
+  "entry_id": "local-mock-candidate",
+  "license_status": "known",
+  "links": {
+    "adapters": [],
+    "datasets": [
+      {
+        "id": "agentic-training-export",
+        "kind": "training_export",
+        "recorded_at": "2026-07-03T00:00:00Z",
+        "status": "ready"
+      }
+    ],
+    "evals": [
+      {
+        "id": "heldout-eval",
+        "kind": "eval_summary",
+        "recorded_at": "2026-07-03T00:00:00Z",
+        "status": "blocked_external_adapters"
+      }
+    ],
+    "promotion_decisions": [],
+    "serving_probes": [
+      {
+        "id": "managed-mock-serving",
+        "kind": "serving_lifecycle",
+        "recorded_at": "2026-07-03T00:00:00Z",
+        "status": "ready"
+      }
+    ],
+    "training_runs": [
+      {
+        "id": "demo-loop-001-training",
+        "kind": "agentic_training_result",
+        "recorded_at": "2026-07-03T00:00:00Z",
+        "status": "completed"
+      }
+    ]
+  },
+  "notes": [
+    "Trace-only local candidate for the fail-closed loop fixture; no alias movement is authorized."
+  ],
+  "registered_at": "2026-07-03T00:00:00Z",
+  "schema_version": "hfr.model_registry_entry.v1",
+  "status": "promotion_blocked_pending_eval_governance",
+  "training_eligible": false,
+  "updated_at": "2026-07-03T00:00:00Z"
+}

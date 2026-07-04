@@ -823,7 +823,9 @@ fail-closed until optional dependencies are explicitly enabled. The
 `evidence_handoff/` fixture records a compact passing harness result and ready
 evidence bundle for a deterministic prompt-injection scenario. The
 `serving_lifecycle/managed_mock/` fixture records a normalized mock serving
-preflight with no model download, provider call, or live endpoint exposure.
+preflight with no model download, provider call, or live endpoint exposure. The
+`promotion_governance/` fixture records a blocked promotion decision and ledger
+that hold aliases until compare and promotion-history gates are real.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -856,6 +858,7 @@ flightrecorder agentic-loop plan \
   --external-eval-receipt runs/external_eval_receipt.json \
   --eval-summary runs/eval_summary.json \
   --promotion-decision runs/promotion_decision.json \
+  --promotion-ledger runs/promotion_ledger.json \
   --out runs/agentic_training_loop_plan.json
 
 flightrecorder validate \

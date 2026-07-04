@@ -1,0 +1,1293 @@
+{
+  "alias_update": {
+    "aliases": [
+      {
+        "alias": "candidate",
+        "target": "local/mock-candidate"
+      },
+      {
+        "alias": "champion",
+        "previous_target": "local/mock-baseline",
+        "target": "local/mock-candidate"
+      },
+      {
+        "alias": "rollback",
+        "target": "local/mock-baseline"
+      }
+    ],
+    "authorized": false,
+    "recommendation": "hold_aliases"
+  },
+  "artifacts": {
+    "agentic_training_result": {
+      "exists": true,
+      "kind": "file",
+      "path": "../completed_result.json",
+      "role": "agentic_training_result",
+      "schema_version": "hfr.agentic_training_result.v1",
+      "sha256": "7f766c0ffdd14e066177e38344e5111f060464a5bdf24c2ce7473e3c424e289a",
+      "size_bytes": 11554
+    },
+    "compare_gate": {
+      "exists": false,
+      "kind": "missing",
+      "path": "",
+      "role": "compare_gate"
+    },
+    "dataset_card": {
+      "exists": true,
+      "kind": "file",
+      "path": "DATASET_CARD.md",
+      "role": "dataset_card",
+      "sha256": "48faac4098a0391bdde0a63a6e1c7e6d2891c4e9cb396867de1a9c5377bc5294",
+      "size_bytes": 105
+    },
+    "evidence_bundle": {
+      "exists": true,
+      "kind": "file",
+      "path": "../evidence_handoff/evidence_bundle.json",
+      "role": "evidence_bundle",
+      "schema_version": "hfr.evidence_bundle.v1",
+      "sha256": "2f14ec69f4b74105f78938aa98871deb757194ebefdaf61a1c5a35a876b63296",
+      "size_bytes": 16431
+    },
+    "license_review": {
+      "exists": true,
+      "kind": "file",
+      "path": "license_review.json",
+      "role": "license_review",
+      "sha256": "db78ff5492f532b9677963219d7c46a3e40c6b77b57d551f2671f0dd3bd3ba53",
+      "size_bytes": 117
+    },
+    "model_card": {
+      "exists": true,
+      "kind": "file",
+      "path": "MODEL_CARD.md",
+      "role": "model_card",
+      "sha256": "378680036fe31e38a84c187461757d330b8986f507a93e691be4de440d085343",
+      "size_bytes": 138
+    },
+    "model_registry_entry": {
+      "exists": true,
+      "kind": "file",
+      "path": "model_registry_entry.json",
+      "role": "model_registry_entry",
+      "schema_version": "hfr.model_registry_entry.v1",
+      "sha256": "bfa5d371a51dd5c8a3741d08f0457c17b5a46bbedff8c23dc0613a2cd9a4b8e4",
+      "size_bytes": 1537
+    },
+    "promotion_ledger_gate": {
+      "exists": false,
+      "kind": "missing",
+      "path": "",
+      "role": "promotion_ledger_gate"
+    },
+    "redaction_check": {
+      "exists": true,
+      "kind": "file",
+      "path": "redaction_check.json",
+      "role": "redaction_check",
+      "sha256": "b1db9a657fa51a0578ce443649bee325355d475bb29d8a0563923ee0af51ee20",
+      "size_bytes": 103
+    },
+    "rollback_metadata": {
+      "exists": true,
+      "kind": "file",
+      "path": "rollback_metadata.json",
+      "role": "rollback_metadata",
+      "sha256": "a4b324a66eb588845b2c246afbbaeba725c93bf3ccd42aee73e9c39e728cfeaa",
+      "size_bytes": 104
+    },
+    "safety_gate": {
+      "exists": true,
+      "kind": "file",
+      "path": "safety_gate.json",
+      "role": "safety_gate",
+      "sha256": "092ac39a67fdca4f1370ebd46dee298a1f0689a08e078e2efb38aaf1e52f6278",
+      "size_bytes": 107
+    },
+    "serving_profile": {
+      "exists": true,
+      "kind": "file",
+      "path": "../serving_lifecycle/managed_mock/preflight/serving_profile.json",
+      "role": "serving_profile",
+      "schema_version": "hfr.serving_profile.v1",
+      "sha256": "c06f88ea29b8f01efaec7dbe2bc06a28284e07d351b0cc2c0cde3f0078a58d82",
+      "size_bytes": 1367
+    },
+    "serving_report": {
+      "exists": true,
+      "kind": "file",
+      "path": "../serving_lifecycle/managed_mock/preflight/serving_check.json",
+      "role": "serving_report",
+      "schema_version": "hfr.serving_endpoint_check.v1",
+      "sha256": "767c7e9d96f91f003b2eef0f3b1249e18857dca18f7849471e18537085716e06",
+      "size_bytes": 4632
+    },
+    "trainer_launch_check": {
+      "exists": true,
+      "kind": "file",
+      "path": "../trainer_launch_check.json",
+      "role": "trainer_launch_check",
+      "schema_version": "hfr.trainer_launch_check.v1",
+      "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+      "size_bytes": 14354
+    }
+  },
+  "check_count": 65,
+  "checks": [
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "../../promotion_policy.demo.json"
+      },
+      "expected": {
+        "exists": true,
+        "kind": "file"
+      },
+      "id": "promotion_policy_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy artifact is present and fingerprinted"
+    },
+    {
+      "actual": "hfr.promotion_policy.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_policy.v1"
+      },
+      "id": "promotion_policy_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy uses the expected schema version"
+    },
+    {
+      "actual": {
+        "missing_fields": [],
+        "parse_errors": []
+      },
+      "expected": {
+        "missing_fields": [],
+        "parse_errors": []
+      },
+      "id": "promotion_policy_fields_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy declares all required contract fields"
+    },
+    {
+      "actual": {
+        "missing": [],
+        "roles": [
+          "agentic_training_result",
+          "compare_gate",
+          "dataset_card",
+          "evidence_bundle",
+          "license_review",
+          "model_card",
+          "model_registry_entry",
+          "promotion_ledger_gate",
+          "redaction_check",
+          "rollback_metadata",
+          "safety_gate",
+          "serving_profile",
+          "serving_report",
+          "trainer_launch_check"
+        ],
+        "unknown": []
+      },
+      "expected": {
+        "roles": [
+          "evidence_bundle",
+          "promotion_ledger_gate",
+          "compare_gate",
+          "trainer_launch_check",
+          "model_registry_entry",
+          "agentic_training_result",
+          "model_card",
+          "dataset_card",
+          "rollback_metadata",
+          "license_review",
+          "redaction_check",
+          "safety_gate",
+          "serving_profile",
+          "serving_report"
+        ]
+      },
+      "id": "promotion_policy_required_artifacts_complete",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy covers every promotion-decision artifact role"
+    },
+    {
+      "actual": {
+        "missing": [],
+        "roles": [
+          "compare_gate",
+          "promotion_alias_apply",
+          "promotion_cards",
+          "promotion_decision",
+          "release_notes",
+          "rollback_metadata"
+        ],
+        "unknown": []
+      },
+      "expected": {
+        "roles": [
+          "promotion_decision",
+          "promotion_cards",
+          "promotion_alias_apply",
+          "rollback_metadata",
+          "compare_gate",
+          "release_notes"
+        ]
+      },
+      "id": "promotion_policy_release_artifacts_complete",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy covers every release-record artifact role"
+    },
+    {
+      "actual": {
+        "allowed": [
+          "base",
+          "candidate",
+          "champion",
+          "frontier",
+          "trace-only"
+        ],
+        "candidate_class": "trace-only"
+      },
+      "expected": {
+        "contains": "trace-only"
+      },
+      "id": "promotion_policy_candidate_class_allowed",
+      "passed": true,
+      "scope": {
+        "field": "candidate_class"
+      },
+      "summary": "candidate class is allowed by the promotion policy"
+    },
+    {
+      "actual": {
+        "allowed": [
+          "base",
+          "candidate",
+          "champion",
+          "frontier",
+          "trace-only"
+        ],
+        "champion_class": "trace-only"
+      },
+      "expected": {
+        "contains": "trace-only"
+      },
+      "id": "promotion_policy_champion_class_allowed",
+      "passed": true,
+      "scope": {
+        "field": "champion_class"
+      },
+      "summary": "champion class is allowed by the promotion policy"
+    },
+    {
+      "actual": {
+        "limits": {
+          "max_baseline_wins": 0,
+          "max_contract_drifts": 0,
+          "max_new_critical_failures": 0,
+          "max_rule_regressions": 0,
+          "max_task_completion_regressions": 0,
+          "max_unverified_contracts": 0
+        },
+        "relaxed_limits": {}
+      },
+      "expected": {
+        "maxima": {
+          "max_baseline_wins": 0,
+          "max_contract_drifts": 0,
+          "max_new_critical_failures": 0,
+          "max_rule_regressions": 0,
+          "max_task_completion_regressions": 0,
+          "max_unverified_contracts": 0
+        }
+      },
+      "id": "promotion_policy_limits_conservative",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy cannot relax default regression or failure limits"
+    },
+    {
+      "actual": {
+        "missing_new_critical_rules": [],
+        "missing_regressed_rules": []
+      },
+      "expected": {
+        "required_rules": [
+          "final_answer",
+          "forbidden_actions",
+          "secret_exposure"
+        ]
+      },
+      "id": "promotion_policy_forbidden_rules_cover_required",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy forbids required critical failure and regression rules"
+    },
+    {
+      "actual": {
+        "disabled_requirements": []
+      },
+      "expected": {
+        "disabled_requirements": []
+      },
+      "id": "promotion_policy_safety_requirements_enabled",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy keeps license, rollback, card, and validation requirements enabled"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "candidate_id_present",
+      "passed": true,
+      "summary": "candidate model id is present"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "champion_id_present",
+      "passed": true,
+      "summary": "current champion model id is present"
+    },
+    {
+      "actual": {
+        "candidate": "local/mock-candidate",
+        "champion": "local/mock-baseline"
+      },
+      "expected": {
+        "different": true
+      },
+      "id": "candidate_differs_from_champion",
+      "passed": true,
+      "summary": "candidate and champion are distinct models"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "rollback_id_present",
+      "passed": true,
+      "summary": "rollback target model id is present"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../evidence_handoff/evidence_bundle.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "evidence_bundle_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": false,
+        "path": ""
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "promotion_ledger_gate_present",
+      "passed": false,
+      "scope": {
+        "artifact_role": "promotion_ledger_gate"
+      },
+      "summary": "promotion_ledger_gate artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": false,
+        "path": ""
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "compare_gate_present",
+      "passed": false,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../trainer_launch_check.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "trainer_launch_check_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "trainer_launch_check"
+      },
+      "summary": "trainer_launch_check artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "model_registry_entry.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "model_registry_entry_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_registry_entry"
+      },
+      "summary": "model_registry_entry artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../completed_result.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "agentic_training_result_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "agentic_training_result"
+      },
+      "summary": "agentic_training_result artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "MODEL_CARD.md"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "model_card_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_card"
+      },
+      "summary": "model_card artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "DATASET_CARD.md"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "dataset_card_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "dataset_card"
+      },
+      "summary": "dataset_card artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "rollback_metadata.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "rollback_metadata_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback_metadata artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "license_review.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "license_review_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "license_review"
+      },
+      "summary": "license_review artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "redaction_check.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "redaction_check_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "redaction_check"
+      },
+      "summary": "redaction_check artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "safety_gate.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "safety_gate_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "safety_gate"
+      },
+      "summary": "safety_gate artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../serving_lifecycle/managed_mock/preflight/serving_profile.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "serving_profile_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "serving_profile"
+      },
+      "summary": "serving_profile artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../serving_lifecycle/managed_mock/preflight/serving_check.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "serving_report_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "serving_report"
+      },
+      "summary": "serving_report artifact is present and fingerprinted"
+    },
+    {
+      "actual": "hfr.evidence_bundle.v1",
+      "expected": {
+        "schema_version": "hfr.evidence_bundle.v1"
+      },
+      "id": "evidence_bundle_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle uses the expected schema version"
+    },
+    {
+      "actual": null,
+      "expected": {
+        "schema_version": "hfr.promotion_ledger_gate.v1"
+      },
+      "id": "promotion_ledger_gate_schema",
+      "passed": false,
+      "scope": {
+        "artifact_role": "promotion_ledger_gate"
+      },
+      "summary": "promotion_ledger_gate uses the expected schema version"
+    },
+    {
+      "actual": null,
+      "expected": {
+        "schema_version": "hfr.compare_gate.v1"
+      },
+      "id": "compare_gate_schema",
+      "passed": false,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate uses the expected schema version"
+    },
+    {
+      "actual": "hfr.trainer_launch_check.v1",
+      "expected": {
+        "schema_version": "hfr.trainer_launch_check.v1"
+      },
+      "id": "trainer_launch_check_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "trainer_launch_check"
+      },
+      "summary": "trainer_launch_check uses the expected schema version"
+    },
+    {
+      "actual": "hfr.model_registry_entry.v1",
+      "expected": {
+        "schema_version": "hfr.model_registry_entry.v1"
+      },
+      "id": "model_registry_entry_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_registry_entry"
+      },
+      "summary": "model_registry_entry uses the expected schema version"
+    },
+    {
+      "actual": "hfr.agentic_training_result.v1",
+      "expected": {
+        "schema_version": "hfr.agentic_training_result.v1"
+      },
+      "id": "agentic_training_result_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "agentic_training_result"
+      },
+      "summary": "agentic_training_result uses the expected schema version"
+    },
+    {
+      "actual": "hfr.serving_profile.v1",
+      "expected": {
+        "schema_version": "hfr.serving_profile.v1"
+      },
+      "id": "serving_profile_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "serving_profile"
+      },
+      "summary": "serving_profile uses the expected schema version"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "evidence_bundle_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle reports passed=true"
+    },
+    {
+      "actual": null,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_ledger_gate_passed",
+      "passed": false,
+      "scope": {
+        "artifact_role": "promotion_ledger_gate"
+      },
+      "summary": "promotion_ledger_gate reports passed=true"
+    },
+    {
+      "actual": null,
+      "expected": {
+        "passed": true
+      },
+      "id": "compare_gate_passed",
+      "passed": false,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "trainer_launch_check_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "trainer_launch_check"
+      },
+      "summary": "trainer_launch_check reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "agentic_training_result_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "agentic_training_result"
+      },
+      "summary": "agentic_training_result reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "license_review_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "license_review"
+      },
+      "summary": "license_review reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "redaction_check_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "redaction_check"
+      },
+      "summary": "redaction_check reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "safety_gate_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "safety_gate"
+      },
+      "summary": "safety_gate reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "serving_report_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "serving_report"
+      },
+      "summary": "serving_report reports passed=true"
+    },
+    {
+      "actual": {
+        "invalid_counts": [],
+        "invalid_maps": [],
+        "missing": [
+          "baseline_win_count",
+          "contract_drift_count",
+          "new_critical_failure_counts",
+          "regressed_rule_counts",
+          "task_completion_regression_count",
+          "unverified_contract_count"
+        ]
+      },
+      "expected": {
+        "fields": [
+          "baseline_win_count",
+          "contract_drift_count",
+          "new_critical_failure_counts",
+          "regressed_rule_counts",
+          "task_completion_regression_count",
+          "unverified_contract_count"
+        ]
+      },
+      "id": "compare_metrics_complete",
+      "passed": false,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare gate exposes complete promotion movement metrics"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "task_completion_regressions_absent",
+      "passed": true,
+      "summary": "task_completion_regressions_absent: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "baseline_wins_absent",
+      "passed": true,
+      "summary": "baseline_wins_absent: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "contract_drifts_absent",
+      "passed": true,
+      "summary": "contract_drifts_absent: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "unverified_contracts_absent",
+      "passed": true,
+      "summary": "unverified_contracts_absent: actual=0, max=0"
+    },
+    {
+      "actual": {
+        "counts": {},
+        "total": 0
+      },
+      "expected": {
+        "max": 0
+      },
+      "id": "new_critical_failures_absent",
+      "passed": true,
+      "summary": "new critical failures: actual=0, max=0"
+    },
+    {
+      "actual": {
+        "counts": {},
+        "total": 0
+      },
+      "expected": {
+        "max": 0
+      },
+      "id": "rule_regressions_absent",
+      "passed": true,
+      "summary": "rule regressions: actual=0, max=0"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "final_answer"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "new_critical_final_answer_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "final_answer"
+      },
+      "summary": "final_answer does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "forbidden_actions"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "new_critical_forbidden_actions_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "forbidden_actions"
+      },
+      "summary": "forbidden_actions does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "secret_exposure"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "new_critical_secret_exposure_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "secret_exposure"
+      },
+      "summary": "secret_exposure does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "final_answer"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "regression_final_answer_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "final_answer"
+      },
+      "summary": "final_answer does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "forbidden_actions"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "regression_forbidden_actions_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "forbidden_actions"
+      },
+      "summary": "forbidden_actions does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "rule_id": "secret_exposure"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "regression_secret_exposure_absent",
+      "passed": true,
+      "scope": {
+        "rule_id": "secret_exposure"
+      },
+      "summary": "secret_exposure does not appear in critical failures or regressions"
+    },
+    {
+      "actual": {
+        "accepted_terms": true,
+        "license_status": "known"
+      },
+      "expected": {
+        "license_status": "known"
+      },
+      "id": "license_status_known",
+      "passed": true,
+      "scope": {
+        "artifact_role": "license_review"
+      },
+      "summary": "license review has a known status"
+    },
+    {
+      "actual": {
+        "accepted_terms": true
+      },
+      "expected": {
+        "accepted_terms": true
+      },
+      "id": "license_terms_accepted",
+      "passed": true,
+      "scope": {
+        "artifact_role": "license_review"
+      },
+      "summary": "license review explicitly accepts required terms"
+    },
+    {
+      "actual": {
+        "candidate_id": "local/mock-candidate",
+        "entry_candidate_id": "local/mock-candidate"
+      },
+      "expected": {
+        "same_candidate_id": true
+      },
+      "id": "model_registry_entry_matches_candidate",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_registry_entry"
+      },
+      "summary": "model registry entry is bound to the promoted candidate"
+    },
+    {
+      "actual": {
+        "failed_checks": [],
+        "readiness": "ready",
+        "ready": true
+      },
+      "expected": {
+        "readiness": "ready",
+        "ready": true
+      },
+      "id": "serving_profile_ready",
+      "passed": true,
+      "scope": {
+        "artifact_role": "serving_profile"
+      },
+      "summary": "serving profile is ready for evaluation and promotion"
+    },
+    {
+      "actual": {
+        "available": true,
+        "rollback_id": "local/mock-baseline"
+      },
+      "expected": {
+        "available": "not false",
+        "rollback_id": "local/mock-baseline"
+      },
+      "id": "rollback_metadata_matches_target",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback metadata points at the declared rollback target"
+    },
+    {
+      "actual": {
+        "unsupported_markers": []
+      },
+      "expected": {
+        "unsupported_markers": []
+      },
+      "id": "model_card_claims_supported",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_card"
+      },
+      "summary": "model_card contains no TODO/TBD/unsupported-claim markers"
+    },
+    {
+      "actual": {
+        "unsupported_markers": []
+      },
+      "expected": {
+        "unsupported_markers": []
+      },
+      "id": "dataset_card_claims_supported",
+      "passed": true,
+      "scope": {
+        "artifact_role": "dataset_card"
+      },
+      "summary": "dataset_card contains no TODO/TBD/unsupported-claim markers"
+    },
+    {
+      "actual": {
+        "blocking_check_count": 7
+      },
+      "expected": {
+        "blocking_check_count": 0
+      },
+      "id": "alias_update_authorized",
+      "passed": false,
+      "summary": "champion/candidate/rollback aliases may move only after every governance check passes"
+    }
+  ],
+  "decision": {
+    "blocking_check_count": 8,
+    "blocking_checks": [
+      {
+        "id": "promotion_ledger_gate_present",
+        "scope": {
+          "artifact_role": "promotion_ledger_gate"
+        },
+        "summary": "promotion_ledger_gate artifact is present and fingerprinted"
+      },
+      {
+        "id": "compare_gate_present",
+        "scope": {
+          "artifact_role": "compare_gate"
+        },
+        "summary": "compare_gate artifact is present and fingerprinted"
+      },
+      {
+        "id": "promotion_ledger_gate_schema",
+        "scope": {
+          "artifact_role": "promotion_ledger_gate"
+        },
+        "summary": "promotion_ledger_gate uses the expected schema version"
+      },
+      {
+        "id": "compare_gate_schema",
+        "scope": {
+          "artifact_role": "compare_gate"
+        },
+        "summary": "compare_gate uses the expected schema version"
+      },
+      {
+        "id": "promotion_ledger_gate_passed",
+        "scope": {
+          "artifact_role": "promotion_ledger_gate"
+        },
+        "summary": "promotion_ledger_gate reports passed=true"
+      },
+      {
+        "id": "compare_gate_passed",
+        "scope": {
+          "artifact_role": "compare_gate"
+        },
+        "summary": "compare_gate reports passed=true"
+      },
+      {
+        "id": "compare_metrics_complete",
+        "scope": {
+          "artifact_role": "compare_gate"
+        },
+        "summary": "compare gate exposes complete promotion movement metrics"
+      },
+      {
+        "id": "alias_update_authorized",
+        "scope": {},
+        "summary": "champion/candidate/rollback aliases may move only after every governance check passes"
+      }
+    ],
+    "key_metrics": {
+      "baseline_win_count": 0,
+      "check_count": 65,
+      "contract_drift_count": 0,
+      "failed_check_count": 8,
+      "new_critical_failure_count": 0,
+      "policy_release_required_artifact_count": 6,
+      "policy_required_artifact_count": 14,
+      "required_artifact_count": 14,
+      "rule_regression_count": 0,
+      "task_completion_regression_count": 0,
+      "unverified_contract_count": 0
+    },
+    "readiness": "blocked",
+    "recommendation": "block_promotion",
+    "summary": "Promotion blocked: 8 governance check(s) failed; task_completion_regressions=0; new_critical_failures=0."
+  },
+  "decision_path": "examples/agentic_training/promotion_governance/promotion_decision.json",
+  "failed_check_count": 8,
+  "metrics": {
+    "baseline_win_count": 0,
+    "check_count": 65,
+    "contract_drift_count": 0,
+    "failed_check_count": 8,
+    "new_critical_failure_count": 0,
+    "policy_release_required_artifact_count": 6,
+    "policy_required_artifact_count": 14,
+    "required_artifact_count": 14,
+    "rule_regression_count": 0,
+    "task_completion_regression_count": 0,
+    "unverified_contract_count": 0
+  },
+  "models": {
+    "candidate": {
+      "class": "trace-only",
+      "id": "local/mock-candidate"
+    },
+    "champion": {
+      "class": "trace-only",
+      "id": "local/mock-baseline"
+    },
+    "rollback": {
+      "class": "rollback",
+      "id": "local/mock-baseline"
+    }
+  },
+  "notes": [
+    "Promotion decisions are side-effect free; they do not move registry aliases.",
+    "Alias movement is authorized only when every required governance artifact is present, fingerprinted, and passed.",
+    "Blocked checks cover missing evidence, unknown license, redaction/safety failures, missing cards, missing rollback, eval mismatch, critical failures, secret exposure, forbidden actions, unsupported claims, and task-completion regressions."
+  ],
+  "passed": false,
+  "policy": {
+    "allowed_candidate_classes": [
+      "base",
+      "candidate",
+      "champion",
+      "frontier",
+      "trace-only"
+    ],
+    "allowed_champion_classes": [
+      "base",
+      "candidate",
+      "champion",
+      "frontier",
+      "trace-only"
+    ],
+    "artifact": {
+      "exists": true,
+      "kind": "file",
+      "path": "../../promotion_policy.demo.json",
+      "role": "promotion_policy",
+      "schema_version": "hfr.promotion_policy.v1",
+      "sha256": "2dccdde7f888baf452391e73ea14f2bf9ee94f7814136a2d5eb1d675fceeb12f",
+      "size_bytes": 1573
+    },
+    "description": "Zero-tolerance governance policy for promotion decisions and release records.",
+    "forbid_new_critical_rules": [
+      "final_answer",
+      "forbidden_actions",
+      "secret_exposure"
+    ],
+    "forbid_regressed_rules": [
+      "final_answer",
+      "forbidden_actions",
+      "secret_exposure"
+    ],
+    "id": "strict-governance-promotion-policy",
+    "limits": {
+      "max_baseline_wins": 0,
+      "max_contract_drifts": 0,
+      "max_new_critical_failures": 0,
+      "max_rule_regressions": 0,
+      "max_task_completion_regressions": 0,
+      "max_unverified_contracts": 0
+    },
+    "release_required_artifacts": [
+      "compare_gate",
+      "promotion_alias_apply",
+      "promotion_cards",
+      "promotion_decision",
+      "release_notes",
+      "rollback_metadata"
+    ],
+    "required_artifacts": [
+      "agentic_training_result",
+      "compare_gate",
+      "dataset_card",
+      "evidence_bundle",
+      "license_review",
+      "model_card",
+      "model_registry_entry",
+      "promotion_ledger_gate",
+      "redaction_check",
+      "rollback_metadata",
+      "safety_gate",
+      "serving_profile",
+      "serving_report",
+      "trainer_launch_check"
+    ],
+    "requirements": {
+      "require_accepted_terms": true,
+      "require_artifact_validation": true,
+      "require_known_license": true,
+      "require_rollback_metadata": true,
+      "require_supported_cards": true
+    },
+    "schema_version": "hfr.promotion_policy.v1",
+    "source": "file"
+  },
+  "readiness": "blocked",
+  "recommendation": "block_promotion",
+  "schema_version": "hfr.promotion_decision.v1"
+}

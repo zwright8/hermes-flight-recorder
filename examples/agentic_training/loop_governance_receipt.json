@@ -174,11 +174,9 @@
         {
           "action": "approve",
           "available": false,
-          "blocked_reason_count": 3,
+          "blocked_reason_count": 1,
           "blocked_reasons": [
-            "latest_iteration_not_ready_for_governance_review",
-            "missing_promotion_decision",
-            "missing_promotion_ledger"
+            "latest_iteration_not_ready_for_governance_review"
           ],
           "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
         },
@@ -211,7 +209,7 @@
       "readiness": "blocked",
       "recommendation": "continue_iteration",
       "recommended_governance_action": "request_another_iteration",
-      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 2 missing phase input(s)."
+      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 0 missing phase input(s)."
     },
     "execution_boundary": {
       "cloud_jobs_started": false,
@@ -229,19 +227,19 @@
     "readiness_digest": {
       "latest_iteration_id": "demo-loop-001",
       "latest_iteration_index": 0,
-      "promotion_decision_present": false,
-      "promotion_ledger_present": false,
+      "promotion_decision_present": true,
+      "promotion_ledger_present": true,
       "readiness": "planned_fail_closed",
       "ready_for_governance_review": false,
       "recommendation": "collect_missing_receipts_before_live_execution",
       "recommended_governance_action": "request_another_iteration",
       "rollback_receipt_present": false,
       "side_effects_started": false,
-      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 2 missing phase input(s) across 1 empty artifact group(s)."
+      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 0 missing phase input(s) across 0 empty artifact group(s)."
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "346e405fcf86eeb51b7772832ef3cb3600ec94265d325f904faeb12b4c237056",
-    "size_bytes": 22317
+    "sha256": "38ef9336d01ce65f0e17b7ba4d7360d115376ade8528e532ebd309fd8addad75",
+    "size_bytes": 22190
   }
 }

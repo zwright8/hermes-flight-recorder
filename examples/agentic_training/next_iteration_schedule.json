@@ -92,7 +92,7 @@
   "next_iteration": {
     "iteration_id": "demo-loop-002",
     "latest_iteration_id": "demo-loop-001",
-    "objective": "Collect missing closed-loop receipts and resolve ledgered repair pressure.",
+    "objective": "Resolve fail-closed held-out external eval and promotion governance blockers.",
     "reason": "critical_work_items_remain_open",
     "schedule": {
       "cadence": "manual"
@@ -109,11 +109,11 @@
     "critical_open_work_item_count": 2,
     "high_open_work_item_count": 0,
     "latest_loop_readiness": "planned_fail_closed",
-    "latest_missing_phase_input_count": 2,
+    "latest_missing_phase_input_count": 0,
     "open_action_count": 2,
     "open_work_item_count": 2,
     "recurring_action_count": 0,
-    "total_open_signal_count": 6
+    "total_open_signal_count": 4
   },
   "readiness": "ready_to_schedule",
   "recommendation": "create_next_loop_plan",
@@ -142,21 +142,21 @@
         "decision": {
           "readiness": "blocked",
           "recommendation": "continue_iteration",
-          "summary": "Latest loop iteration demo-loop-001 is fail-closed with 2 missing phase input(s)."
+          "summary": "Latest loop iteration demo-loop-001 is fail-closed with 0 missing phase input(s)."
         },
         "exists": true,
         "kind": "file",
         "metrics": {
           "latest_iteration_id": "demo-loop-001",
-          "latest_missing_phase_input_count": 2,
+          "latest_missing_phase_input_count": 0,
           "latest_readiness": "planned_fail_closed"
         },
         "passed": true,
         "path": "loop_ledger.json",
         "role": "agentic_loop_ledger",
         "schema_version": "hfr.agentic_loop_ledger.v1",
-        "sha256": "346e405fcf86eeb51b7772832ef3cb3600ec94265d325f904faeb12b4c237056",
-        "size_bytes": 22317
+        "sha256": "38ef9336d01ce65f0e17b7ba4d7360d115376ade8528e532ebd309fd8addad75",
+        "size_bytes": 22190
       }
     ],
     "improvement_ledger": [

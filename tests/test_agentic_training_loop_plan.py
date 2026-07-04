@@ -46,6 +46,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         model_grader_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json"
         action_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json"
         improvement_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "improvement_ledger.json"
+        promotion_decision_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_decision.json"
+        promotion_ledger_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_ledger.json"
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
 
         expected_refs = {
@@ -69,6 +71,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "model_grader_gate": ("model_grader/passing_gate.json", model_grader_gate_path),
             "action_ledger": ("iteration_ledgers/action_ledger.json", action_ledger_path),
             "improvement_ledger": ("iteration_ledgers/improvement_ledger.json", improvement_ledger_path),
+            "promotion_decision": ("promotion_governance/promotion_decision.json", promotion_decision_path),
+            "promotion_ledger": ("promotion_governance/promotion_ledger.json", promotion_ledger_path),
         }
         for role, (expected_path, source_path) in expected_refs.items():
             ref = plan["source_artifacts"][role][0]
@@ -77,7 +81,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
-        self.assertEqual(plan["artifact_count"], 33)
+        self.assertEqual(plan["artifact_count"], 35)
+        self.assertEqual(plan["missing_phase_inputs"], [])
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
         self.assertNotIn("harness_result", plan["missing_phase_inputs"])
@@ -93,6 +98,12 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertNotIn("external_eval_receipt", plan["missing_phase_inputs"])
         self.assertNotIn("eval_summary", plan["missing_phase_inputs"])
         self.assertNotIn("serving_lifecycle", plan["missing_phase_inputs"])
+        self.assertNotIn("promotion_decision", plan["missing_phase_inputs"])
+        self.assertNotIn("promotion_ledger", plan["missing_phase_inputs"])
+        self.assertEqual(
+            {check["id"] for check in plan["checks"] if not check["passed"]},
+            {"heldout_eval_is_fail_closed", "governance_required_for_promotion"},
+        )
         self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("dataset_curation_receipt_required_for_trainer_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -126,6 +137,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(phases["heldout_eval"]["status"], "ready")
         self.assertEqual(phases["heldout_eval"]["missing_required_artifacts"], [])
         self.assertEqual(phases["improvement_planning"]["status"], "ready")
+        self.assertEqual(phases["governance_decision"]["status"], "ready")
+        self.assertEqual(phases["governance_decision"]["present_required_artifacts"], ["promotion_decision"])
+        self.assertEqual(phases["promotion_or_rollback"]["status"], "ready")
+        self.assertEqual(phases["promotion_or_rollback"]["present_required_artifacts"], ["promotion_ledger"])
         self.assertEqual(phases["next_iteration"]["status"], "ready")
         self.assertFalse(plan["cloud_training"]["cloud_jobs_started"])
         self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])

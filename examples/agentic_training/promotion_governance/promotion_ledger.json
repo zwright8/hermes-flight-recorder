@@ -1,0 +1,71 @@
+{
+  "decision_count": 1,
+  "ledger_path": "examples/agentic_training/promotion_governance/promotion_ledger.json",
+  "metrics": {
+    "allowed_count": 0,
+    "blocked_count": 1,
+    "consecutive_allowed_count": 0,
+    "consecutive_blocked_count": 1,
+    "decision_count": 1,
+    "decision_gate_results": [
+      {
+        "failed_check_count": 2,
+        "index": 0,
+        "passed": false,
+        "path": "promotion_decision_gate.json",
+        "recommendation": "block_promotion",
+        "source_recommendation": "block_promotion"
+      }
+    ],
+    "latest_passed": false,
+    "latest_readiness": "blocked",
+    "latest_recommendation": "block_promotion",
+    "recommendation_counts": [
+      {
+        "count": 1,
+        "id": "block_promotion"
+      }
+    ],
+    "source_recommendation_counts": [
+      {
+        "count": 1,
+        "id": "block_promotion"
+      }
+    ],
+    "unique_source_artifact_count": 1
+  },
+  "notes": [
+    "Promotion ledgers summarize decision_gate artifacts across improvement iterations; they do not launch trainers or mutate CI.",
+    "Allowed means the decision gate passed and recommended allow_promotion; all other decisions are counted as blocked pressure."
+  ],
+  "passed": true,
+  "records": [
+    {
+      "check_count": 2,
+      "exists": true,
+      "expected_readiness": "ready",
+      "expected_recommendation": "apply_alias_update",
+      "failed_check_count": 2,
+      "index": 0,
+      "passed": false,
+      "path": "promotion_decision_gate.json",
+      "readiness": "blocked",
+      "recommendation": "block_promotion",
+      "require_passed": false,
+      "schema_version": "hfr.decision_gate.v1",
+      "sha256": "110465b8e5f2054d10c9fd086c180df857e14fb5b6e928e61e73a106d86399f8",
+      "size_bytes": 2104,
+      "source": {
+        "artifact_exists": true,
+        "artifact_path": "promotion_decision.json",
+        "artifact_sha256": "85aab5b00b81fb7bd61960d76652b5601c6b115b33257c19f2888ccae3deded4",
+        "blocking_check_count": 8,
+        "passed": false,
+        "readiness": "blocked",
+        "recommendation": "block_promotion",
+        "schema_version": "hfr.promotion_decision.v1"
+      }
+    }
+  ],
+  "schema_version": "hfr.promotion_ledger.v1"
+}

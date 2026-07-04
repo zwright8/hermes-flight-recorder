@@ -25,6 +25,48 @@ def without_preserve_paths(args):
 
 
 class PromotionDecisionTests(unittest.TestCase):
+    def test_committed_agentic_training_promotion_governance_blocks_alias_update(self):
+        root = ROOT / "examples" / "agentic_training" / "promotion_governance"
+        decision_path = root / "promotion_decision.json"
+        gate_path = root / "promotion_decision_gate.json"
+        ledger_path = root / "promotion_ledger.json"
+        decision = json.loads(decision_path.read_text(encoding="utf-8"))
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(decision["schema_version"], "hfr.promotion_decision.v1")
+        self.assertFalse(decision["passed"])
+        self.assertEqual(decision["recommendation"], "block_promotion")
+        self.assertFalse(decision["alias_update"]["authorized"])
+        self.assertEqual(decision["alias_update"]["recommendation"], "hold_aliases")
+        failed_ids = {check["id"] for check in decision["checks"] if not check["passed"]}
+        self.assertIn("promotion_ledger_gate_present", failed_ids)
+        self.assertIn("compare_gate_present", failed_ids)
+        self.assertIn("alias_update_authorized", failed_ids)
+        self.assertTrue(decision["artifacts"]["evidence_bundle"]["exists"])
+        self.assertTrue(decision["artifacts"]["serving_profile"]["exists"])
+
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["source_decision"]["recommendation"], "block_promotion")
+        self.assertEqual(ledger["metrics"]["blocked_count"], 1)
+        self.assertEqual(ledger["metrics"]["allowed_count"], 0)
+        self.assertEqual(ledger["metrics"]["latest_recommendation"], "block_promotion")
+        self.assertEqual(
+            run_cli(
+                [
+                    "validate",
+                    "--promotion-decision",
+                    str(decision_path),
+                    "--decision-gate",
+                    str(gate_path),
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--strict",
+                ]
+            ),
+            0,
+        )
+
     def test_promotion_cards_generate_valid_model_and_dataset_cards(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
