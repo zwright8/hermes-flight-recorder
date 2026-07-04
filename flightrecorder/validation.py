@@ -52,7 +52,12 @@ from .agentic_loop_governance import (
     _source_ledger_ref as _build_agentic_loop_governance_ledger_ref,
 )
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
-from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
+from .bundle import (
+    EVIDENCE_BUNDLE_SCHEMA_VERSION,
+    HARNESS_RUN_MANIFEST_SCHEMA_VERSION,
+    HARNESS_RUN_RESULT_SCHEMA_VERSION,
+    _decision_key_metrics as _build_evidence_bundle_decision_key_metrics,
+)
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .cloud_training import (
     CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
@@ -20251,8 +20256,11 @@ def _validate_evidence_bundle_decision(
         target.errors.append(
             f"evidence_bundle.decision.passed_gate_count expected {expected_passed_gates}, got {decision.get('passed_gate_count')!r}."
         )
-    if not isinstance(decision.get("key_metrics"), dict):
+    key_metrics = decision.get("key_metrics")
+    if not isinstance(key_metrics, dict):
         target.errors.append("evidence_bundle.decision.key_metrics must be an object.")
+    elif key_metrics != _build_evidence_bundle_decision_key_metrics(metrics):
+        target.errors.append("evidence_bundle.decision.key_metrics must match evidence_bundle.metrics.")
 
 
 def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
