@@ -12750,10 +12750,16 @@ def _validate_review_manifest(
         for output_name in ("review_items", "label_template", "instructions", "manifest"):
             if output_name not in outputs:
                 target.errors.append(f"manifest.outputs.{output_name} is missing.")
-    if _looks_absolute(str(manifest.get("source_runs_dir", ""))):
-        target.warnings.append("manifest.source_runs_dir is absolute; prefer redacted or relative exports for sharing.")
-    if _looks_absolute(str(manifest.get("output_dir", ""))):
-        target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+    _validate_public_review_ref_path(target, "manifest.source_runs_dir", manifest.get("source_runs_dir"))
+    _validate_public_review_ref_path(target, "manifest.output_dir", manifest.get("output_dir"))
+    if isinstance(outputs, dict):
+        for output_name, output_path in outputs.items():
+            _validate_public_review_ref_path(target, f"manifest.outputs.{output_name}", output_path)
+    _validate_public_review_fingerprint_paths(
+        manifest.get("artifact_fingerprints"),
+        target,
+        "manifest.artifact_fingerprints",
+    )
 
 
 def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget) -> None:
@@ -12789,7 +12795,7 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
                 if not isinstance(source_artifacts.get(artifact_name), str) or not source_artifacts.get(artifact_name):
                     target.errors.append(f"review_items[{index}].source_artifacts.{artifact_name} must be a non-empty string.")
                 else:
-                    _warn_absolute_public_path(
+                    _validate_public_review_ref_path(
                         target,
                         f"review_items[{index}].source_artifacts.{artifact_name}",
                         source_artifacts.get(artifact_name),
@@ -12799,7 +12805,7 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
                     if not isinstance(source_artifacts.get(artifact_name), str) or not source_artifacts.get(artifact_name):
                         target.errors.append(f"review_items[{index}].source_artifacts.{artifact_name} must be a non-empty string when present.")
                     else:
-                        _warn_absolute_public_path(
+                        _validate_public_review_ref_path(
                             target,
                             f"review_items[{index}].source_artifacts.{artifact_name}",
                             source_artifacts.get(artifact_name),
@@ -12981,12 +12987,30 @@ def _validate_reviewed_manifest(
             expected_label_provenance,
             reviewed_trainer_views,
         )
-    if _looks_absolute(str(manifest.get("source_review_export", ""))):
-        target.warnings.append("manifest.source_review_export is absolute; prefer redacted or relative exports for sharing.")
-    if _looks_absolute(str(manifest.get("labels_path", ""))):
-        target.warnings.append("manifest.labels_path is absolute; prefer redacted or relative exports for sharing.")
-    if _looks_absolute(str(manifest.get("output_dir", ""))):
-        target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+    _validate_public_review_ref_path(target, "manifest.source_review_export", manifest.get("source_review_export"))
+    _validate_public_review_ref_path(target, "manifest.labels_path", manifest.get("labels_path"))
+    _validate_public_review_ref_path(target, "manifest.output_dir", manifest.get("output_dir"))
+    if isinstance(outputs, dict):
+        for output_name, output_path in outputs.items():
+            _validate_public_review_ref_path(target, f"manifest.outputs.{output_name}", output_path)
+    _validate_public_review_fingerprint_paths(
+        manifest.get("source_review_artifacts"),
+        target,
+        "manifest.source_review_artifacts",
+    )
+    _validate_public_review_fingerprint_paths(
+        {"labels_artifact": manifest.get("labels_artifact")},
+        target,
+        "manifest",
+    )
+    _validate_public_review_fingerprint_paths(
+        manifest.get("artifact_fingerprints"),
+        target,
+        "manifest.artifact_fingerprints",
+    )
+    if isinstance(registry, dict):
+        _validate_public_review_ref_path(target, "manifest.registry.path", registry.get("path"))
+        _validate_public_review_ref_path(target, "manifest.registry.manifest_path", registry.get("manifest_path"))
 
 
 def _expected_reviewed_label_provenance(
@@ -13137,7 +13161,7 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
         for field_name in ("episode_id", "scenario_id", "task_family", "prompt", "response", "human_label", "source_label_file"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_labels[{index}].{field_name} must be a string.")
-        _warn_absolute_public_path(target, f"reviewed_labels[{index}].source_label_file", row.get("source_label_file"))
+        _validate_public_review_ref_path(target, f"reviewed_labels[{index}].source_label_file", row.get("source_label_file"))
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"reviewed_labels[{index}].review_item_sha256 must be a SHA-256 hex string.")
         if not _is_sha256(row.get("source_label_sha256")):
@@ -13165,7 +13189,7 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
             target.errors.append(f"reviewed_labels[{index}].source_artifacts must be an object.")
         else:
             for artifact_name, artifact_path in source_artifacts.items():
-                _warn_absolute_public_path(
+                _validate_public_review_ref_path(
                     target,
                     f"reviewed_labels[{index}].source_artifacts.{artifact_name}",
                     artifact_path,
@@ -27801,6 +27825,45 @@ def _looks_absolute(value: str) -> bool:
 def _warn_absolute_public_path(target: ValidationTarget, label: str, value: Any) -> None:
     if isinstance(value, str) and value and _looks_absolute(value):
         target.warnings.append(f"{label} is absolute; use a relative path or redacted placeholder for public bundles.")
+
+
+def _validate_public_review_ref_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _is_public_review_ref_path(value):
+        return
+    target.errors.append(f"{label} must be a safe relative path or redacted placeholder.")
+
+
+def _validate_public_review_fingerprint_paths(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        return
+    for name, record in value.items():
+        if not isinstance(name, str) or not isinstance(record, dict):
+            continue
+        _validate_public_review_ref_path(target, f"{label}.{name}.path", record.get("path"))
+
+
+def _is_public_review_ref_path(value: str) -> bool:
+    if _is_redacted_placeholder(value):
+        return True
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
+
+
+def _is_redacted_placeholder(value: str) -> bool:
+    if not (value.startswith("<redacted:") and value.endswith(">")):
+        return False
+    name = value.removeprefix("<redacted:").removesuffix(">")
+    return bool(name) and "/" not in name and "\\" not in name and name not in {".", ".."}
 
 
 def _sha256(path: Path) -> str:

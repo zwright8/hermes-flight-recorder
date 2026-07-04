@@ -1046,8 +1046,10 @@ flightrecorder validate \
 report path, and lineage pointer for each run. `label_template.jsonl` is an
 editable starting point for human labels such as `accept`, `reject`,
 `needs_review`, `unsafe`, and `incomplete`.
-Strict validation warns if preserved review-item source artifact paths would
-publish local run, report, trace, scorecard, lineage, or regression references.
+`--preserve-paths` preserves only public-safe relative review-item source
+artifact paths. Absolute local run, report, trace, scorecard, lineage, label, or
+regression references are redacted when generated and rejected by validation if
+hand-authored into review or reviewed exports.
 Reviewers can also set `reviewer_confidence` to `high`, `medium`, `low`, or
 `unknown` so downstream gates can distinguish strongly grounded labels from
 labels that need another pass.
@@ -1093,9 +1095,8 @@ letting trainers or CI jobs filter low-confidence labels without losing
 provenance. Reviewed manifests also carry `dataset_version`, redaction status,
 label provenance, and a registry pointer so `trainer-preflight
 --require-dataset-version` can select reviewed datasets exactly like automated
-training exports. Strict validation also warns before reviewed-label rows
-publish preserved local label-file paths or inherited review-item source
-artifact paths.
+training exports. Reviewed-label rows use the same public-safe path boundary for
+label-file paths and inherited review-item source artifact paths.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed

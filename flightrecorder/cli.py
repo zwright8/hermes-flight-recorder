@@ -4724,7 +4724,7 @@ def _parser() -> argparse.ArgumentParser:
     export_review.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_review.add_argument("--out", required=True, help="Output directory for review queue artifacts")
     export_review.add_argument("--only-failed", action="store_true", help="Include only failed runs in the review queue")
-    export_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    export_review.add_argument("--preserve-paths", action="store_true", help="Preserve public-safe relative paths; redact absolute local paths")
     export_review.set_defaults(func=cmd_export_review)
 
     apply_review = subparsers.add_parser("apply-review", help="Apply completed human labels to a review queue")
@@ -4737,7 +4737,7 @@ def _parser() -> argparse.ArgumentParser:
         default=0,
         help="Maximum reviewed preference pairs per task family; 0 means unlimited",
     )
-    apply_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    apply_review.add_argument("--preserve-paths", action="store_true", help="Preserve public-safe relative paths; redact absolute local paths")
     apply_review.set_defaults(func=cmd_apply_review)
 
     review_calibration = subparsers.add_parser(

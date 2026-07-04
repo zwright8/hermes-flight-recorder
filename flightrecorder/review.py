@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
@@ -932,16 +932,32 @@ def _sha256_file(path: Path) -> str:
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:
     raw = str(path)
-    if preserve_paths:
+    if preserve_paths and _is_public_review_ref_path(raw):
         return raw
     if _is_windows_absolute(raw):
         return f"<redacted:{_basename(raw)}>"
     resolved = path.resolve()
     cwd = Path.cwd().resolve()
     try:
-        return str(resolved.relative_to(cwd))
+        relative = str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+    return relative if _is_public_review_ref_path(relative) else f"<redacted:{resolved.name}>"
+
+
+def _is_public_review_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not value.startswith("<redacted:")
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _is_windows_absolute(value: str) -> bool:

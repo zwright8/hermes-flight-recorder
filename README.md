@@ -72,6 +72,11 @@ and handoff receipts that make those systems auditable.
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
 
+Review exports and reviewed trainer handoffs preserve only public-safe relative
+source references. Absolute local run, report, trace, scorecard, lineage, or
+label paths are redacted at write time and rejected by validation if
+hand-authored into public artifacts.
+
 All major artifacts have bundled JSON Schema contracts under
 `flightrecorder/schemas/` and can be checked with `flightrecorder schemas`.
 
