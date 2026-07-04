@@ -728,6 +728,8 @@ card, and dataset card decisions.
   governance evidence.
 - Rollout-receipt strict validation now warns on absolute source-plan refs
   before mock rollout evidence is admitted to rejection-sampling gates.
+- Rollout-plan strict validation now warns on absolute plan, scenario, and
+  verifier-config refs before mock rollout batches are admitted to receipts.
 - Cloud-training artifact manifests, preflights, launch plans, launch receipts,
   and status receipts reopen path-backed upload/source refs from their own file
   location and reject symlinked, stale SHA-256, or byte-size evidence before

@@ -118,6 +118,37 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertFalse(receipt["execution_boundary"]["model_provider_calls_started"])
             self.assertFalse(receipt["lineage"]["dataset_rows_created"])
 
+    def test_strict_validate_warns_on_absolute_rollout_plan_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = root / "rollout_plan.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-preserved-plan",
+                scenario_paths=[SCENARIO],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                verifier_paths=[VERIFIER],
+                preserve_paths=True,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_plan(plan_path, plan)
+
+            validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path])
+            strict_validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
+
+            self.assertTrue(validation["passed"], validation)
+            self.assertFalse(strict_validation["passed"], strict_validation)
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            strict_warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
+            for expected in (
+                "agentic_rollout_plan.plan_path is absolute",
+                "agentic_rollout_plan.scenarios[0].path is absolute",
+                "agentic_rollout_plan.environment.external_state_verifiers[0].path is absolute",
+            ):
+                self.assertIn(expected, warnings)
+                self.assertIn(expected, strict_warnings)
+
     def test_rollout_receipt_records_mock_rows_without_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "rollout_plan.json"

@@ -6717,6 +6717,10 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
         target.errors.append(f"agentic_rollout_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}.")
     if not _is_string_list(plan.get("blocked_reasons")):
         target.errors.append("agentic_rollout_plan.blocked_reasons must be a list of strings.")
+    if not isinstance(plan.get("plan_path"), str) or not plan.get("plan_path"):
+        target.errors.append("agentic_rollout_plan.plan_path must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "agentic_rollout_plan.plan_path", plan.get("plan_path"))
     budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
     if isinstance(plan.get("budget"), dict):
         _validate_allowed_keys(budget, _AGENTIC_ROLLOUT_PLAN_BUDGET_KEYS, target, "agentic_rollout_plan.budget")
@@ -6885,6 +6889,8 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
             target.errors.append(f"{ref_label}.role must be verifier_config.")
         if not isinstance(ref.get("path"), str) or not ref.get("path"):
             target.errors.append(f"{ref_label}.path must be a non-empty string.")
+        else:
+            _warn_absolute_public_path(target, f"{ref_label}.path", ref.get("path"))
         if not isinstance(ref.get("exists"), bool):
             target.errors.append(f"{ref_label}.exists must be a boolean.")
         elif ref.get("exists") is True:
@@ -7002,6 +7008,8 @@ def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget) ->
         for field_name in ("id", "path", "schema_version"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
+        if isinstance(row.get("path"), str):
+            _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
         if not isinstance(row.get("exists"), bool):
             target.errors.append(f"{label}.exists must be a boolean.")
         elif row.get("exists") is True and not _is_sha256(row.get("sha256")):
