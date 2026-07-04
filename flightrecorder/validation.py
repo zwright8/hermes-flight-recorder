@@ -16906,12 +16906,27 @@ def _validate_external_eval_scenario_manifest_file(
     manifest: dict[str, Any], target: ValidationTarget, label: str, source_path: Path
 ) -> None:
     path_value = manifest.get("path")
+    if isinstance(path_value, str) and path_value and not _is_safe_or_redacted_external_eval_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the external eval plan.")
+        return
     if manifest.get("exists") is not True:
+        if manifest.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+        if manifest.get("size_bytes") is not None:
+            target.errors.append(f"{label}.size_bytes must be null when exists is false.")
+        if manifest.get("schema_version") is not None:
+            target.errors.append(f"{label}.schema_version must be null when exists is false.")
+        if manifest.get("ready") is not None:
+            target.errors.append(f"{label}.ready must be null when exists is false.")
+        if manifest.get("scenario_count") is not None:
+            target.errors.append(f"{label}.scenario_count must be null when exists is false.")
         return
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
-    _warn_absolute_public_path(target, f"{label}.path", path_value)
+    if not _is_replayable_external_eval_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the external eval plan.")
+        return
     file_path = _external_eval_reference_path(path_value, source_path)
     if not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to a manifest file.")

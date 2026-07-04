@@ -105,8 +105,11 @@ The supported adapter IDs are `bfcl`, `inspect_ai`, `lm_eval_harness`, and
 installed, an adapter is not ready unless `--allow-installed` is present and all
 required inputs for that adapter are supplied. The plan records dependency
 status, held-out scenario manifest SHA-256 and byte size, required inputs, and
-blocking reasons. Validation resolves the manifest reference from the plan file
-location before trusting those fingerprints.
+blocking reasons. Scenario manifests are replayable only when the plan can point
+to them with a safe path relative to the plan output; absolute or traversal refs
+are redacted and treated as missing, even with `--preserve-paths`. Validation
+resolves the manifest reference from the plan file location before trusting
+those fingerprints.
 Each adapter row also includes an `adapter_contract` that attests to
 plan-and-receipt-only dry-run transport, disabled live benchmark support, no
 provider API calls, no model downloads, no credential values, and the need for a

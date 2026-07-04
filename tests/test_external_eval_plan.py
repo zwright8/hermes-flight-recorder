@@ -82,7 +82,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(written["inputs"]["scenario_manifest"]["path"], manifest.name)
             self.assertEqual(written["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
 
-    def test_strict_validate_warns_on_absolute_scenario_manifest_path(self):
+    def test_preserve_paths_keeps_plan_manifest_output_relative(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             manifest = _scenario_manifest(root / "heldout.json")
@@ -96,14 +96,119 @@ class ExternalEvalPlanTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             self.assertEqual(non_strict_code, 0)
-            self.assertEqual(strict_code, 1)
+            self.assertEqual(strict_code, 0)
+            plan = _read_json(out)
+            self.assertEqual(plan["inputs"]["scenario_manifest"]["path"], manifest.name)
             warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
             strict_warnings = "\n".join(
                 warning for target in _read_json(strict_validation)["targets"] for warning in target["warnings"]
             )
-            expected = "external_eval_plan.inputs.scenario_manifest.path is absolute"
-            self.assertIn(expected, warnings)
-            self.assertIn(expected, strict_warnings)
+            self.assertNotIn("external_eval_plan.inputs.scenario_manifest.path is absolute", warnings)
+            self.assertNotIn("external_eval_plan.inputs.scenario_manifest.path is absolute", strict_warnings)
+
+    def test_external_eval_plan_redacts_unreplayable_manifest_without_reading_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "sources"
+            report_dir = root / "reports"
+            source_dir.mkdir()
+            report_dir.mkdir()
+            manifest = _scenario_manifest(source_dir / "heldout.json", scenario_ids=["LOCAL_SECRET_SCENARIO"])
+            out = report_dir / "external_eval_plan.json"
+
+            code = run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--preserve-paths", "--out", str(out)])
+            validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            schema_result = check_schema_file(out)
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+            rendered = out.read_text(encoding="utf-8")
+            self.assertNotIn(str(source_dir), rendered)
+            self.assertNotIn("../sources", rendered)
+            self.assertNotIn("LOCAL_SECRET_SCENARIO", rendered)
+            plan = _read_json(out)
+            scenario_manifest = plan["inputs"]["scenario_manifest"]
+            self.assertEqual(scenario_manifest["path"], "<redacted:heldout.json>")
+            self.assertFalse(scenario_manifest["exists"])
+            self.assertIsNone(scenario_manifest["sha256"])
+            self.assertIsNone(scenario_manifest["size_bytes"])
+            self.assertIsNone(scenario_manifest["schema_version"])
+            self.assertIsNone(scenario_manifest["ready"])
+            self.assertIsNone(scenario_manifest["scenario_count"])
+            self.assertIn("missing_scenario_manifest", plan["blocking_reasons"])
+            self.assertFalse(plan["governance_handoff"]["external_eval_claims_allowed"])
+
+    def test_external_eval_plan_writer_refreshes_direct_api_external_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "sources"
+            report_dir = root / "reports"
+            source_dir.mkdir()
+            report_dir.mkdir()
+            manifest = _scenario_manifest(source_dir / "heldout.json")
+            out = report_dir / "external_eval_plan.json"
+            with patch(
+                "flightrecorder.external_eval._dependency_status",
+                return_value={"available": True, "imports": {"bfcl_eval": True}, "commands": {"bfcl": True}},
+            ):
+                plan = build_external_eval_plan(
+                    adapters=["bfcl"],
+                    scenario_manifest=manifest,
+                    model_endpoint="http://127.0.0.1:8000/v1",
+                    tool_schema_set="tools-v1",
+                    allow_installed=True,
+                )
+            self.assertTrue(plan["ready"])
+
+            write_external_eval_plan(plan, out)
+            validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            written = _read_json(out)
+
+            self.assertEqual(validate_code, 0)
+            self.assertFalse(written["ready"])
+            self.assertEqual(written["inputs"]["scenario_manifest"]["path"], "<redacted:heldout.json>")
+            self.assertIsNone(written["adapters"][0]["execution_contract"]["scenario_manifest_sha256"])
+            self.assertIn("missing_scenario_manifest", written["adapters"][0]["blocking_reasons"])
+            self.assertFalse(written["governance_handoff"]["external_eval_claims_allowed"])
+
+    def test_external_eval_plan_writer_redacts_relative_manifest_outside_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "sources"
+            report_dir = root / "reports"
+            source_dir.mkdir()
+            report_dir.mkdir()
+            _scenario_manifest(source_dir / "heldout.json")
+            out = report_dir / "external_eval_plan.json"
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                with patch(
+                    "flightrecorder.external_eval._dependency_status",
+                    return_value={"available": True, "imports": {"bfcl_eval": True}, "commands": {"bfcl": True}},
+                ):
+                    plan = build_external_eval_plan(
+                        adapters=["bfcl"],
+                        scenario_manifest=Path("sources") / "heldout.json",
+                        model_endpoint="http://127.0.0.1:8000/v1",
+                        tool_schema_set="tools-v1",
+                        allow_installed=True,
+                    )
+                self.assertTrue(plan["ready"])
+                write_external_eval_plan(plan, out)
+            finally:
+                os.chdir(previous_cwd)
+
+            validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            written = _read_json(out)
+
+            self.assertEqual(validate_code, 0)
+            self.assertFalse(written["ready"])
+            self.assertEqual(written["inputs"]["scenario_manifest"]["path"], "<redacted:heldout.json>")
+            self.assertNotIn("../sources", out.read_text(encoding="utf-8"))
+            self.assertIsNone(written["adapters"][0]["execution_contract"]["scenario_manifest_sha256"])
+            self.assertIn("missing_scenario_manifest", written["adapters"][0]["blocking_reasons"])
 
     def test_eval_summary_surfaces_external_adapter_blockers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -189,7 +294,12 @@ class ExternalEvalPlanTests(unittest.TestCase):
             validation = root / "validation.json"
             run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
             plan = _read_json(out)
-            plan["inputs"]["scenario_manifest"]["path"] = manifest.name
+            scenario_manifest = plan["inputs"]["scenario_manifest"]
+            scenario_manifest["path"] = manifest.name
+            scenario_manifest["exists"] = True
+            scenario_manifest["schema_version"] = "hfr.heldout_scenario_manifest.v1"
+            scenario_manifest["sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            scenario_manifest["size_bytes"] = manifest.stat().st_size
             out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             previous_cwd = Path.cwd()
@@ -326,8 +436,8 @@ class ExternalEvalPlanTests(unittest.TestCase):
             )
 
 
-def _scenario_manifest(path: Path) -> Path:
-    payload = {"schema_version": "hfr.heldout_scenario_manifest.v1", "scenario_ids": ["email_reply_completion"]}
+def _scenario_manifest(path: Path, *, scenario_ids: list[str] | None = None) -> Path:
+    payload = {"schema_version": "hfr.heldout_scenario_manifest.v1", "scenario_ids": scenario_ids or ["email_reply_completion"]}
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 

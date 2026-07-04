@@ -810,8 +810,11 @@ flightrecorder validate \
 ```
 
 External benchmark adapters stay fail-closed until a separate runner executes
-them. Archive an external eval receipt to prove no live BFCL, Inspect AI,
-lm-eval, or SWE-bench job was started by Flight Recorder:
+them. External eval plans only keep scenario-manifest refs when they are safe
+relative paths from the plan output; unreplayable absolute or traversal refs are
+redacted and treated as missing, including with `--preserve-paths`. Archive an
+external eval receipt to prove no live BFCL, Inspect AI, lm-eval, or SWE-bench
+job was started by Flight Recorder:
 External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.

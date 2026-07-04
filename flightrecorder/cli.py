@@ -1458,6 +1458,7 @@ def cmd_external_eval_plan(args: argparse.Namespace) -> int:
         sandbox_policy=args.sandbox_policy,
         allow_installed=args.allow_installed,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else Path.cwd(),
     )
     if args.out:
         write_external_eval_plan(plan, args.out, preserve_paths=args.preserve_paths)
@@ -3450,7 +3451,11 @@ def _parser() -> argparse.ArgumentParser:
         help="Allow installed optional adapter dependencies to become ready when required inputs are present",
     )
     external_eval_plan.add_argument("--out", help="Write external eval adapter plan JSON to this path")
-    external_eval_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
+    external_eval_plan.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Preserve safe source path text in plan output; unsafe absolute or traversal refs remain redacted",
+    )
     external_eval_plan.set_defaults(func=cmd_external_eval_plan)
 
     external_eval_receipt = subparsers.add_parser(

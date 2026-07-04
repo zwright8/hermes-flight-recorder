@@ -82,9 +82,11 @@ def build_external_eval_plan(
     sandbox_policy: str | None = None,
     allow_installed: bool = False,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a readiness plan for optional external eval harness adapters."""
     selected = _selected_adapters(adapters)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
     inputs = _inputs(
         scenario_manifest=scenario_manifest,
         model_endpoint=model_endpoint,
@@ -95,6 +97,7 @@ def build_external_eval_plan(
         swe_bench_task_set=swe_bench_task_set,
         sandbox_policy=sandbox_policy,
         preserve_paths=preserve_paths,
+        output_base_dir=display_base_dir,
     )
     adapter_rows = [_adapter_plan(adapter_id, inputs, allow_installed) for adapter_id in selected]
     blocking_reasons = _blocking_reasons(adapter_rows)
@@ -237,8 +240,9 @@ def _inputs(
     swe_bench_task_set: str | None,
     sandbox_policy: str | None,
     preserve_paths: bool,
+    output_base_dir: Path | None,
 ) -> dict[str, Any]:
-    manifest = _manifest_record(scenario_manifest, preserve_paths)
+    manifest = _manifest_record(scenario_manifest, preserve_paths, output_base_dir)
     return {
         "scenario_manifest": manifest,
         "model_endpoint": model_endpoint or None,
@@ -251,22 +255,20 @@ def _inputs(
     }
 
 
-def _manifest_record(path: str | Path | None, preserve_paths: bool) -> dict[str, Any]:
+def _manifest_record(path: str | Path | None, preserve_paths: bool, output_base_dir: Path | None) -> dict[str, Any]:
     if path is None:
-        return {
-            "path": None,
-            "exists": False,
-            "sha256": None,
-            "size_bytes": None,
-            "schema_version": None,
-            "ready": None,
-            "scenario_count": None,
-        }
+        return _missing_manifest_record(None)
     manifest_path = Path(path)
+    if output_base_dir is not None:
+        display_path, replayable = _source_display_path(manifest_path, preserve_paths, output_base_dir)
+    else:
+        display_path, replayable = _display_path(manifest_path, preserve_paths), True
     exists = manifest_path.exists() and manifest_path.is_file()
+    if not exists or not replayable:
+        return _missing_manifest_record(display_path)
     return {
-        "path": _display_path(manifest_path, preserve_paths),
-        "exists": exists,
+        "path": display_path,
+        "exists": True,
         "sha256": _sha256(manifest_path) if exists else None,
         "size_bytes": manifest_path.stat().st_size if exists else None,
         **(_manifest_metadata(manifest_path) if exists else {"schema_version": None, "ready": None, "scenario_count": None}),
@@ -327,6 +329,18 @@ def _manifest_metadata(path: Path) -> dict[str, Any]:
         "schema_version": payload.get("schema_version") if isinstance(payload.get("schema_version"), str) else None,
         "ready": ready,
         "scenario_count": scenario_count,
+    }
+
+
+def _missing_manifest_record(path: str | None) -> dict[str, Any]:
+    return {
+        "path": path,
+        "exists": False,
+        "sha256": None,
+        "size_bytes": None,
+        "schema_version": None,
+        "ready": None,
+        "scenario_count": None,
     }
 
 
@@ -531,12 +545,11 @@ def write_external_eval_plan(plan: dict[str, Any], out_path: str | Path, *, pres
 
 
 def _plan_for_write(plan: dict[str, Any], out_path: Path, preserve_paths: bool) -> dict[str, Any]:
-    if preserve_paths:
-        return plan
     payload = copy.deepcopy(plan)
     manifest = payload.get("inputs", {}).get("scenario_manifest") if isinstance(payload.get("inputs"), dict) else None
     if isinstance(manifest, dict):
-        manifest["path"] = _output_relative_path(manifest.get("path"), out_path.parent)
+        if _rewrite_manifest_ref_for_output(manifest, out_path.parent):
+            _refresh_plan_readiness(payload)
     return payload
 
 
@@ -559,3 +572,77 @@ def _output_relative_path(value: Any, output_dir: Path) -> Any:
             return value
         path = path.resolve()
     return os.path.relpath(path.resolve(), output_dir.resolve())
+
+
+def _rewrite_manifest_ref_for_output(manifest: dict[str, Any], output_dir: Path) -> bool:
+    value = manifest.get("path")
+    if not isinstance(value, str) or not value:
+        return False
+    if value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    if _is_safe_public_path(value):
+        if (output_dir / path).is_file():
+            return False
+        if path.exists():
+            relative = _safe_output_relative_path(path, output_dir)
+            if relative is not None:
+                manifest["path"] = relative
+                return False
+            _redact_manifest_ref(manifest, value)
+            return True
+        if manifest.get("exists") is True:
+            _redact_manifest_ref(manifest, value)
+            return True
+        return False
+    relative = _safe_output_relative_path(path, output_dir) if path.is_absolute() or path.exists() else None
+    if relative is not None:
+        manifest["path"] = relative
+        return False
+    _redact_manifest_ref(manifest, value)
+    return True
+
+
+def _redact_manifest_ref(manifest: dict[str, Any], raw: str) -> None:
+    manifest.update(_missing_manifest_record(f"<redacted:{_basename(raw)}>"))
+
+
+def _refresh_plan_readiness(payload: dict[str, Any]) -> None:
+    inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
+    adapters = payload.get("adapters") if isinstance(payload.get("adapters"), list) else []
+    for adapter in adapters:
+        if not isinstance(adapter, dict):
+            continue
+        adapter_id = adapter.get("id")
+        spec = ADAPTERS.get(adapter_id) if isinstance(adapter_id, str) else None
+        if spec is None:
+            continue
+        old_blockers = adapter.get("blocking_reasons") if isinstance(adapter.get("blocking_reasons"), list) else []
+        input_blocker_reasons = _input_blocker_reasons(spec)
+        preserved_blockers = [reason for reason in old_blockers if isinstance(reason, str) and reason not in input_blocker_reasons]
+        new_input_blockers = [reason for name in spec["required_inputs"] for reason in _input_blockers(inputs, name)]
+        blockers = sorted(set(preserved_blockers + new_input_blockers))
+        adapter["provided_inputs"] = [name for name in spec["required_inputs"] if _input_present(inputs, name)]
+        contract = adapter.get("execution_contract")
+        if isinstance(contract, dict):
+            manifest = inputs.get("scenario_manifest") if isinstance(inputs, dict) else {}
+            contract["scenario_manifest_sha256"] = manifest.get("sha256") if isinstance(manifest, dict) else None
+        adapter["blocking_reasons"] = blockers
+        adapter["ready"] = not blockers
+    adapter_rows = [row for row in adapters if isinstance(row, dict) and "ready" in row and "blocking_reasons" in row]
+    blocking_reasons = _blocking_reasons(adapter_rows)
+    payload["ready_adapter_count"] = sum(1 for row in adapter_rows if row.get("ready") is True)
+    payload["blocking_reasons"] = blocking_reasons
+    payload["ready"] = bool(adapter_rows) and not blocking_reasons
+    governance = payload.get("governance_handoff")
+    if isinstance(governance, dict):
+        governance["external_eval_claims_allowed"] = payload["ready"]
+        governance["recommendation"] = (
+            "External eval adapters are ready to execute against the declared held-out scenario manifest."
+            if payload["ready"]
+            else "Keep external eval claims disabled until every selected adapter is ready."
+        )
+
+
+def _input_blocker_reasons(spec: dict[str, Any]) -> set[str]:
+    return {f"missing_{name}" for name in spec["required_inputs"]} | {"scenario_manifest_not_ready"}

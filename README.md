@@ -686,7 +686,8 @@ Registry and governance commands add:
 
 - model candidates, compatibility reports, adapter manifests, serving probes,
 - dataset manifests and cards,
-- eval summaries and external eval readiness plans,
+- eval summaries and external eval readiness plans that keep held-out manifest
+  refs relative and redact unreplayable local paths,
 - model cards, dataset cards, promotion decisions, rollback receipts, release
   records, and alias apply receipts.
 
