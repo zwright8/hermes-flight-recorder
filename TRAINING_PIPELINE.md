@@ -683,6 +683,8 @@ metrics, adapters, checkpoints, logs, and failure reports without launching a
 trainer or importing trainer stacks. It also records a side-effect-free
 `registry_update` proposal for training-run and adapter links; governance or a
 later guarded registry step must apply those links explicitly.
+Validation rejects lineage refs that traverse symlinked parent directories
+before replaying delegated-flow or training-plan manifest checks.
 Validate result receipts directly before bundling them:
 
 ```bash

@@ -10649,7 +10649,7 @@ def _validate_agentic_training_result_flow_lineage(
     if not isinstance(path_value, str) or not _is_safe_agentic_training_result_path(path_value):
         return
     flow_path = _agentic_training_result_reference_path(path_value, source_path)
-    if not flow_path.is_file() or flow_path.is_symlink():
+    if not flow_path.is_file() or flow_path.is_symlink() or _path_has_symlink_component(flow_path, include_leaf=False):
         return
     try:
         flow = json.loads(flow_path.read_text(encoding="utf-8"))
@@ -10708,7 +10708,7 @@ def _agentic_training_result_plan_input_manifests(lineage: dict[str, Any], sourc
     if not _is_safe_agentic_training_result_path(path_value):
         return {}
     plan_path = _agentic_training_result_reference_path(path_value, source_path)
-    if not plan_path.is_file():
+    if not plan_path.is_file() or plan_path.is_symlink() or _path_has_symlink_component(plan_path, include_leaf=False):
         return {}
     try:
         payload = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -10766,6 +10766,9 @@ def _validate_agentic_training_result_lineage_file(
         return
     if current_path.is_symlink():
         target.errors.append(f"{label}.path must not be a symlink.")
+        return
+    if _path_has_symlink_component(current_path, include_leaf=False):
+        target.errors.append(f"{label}.path must not traverse symlinked components.")
         return
     if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
         target.errors.append(f"{label}.size_bytes does not match the current file.")

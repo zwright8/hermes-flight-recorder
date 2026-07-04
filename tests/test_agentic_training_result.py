@@ -694,6 +694,53 @@ class AgenticTrainingResultTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("agentic_training_result.artifacts[0].path must not be a symlink.", errors)
 
+    def test_validate_rejects_agentic_training_result_lineage_symlinked_parent_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local_plan = root / EXAMPLE_PLAN.name
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            self.write_runtime_preflight(runtime, ready=True, plan_path=local_plan)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=local_plan,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            result["lineage"]["agentic_training_flow"]["path"] = str(Path(linked_parent.name) / "agentic_training_flow.json")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.lineage.agentic_training_flow.path must not traverse symlinked components.",
+                errors,
+            )
+
     def test_validate_rejects_agentic_training_result_absolute_public_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
