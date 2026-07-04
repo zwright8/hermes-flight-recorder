@@ -12820,6 +12820,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
         target.errors.append("evidence_bundle.notes must be a list of strings.")
 
     failed_checks = _validate_evidence_bundle_checks(checks, target)
+    blocking_check_rows = _evidence_bundle_blocking_check_rows(checks)
     if bundle.get("check_count") != len(checks):
         target.errors.append(f"evidence_bundle.check_count expected {len(checks)}, got {bundle.get('check_count')!r}.")
     if bundle.get("failed_check_count") != failed_checks:
@@ -12833,7 +12834,15 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     if bundle.get("readiness") != expected_readiness:
         target.errors.append(f"evidence_bundle.readiness expected {expected_readiness!r}, got {bundle.get('readiness')!r}.")
     if "decision" in bundle:
-        _validate_evidence_bundle_decision(bundle.get("decision"), expected_readiness, failed_checks, artifacts, metrics, target)
+        _validate_evidence_bundle_decision(
+            bundle.get("decision"),
+            expected_readiness,
+            failed_checks,
+            blocking_check_rows,
+            artifacts,
+            metrics,
+            target,
+        )
     if not artifacts:
         target.errors.append("evidence_bundle.artifacts must not be empty.")
     for name, record in artifacts.items():
@@ -19217,10 +19226,23 @@ def _validate_evidence_bundle_checks(checks: list[Any], target: ValidationTarget
     return failed_checks
 
 
+def _evidence_bundle_blocking_check_rows(checks: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(check.get("id") or "unknown"),
+            "summary": str(check.get("summary") or ""),
+            "scope": check.get("scope") if isinstance(check.get("scope"), dict) else {},
+        }
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False
+    ]
+
+
 def _validate_evidence_bundle_decision(
     decision: Any,
     expected_readiness: str,
     failed_checks: int,
+    blocking_check_rows: list[dict[str, Any]],
     artifacts: dict[str, Any],
     metrics: dict[str, Any],
     target: ValidationTarget,
@@ -19263,6 +19285,8 @@ def _validate_evidence_bundle_decision(
                 target.errors.append(f"{label}.summary must be a string.")
             if not isinstance(check.get("scope"), dict):
                 target.errors.append(f"{label}.scope must be an object.")
+        if blocking_checks != blocking_check_rows:
+            target.errors.append("evidence_bundle.decision.blocking_checks must match failed evidence_bundle.checks.")
     blocking_gates = decision.get("blocking_gates")
     if not isinstance(blocking_gates, list):
         target.errors.append("evidence_bundle.decision.blocking_gates must be a list.")

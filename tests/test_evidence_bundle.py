@@ -1535,6 +1535,30 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact must reference an evidence_bundle.artifacts key, metrics key, or evidence_bundle", errors)
 
+    def test_validate_rejects_stale_bundle_decision_blocking_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "failed_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["decision"]["blocking_checks"][0]["id"] = "stale_check_id"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision.blocking_checks must match failed evidence_bundle.checks", errors)
+
     def test_strict_validate_rejects_absolute_bundle_artifact_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
