@@ -57,6 +57,7 @@ from .bundle import (
     HARNESS_RUN_MANIFEST_SCHEMA_VERSION,
     HARNESS_RUN_RESULT_SCHEMA_VERSION,
     _decision_key_metrics as _build_evidence_bundle_decision_key_metrics,
+    _decision_text as _build_evidence_bundle_decision_text,
 )
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .cloud_training import (
@@ -20263,8 +20264,11 @@ def _validate_evidence_bundle_decision(
             "evidence_bundle.decision.recommendation expected "
             f"{expected_recommendation!r}, got {decision.get('recommendation')!r}."
         )
-    if not isinstance(decision.get("summary"), str) or not decision.get("summary"):
+    summary = decision.get("summary")
+    if not isinstance(summary, str) or not summary:
         target.errors.append("evidence_bundle.decision.summary must be a non-empty string.")
+    elif summary != _build_evidence_bundle_decision_text(expected_readiness, blocking_check_rows):
+        target.errors.append("evidence_bundle.decision.summary must match bundle readiness and failed checks.")
     if decision.get("blocking_check_count") != failed_checks:
         target.errors.append(
             f"evidence_bundle.decision.blocking_check_count expected {failed_checks}, got {decision.get('blocking_check_count')!r}."

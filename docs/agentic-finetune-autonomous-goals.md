@@ -692,6 +692,9 @@ card, and dataset card decisions.
 - Evidence-bundle decision key metrics are recomputed from bundle metrics during
   validation, blocking stale or hand-edited executive summaries that disagree
   with the underlying evidence sections.
+- Evidence-bundle decision summary text is recomputed from bundle readiness and
+  failed checks during validation, blocking hand-edited prose that claims a
+  safer or clearer handoff state than the evidence supports.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
