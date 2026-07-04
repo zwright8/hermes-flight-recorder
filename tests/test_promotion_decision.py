@@ -1238,6 +1238,65 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
+    def test_promotion_decision_blocks_symlinked_json_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "compare_gate.json").write_text(artifacts["compare_gate"].read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            artifacts["compare_gate"] = linked_parent / "compare_gate.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            compare_gate = decision["artifacts"]["compare_gate"]
+            self.assertFalse(compare_gate["exists"])
+            self.assertEqual(compare_gate["kind"], "other")
+            self.assertNotIn("sha256", compare_gate)
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("compare_gate_present", failed_ids)
+            self.assertIn("compare_gate_schema", failed_ids)
+            self.assertIn("compare_gate_passed", failed_ids)
+            self.assertIn("compare_metrics_complete", failed_ids)
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_symlinked_card_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "MODEL_CARD.md").write_text(artifacts["model_card"].read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_cards"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            artifacts["model_card"] = linked_parent / "MODEL_CARD.md"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            model_card = decision["artifacts"]["model_card"]
+            self.assertFalse(model_card["exists"])
+            self.assertEqual(model_card["kind"], "other")
+            self.assertNotIn("sha256", model_card)
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("model_card_present", failed_ids)
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
     def test_validate_promotion_policy_rejects_relaxed_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

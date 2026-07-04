@@ -464,7 +464,9 @@ redaction or safety failure, missing cards, missing rollback metadata, failed
 rollback receipts, eval mismatch, task-completion regression, new critical
 failures, secret exposure, forbidden actions, and unsupported card claims. A
 passing decision is still side-effect free: it authorizes an alias-update
-receipt, leaving the actual registry write to a later guarded step.
+receipt, leaving the actual registry write to a later guarded step. Promotion
+decisions reject required source artifacts and card files that are symlinks or
+traverse symlinked parent directories before reading, hashing, or binding them.
 `promotion-rollback-receipt` is side-effect free: it fingerprints the model
 registry, proves the rollback target is registered, and blocks when the target
 no longer matches the current champion before promotion. Validation also reads

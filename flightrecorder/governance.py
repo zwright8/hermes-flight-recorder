@@ -223,11 +223,17 @@ def build_promotion_decision(
     }
     output_path = Path(out_path) if out_path is not None else None
     artifacts = {
-        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths, output_path)
+        role: _artifact_record(
+            role,
+            Path(raw_path) if raw_path else None,
+            preserve_paths,
+            output_path,
+            reject_symlink_components=True,
+        )
         for role, raw_path in paths.items()
     }
     json_artifacts = {
-        role: _read_json_artifact(Path(raw_path)) if raw_path else None
+        role: _read_json_artifact(Path(raw_path), reject_symlink_components=True) if raw_path else None
         for role, raw_path in paths.items()
         if role in _JSON_ARTIFACT_ROLES or role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
@@ -331,8 +337,8 @@ def build_promotion_decision(
     _add_model_registry_entry_check(checks, json_artifacts.get("model_registry_entry"), candidate_id)
     _add_serving_profile_check(checks, json_artifacts.get("serving_profile"))
     _add_rollback_metadata_check(checks, json_artifacts.get("rollback_metadata"), rollback_id)
-    _add_card_claims_check(checks, "model_card", Path(model_card_path) if model_card_path else None)
-    _add_card_claims_check(checks, "dataset_card", Path(dataset_card_path) if dataset_card_path else None)
+    _add_card_claims_check(checks, "model_card", Path(model_card_path) if model_card_path else None, reject_symlink_components=True)
+    _add_card_claims_check(checks, "dataset_card", Path(dataset_card_path) if dataset_card_path else None, reject_symlink_components=True)
 
     failed_before_alias = sum(1 for check in checks if not check["passed"])
     _add_check(
@@ -1747,8 +1753,16 @@ def _add_compare_metrics_check(checks: list[dict[str, Any]], compare_metrics: di
     )
 
 
-def _add_card_claims_check(checks: list[dict[str, Any]], role: str, path: Path | None) -> None:
+def _add_card_claims_check(
+    checks: list[dict[str, Any]],
+    role: str,
+    path: Path | None,
+    *,
+    reject_symlink_components: bool = False,
+) -> None:
     markers: list[str] = []
+    if path is not None and reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        path = None
     if path is not None and path.exists() and path.is_file():
         try:
             text = path.read_text(encoding="utf-8").lower()
