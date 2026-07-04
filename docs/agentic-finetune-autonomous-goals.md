@@ -725,6 +725,8 @@ card, and dataset card decisions.
   governance summaries are accepted.
 - Suite-summary strict validation now warns on absolute scenario, trace, run,
   and run-artifact paths before public eval summaries are accepted.
+- Evidence-coverage and trace-observability strict validation now warn on
+  absolute per-run directories before public diagnostics are accepted.
 - External-eval strict validation now warns on absolute heldout-manifest and
   source-plan refs before adapter plans or dry-run receipts become public
   governance evidence.

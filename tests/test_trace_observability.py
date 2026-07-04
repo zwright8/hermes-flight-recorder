@@ -109,6 +109,29 @@ class TraceObservabilityTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("trace_observability.metrics.run_count", errors)
 
+    def test_strict_validate_warns_on_absolute_run_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "trace_observability.json"
+            strict_summary = Path(tmp) / "strict_validation.json"
+            permissive_summary = Path(tmp) / "permissive_validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+            run_cli(["trace-observability", "--runs", str(runs), "--out", str(out), "--preserve-paths"])
+
+            permissive_code = run_cli(["validate", "--trace-observability", str(out), "--out", str(permissive_summary)])
+            strict_code = run_cli(["validate", "--trace-observability", str(out), "--out", str(strict_summary), "--strict"])
+
+            self.assertEqual(permissive_code, 0)
+            self.assertEqual(strict_code, 1)
+            permissive = json.loads(permissive_summary.read_text(encoding="utf-8"))
+            strict = json.loads(strict_summary.read_text(encoding="utf-8"))
+            self.assertTrue(permissive["passed"], permissive)
+            self.assertGreater(permissive["warning_count"], 0, permissive)
+            self.assertFalse(strict["passed"], strict)
+            self.assertEqual(strict["error_count"], 0, strict)
+            warnings = "\n".join(warning for target in strict["targets"] for warning in target["warnings"])
+            self.assertIn("trace_observability.runs[0].run_dir is absolute", warnings)
+
 
 if __name__ == "__main__":
     unittest.main()

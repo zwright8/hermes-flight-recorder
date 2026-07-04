@@ -15402,6 +15402,7 @@ def _validate_evidence_coverage_runs(runs: list[Any], target: ValidationTarget) 
         for field_name in ("scenario_id", "scenario_title", "run_dir"):
             if not isinstance(run.get(field_name), str) or not run.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.run_dir", run.get("run_dir"))
         if not isinstance(run.get("passed"), bool):
             target.errors.append(f"{label}.passed must be a boolean.")
         if not _is_int_between(run.get("score"), 0, 100):
@@ -15594,6 +15595,7 @@ def _validate_trace_observability_runs(runs: list[Any], target: ValidationTarget
         for field_name in ("run_dir", "scenario_id", "source_format", "model"):
             if not isinstance(run.get(field_name), str) or not run.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.run_dir", run.get("run_dir"))
         if run.get("passed") is not None and not isinstance(run.get("passed"), bool):
             target.errors.append(f"{label}.passed must be a boolean or null.")
         if run.get("score") is not None and not _is_int_between(run.get("score"), 0, 100):
