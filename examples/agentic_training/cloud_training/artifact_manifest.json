@@ -9,7 +9,7 @@
   "checks": [
     {
       "actual": {
-        "upload_count": 1
+        "upload_count": 3
       },
       "expected": {
         "min_upload_count": 1
@@ -23,10 +23,24 @@
         "uploads": [
           {
             "exists": true,
-            "path": "../plans/sft_then_dpo_plan.json",
+            "path": "sources/plans/sft_then_dpo_plan.json",
             "role": "upload",
             "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
             "size_bytes": 15787
+          },
+          {
+            "exists": true,
+            "path": "sources/trainer_preflight.json",
+            "role": "upload",
+            "sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+            "size_bytes": 88398
+          },
+          {
+            "exists": true,
+            "path": "sources/trainer_launch_check.json",
+            "role": "upload",
+            "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+            "size_bytes": 14354
           }
         ]
       },
@@ -58,20 +72,20 @@
           ],
           "credential_values_recorded": false,
           "download_artifacts_expected_to_exist_before_launch": false,
-          "expected_download_count": 1,
+          "expected_download_count": 0,
           "flight_recorder_downloaded_artifacts": false,
           "flight_recorder_uploaded_artifacts": false,
           "mode": "dry_run_manifest_only",
           "provider_api_called": false,
-          "requires_external_runner_download": true,
+          "requires_external_runner_download": false,
           "requires_external_runner_upload": true,
-          "upload_count": 1,
-          "upload_size_bytes": 15787
+          "upload_count": 3,
+          "upload_size_bytes": 118539
         }
       },
       "expected": {
-        "expected_download_count": 1,
-        "upload_count": 1
+        "expected_download_count": 0,
+        "upload_count": 3
       },
       "id": "transfer_plan_matches_artifacts",
       "passed": true,
@@ -106,15 +120,7 @@
     "provider_api_called": false,
     "weights_updated_by_flight_recorder": false
   },
-  "expected_download_artifacts": [
-    {
-      "exists": false,
-      "path": "adapters/candidate/adapter_model.safetensors",
-      "role": "download",
-      "sha256": null,
-      "size_bytes": null
-    }
-  ],
+  "expected_download_artifacts": [],
   "failed_check_count": 0,
   "passed": true,
   "provider": {
@@ -190,23 +196,37 @@
     ],
     "credential_values_recorded": false,
     "download_artifacts_expected_to_exist_before_launch": false,
-    "expected_download_count": 1,
+    "expected_download_count": 0,
     "flight_recorder_downloaded_artifacts": false,
     "flight_recorder_uploaded_artifacts": false,
     "mode": "dry_run_manifest_only",
     "provider_api_called": false,
-    "requires_external_runner_download": true,
+    "requires_external_runner_download": false,
     "requires_external_runner_upload": true,
-    "upload_count": 1,
-    "upload_size_bytes": 15787
+    "upload_count": 3,
+    "upload_size_bytes": 118539
   },
   "upload_artifacts": [
     {
       "exists": true,
-      "path": "../plans/sft_then_dpo_plan.json",
+      "path": "sources/plans/sft_then_dpo_plan.json",
       "role": "upload",
       "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
       "size_bytes": 15787
+    },
+    {
+      "exists": true,
+      "path": "sources/trainer_preflight.json",
+      "role": "upload",
+      "sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+      "size_bytes": 88398
+    },
+    {
+      "exists": true,
+      "path": "sources/trainer_launch_check.json",
+      "role": "upload",
+      "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+      "size_bytes": 14354
     }
   ]
 }

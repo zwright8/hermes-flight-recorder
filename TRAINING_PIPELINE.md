@@ -805,6 +805,9 @@ The committed closed-loop demo includes a real local `export-rl` bundle under
 `examples/agentic_training/training_export/` plus a
 `dataset_curation_receipt.json` that binds it to rejection sampling while
 recording that no curated rows, registries, cloud jobs, or weights were changed.
+It also includes a `training_gate.json`, `trainer_preflight.json`, and
+`trainer_launch_check.json` that approve only the local dry-run trainer command
+against the selected dataset version.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -820,6 +823,9 @@ flightrecorder agentic-loop plan \
   --evidence-bundle runs/evidence_bundle_trainer.json \
   --rejection-sampling-gate runs/rejection_sampling_gate.json \
   --dataset-curation-receipt runs/dataset_curation_receipt.json \
+  --training-export runs/training_export \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
   --agentic-training-plan runs/agentic_training_plan.json \
   --agentic-training-result runs/agentic_training_result.json \
   --cloud-training-provider-registry runs/cloud_provider_registry.json \
@@ -998,6 +1004,9 @@ absolute or traversal paths are redacted and treated as missing, which keeps
 the cloud receipt blocked rather than publishing local filesystem details.
 Validation requires those refs to resolve to regular non-symlink files before
 using referenced payloads to derive source readiness or provider-chain state.
+For nested public examples, stage trainer handoff inputs below the receipt
+directory, such as `cloud_training/sources/`, so receipts can store replayable
+paths like `sources/trainer_preflight.json` without permitting `..` traversal.
 
 ```bash
 flightrecorder cloud-training providers \
@@ -1005,7 +1014,9 @@ flightrecorder cloud-training providers \
 
 flightrecorder cloud-training artifacts \
   --provider modal \
-  --upload runs/trainer_archive/trainer_archive.json \
+  --upload runs/agentic_training_plan.json \
+  --upload runs/trainer_preflight.json \
+  --upload runs/trainer_launch_check.json \
   --download adapters/candidate/adapter_model.safetensors \
   --out runs/cloud_artifacts.json
 

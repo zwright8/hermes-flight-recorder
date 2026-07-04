@@ -142,6 +142,82 @@ The committed export is a deterministic local `export-rl` bundle. The curation
 receipt binds it to rejection sampling, but records that Flight Recorder did not
 write curated rows, update registries, start cloud jobs, or update weights.
 
+Gate the curated export and record the local dry-run trainer handoff:
+
+```bash
+dataset_version="$(python3.11 -c 'import json, pathlib; print(json.loads(pathlib.Path("examples/agentic_training/training_export/manifest.json").read_text())["dataset_version"])')"
+
+flightrecorder gate-export \
+  --training-export examples/agentic_training/training_export \
+  --policy examples/training_gate_policy.demo.json \
+  --out examples/agentic_training/training_gate.json
+
+flightrecorder trainer-preflight \
+  --gate examples/agentic_training/training_gate.json \
+  --training-export examples/agentic_training/training_export \
+  --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --require-gate training_gate \
+  --require-dataset-version "$dataset_version" \
+  --trainer-command "python train.py --dataset training_export --dry-run" \
+  --metadata launcher=dry-run \
+  --out examples/agentic_training/trainer_preflight.json
+
+flightrecorder trainer-launch-check \
+  --preflight examples/agentic_training/trainer_preflight.json \
+  --require-gate training_gate \
+  --require-dataset-version "$dataset_version" \
+  --require-metadata launcher=dry-run \
+  --out examples/agentic_training/trainer_launch_check.json \
+  --strict
+```
+
+Refresh the dry-run cloud-training handoff from replayable source snapshots:
+
+```bash
+mkdir -p examples/agentic_training/cloud_training/sources/plans
+cp examples/agentic_training/plans/sft_then_dpo_plan.json \
+  examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json
+cp examples/agentic_training/trainer_preflight.json \
+  examples/agentic_training/cloud_training/sources/trainer_preflight.json
+cp examples/agentic_training/trainer_launch_check.json \
+  examples/agentic_training/cloud_training/sources/trainer_launch_check.json
+
+flightrecorder cloud-training preflight \
+  --provider modal \
+  --agentic-training-plan examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json \
+  --trainer-preflight examples/agentic_training/cloud_training/sources/trainer_preflight.json \
+  --trainer-launch-check examples/agentic_training/cloud_training/sources/trainer_launch_check.json \
+  --region provider_default \
+  --gpu-class a100 \
+  --max-cost-usd 0 \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/cloud_training/preflight.json
+
+flightrecorder cloud-training artifacts \
+  --provider modal \
+  --upload examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json \
+  --upload examples/agentic_training/cloud_training/sources/trainer_preflight.json \
+  --upload examples/agentic_training/cloud_training/sources/trainer_launch_check.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/cloud_training/artifact_manifest.json
+
+flightrecorder cloud-training plan \
+  --preflight examples/agentic_training/cloud_training/preflight.json \
+  --artifact-manifest examples/agentic_training/cloud_training/artifact_manifest.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/cloud_training/launch_plan.json
+
+flightrecorder cloud-training launch \
+  --launch-plan examples/agentic_training/cloud_training/launch_plan.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/cloud_training/launch_receipt.json
+
+flightrecorder cloud-training status \
+  --launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/cloud_training/status_receipt.json
+```
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
@@ -162,6 +238,8 @@ flightrecorder agentic-loop plan \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
   --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
   --training-export examples/agentic_training/training_export \
+  --trainer-preflight examples/agentic_training/trainer_preflight.json \
+  --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
@@ -185,11 +263,12 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include harness results, local trainer-preflight, serving, held-out
-eval, or promotion receipts. It does bind loop-local rollout plan and mock
-receipt, nested model-grader review, rejection-sampling, dataset-curation,
-training-export, cloud-training, action-ledger, and improvement-ledger receipts
-without provider, dataset-write, or scheduler side effects. The
+does not include harness results, evidence bundles, serving, held-out eval, or
+promotion receipts. It does bind loop-local rollout plan and mock receipt,
+nested model-grader review, rejection-sampling, dataset-curation,
+training-export, trainer-preflight, trainer-launch-check, cloud-training,
+action-ledger, and improvement-ledger receipts without provider, dataset-write,
+or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
@@ -209,12 +288,21 @@ flightrecorder validate \
 
 flightrecorder schemas --check examples/agentic_training/loop_plan.json
 flightrecorder schemas --check examples/agentic_training/model_grader/reviewed_gate.json
+flightrecorder schemas --check examples/agentic_training/training_gate.json
 flightrecorder validate \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
   --training-export examples/agentic_training/training_export \
   --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
+  --trainer-preflight examples/agentic_training/trainer_preflight.json \
+  --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
+  --cloud-training-provider-registry examples/agentic_training/cloud_training/provider_registry.json \
+  --cloud-training-preflight examples/agentic_training/cloud_training/preflight.json \
+  --cloud-training-artifact-manifest examples/agentic_training/cloud_training/artifact_manifest.json \
+  --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
+  --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
+  --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 

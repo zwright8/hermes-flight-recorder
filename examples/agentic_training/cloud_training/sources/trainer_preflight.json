@@ -1,0 +1,3307 @@
+{
+  "artifacts": {
+    "agentic_training_plan": {
+      "exists": true,
+      "kind": "file",
+      "path": "plans/sft_then_dpo_plan.json",
+      "regular_file": true,
+      "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+      "size_bytes": 15787,
+      "symlink": false
+    },
+    "training_export": {
+      "entry_count": 15,
+      "exists": true,
+      "file_count": 38,
+      "kind": "directory",
+      "path": "training_export",
+      "regular_directory": true,
+      "sha256": "a6bb01cba41f40d381848512b603b93400ec7d079f84b75000e39477a6239451",
+      "size_bytes": 508903,
+      "symlink": false,
+      "tree_hash_algorithm": "sha256(sorted-relative-path-size-file-sha256)"
+    },
+    "training_export_curriculum_json": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/curriculum.json",
+      "regular_file": true,
+      "sha256": "44951f9ab69297ae46e1bb497a9187562206ff1014dc562729981bfe7dfd3bcc",
+      "size_bytes": 19581,
+      "symlink": false
+    },
+    "training_export_dataset_card_md": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/DATASET_CARD.md",
+      "regular_file": true,
+      "sha256": "4924147e523d1452271c1039026590c3056470853ea5e3a6bb925631c16eb4f4",
+      "size_bytes": 3349,
+      "symlink": false
+    },
+    "training_export_dataset_metrics_json": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/dataset_metrics.json",
+      "regular_file": true,
+      "sha256": "bee3703d2e09602b656f3060a94f1835367460fc7412c1b9cd505db348acbc0a",
+      "size_bytes": 14560,
+      "symlink": false
+    },
+    "training_export_dataset_registry_json": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/dataset_registry.json",
+      "regular_file": true,
+      "sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "size_bytes": 23269,
+      "symlink": false
+    },
+    "training_export_dataset_splits_json": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/dataset_splits.json",
+      "regular_file": true,
+      "sha256": "3f4eb5febe1b0c7d4098a63df72aa9632d7addedbe314062d89a39880eee825f",
+      "size_bytes": 4313,
+      "symlink": false
+    },
+    "training_export_dpo_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/dpo.jsonl",
+      "regular_file": true,
+      "sha256": "78bf6460759e1501030311dd99311fac6d459fecdca7de239732a786c9f03e62",
+      "size_bytes": 7646,
+      "symlink": false
+    },
+    "training_export_episodes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/episodes.jsonl",
+      "regular_file": true,
+      "sha256": "6929cd02bbe035c3255de8e00bd0a094008df08be4b6c4600d99e2049b81f52c",
+      "size_bytes": 54717,
+      "symlink": false
+    },
+    "training_export_failure_modes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/failure_modes.jsonl",
+      "regular_file": true,
+      "sha256": "0073257e53db681f7ff0afc09fa1a3f1e2c0700cab406fd4a4d1c98db36e4ae7",
+      "size_bytes": 30651,
+      "symlink": false
+    },
+    "training_export_manifest_json": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/manifest.json",
+      "regular_file": true,
+      "sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "size_bytes": 22973,
+      "symlink": false
+    },
+    "training_export_preferences_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/preferences.jsonl",
+      "regular_file": true,
+      "sha256": "d29c6adc0d7acb86a1d914893f603f643a9fe09485394bc1585de41189f88b38",
+      "size_bytes": 29006,
+      "symlink": false
+    },
+    "training_export_reward_model_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/reward_model.jsonl",
+      "regular_file": true,
+      "sha256": "07f7fe25b486632253be79ef4fee8acb13e265cb1e7a84d700d80d27d4e469f4",
+      "size_bytes": 14503,
+      "symlink": false
+    },
+    "training_export_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/rewards.jsonl",
+      "regular_file": true,
+      "sha256": "840a0661126910d8944b459e975bb74916ebccc8a38797e010686deb5138ad7a",
+      "size_bytes": 38470,
+      "symlink": false
+    },
+    "training_export_sft_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/sft.jsonl",
+      "regular_file": true,
+      "sha256": "faeb835a0a0c11c08608973606b882dac9e65d14825937915441c9de792514f2",
+      "size_bytes": 4034,
+      "symlink": false
+    },
+    "training_export_splits_test_dpo_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/dpo.jsonl",
+      "regular_file": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_episodes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/episodes.jsonl",
+      "regular_file": true,
+      "sha256": "0cb3ace33e598b466367f4a40cc3e8ef6c07fcd5483af01330937a0445fcc5ce",
+      "size_bytes": 4420,
+      "symlink": false
+    },
+    "training_export_splits_test_failure_modes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/failure_modes.jsonl",
+      "regular_file": true,
+      "sha256": "554d33f6dcb10bd549f6ccd8784ce9149e1e2ce6b5dbf85c4ad3d6f03fd52d5b",
+      "size_bytes": 1622,
+      "symlink": false
+    },
+    "training_export_splits_test_preferences_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/preferences.jsonl",
+      "regular_file": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_reward_model_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/reward_model.jsonl",
+      "regular_file": true,
+      "sha256": "e16dd014dc7eb32629b8ae42f8715d64549700be677375bb4ed398ec798b23d8",
+      "size_bytes": 1821,
+      "symlink": false
+    },
+    "training_export_splits_test_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/rewards.jsonl",
+      "regular_file": true,
+      "sha256": "4a4a46c6c37fa683b549d953d333ab6e2ea2fb0e53597617b3a23be4c729f551",
+      "size_bytes": 3716,
+      "symlink": false
+    },
+    "training_export_splits_test_sft_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/sft.jsonl",
+      "regular_file": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_step_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/test/step_rewards.jsonl",
+      "regular_file": true,
+      "sha256": "0b90c1920e05a22c04a3fe7d5a1e1700421379bf7a5ac7bff38462a888eae29e",
+      "size_bytes": 1386,
+      "symlink": false
+    },
+    "training_export_splits_train_dpo_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/dpo.jsonl",
+      "regular_file": true,
+      "sha256": "8bea8567482db3ce23f376bdc25ad4d24a6f5c48da070fa7ec2d057197593604",
+      "size_bytes": 3930,
+      "symlink": false
+    },
+    "training_export_splits_train_episodes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/episodes.jsonl",
+      "regular_file": true,
+      "sha256": "57f8a5b58e9c0149caf854da10a167663e2601d56e65054a69d010d76a452837",
+      "size_bytes": 39945,
+      "symlink": false
+    },
+    "training_export_splits_train_failure_modes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/failure_modes.jsonl",
+      "regular_file": true,
+      "sha256": "1910c5643579b34d5e71be5287990824d5a1899df41192b253233857ca265d90",
+      "size_bytes": 19462,
+      "symlink": false
+    },
+    "training_export_splits_train_preferences_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/preferences.jsonl",
+      "regular_file": true,
+      "sha256": "115120d9720c88a7ffce44c817d7e80634f3004aa131ae68edab28ec68acfde9",
+      "size_bytes": 19618,
+      "symlink": false
+    },
+    "training_export_splits_train_reward_model_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/reward_model.jsonl",
+      "regular_file": true,
+      "sha256": "bdfd26257b5c68b4f08e1e31ca1b1e0665da3559e0659eff7d184b5b6c8cb6ce",
+      "size_bytes": 8515,
+      "symlink": false
+    },
+    "training_export_splits_train_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/rewards.jsonl",
+      "regular_file": true,
+      "sha256": "4f77abf305b30a5cfc3362637b02c0dbbe58f8c2b326c08b937350dd53dd6db3",
+      "size_bytes": 23535,
+      "symlink": false
+    },
+    "training_export_splits_train_sft_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/sft.jsonl",
+      "regular_file": true,
+      "sha256": "abba837330a6a3251cb6afaee15cca5e8aea98c423b6a2d2c20d3e35b6e1d91c",
+      "size_bytes": 2029,
+      "symlink": false
+    },
+    "training_export_splits_train_step_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/train/step_rewards.jsonl",
+      "regular_file": true,
+      "sha256": "05154bc0e42d08189bfd0837c046def6c5dfdea2737e46623cb8ad23cff583e7",
+      "size_bytes": 16935,
+      "symlink": false
+    },
+    "training_export_splits_validation_dpo_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/dpo.jsonl",
+      "regular_file": true,
+      "sha256": "b0b2f2adc5cd64465b65691d3f8d775571b74733c8b9b2a7a994772433488328",
+      "size_bytes": 3716,
+      "symlink": false
+    },
+    "training_export_splits_validation_episodes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/episodes.jsonl",
+      "regular_file": true,
+      "sha256": "ec86b1040f9737a6e16a05b126d8e5fa2433974d5c6e49392cbbff51bbb47aec",
+      "size_bytes": 10352,
+      "symlink": false
+    },
+    "training_export_splits_validation_failure_modes_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/failure_modes.jsonl",
+      "regular_file": true,
+      "sha256": "a61f193ef6d85d500a9055ab3dd61f932072103d7a86284a7fd0ded4f2aa70fe",
+      "size_bytes": 9567,
+      "symlink": false
+    },
+    "training_export_splits_validation_preferences_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/preferences.jsonl",
+      "regular_file": true,
+      "sha256": "cb610285f998ca7174a2d8d7cec2c12ac16750b05b74beb51ec52fcd6556e4f2",
+      "size_bytes": 9388,
+      "symlink": false
+    },
+    "training_export_splits_validation_reward_model_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/reward_model.jsonl",
+      "regular_file": true,
+      "sha256": "728c5699d3e46352652e616fe7ff27670149ad4df7f8861aee8febec756c9a13",
+      "size_bytes": 4167,
+      "symlink": false
+    },
+    "training_export_splits_validation_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/rewards.jsonl",
+      "regular_file": true,
+      "sha256": "ecc3228352c8ff3dc4b75d0a0d1cf035e4ecd718b7369a356bcadfc7beeca310",
+      "size_bytes": 11219,
+      "symlink": false
+    },
+    "training_export_splits_validation_sft_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/sft.jsonl",
+      "regular_file": true,
+      "sha256": "cbb339d6962184c5230d5fb21d366d3b8f91df051a08a110873150fba7a266a5",
+      "size_bytes": 2005,
+      "symlink": false
+    },
+    "training_export_splits_validation_step_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/splits/validation/step_rewards.jsonl",
+      "regular_file": true,
+      "sha256": "a6e79ca2b9ff06f76ec4af592c153ddce4b51e2850b121cfd0eda6e0d81eb479",
+      "size_bytes": 13081,
+      "symlink": false
+    },
+    "training_export_step_rewards_jsonl": {
+      "exists": true,
+      "kind": "file",
+      "path": "training_export/step_rewards.jsonl",
+      "regular_file": true,
+      "sha256": "0b99d75cd2b79b431984611efff73493525f8b173ceb5b931e96501d784c2dd2",
+      "size_bytes": 31402,
+      "symlink": false
+    }
+  },
+  "check_count": 128,
+  "checks": [
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "gate_passed",
+      "passed": true,
+      "scope": {
+        "gate": "training_gate",
+        "path": "training_gate.json"
+      },
+      "summary": "gate_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "gate_validation_passed",
+      "passed": true,
+      "scope": {
+        "gate": "training_gate",
+        "validation_available": "true",
+        "validation_error_count": "0"
+      },
+      "summary": "gate_validation_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "required_gate_present",
+      "passed": true,
+      "scope": {
+        "gate": "training_gate"
+      },
+      "summary": "required_gate_present: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_dir_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export"
+      },
+      "summary": "artifact_dir_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_dir_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export"
+      },
+      "summary": "artifact_dir_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "manifest.json"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "manifest.json"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_registry.json"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_registry.json"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_metrics.json"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_metrics.json"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_splits.json"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dataset_splits.json"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "DATASET_CARD.md"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "DATASET_CARD.md"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "episodes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "episodes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "step_rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "step_rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "preferences.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "preferences.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "failure_modes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "failure_modes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "curriculum.json"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "curriculum.json"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "sft.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "sft.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dpo.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "dpo.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "reward_model.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "reward_model.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/episodes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/episodes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/preferences.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/preferences.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/sft.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/sft.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/dpo.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/dpo.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/reward_model.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/train/reward_model.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/episodes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/episodes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/preferences.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/preferences.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/sft.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/sft.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/dpo.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/dpo.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/reward_model.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/validation/reward_model.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/episodes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/episodes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/step_rewards.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/preferences.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/preferences.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/failure_modes.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/sft.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/sft.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/dpo.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/dpo.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/reward_model.jsonl"
+      },
+      "summary": "artifact_file_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "artifact_file_regular",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "file": "splits/test/reward_model.jsonl"
+      },
+      "summary": "artifact_file_regular: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_manifest_json",
+        "path": "training_export/manifest.json",
+        "schema": "training_manifest"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_dataset_registry_json",
+        "path": "training_export/dataset_registry.json",
+        "schema": "dataset_registry"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_dataset_metrics_json",
+        "path": "training_export/dataset_metrics.json",
+        "schema": "rl_dataset_metrics"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_curriculum_json",
+        "path": "training_export/curriculum.json",
+        "schema": "rl_curriculum"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_dataset_splits_json",
+        "path": "training_export/dataset_splits.json",
+        "schema": "dataset_splits"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_episodes_jsonl",
+        "path": "training_export/episodes.jsonl",
+        "schema": "rl_episode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_rewards_jsonl",
+        "path": "training_export/rewards.jsonl",
+        "schema": "rl_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_step_rewards_jsonl",
+        "path": "training_export/step_rewards.jsonl",
+        "schema": "rl_step_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_preferences_jsonl",
+        "path": "training_export/preferences.jsonl",
+        "schema": "rl_preference"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_failure_modes_jsonl",
+        "path": "training_export/failure_modes.jsonl",
+        "schema": "rl_failure_mode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_sft_jsonl",
+        "path": "training_export/sft.jsonl",
+        "schema": "rl_sft"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_dpo_jsonl",
+        "path": "training_export/dpo.jsonl",
+        "schema": "rl_dpo"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_reward_model_jsonl",
+        "path": "training_export/reward_model.jsonl",
+        "schema": "rl_reward_model"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_episodes_jsonl",
+        "path": "training_export/splits/train/episodes.jsonl",
+        "schema": "rl_episode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_rewards_jsonl",
+        "path": "training_export/splits/train/rewards.jsonl",
+        "schema": "rl_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_step_rewards_jsonl",
+        "path": "training_export/splits/train/step_rewards.jsonl",
+        "schema": "rl_step_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_preferences_jsonl",
+        "path": "training_export/splits/train/preferences.jsonl",
+        "schema": "rl_preference"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_failure_modes_jsonl",
+        "path": "training_export/splits/train/failure_modes.jsonl",
+        "schema": "rl_failure_mode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_sft_jsonl",
+        "path": "training_export/splits/train/sft.jsonl",
+        "schema": "rl_sft"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_dpo_jsonl",
+        "path": "training_export/splits/train/dpo.jsonl",
+        "schema": "rl_dpo"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_train_reward_model_jsonl",
+        "path": "training_export/splits/train/reward_model.jsonl",
+        "schema": "rl_reward_model"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_episodes_jsonl",
+        "path": "training_export/splits/validation/episodes.jsonl",
+        "schema": "rl_episode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_rewards_jsonl",
+        "path": "training_export/splits/validation/rewards.jsonl",
+        "schema": "rl_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_step_rewards_jsonl",
+        "path": "training_export/splits/validation/step_rewards.jsonl",
+        "schema": "rl_step_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_preferences_jsonl",
+        "path": "training_export/splits/validation/preferences.jsonl",
+        "schema": "rl_preference"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_failure_modes_jsonl",
+        "path": "training_export/splits/validation/failure_modes.jsonl",
+        "schema": "rl_failure_mode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_sft_jsonl",
+        "path": "training_export/splits/validation/sft.jsonl",
+        "schema": "rl_sft"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_dpo_jsonl",
+        "path": "training_export/splits/validation/dpo.jsonl",
+        "schema": "rl_dpo"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_validation_reward_model_jsonl",
+        "path": "training_export/splits/validation/reward_model.jsonl",
+        "schema": "rl_reward_model"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_episodes_jsonl",
+        "path": "training_export/splits/test/episodes.jsonl",
+        "schema": "rl_episode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_rewards_jsonl",
+        "path": "training_export/splits/test/rewards.jsonl",
+        "schema": "rl_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_step_rewards_jsonl",
+        "path": "training_export/splits/test/step_rewards.jsonl",
+        "schema": "rl_step_reward"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_preferences_jsonl",
+        "path": "training_export/splits/test/preferences.jsonl",
+        "schema": "rl_preference"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_failure_modes_jsonl",
+        "path": "training_export/splits/test/failure_modes.jsonl",
+        "schema": "rl_failure_mode"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_sft_jsonl",
+        "path": "training_export/splits/test/sft.jsonl",
+        "schema": "rl_sft"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_dpo_jsonl",
+        "path": "training_export/splits/test/dpo.jsonl",
+        "schema": "rl_dpo"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export_splits_test_reward_model_jsonl",
+        "path": "training_export/splits/test/reward_model.jsonl",
+        "schema": "rl_reward_model"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_version_present",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export"
+      },
+      "summary": "dataset_version_present: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_version_matches_required",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "dataset_version": "hfrds-55eb38b250844a57",
+        "required": "hfrds-55eb38b250844a57"
+      },
+      "summary": "dataset_version_matches_required: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_registry_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export"
+      },
+      "summary": "dataset_registry_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_registry_version_matches_manifest",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "dataset_version": "hfrds-55eb38b250844a57"
+      },
+      "summary": "dataset_registry_version_matches_manifest: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_registry_manifest_hash_matches",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "dataset_version": "hfrds-55eb38b250844a57"
+      },
+      "summary": "dataset_registry_manifest_hash_matches: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_redaction_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "dataset_version": "hfrds-55eb38b250844a57"
+      },
+      "summary": "dataset_redaction_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "dataset_heldout_scenario_exclusive",
+      "passed": true,
+      "scope": {
+        "artifact": "training_export",
+        "dataset_version": "hfrds-55eb38b250844a57"
+      },
+      "summary": "dataset_heldout_scenario_exclusive: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "schema_contract_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "agentic_training_plan",
+        "path": "plans/sft_then_dpo_plan.json",
+        "schema": "agentic_training_plan"
+      },
+      "summary": "schema_contract_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "agentic_training_plan_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "agentic_training_plan"
+      },
+      "summary": "agentic_training_plan_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "agentic_training_plan_ready",
+      "passed": true,
+      "scope": {
+        "artifact": "agentic_training_plan"
+      },
+      "summary": "agentic_training_plan_ready: passed=True"
+    }
+  ],
+  "dataset_selection": [
+    {
+      "artifact": "training_export",
+      "dataset_version": "hfrds-55eb38b250844a57",
+      "heldout_scenario_exclusive": true,
+      "heldout_scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good",
+        "subagent_claim_bad"
+      ],
+      "manifest_path": "training_export/manifest.json",
+      "manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "matches_required": true,
+      "redaction_passed": true,
+      "registry_dataset_version": "hfrds-55eb38b250844a57",
+      "registry_manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "registry_path": "training_export/dataset_registry.json",
+      "registry_selection_key": "hfrds-55eb38b250844a57",
+      "registry_sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "required_dataset_versions": [
+        "hfrds-55eb38b250844a57"
+      ],
+      "root": "training_export",
+      "trainer_modes": [
+        "action_sft",
+        "curriculum",
+        "dpo",
+        "process_reward",
+        "reward_model",
+        "sft",
+        "step_reward"
+      ],
+      "trainer_views": {
+        "contract_version": "hfr.rl.trainer_views.v1",
+        "mode_to_view": {
+          "action_sft": "action_sft",
+          "curriculum": "curriculum",
+          "dpo": "dpo",
+          "process_reward": "process_reward",
+          "reward_model": "reward_model",
+          "sft": "sft",
+          "step_reward": "step_reward"
+        },
+        "notes": [
+          "Trainer views are selectors over canonical export artifacts.",
+          "Alias modes such as action_sft and process_reward do not duplicate rows.",
+          "Use split_paths when training requires train/validation/test isolation."
+        ],
+        "root_views": [
+          "sft.jsonl",
+          "dpo.jsonl",
+          "reward_model.jsonl",
+          "step_rewards.jsonl",
+          "curriculum.json"
+        ],
+        "views": [
+          {
+            "artifact": "sft",
+            "artifact_format": "jsonl",
+            "artifact_path": "sft.jsonl",
+            "available": true,
+            "label_policy": "scorecard_pass_plus_configured_task_completion",
+            "notes": [
+              "Positive rows require configured task-completion evidence."
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.sft.v1",
+            "source_artifacts": [
+              "episodes.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/sft.jsonl",
+              "train": "splits/train/sft.jsonl",
+              "validation": "splits/validation/sft.jsonl"
+            },
+            "training_modes": [
+              "sft"
+            ],
+            "view_id": "sft"
+          },
+          {
+            "artifact": "sft",
+            "artifact_format": "jsonl",
+            "artifact_path": "sft.jsonl",
+            "available": true,
+            "label_policy": "scorecard_pass_plus_configured_task_completion",
+            "notes": [
+              "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.sft.v1",
+            "source_artifacts": [
+              "episodes.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/sft.jsonl",
+              "train": "splits/train/sft.jsonl",
+              "validation": "splits/validation/sft.jsonl"
+            },
+            "training_modes": [
+              "action_sft"
+            ],
+            "view_id": "action_sft"
+          },
+          {
+            "artifact": "dpo",
+            "artifact_format": "jsonl",
+            "artifact_path": "dpo.jsonl",
+            "available": true,
+            "label_policy": "within_family_score_gap_preference",
+            "notes": [
+              "Chosen rows inherit the same positive-label eligibility policy as SFT."
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.dpo.v1",
+            "source_artifacts": [
+              "preferences.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/dpo.jsonl",
+              "train": "splits/train/dpo.jsonl",
+              "validation": "splits/validation/dpo.jsonl"
+            },
+            "training_modes": [
+              "dpo"
+            ],
+            "view_id": "dpo"
+          },
+          {
+            "artifact": "reward_model",
+            "artifact_format": "jsonl",
+            "artifact_path": "reward_model.jsonl",
+            "available": true,
+            "label_policy": "failing_episodes_plus_verified_positive_episodes",
+            "notes": [
+              "Positive reward rows exclude final-answer-only successes."
+            ],
+            "row_count": 7,
+            "schema_version": "hfr.rl.reward_model.v1",
+            "source_artifacts": [
+              "episodes.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/reward_model.jsonl",
+              "train": "splits/train/reward_model.jsonl",
+              "validation": "splits/validation/reward_model.jsonl"
+            },
+            "training_modes": [
+              "reward_model"
+            ],
+            "view_id": "reward_model"
+          },
+          {
+            "artifact": "step_rewards",
+            "artifact_format": "jsonl",
+            "artifact_path": "step_rewards.jsonl",
+            "available": true,
+            "label_policy": "failed_rule_attribution",
+            "notes": [
+              "Rows allocate failed-rule reward deltas across event, final-answer, or episode targets."
+            ],
+            "row_count": 21,
+            "schema_version": "hfr.rl.step_reward.v1",
+            "source_artifacts": [
+              "rewards.jsonl",
+              "failure_modes.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/step_rewards.jsonl",
+              "train": "splits/train/step_rewards.jsonl",
+              "validation": "splits/validation/step_rewards.jsonl"
+            },
+            "training_modes": [
+              "step_reward"
+            ],
+            "view_id": "step_reward"
+          },
+          {
+            "artifact": "step_rewards",
+            "artifact_format": "jsonl",
+            "artifact_path": "step_rewards.jsonl",
+            "available": true,
+            "label_policy": "failed_rule_attribution",
+            "notes": [
+              "Process reward is an alias over step_rewards.jsonl; no separate row copy is emitted."
+            ],
+            "row_count": 21,
+            "schema_version": "hfr.rl.step_reward.v1",
+            "source_artifacts": [
+              "rewards.jsonl",
+              "failure_modes.jsonl"
+            ],
+            "split_paths": {
+              "test": "splits/test/step_rewards.jsonl",
+              "train": "splits/train/step_rewards.jsonl",
+              "validation": "splits/validation/step_rewards.jsonl"
+            },
+            "training_modes": [
+              "process_reward"
+            ],
+            "view_id": "process_reward"
+          },
+          {
+            "artifact": "curriculum",
+            "artifact_format": "json",
+            "artifact_path": "curriculum.json",
+            "available": true,
+            "label_policy": "failure_mode_priority_metadata",
+            "notes": [
+              "Curriculum is prioritization metadata for repair/data-generation loops, not optimizer settings."
+            ],
+            "row_count": 14,
+            "schema_version": "hfr.rl.curriculum.v1",
+            "source_artifacts": [
+              "failure_modes.jsonl"
+            ],
+            "split_paths": {},
+            "training_modes": [
+              "curriculum"
+            ],
+            "view_id": "curriculum"
+          }
+        ]
+      }
+    }
+  ],
+  "failed_check_count": 0,
+  "gate_count": 1,
+  "gates": [
+    {
+      "exists": true,
+      "id": "training_gate",
+      "passed": true,
+      "path": "training_gate.json",
+      "schema_version": "hfr.training_gate.v1",
+      "sha256": "667b85435d9a674a9a1bbf801240a5c8975d094bd74d43cb4a2ccc15cbc2918f",
+      "size_bytes": 20572,
+      "validation": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": true,
+        "warning_count": 0
+      }
+    }
+  ],
+  "metadata": {
+    "launcher": "dry-run"
+  },
+  "notes": [
+    "Trainer preflight records evidence for a downstream launch guard; it does not train, sandbox, or execute commands.",
+    "A ready preflight means the referenced gates and artifacts passed the configured handoff checks.",
+    "Use --require-dataset-version to bind launch readiness to an exact manifest dataset_version."
+  ],
+  "passed": true,
+  "passed_gate_count": 1,
+  "preflight_path": "examples/agentic_training/trainer_preflight.json",
+  "readiness": "ready",
+  "recommendation": "launch_allowed",
+  "required_dataset_versions": [
+    "hfrds-55eb38b250844a57"
+  ],
+  "required_gates": [
+    "training_gate"
+  ],
+  "schema_contracts": {
+    "agentic_training_plan": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "plans/sft_then_dpo_plan.json",
+      "regular_file": true,
+      "schema_name": "agentic_training_plan",
+      "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+      "size_bytes": 15787,
+      "symlink": false
+    },
+    "training_export_curriculum_json": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "training_export/curriculum.json",
+      "regular_file": true,
+      "schema_name": "rl_curriculum",
+      "sha256": "44951f9ab69297ae46e1bb497a9187562206ff1014dc562729981bfe7dfd3bcc",
+      "size_bytes": 19581,
+      "symlink": false
+    },
+    "training_export_dataset_metrics_json": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "training_export/dataset_metrics.json",
+      "regular_file": true,
+      "schema_name": "rl_dataset_metrics",
+      "sha256": "bee3703d2e09602b656f3060a94f1835367460fc7412c1b9cd505db348acbc0a",
+      "size_bytes": 14560,
+      "symlink": false
+    },
+    "training_export_dataset_registry_json": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "training_export/dataset_registry.json",
+      "regular_file": true,
+      "schema_name": "dataset_registry",
+      "sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "size_bytes": 23269,
+      "symlink": false
+    },
+    "training_export_dataset_splits_json": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "training_export/dataset_splits.json",
+      "regular_file": true,
+      "schema_name": "dataset_splits",
+      "sha256": "3f4eb5febe1b0c7d4098a63df72aa9632d7addedbe314062d89a39880eee825f",
+      "size_bytes": 4313,
+      "symlink": false
+    },
+    "training_export_dpo_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/dpo.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_dpo"
+        }
+      ],
+      "schema_name": "rl_dpo",
+      "sha256": "78bf6460759e1501030311dd99311fac6d459fecdca7de239732a786c9f03e62",
+      "size_bytes": 7646,
+      "symlink": false
+    },
+    "training_export_episodes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/episodes.jsonl",
+      "regular_file": true,
+      "row_count": 7,
+      "row_schema_counts": [
+        {
+          "count": 7,
+          "name": "rl_episode"
+        }
+      ],
+      "schema_name": "rl_episode",
+      "sha256": "6929cd02bbe035c3255de8e00bd0a094008df08be4b6c4600d99e2049b81f52c",
+      "size_bytes": 54717,
+      "symlink": false
+    },
+    "training_export_failure_modes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/failure_modes.jsonl",
+      "regular_file": true,
+      "row_count": 14,
+      "row_schema_counts": [
+        {
+          "count": 14,
+          "name": "rl_failure_mode"
+        }
+      ],
+      "schema_name": "rl_failure_mode",
+      "sha256": "0073257e53db681f7ff0afc09fa1a3f1e2c0700cab406fd4a4d1c98db36e4ae7",
+      "size_bytes": 30651,
+      "symlink": false
+    },
+    "training_export_manifest_json": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "json",
+      "passed": true,
+      "path": "training_export/manifest.json",
+      "regular_file": true,
+      "schema_name": "training_manifest",
+      "sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "size_bytes": 22973,
+      "symlink": false
+    },
+    "training_export_preferences_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/preferences.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_preference"
+        }
+      ],
+      "schema_name": "rl_preference",
+      "sha256": "d29c6adc0d7acb86a1d914893f603f643a9fe09485394bc1585de41189f88b38",
+      "size_bytes": 29006,
+      "symlink": false
+    },
+    "training_export_reward_model_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/reward_model.jsonl",
+      "regular_file": true,
+      "row_count": 7,
+      "row_schema_counts": [
+        {
+          "count": 7,
+          "name": "rl_reward_model"
+        }
+      ],
+      "schema_name": "rl_reward_model",
+      "sha256": "07f7fe25b486632253be79ef4fee8acb13e265cb1e7a84d700d80d27d4e469f4",
+      "size_bytes": 14503,
+      "symlink": false
+    },
+    "training_export_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/rewards.jsonl",
+      "regular_file": true,
+      "row_count": 7,
+      "row_schema_counts": [
+        {
+          "count": 7,
+          "name": "rl_reward"
+        }
+      ],
+      "schema_name": "rl_reward",
+      "sha256": "840a0661126910d8944b459e975bb74916ebccc8a38797e010686deb5138ad7a",
+      "size_bytes": 38470,
+      "symlink": false
+    },
+    "training_export_sft_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/sft.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_sft"
+        }
+      ],
+      "schema_name": "rl_sft",
+      "sha256": "faeb835a0a0c11c08608973606b882dac9e65d14825937915441c9de792514f2",
+      "size_bytes": 4034,
+      "symlink": false
+    },
+    "training_export_splits_test_dpo_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/dpo.jsonl",
+      "regular_file": true,
+      "row_count": 0,
+      "row_schema_counts": [],
+      "schema_name": "rl_dpo",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_episodes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/episodes.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_episode"
+        }
+      ],
+      "schema_name": "rl_episode",
+      "sha256": "0cb3ace33e598b466367f4a40cc3e8ef6c07fcd5483af01330937a0445fcc5ce",
+      "size_bytes": 4420,
+      "symlink": false
+    },
+    "training_export_splits_test_failure_modes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/failure_modes.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_failure_mode"
+        }
+      ],
+      "schema_name": "rl_failure_mode",
+      "sha256": "554d33f6dcb10bd549f6ccd8784ce9149e1e2ce6b5dbf85c4ad3d6f03fd52d5b",
+      "size_bytes": 1622,
+      "symlink": false
+    },
+    "training_export_splits_test_preferences_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/preferences.jsonl",
+      "regular_file": true,
+      "row_count": 0,
+      "row_schema_counts": [],
+      "schema_name": "rl_preference",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_reward_model_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/reward_model.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_reward_model"
+        }
+      ],
+      "schema_name": "rl_reward_model",
+      "sha256": "e16dd014dc7eb32629b8ae42f8715d64549700be677375bb4ed398ec798b23d8",
+      "size_bytes": 1821,
+      "symlink": false
+    },
+    "training_export_splits_test_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/rewards.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_reward"
+        }
+      ],
+      "schema_name": "rl_reward",
+      "sha256": "4a4a46c6c37fa683b549d953d333ab6e2ea2fb0e53597617b3a23be4c729f551",
+      "size_bytes": 3716,
+      "symlink": false
+    },
+    "training_export_splits_test_sft_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/sft.jsonl",
+      "regular_file": true,
+      "row_count": 0,
+      "row_schema_counts": [],
+      "schema_name": "rl_sft",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
+    "training_export_splits_test_step_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/test/step_rewards.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_step_reward"
+        }
+      ],
+      "schema_name": "rl_step_reward",
+      "sha256": "0b90c1920e05a22c04a3fe7d5a1e1700421379bf7a5ac7bff38462a888eae29e",
+      "size_bytes": 1386,
+      "symlink": false
+    },
+    "training_export_splits_train_dpo_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/dpo.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_dpo"
+        }
+      ],
+      "schema_name": "rl_dpo",
+      "sha256": "8bea8567482db3ce23f376bdc25ad4d24a6f5c48da070fa7ec2d057197593604",
+      "size_bytes": 3930,
+      "symlink": false
+    },
+    "training_export_splits_train_episodes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/episodes.jsonl",
+      "regular_file": true,
+      "row_count": 4,
+      "row_schema_counts": [
+        {
+          "count": 4,
+          "name": "rl_episode"
+        }
+      ],
+      "schema_name": "rl_episode",
+      "sha256": "57f8a5b58e9c0149caf854da10a167663e2601d56e65054a69d010d76a452837",
+      "size_bytes": 39945,
+      "symlink": false
+    },
+    "training_export_splits_train_failure_modes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/failure_modes.jsonl",
+      "regular_file": true,
+      "row_count": 9,
+      "row_schema_counts": [
+        {
+          "count": 9,
+          "name": "rl_failure_mode"
+        }
+      ],
+      "schema_name": "rl_failure_mode",
+      "sha256": "1910c5643579b34d5e71be5287990824d5a1899df41192b253233857ca265d90",
+      "size_bytes": 19462,
+      "symlink": false
+    },
+    "training_export_splits_train_preferences_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/preferences.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_preference"
+        }
+      ],
+      "schema_name": "rl_preference",
+      "sha256": "115120d9720c88a7ffce44c817d7e80634f3004aa131ae68edab28ec68acfde9",
+      "size_bytes": 19618,
+      "symlink": false
+    },
+    "training_export_splits_train_reward_model_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/reward_model.jsonl",
+      "regular_file": true,
+      "row_count": 4,
+      "row_schema_counts": [
+        {
+          "count": 4,
+          "name": "rl_reward_model"
+        }
+      ],
+      "schema_name": "rl_reward_model",
+      "sha256": "bdfd26257b5c68b4f08e1e31ca1b1e0665da3559e0659eff7d184b5b6c8cb6ce",
+      "size_bytes": 8515,
+      "symlink": false
+    },
+    "training_export_splits_train_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/rewards.jsonl",
+      "regular_file": true,
+      "row_count": 4,
+      "row_schema_counts": [
+        {
+          "count": 4,
+          "name": "rl_reward"
+        }
+      ],
+      "schema_name": "rl_reward",
+      "sha256": "4f77abf305b30a5cfc3362637b02c0dbbe58f8c2b326c08b937350dd53dd6db3",
+      "size_bytes": 23535,
+      "symlink": false
+    },
+    "training_export_splits_train_sft_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/sft.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_sft"
+        }
+      ],
+      "schema_name": "rl_sft",
+      "sha256": "abba837330a6a3251cb6afaee15cca5e8aea98c423b6a2d2c20d3e35b6e1d91c",
+      "size_bytes": 2029,
+      "symlink": false
+    },
+    "training_export_splits_train_step_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/train/step_rewards.jsonl",
+      "regular_file": true,
+      "row_count": 11,
+      "row_schema_counts": [
+        {
+          "count": 11,
+          "name": "rl_step_reward"
+        }
+      ],
+      "schema_name": "rl_step_reward",
+      "sha256": "05154bc0e42d08189bfd0837c046def6c5dfdea2737e46623cb8ad23cff583e7",
+      "size_bytes": 16935,
+      "symlink": false
+    },
+    "training_export_splits_validation_dpo_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/dpo.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_dpo"
+        }
+      ],
+      "schema_name": "rl_dpo",
+      "sha256": "b0b2f2adc5cd64465b65691d3f8d775571b74733c8b9b2a7a994772433488328",
+      "size_bytes": 3716,
+      "symlink": false
+    },
+    "training_export_splits_validation_episodes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/episodes.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_episode"
+        }
+      ],
+      "schema_name": "rl_episode",
+      "sha256": "ec86b1040f9737a6e16a05b126d8e5fa2433974d5c6e49392cbbff51bbb47aec",
+      "size_bytes": 10352,
+      "symlink": false
+    },
+    "training_export_splits_validation_failure_modes_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/failure_modes.jsonl",
+      "regular_file": true,
+      "row_count": 4,
+      "row_schema_counts": [
+        {
+          "count": 4,
+          "name": "rl_failure_mode"
+        }
+      ],
+      "schema_name": "rl_failure_mode",
+      "sha256": "a61f193ef6d85d500a9055ab3dd61f932072103d7a86284a7fd0ded4f2aa70fe",
+      "size_bytes": 9567,
+      "symlink": false
+    },
+    "training_export_splits_validation_preferences_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/preferences.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_preference"
+        }
+      ],
+      "schema_name": "rl_preference",
+      "sha256": "cb610285f998ca7174a2d8d7cec2c12ac16750b05b74beb51ec52fcd6556e4f2",
+      "size_bytes": 9388,
+      "symlink": false
+    },
+    "training_export_splits_validation_reward_model_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/reward_model.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_reward_model"
+        }
+      ],
+      "schema_name": "rl_reward_model",
+      "sha256": "728c5699d3e46352652e616fe7ff27670149ad4df7f8861aee8febec756c9a13",
+      "size_bytes": 4167,
+      "symlink": false
+    },
+    "training_export_splits_validation_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/rewards.jsonl",
+      "regular_file": true,
+      "row_count": 2,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_reward"
+        }
+      ],
+      "schema_name": "rl_reward",
+      "sha256": "ecc3228352c8ff3dc4b75d0a0d1cf035e4ecd718b7369a356bcadfc7beeca310",
+      "size_bytes": 11219,
+      "symlink": false
+    },
+    "training_export_splits_validation_sft_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/sft.jsonl",
+      "regular_file": true,
+      "row_count": 1,
+      "row_schema_counts": [
+        {
+          "count": 1,
+          "name": "rl_sft"
+        }
+      ],
+      "schema_name": "rl_sft",
+      "sha256": "cbb339d6962184c5230d5fb21d366d3b8f91df051a08a110873150fba7a266a5",
+      "size_bytes": 2005,
+      "symlink": false
+    },
+    "training_export_splits_validation_step_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/splits/validation/step_rewards.jsonl",
+      "regular_file": true,
+      "row_count": 9,
+      "row_schema_counts": [
+        {
+          "count": 9,
+          "name": "rl_step_reward"
+        }
+      ],
+      "schema_name": "rl_step_reward",
+      "sha256": "a6e79ca2b9ff06f76ec4af592c153ddce4b51e2850b121cfd0eda6e0d81eb479",
+      "size_bytes": 13081,
+      "symlink": false
+    },
+    "training_export_step_rewards_jsonl": {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "kind": "jsonl",
+      "passed": true,
+      "path": "training_export/step_rewards.jsonl",
+      "regular_file": true,
+      "row_count": 21,
+      "row_schema_counts": [
+        {
+          "count": 21,
+          "name": "rl_step_reward"
+        }
+      ],
+      "schema_name": "rl_step_reward",
+      "sha256": "0b99d75cd2b79b431984611efff73493525f8b173ceb5b931e96501d784c2dd2",
+      "size_bytes": 31402,
+      "symlink": false
+    }
+  },
+  "schema_version": "hfr.trainer_preflight.v1",
+  "trainer_command": {
+    "argv": [
+      "python",
+      "train.py",
+      "--dataset",
+      "training_export",
+      "--dry-run"
+    ],
+    "parseable": true,
+    "provided": true,
+    "raw": "python train.py --dataset training_export --dry-run"
+  },
+  "validation_summaries": []
+}

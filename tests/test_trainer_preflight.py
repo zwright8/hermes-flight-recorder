@@ -11,7 +11,8 @@ from pathlib import Path
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan, write_agentic_training_plan
 from flightrecorder.cli import main
-from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.schema_registry import check_schema_contract, check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,6 +209,44 @@ class TrainerPreflightTests(unittest.TestCase):
         errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
         self.assertIn(expected_scope, errors)
         self.assertIn(expected_field, errors)
+
+    def test_committed_agentic_training_trainer_handoff_replays_export(self):
+        example_root = ROOT / "examples" / "agentic_training"
+        gate_path = example_root / "training_gate.json"
+        preflight_path = example_root / "trainer_preflight.json"
+        launch_check_path = example_root / "trainer_launch_check.json"
+        export_manifest_path = example_root / "training_export" / "manifest.json"
+        dataset_version = json.loads(export_manifest_path.read_text(encoding="utf-8"))["dataset_version"]
+
+        self.assertTrue(check_schema_file(gate_path)["passed"])
+        validation = validate_artifacts(
+            trainer_preflight_paths=[preflight_path],
+            trainer_launch_check_paths=[launch_check_path],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+        launch_check = json.loads(launch_check_path.read_text(encoding="utf-8"))
+        self.assertTrue(gate["passed"])
+        self.assertEqual(preflight["readiness"], "ready")
+        self.assertEqual(preflight["recommendation"], "launch_allowed")
+        self.assertEqual(preflight["failed_check_count"], 0)
+        self.assertEqual(preflight["gates"][0]["path"], "training_gate.json")
+        self.assertEqual(preflight["dataset_selection"][0]["dataset_version"], dataset_version)
+        self.assertTrue(preflight["dataset_selection"][0]["matches_required"])
+        self.assertTrue(preflight["dataset_selection"][0]["redaction_passed"])
+        self.assertEqual(preflight["trainer_command"]["raw"], "python train.py --dataset training_export --dry-run")
+        self.assertEqual(preflight["metadata"]["launcher"], "dry-run")
+
+        self.assertEqual(launch_check["readiness"], "ready")
+        self.assertEqual(launch_check["recommendation"], "launch_allowed")
+        self.assertEqual(launch_check["failed_check_count"], 0)
+        self.assertEqual(launch_check["approved_command"]["raw"], preflight["trainer_command"]["raw"])
+        self.assertTrue(launch_check["approved_command"]["approved"])
+        self.assertEqual(launch_check["dataset_selection"][0]["dataset_version"], dataset_version)
+        self.assertTrue(launch_check["dataset_selection"][0]["matches_required"])
 
     def test_trainer_preflight_archives_agentic_training_plan(self):
         with tempfile.TemporaryDirectory() as tmp:

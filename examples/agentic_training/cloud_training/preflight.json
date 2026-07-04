@@ -1,15 +1,12 @@
 {
-  "blocked_reasons": [
-    "trainer_preflight_ready: passed=False",
-    "trainer_launch_check_ready: passed=False"
-  ],
+  "blocked_reasons": [],
   "check_count": 11,
   "checks": [
     {
       "actual": {
         "artifact": {
           "exists": true,
-          "path": "../plans/sft_then_dpo_plan.json",
+          "path": "sources/plans/sft_then_dpo_plan.json",
           "role": "agentic_training_plan",
           "schema_error_count": 0,
           "schema_errors": [],
@@ -32,19 +29,17 @@
     {
       "actual": {
         "artifact": {
-          "exists": false,
-          "path": "",
+          "exists": true,
+          "path": "sources/trainer_preflight.json",
           "role": "trainer_preflight",
-          "schema_error_count": 1,
-          "schema_errors": [
-            "artifact not provided"
-          ],
+          "schema_error_count": 0,
+          "schema_errors": [],
           "schema_name": "trainer_preflight",
-          "schema_passed": false,
-          "sha256": null,
-          "size_bytes": null,
-          "source_passed": null,
-          "source_recommendation": ""
+          "schema_passed": true,
+          "sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+          "size_bytes": 88398,
+          "source_passed": true,
+          "source_recommendation": "launch_allowed"
         }
       },
       "expected": {
@@ -52,25 +47,23 @@
         "schema": "trainer_preflight"
       },
       "id": "trainer_preflight_ready",
-      "passed": false,
-      "summary": "trainer_preflight_ready: passed=False"
+      "passed": true,
+      "summary": "trainer_preflight_ready: passed=True"
     },
     {
       "actual": {
         "artifact": {
-          "exists": false,
-          "path": "",
+          "exists": true,
+          "path": "sources/trainer_launch_check.json",
           "role": "trainer_launch_check",
-          "schema_error_count": 1,
-          "schema_errors": [
-            "artifact not provided"
-          ],
+          "schema_error_count": 0,
+          "schema_errors": [],
           "schema_name": "trainer_launch_check",
-          "schema_passed": false,
-          "sha256": null,
-          "size_bytes": null,
-          "source_passed": null,
-          "source_recommendation": ""
+          "schema_passed": true,
+          "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+          "size_bytes": 14354,
+          "source_passed": true,
+          "source_recommendation": "launch_allowed"
         }
       },
       "expected": {
@@ -78,8 +71,8 @@
         "schema": "trainer_launch_check"
       },
       "id": "trainer_launch_check_ready",
-      "passed": false,
-      "summary": "trainer_launch_check_ready: passed=False"
+      "passed": true,
+      "summary": "trainer_launch_check_ready: passed=True"
     },
     {
       "actual": {
@@ -248,7 +241,7 @@
     "provider_api_called": false,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 2,
+  "failed_check_count": 0,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_provider_owns_execution": true,
@@ -286,7 +279,7 @@
     "Preflight checks local receipts, constraints, and credential variable presence only.",
     "Live preflight probes use importlib metadata and environment-variable presence only; no provider SDK is imported and no provider API call is made."
   ],
-  "passed": false,
+  "passed": true,
   "provider": {
     "adapter_contract": {
       "adapter_id": "cloud_training.modal.fail_closed.v1",
@@ -350,13 +343,13 @@
       "provider_default"
     ]
   },
-  "readiness": "blocked",
-  "recommendation": "block_cloud_training_launch",
+  "readiness": "ready_for_dry_run_launch_plan",
+  "recommendation": "build_dry_run_launch_plan",
   "schema_version": "hfr.cloud_training_preflight.v1",
   "source_artifacts": {
     "agentic_training_plan": {
       "exists": true,
-      "path": "../plans/sft_then_dpo_plan.json",
+      "path": "sources/plans/sft_then_dpo_plan.json",
       "role": "agentic_training_plan",
       "schema_error_count": 0,
       "schema_errors": [],
@@ -368,34 +361,30 @@
       "source_recommendation": "ready_for_external_trainer_plan"
     },
     "trainer_launch_check": {
-      "exists": false,
-      "path": "",
+      "exists": true,
+      "path": "sources/trainer_launch_check.json",
       "role": "trainer_launch_check",
-      "schema_error_count": 1,
-      "schema_errors": [
-        "artifact not provided"
-      ],
+      "schema_error_count": 0,
+      "schema_errors": [],
       "schema_name": "trainer_launch_check",
-      "schema_passed": false,
-      "sha256": null,
-      "size_bytes": null,
-      "source_passed": null,
-      "source_recommendation": ""
+      "schema_passed": true,
+      "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+      "size_bytes": 14354,
+      "source_passed": true,
+      "source_recommendation": "launch_allowed"
     },
     "trainer_preflight": {
-      "exists": false,
-      "path": "",
+      "exists": true,
+      "path": "sources/trainer_preflight.json",
       "role": "trainer_preflight",
-      "schema_error_count": 1,
-      "schema_errors": [
-        "artifact not provided"
-      ],
+      "schema_error_count": 0,
+      "schema_errors": [],
       "schema_name": "trainer_preflight",
-      "schema_passed": false,
-      "sha256": null,
-      "size_bytes": null,
-      "source_passed": null,
-      "source_recommendation": ""
+      "schema_passed": true,
+      "sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+      "size_bytes": 88398,
+      "source_passed": true,
+      "source_recommendation": "launch_allowed"
     }
   }
 }

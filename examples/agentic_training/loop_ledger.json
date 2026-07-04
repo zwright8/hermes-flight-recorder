@@ -43,7 +43,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 11 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 9 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,7 +57,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 24,
+      "artifact_count": 26,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -100,7 +100,7 @@
           "group": "serving"
         },
         {
-          "count": 4,
+          "count": 6,
           "group": "training"
         }
       ],
@@ -199,10 +199,18 @@
         },
         {
           "count": 1,
+          "role": "trainer_launch_check"
+        },
+        {
+          "count": 1,
+          "role": "trainer_preflight"
+        },
+        {
+          "count": 1,
           "role": "training_export"
         }
       ],
-      "blocked_reason_count": 4,
+      "blocked_reason_count": 2,
       "cloud_training": {
         "artifact_count": 6,
         "artifact_manifest_present": true,
@@ -248,98 +256,95 @@
           },
           {
             "id": "preflight_links_trainer_preflight",
-            "passed": false,
+            "passed": true,
             "source_artifact_count": 1,
             "source_ref": "trainer_preflight",
-            "source_ref_sha256": "",
+            "source_ref_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
             "source_role": "cloud_training_preflight",
             "source_schema_version": "hfr.cloud_training_preflight.v1",
-            "status": "missing_target_artifact",
-            "target_artifact_count": 0,
+            "status": "matched",
+            "target_artifact_count": 1,
             "target_role": "trainer_preflight",
-            "target_schema_version": "",
-            "target_sha256": ""
+            "target_schema_version": "hfr.trainer_preflight.v1",
+            "target_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2"
           },
           {
             "id": "preflight_links_trainer_launch_check",
-            "passed": false,
+            "passed": true,
             "source_artifact_count": 1,
             "source_ref": "trainer_launch_check",
-            "source_ref_sha256": "",
+            "source_ref_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
             "source_role": "cloud_training_preflight",
             "source_schema_version": "hfr.cloud_training_preflight.v1",
-            "status": "missing_target_artifact",
-            "target_artifact_count": 0,
+            "status": "matched",
+            "target_artifact_count": 1,
             "target_role": "trainer_launch_check",
-            "target_schema_version": "",
-            "target_sha256": ""
+            "target_schema_version": "hfr.trainer_launch_check.v1",
+            "target_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8"
           },
           {
             "id": "launch_plan_links_preflight",
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "preflight",
-            "source_ref_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
+            "source_ref_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
             "source_role": "cloud_training_launch_plan",
             "source_schema_version": "hfr.cloud_training_launch_plan.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_preflight",
             "target_schema_version": "hfr.cloud_training_preflight.v1",
-            "target_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509"
+            "target_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241"
           },
           {
             "id": "launch_plan_links_artifact_manifest",
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "artifact_manifest",
-            "source_ref_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
+            "source_ref_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
             "source_role": "cloud_training_launch_plan",
             "source_schema_version": "hfr.cloud_training_launch_plan.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_artifact_manifest",
             "target_schema_version": "hfr.cloud_training_artifact_manifest.v1",
-            "target_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9"
+            "target_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1"
           },
           {
             "id": "launch_receipt_links_launch_plan",
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "launch_plan",
-            "source_ref_sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31",
+            "source_ref_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582",
             "source_role": "cloud_training_launch_receipt",
             "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_launch_plan",
             "target_schema_version": "hfr.cloud_training_launch_plan.v1",
-            "target_sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31"
+            "target_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582"
           },
           {
             "id": "status_receipt_links_launch_receipt",
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "launch_receipt",
-            "source_ref_sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937",
+            "source_ref_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
             "source_role": "cloud_training_status_receipt",
             "source_schema_version": "hfr.cloud_training_status_receipt.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_launch_receipt",
             "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
-            "target_sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937"
+            "target_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079"
           }
         ],
-        "matched_link_count": 5,
+        "matched_link_count": 7,
         "mismatched_link_count": 0,
         "mismatched_links": [],
-        "missing_link_count": 2,
-        "missing_links": [
-          "preflight_links_trainer_preflight",
-          "preflight_links_trainer_launch_check"
-        ],
-        "passed": false,
+        "missing_link_count": 0,
+        "missing_links": [],
+        "passed": true,
         "provider": {
           "pipeline_provider_id": "modal",
           "pipeline_provider_ids": [
@@ -400,11 +405,11 @@
             "role": "cloud_training_status_receipt"
           },
           {
-            "count": 0,
+            "count": 1,
             "role": "trainer_launch_check"
           },
           {
-            "count": 0,
+            "count": 1,
             "role": "trainer_preflight"
           }
         ]
@@ -415,14 +420,14 @@
         "credential_values_recorded": false,
         "fail_closed": true,
         "launch_mode": "dry_run",
-        "launch_readiness": "blocked",
+        "launch_readiness": "dry_run_recorded",
         "launch_receipt_count": 1,
-        "launch_receipt_passed": false,
-        "launch_recommendation": "block_live_cloud_launch",
+        "launch_receipt_passed": true,
+        "launch_recommendation": "safe_to_archive_dry_run_receipt",
         "live_launch_requested": false,
         "provider_api_calls_started": false,
         "provider_cancel_called": false,
-        "receipts_passed": false,
+        "receipts_passed": true,
         "status_not_started": true,
         "status_provider_status": "not_started",
         "status_readiness": "status_recorded",
@@ -496,9 +501,7 @@
         "heldout_manifest",
         "promotion_decision",
         "promotion_ledger",
-        "serving_lifecycle",
-        "trainer_launch_check",
-        "trainer_preflight"
+        "serving_lifecycle"
       ],
       "next_actions": {
         "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
@@ -510,7 +513,7 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 7,
+          "count": 6,
           "id": "blocked"
         },
         {
@@ -518,7 +521,7 @@
           "id": "planned"
         },
         {
-          "count": 5,
+          "count": 6,
           "id": "ready"
         }
       ],
@@ -535,20 +538,19 @@
         ],
         "roles_present": []
       },
-      "sha256": "09f7e8221bf5cfa86a5b8d605730e1310f700250307bdea6e7c55ab0093d3e71",
-      "size_bytes": 47395,
+      "sha256": "81fe740cae4a7ea4973c04fc034369582509ad3d7ec2417f2f1c206b0e9a3bb7",
+      "size_bytes": 48554,
       "training_outputs": {
-        "artifact_count": 4,
+        "artifact_count": 6,
         "group": "training",
-        "roles_missing": [
-          "trainer_preflight",
-          "trainer_launch_check"
-        ],
+        "roles_missing": [],
         "roles_present": [
           "agentic_training_plan",
           "agentic_training_runtime_preflight",
           "agentic_training_flow",
-          "agentic_training_result"
+          "agentic_training_result",
+          "trainer_preflight",
+          "trainer_launch_check"
         ]
       }
     }
@@ -597,14 +599,14 @@
         "group": "serving"
       },
       {
-        "count": 4,
+        "count": 6,
         "group": "training"
       }
     ],
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 11,
+    "latest_missing_phase_input_count": 9,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -633,15 +635,15 @@
   ],
   "passed": true,
   "readiness_digest": {
-    "blocked_reason_count": 4,
+    "blocked_reason_count": 2,
     "cloud_training_ambiguous_link_count": 0,
     "cloud_training_cost_incurred_usd": 0,
     "cloud_training_duplicate_role_count": 0,
     "cloud_training_launch_mode": "dry_run",
-    "cloud_training_lineage_bound": false,
+    "cloud_training_lineage_bound": true,
     "cloud_training_live_launch_requested": false,
     "cloud_training_mismatched_link_count": 0,
-    "cloud_training_missing_link_count": 2,
+    "cloud_training_missing_link_count": 0,
     "cloud_training_provider_id": "modal",
     "cloud_training_receipts_fail_closed": true,
     "cloud_training_status_provider_status": "not_started",
@@ -669,7 +671,7 @@
       "governance",
       "serving"
     ],
-    "missing_phase_input_count": 11,
+    "missing_phase_input_count": 9,
     "missing_phase_inputs": [
       "eval_summary",
       "evidence_bundle",
@@ -679,9 +681,7 @@
       "heldout_manifest",
       "promotion_decision",
       "promotion_ledger",
-      "serving_lifecycle",
-      "trainer_launch_check",
-      "trainer_preflight"
+      "serving_lifecycle"
     ],
     "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
     "next_action_scheduled": false,
@@ -694,7 +694,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 11 missing phase input(s) across 4 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 9 missing phase input(s) across 4 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

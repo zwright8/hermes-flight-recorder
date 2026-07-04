@@ -12,10 +12,10 @@
           "schema_errors": [],
           "schema_name": "cloud_training_launch_receipt",
           "schema_passed": true,
-          "sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937",
-          "size_bytes": 2643,
-          "source_passed": false,
-          "source_recommendation": "block_live_cloud_launch"
+          "sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
+          "size_bytes": 2628,
+          "source_passed": true,
+          "source_recommendation": "safe_to_archive_dry_run_receipt"
         }
       },
       "expected": {
@@ -38,7 +38,7 @@
     },
     {
       "actual": {
-        "cancel_requested": true,
+        "cancel_requested": false,
         "provider_cancel_called": false
       },
       "expected": {
@@ -76,14 +76,14 @@
       "schema_errors": [],
       "schema_name": "cloud_training_launch_receipt",
       "schema_passed": true,
-      "sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937",
-      "size_bytes": 2643,
-      "source_passed": false,
-      "source_recommendation": "block_live_cloud_launch"
+      "sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
+      "size_bytes": 2628,
+      "source_passed": true,
+      "source_recommendation": "safe_to_archive_dry_run_receipt"
     }
   },
   "status": {
-    "cancel_requested": true,
+    "cancel_requested": false,
     "cost_incurred_usd": 0,
     "provider_api_called": false,
     "provider_cancel_called": false,

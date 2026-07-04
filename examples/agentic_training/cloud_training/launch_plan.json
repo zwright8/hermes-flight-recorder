@@ -1,7 +1,5 @@
 {
-  "blocked_reasons": [
-    "preflight_ready: passed=False"
-  ],
+  "blocked_reasons": [],
   "check_count": 4,
   "checks": [
     {
@@ -14,10 +12,10 @@
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
-          "size_bytes": 11230,
-          "source_passed": false,
-          "source_recommendation": "block_cloud_training_launch"
+          "sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
+          "size_bytes": 11414,
+          "source_passed": true,
+          "source_recommendation": "build_dry_run_launch_plan"
         }
       },
       "expected": {
@@ -25,8 +23,8 @@
         "schema": "cloud_training_preflight"
       },
       "id": "preflight_ready",
-      "passed": false,
-      "summary": "preflight_ready: passed=False"
+      "passed": true,
+      "summary": "preflight_ready: passed=True"
     },
     {
       "actual": {
@@ -38,8 +36,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
-          "size_bytes": 6041,
+          "sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
+          "size_bytes": 6840,
           "source_passed": true,
           "source_recommendation": ""
         }
@@ -95,7 +93,7 @@
     "provider_api_called": false,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 1,
+  "failed_check_count": 0,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_provider_owns_execution": true,
@@ -118,7 +116,7 @@
     "mode": "dry_run",
     "provider_api_call_planned": false
   },
-  "passed": false,
+  "passed": true,
   "provider": {
     "adapter_contract": {
       "adapter_id": "cloud_training.modal.fail_closed.v1",
@@ -189,8 +187,8 @@
     "preflight_provider_id": "modal",
     "provider_consistent": true
   },
-  "readiness": "blocked",
-  "recommendation": "block_launch_receipt",
+  "readiness": "ready_for_dry_run_launch",
+  "recommendation": "emit_dry_run_launch_receipt",
   "schema_version": "hfr.cloud_training_launch_plan.v1",
   "source_artifacts": {
     "artifact_manifest": {
@@ -201,8 +199,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
-      "size_bytes": 6041,
+      "sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
+      "size_bytes": 6840,
       "source_passed": true,
       "source_recommendation": ""
     },
@@ -214,10 +212,10 @@
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
-      "size_bytes": 11230,
-      "source_passed": false,
-      "source_recommendation": "block_cloud_training_launch"
+      "sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
+      "size_bytes": 11414,
+      "source_passed": true,
+      "source_recommendation": "build_dry_run_launch_plan"
     }
   }
 }

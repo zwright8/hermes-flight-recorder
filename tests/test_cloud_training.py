@@ -86,6 +86,64 @@ class CloudTrainingTests(unittest.TestCase):
         validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
         self.assertTrue(validation["passed"], validation)
 
+    def test_committed_agentic_training_cloud_handoff_binds_trainer_sources(self):
+        example_root = ROOT / "examples" / "agentic_training"
+        cloud_root = example_root / "cloud_training"
+        plan_source = cloud_root / "sources" / "plans" / "sft_then_dpo_plan.json"
+        trainer_preflight_source = cloud_root / "sources" / "trainer_preflight.json"
+        trainer_launch_check_source = cloud_root / "sources" / "trainer_launch_check.json"
+        preflight_path = cloud_root / "preflight.json"
+        artifact_manifest_path = cloud_root / "artifact_manifest.json"
+        launch_plan_path = cloud_root / "launch_plan.json"
+        launch_receipt_path = cloud_root / "launch_receipt.json"
+        status_receipt_path = cloud_root / "status_receipt.json"
+
+        self.assertEqual(sha256_file(plan_source), sha256_file(example_root / "plans" / "sft_then_dpo_plan.json"))
+        self.assertEqual(sha256_file(trainer_preflight_source), sha256_file(example_root / "trainer_preflight.json"))
+        self.assertEqual(sha256_file(trainer_launch_check_source), sha256_file(example_root / "trainer_launch_check.json"))
+
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+        source_paths = {role: ref["path"] for role, ref in preflight["source_artifacts"].items()}
+        self.assertEqual(source_paths["agentic_training_plan"], "sources/plans/sft_then_dpo_plan.json")
+        self.assertEqual(source_paths["trainer_preflight"], "sources/trainer_preflight.json")
+        self.assertEqual(source_paths["trainer_launch_check"], "sources/trainer_launch_check.json")
+        self.assertTrue(preflight["passed"])
+        self.assertEqual(preflight["readiness"], "ready_for_dry_run_launch_plan")
+        self.assertFalse(preflight["execution_boundary"]["provider_api_called"])
+        self.assertFalse(preflight["execution_boundary"]["cloud_job_started"])
+        self.assertFalse(preflight["execution_boundary"]["credential_values_recorded"])
+
+        manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [row["path"] for row in manifest["upload_artifacts"]],
+            [
+                "sources/plans/sft_then_dpo_plan.json",
+                "sources/trainer_preflight.json",
+                "sources/trainer_launch_check.json",
+            ],
+        )
+        self.assertFalse(manifest["transfer_plan"]["flight_recorder_uploaded_artifacts"])
+        self.assertFalse(manifest["transfer_plan"]["provider_api_called"])
+
+        launch_receipt = json.loads(launch_receipt_path.read_text(encoding="utf-8"))
+        status_receipt = json.loads(status_receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(launch_receipt["launch"]["mode"], "dry_run")
+        self.assertFalse(launch_receipt["launch"]["cloud_job_started"])
+        self.assertFalse(launch_receipt["launch"]["provider_api_called"])
+        self.assertEqual(launch_receipt["launch"]["cost_incurred_usd"], 0)
+        self.assertEqual(status_receipt["status"]["provider_status"], "not_started")
+        self.assertFalse(status_receipt["status"]["provider_api_called"])
+
+        validation = validate_artifacts(
+            cloud_training_preflight_paths=[preflight_path],
+            cloud_training_artifact_manifest_paths=[artifact_manifest_path],
+            cloud_training_launch_plan_paths=[launch_plan_path],
+            cloud_training_launch_receipt_paths=[launch_receipt_path],
+            cloud_training_status_receipt_paths=[status_receipt_path],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+
     def test_committed_standalone_cloud_training_example_replays_fail_closed_chain(self):
         example_root = ROOT / "examples" / "cloud_training"
         plan_path = example_root / "plans" / "sft_then_dpo_plan.json"

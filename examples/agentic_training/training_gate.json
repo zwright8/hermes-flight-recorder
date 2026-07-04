@@ -1,0 +1,856 @@
+{
+  "check_count": 50,
+  "checks": [
+    {
+      "actual": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": true,
+        "target_count": 1,
+        "warning_count": 0
+      },
+      "expected": {
+        "error_count": 0,
+        "passed": true
+      },
+      "id": "valid_training_export",
+      "passed": true,
+      "summary": "valid_training_export: passed=True, errors=0, warnings=0"
+    },
+    {
+      "actual": 7,
+      "expected": {
+        "min": 7
+      },
+      "id": "min_episodes",
+      "passed": true,
+      "summary": "min_episodes: actual=7, min=7"
+    },
+    {
+      "actual": 0.2857,
+      "expected": {
+        "min": 0.2857
+      },
+      "id": "min_pass_rate",
+      "passed": true,
+      "summary": "min_pass_rate: actual=0.2857, min=0.2857"
+    },
+    {
+      "actual": 50.7143,
+      "expected": {
+        "min": 50.7143
+      },
+      "id": "min_average_score",
+      "passed": true,
+      "summary": "min_average_score: actual=50.7143, min=50.7143"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_preferences",
+      "passed": true,
+      "summary": "min_preferences: actual=2, min=2"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_sft",
+      "passed": true,
+      "summary": "min_sft: actual=2, min=2"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_dpo",
+      "passed": true,
+      "summary": "min_dpo: actual=2, min=2"
+    },
+    {
+      "actual": 7,
+      "expected": {
+        "min": 7
+      },
+      "id": "min_reward_model",
+      "passed": true,
+      "summary": "min_reward_model: actual=7, min=7"
+    },
+    {
+      "actual": 21,
+      "expected": {
+        "min": 21
+      },
+      "id": "min_step_rewards",
+      "passed": true,
+      "summary": "min_step_rewards: actual=21, min=21"
+    },
+    {
+      "actual": 6,
+      "expected": {
+        "min": 6
+      },
+      "id": "min_task_completion_configured",
+      "passed": true,
+      "summary": "min_task_completion_configured: actual=6, min=6"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_task_completion_complete",
+      "passed": true,
+      "summary": "min_task_completion_complete: actual=2, min=2"
+    },
+    {
+      "actual": 4,
+      "expected": {
+        "max": 4
+      },
+      "id": "max_task_completion_incomplete",
+      "passed": true,
+      "summary": "max_task_completion_incomplete: actual=4, max=4"
+    },
+    {
+      "actual": 0.5238,
+      "expected": {
+        "min": 0.5238
+      },
+      "id": "min_task_completion_check_pass_rate",
+      "passed": true,
+      "summary": "min_task_completion_check_pass_rate: actual=0.5238, min=0.5238"
+    },
+    {
+      "actual": 1.0,
+      "expected": {
+        "min": 1.0
+      },
+      "id": "min_source_fingerprint_rate",
+      "passed": true,
+      "summary": "min_source_fingerprint_rate: actual=1.0, min=1.0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_unverified_source_fingerprints",
+      "passed": true,
+      "summary": "max_unverified_source_fingerprints: actual=0, max=0"
+    },
+    {
+      "actual": 1.0,
+      "expected": {
+        "min": 1.0
+      },
+      "id": "min_trainer_view_source_fingerprint_rate",
+      "passed": true,
+      "summary": "min_trainer_view_source_fingerprint_rate: actual=1.0, min=1.0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_unverified_trainer_view_source_fingerprints",
+      "passed": true,
+      "summary": "max_unverified_trainer_view_source_fingerprints: actual=0, max=0"
+    },
+    {
+      "actual": 6.0,
+      "expected": {
+        "min": 6.0
+      },
+      "id": "min_trace_average_events",
+      "passed": true,
+      "summary": "min_trace_average_events: actual=6.0, min=6.0"
+    },
+    {
+      "actual": 6,
+      "expected": {
+        "min": 4
+      },
+      "id": "min_trace_event_type_count",
+      "passed": true,
+      "summary": "min_trace_event_type_count: actual=6, min=4"
+    },
+    {
+      "actual": 1.0,
+      "expected": {
+        "min": 1.0
+      },
+      "id": "min_trace_final_answer_rate",
+      "passed": true,
+      "summary": "min_trace_final_answer_rate: actual=1.0, min=1.0"
+    },
+    {
+      "actual": 0.8571,
+      "expected": {
+        "min": 0.8
+      },
+      "id": "min_trace_tool_or_api_rate",
+      "passed": true,
+      "summary": "min_trace_tool_or_api_rate: actual=0.8571, min=0.8"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_trace_empty_final_answers",
+      "passed": true,
+      "summary": "max_trace_empty_final_answers: actual=0, max=0"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "max": 2
+      },
+      "id": "max_trace_risk_count",
+      "passed": true,
+      "summary": "max_trace_risk_count: actual=2, max=2"
+    },
+    {
+      "actual": 5,
+      "expected": {
+        "min": 5
+      },
+      "id": "min_split_task_families",
+      "passed": true,
+      "summary": "min_split_task_families: actual=5, min=5"
+    },
+    {
+      "actual": 4,
+      "expected": {
+        "min": 4
+      },
+      "id": "min_train_episodes",
+      "passed": true,
+      "summary": "min_train_episodes: actual=4, min=4"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_validation_episodes",
+      "passed": true,
+      "summary": "min_validation_episodes: actual=2, min=2"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_test_episodes",
+      "passed": true,
+      "summary": "min_test_episodes: actual=1, min=1"
+    },
+    {
+      "actual": {
+        "value": true
+      },
+      "expected": {
+        "value": true
+      },
+      "id": "require_family_exclusive_splits",
+      "passed": true,
+      "summary": "require_family_exclusive_splits: actual=True, expected=True"
+    },
+    {
+      "actual": 7,
+      "expected": {
+        "min": 1
+      },
+      "id": "require_trace_event_type",
+      "passed": true,
+      "scope": {
+        "event_type": "assistant_message"
+      },
+      "summary": "require_trace_event_type: actual=7, min=1"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_quality_flags",
+      "passed": true,
+      "summary": "max_quality_flags: actual=0, max=0"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "id": "warning"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "forbid_quality_severity",
+      "passed": true,
+      "summary": "forbid_quality_severity: id=warning, count=0"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "id": "error"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "forbid_quality_severity",
+      "passed": true,
+      "summary": "forbid_quality_severity: id=error, count=0"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "require_task_family",
+      "passed": true,
+      "scope": {
+        "task_family": "budget_runaway"
+      },
+      "summary": "require_task_family: present=True"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "require_task_family",
+      "passed": true,
+      "scope": {
+        "task_family": "cron_async_delegation"
+      },
+      "summary": "require_task_family: present=True"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "require_task_family",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "require_task_family: present=True"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "require_task_family",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "require_task_family: present=True"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "require_task_family",
+      "passed": true,
+      "scope": {
+        "task_family": "subagent_claim"
+      },
+      "summary": "require_task_family: present=True"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "task_family_present",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_present: present=True"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "task_family_min_episodes",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_min_episodes: actual=2, min=2"
+    },
+    {
+      "actual": 9,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_step_rewards",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_min_step_rewards: actual=9, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_dpo",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_min_dpo: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_task_completion_complete",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_min_task_completion_complete: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "max": 1
+      },
+      "id": "task_family_max_task_completion_incomplete",
+      "passed": true,
+      "scope": {
+        "task_family": "prompt_injection"
+      },
+      "summary": "task_family_max_task_completion_incomplete: actual=1, max=1"
+    },
+    {
+      "actual": {
+        "present": true
+      },
+      "expected": {
+        "present": true
+      },
+      "id": "task_family_present",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_present: present=True"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "task_family_min_episodes",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_min_episodes: actual=2, min=2"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_sft",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_min_sft: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_dpo",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_min_dpo: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "task_family_min_task_completion_complete",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_min_task_completion_complete: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "max": 1
+      },
+      "id": "task_family_max_failed",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_max_failed: actual=1, max=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "max": 1
+      },
+      "id": "task_family_max_task_completion_incomplete",
+      "passed": true,
+      "scope": {
+        "task_family": "email_reply_completion"
+      },
+      "summary": "task_family_max_task_completion_incomplete: actual=1, max=1"
+    }
+  ],
+  "decision": {
+    "blocking_check_count": 0,
+    "blocking_checks": [],
+    "failed_checks": [],
+    "key_metrics": {
+      "artifact_counts": {
+        "dpo": 2,
+        "episodes": 7,
+        "failure_modes": 14,
+        "preferences": 2,
+        "reward_model": 7,
+        "rewards": 7,
+        "sft": 2,
+        "step_rewards": 21
+      },
+      "average_score": 50.7143,
+      "dataset_splits": {
+        "episode_count": 7,
+        "family_exclusive": true,
+        "task_family_count": 5,
+        "test_episode_count": 1,
+        "train_episode_count": 4,
+        "validation_episode_count": 2
+      },
+      "episode_count": 7,
+      "pass_rate": 0.2857,
+      "quality_flag_count": 0,
+      "source_fingerprint_coverage": {
+        "episodes": 7,
+        "fully_verified": 7,
+        "rate": 1.0,
+        "unverified": 0,
+        "with_scenario_sha256": 7,
+        "with_source_trace_sha256": 7
+      },
+      "task_completion": {
+        "check_pass_rate": 0.5238,
+        "complete_count": 2,
+        "configured_count": 6,
+        "episode_count": 7,
+        "incomplete_count": 4,
+        "not_applicable_count": 1,
+        "passed_check_count": 11,
+        "required_check_count": 21,
+        "unknown_count": 0
+      },
+      "trace_signal": {
+        "api_call_count": 0,
+        "approval_event_count": 0,
+        "average_event_count": 6.0,
+        "empty_final_answer_count": 0,
+        "episode_count": 7,
+        "episodes_with_final_answer": 7,
+        "episodes_with_tool_or_api_events": 6,
+        "event_type_count": 6,
+        "event_type_counts": [
+          {
+            "count": 12,
+            "id": "tool_call"
+          },
+          {
+            "count": 7,
+            "id": "assistant_message"
+          },
+          {
+            "count": 7,
+            "id": "tool_result"
+          },
+          {
+            "count": 7,
+            "id": "user_message"
+          },
+          {
+            "count": 6,
+            "id": "subagent_start"
+          },
+          {
+            "count": 3,
+            "id": "subagent_stop"
+          }
+        ],
+        "final_answer_rate": 1.0,
+        "max_event_count": 10,
+        "min_event_count": 4,
+        "risk_count": 2,
+        "risk_counts": [
+          {
+            "count": 1,
+            "id": "no_tool_or_api_events"
+          },
+          {
+            "count": 1,
+            "id": "tool_call_result_imbalance"
+          }
+        ],
+        "subagent_event_count": 9,
+        "tool_call_count": 12,
+        "tool_or_api_episode_rate": 0.8571,
+        "tool_result_count": 7,
+        "total_event_count": 42
+      },
+      "trainer_view_source_fingerprint_coverage": {
+        "dpo_rows": 2,
+        "fully_verified": 11,
+        "fully_verified_rate": 1.0,
+        "reward_model_rows": 7,
+        "rows": 11,
+        "sft_rows": 2,
+        "unverified": 0
+      },
+      "validation": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": true,
+        "target_count": 1,
+        "warning_count": 0
+      }
+    },
+    "next_action_count": 0,
+    "next_actions": [],
+    "readiness": "ready",
+    "recommendation": "promote_iteration",
+    "summary": "Gate is ready: all checks passed."
+  },
+  "failed_check_count": 0,
+  "metrics": {
+    "artifact_counts": {
+      "dpo": 2,
+      "episodes": 7,
+      "failure_modes": 14,
+      "preferences": 2,
+      "reward_model": 7,
+      "rewards": 7,
+      "sft": 2,
+      "step_rewards": 21
+    },
+    "average_score": 50.7143,
+    "dataset_splits": {
+      "episode_count": 7,
+      "family_exclusive": true,
+      "task_family_count": 5,
+      "test_episode_count": 1,
+      "train_episode_count": 4,
+      "validation_episode_count": 2
+    },
+    "episode_count": 7,
+    "pass_rate": 0.2857,
+    "quality_flag_count": 0,
+    "source_fingerprint_coverage": {
+      "episodes": 7,
+      "fully_verified": 7,
+      "rate": 1.0,
+      "unverified": 0,
+      "with_scenario_sha256": 7,
+      "with_source_trace_sha256": 7
+    },
+    "task_completion": {
+      "check_pass_rate": 0.5238,
+      "complete_count": 2,
+      "configured_count": 6,
+      "episode_count": 7,
+      "incomplete_count": 4,
+      "not_applicable_count": 1,
+      "passed_check_count": 11,
+      "required_check_count": 21,
+      "unknown_count": 0
+    },
+    "trace_signal": {
+      "api_call_count": 0,
+      "approval_event_count": 0,
+      "average_event_count": 6.0,
+      "empty_final_answer_count": 0,
+      "episode_count": 7,
+      "episodes_with_final_answer": 7,
+      "episodes_with_tool_or_api_events": 6,
+      "event_type_count": 6,
+      "event_type_counts": [
+        {
+          "count": 12,
+          "id": "tool_call"
+        },
+        {
+          "count": 7,
+          "id": "assistant_message"
+        },
+        {
+          "count": 7,
+          "id": "tool_result"
+        },
+        {
+          "count": 7,
+          "id": "user_message"
+        },
+        {
+          "count": 6,
+          "id": "subagent_start"
+        },
+        {
+          "count": 3,
+          "id": "subagent_stop"
+        }
+      ],
+      "final_answer_rate": 1.0,
+      "max_event_count": 10,
+      "min_event_count": 4,
+      "risk_count": 2,
+      "risk_counts": [
+        {
+          "count": 1,
+          "id": "no_tool_or_api_events"
+        },
+        {
+          "count": 1,
+          "id": "tool_call_result_imbalance"
+        }
+      ],
+      "subagent_event_count": 9,
+      "tool_call_count": 12,
+      "tool_or_api_episode_rate": 0.8571,
+      "tool_result_count": 7,
+      "total_event_count": 42
+    },
+    "trainer_view_source_fingerprint_coverage": {
+      "dpo_rows": 2,
+      "fully_verified": 11,
+      "fully_verified_rate": 1.0,
+      "reward_model_rows": 7,
+      "rows": 11,
+      "sft_rows": 2,
+      "unverified": 0
+    },
+    "validation": {
+      "available": true,
+      "error_count": 0,
+      "passed": true,
+      "strict": true,
+      "target_count": 1,
+      "warning_count": 0
+    }
+  },
+  "passed": true,
+  "policy": {
+    "description": "Demo readiness thresholds for the bundled offline training export. Tighten these before gating production improvement data.",
+    "effective": {
+      "forbid_quality_severities": [
+        "warning",
+        "error"
+      ],
+      "max_quality_flags": 0,
+      "max_task_completion_incomplete": 4,
+      "max_trace_empty_final_answers": 0,
+      "max_trace_risk_count": 2,
+      "max_unverified_source_fingerprints": 0,
+      "max_unverified_trainer_view_source_fingerprints": 0,
+      "min_average_score": 50.7143,
+      "min_dpo": 2,
+      "min_episodes": 7,
+      "min_pass_rate": 0.2857,
+      "min_preferences": 2,
+      "min_reward_model": 7,
+      "min_sft": 2,
+      "min_source_fingerprint_rate": 1.0,
+      "min_split_task_families": 5,
+      "min_step_rewards": 21,
+      "min_task_completion_check_pass_rate": 0.5238,
+      "min_task_completion_complete": 2,
+      "min_task_completion_configured": 6,
+      "min_test_episodes": 1,
+      "min_trace_average_events": 6.0,
+      "min_trace_event_type_count": 4,
+      "min_trace_final_answer_rate": 1.0,
+      "min_trace_tool_or_api_rate": 0.8,
+      "min_train_episodes": 4,
+      "min_trainer_view_source_fingerprint_rate": 1.0,
+      "min_validation_episodes": 2,
+      "require_family_exclusive_splits": true,
+      "require_task_families": [
+        "budget_runaway",
+        "cron_async_delegation",
+        "email_reply_completion",
+        "prompt_injection",
+        "subagent_claim"
+      ],
+      "require_trace_event_types": [
+        "assistant_message"
+      ],
+      "require_valid_export": true,
+      "strict_validation": true,
+      "task_family_gates": [
+        {
+          "max_task_completion_incomplete": 1,
+          "min_dpo": 1,
+          "min_episodes": 2,
+          "min_step_rewards": 1,
+          "min_task_completion_complete": 1,
+          "task_family": "prompt_injection"
+        },
+        {
+          "max_failed": 1,
+          "max_task_completion_incomplete": 1,
+          "min_dpo": 1,
+          "min_episodes": 2,
+          "min_sft": 1,
+          "min_task_completion_complete": 1,
+          "task_family": "email_reply_completion"
+        }
+      ]
+    },
+    "path": "examples/training_gate_policy.demo.json",
+    "schema_version": "hfr.training_gate.policy.v1"
+  },
+  "schema_version": "hfr.training_gate.v1",
+  "training_export": "examples/agentic_training/training_export"
+}
