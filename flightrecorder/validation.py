@@ -22917,10 +22917,34 @@ def _validate_trainer_archive_check_portable_command(value: Any, target: Validat
         target.errors.append("trainer_archive_check.portable_command.argv must be a list of strings.")
         argv = []
     for index, item in enumerate(item for item in argv if isinstance(item, str)):
-        _warn_command_token_public_path(target, f"trainer_archive_check.portable_command.argv[{index}]", item)
+        _validate_trainer_archive_check_command_token_public_path(
+            target,
+            f"trainer_archive_check.portable_command.argv[{index}]",
+            item,
+        )
     shell = value.get("shell")
     if isinstance(shell, str) and shell:
-        _warn_shell_tokens_public_paths(shell, target, "trainer_archive_check.portable_command.shell")
+        _validate_trainer_archive_check_command_tokens_public_paths(shell, target, "trainer_archive_check.portable_command.shell")
+
+
+def _validate_trainer_archive_check_command_tokens_public_paths(command: str, target: ValidationTarget, label: str) -> None:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    for index, token in enumerate(tokens):
+        _validate_trainer_archive_check_command_token_public_path(target, f"{label}[{index}]", token)
+
+
+def _validate_trainer_archive_check_command_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
 
 
 def _validate_trainer_archive_check_consumer_contract(value: Any, target: ValidationTarget) -> None:

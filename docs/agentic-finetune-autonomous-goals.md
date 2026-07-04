@@ -88,8 +88,8 @@ evidence.
 - Validate trainer archives before public use so preserved archive source paths,
   approved-command raw, argv, or shell tokens warn under strict validation.
 - Validate trainer archive checks before public use so preserved archive roots,
-  external code roots, resolved paths, or portable command tokens warn under
-  strict validation.
+  external code roots, or resolved paths warn under strict validation, while
+  portable command tokens are rejected when they carry local absolute paths.
 - Validate trainer consumer plans before public use so preserved archive roots,
   external code roots, or argv tokens are rejected when they carry local
   absolute paths.

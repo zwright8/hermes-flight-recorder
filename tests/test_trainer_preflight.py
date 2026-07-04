@@ -1213,24 +1213,22 @@ class TrainerPreflightTests(unittest.TestCase):
             ]
             portable["shell"] = shlex.join(portable["argv"])
             absolute_archive_check.write_text(json.dumps(forged_check, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(absolute_archive_check)]), 0)
             code = run_cli(
                 [
                     "validate",
                     "--trainer-archive-check",
                     str(absolute_archive_check),
-                    "--strict",
                     "--out",
                     str(absolute_archive_summary),
                 ]
             )
             self.assertEqual(code, 1)
             validation = json.loads(absolute_archive_summary.read_text(encoding="utf-8"))
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("trainer_archive_check.portable_command.argv[1] is absolute", warnings)
-            self.assertIn("trainer_archive_check.portable_command.argv[2] contains absolute path", warnings)
-            self.assertIn("trainer_archive_check.portable_command.shell[1] is absolute", warnings)
-            self.assertIn("trainer_archive_check.portable_command.shell[2] contains absolute path", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive_check.portable_command.argv[1] must use a relative command token", errors)
+            self.assertIn("trainer_archive_check.portable_command.argv[2] must use a relative command token", errors)
+            self.assertIn("trainer_archive_check.portable_command.shell[1] must use a relative command token", errors)
+            self.assertIn("trainer_archive_check.portable_command.shell[2] must use a relative command token", errors)
             forged = json.loads(json.dumps(check))
             forged["provider_console_url"] = "redacted-provider-console"
             forged["checks"][0]["provider_call"] = "forged"
