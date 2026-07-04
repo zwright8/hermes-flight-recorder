@@ -357,7 +357,7 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_flow.flow_path must be a safe relative path without traversal", errors)
 
-    def test_strict_validation_warns_on_absolute_command_paths(self):
+    def test_validation_rejects_absolute_command_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runtime = self.write_runtime_preflight(root)
@@ -383,18 +383,42 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             command["command_shell"] = shlex.join(command["command_argv"])
             write_agentic_training_flow(out, receipt)
 
-            permissive = validate_artifacts(agentic_training_flow_paths=[out], strict=False)
-            self.assertTrue(permissive["passed"], permissive)
-            strict = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
-            self.assertFalse(strict["passed"], strict)
-            warnings = "\n".join(warning for target in strict["targets"] for warning in target["warnings"])
-            self.assertIn("agentic_training_flow.delegated_flow.command.execution_cwd is absolute", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.archive_root is absolute", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.external_code_root is absolute", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.command_argv[1] is absolute", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.command_argv[2] contains absolute path", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.command_shell[1] is absolute", warnings)
-            self.assertIn("agentic_training_flow.delegated_flow.command.command_shell[2] contains absolute path", warnings)
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=False)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command.execution_cwd must be a safe relative path or redacted placeholder.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command.archive_root must be a safe relative path or redacted placeholder.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command.external_code_root must be a safe relative path or redacted placeholder.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command.command_argv[1] must use a relative command token or redacted placeholder.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command.command_argv[2] must use a relative command token or redacted placeholder.",
+                errors,
+            )
+
+            command["execution_cwd"] = "archive"
+            command["archive_root"] = "archive"
+            command["external_code_root"] = "trainer-code"
+            command["command_argv"] = [
+                "python",
+                "trainer-code/train.py",
+                "--plan=archive/agentic_training_plan.json",
+                "--dry-run",
+            ]
+            command["command_shell"] = shlex.join(command["command_argv"])
+            write_agentic_training_flow(out, receipt)
+            self.assertTrue(validate_artifacts(agentic_training_flow_paths=[out], strict=True)["passed"])
 
     def test_validation_rejects_missing_source_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:

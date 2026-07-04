@@ -97,10 +97,10 @@ evidence.
 - Validate agentic training plans before public use so preserved external
   runner command tokens warn under strict validation.
 - Validate agentic training flow handoffs before public use so preserved
-  delegated command cwd, archive roots, external code roots, argv, or shell
-  tokens warn under strict validation.
+  delegated command cwd, archive roots, external code roots, or argv tokens
+  are rejected when they contain absolute local paths.
 - Validate cloud-training launch plans before public use so preserved dry-run
-  command tokens warn under strict validation.
+  command tokens are rejected when they contain absolute local paths.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved

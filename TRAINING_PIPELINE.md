@@ -644,9 +644,9 @@ promotion-required reason, and keep the readiness recommendation at
 `block_delegated_trainer_execution`. The receipt records the exact external
 command, stage sequence, selected trainer views, and a fail-closed execution
 boundary without starting a subprocess, importing trainer modules, creating
-cloud jobs, downloading models, or updating weights. Before public handoff,
-strict validation warns if that delegated command still contains absolute
-execution roots, argv paths, or shell tokens.
+cloud jobs, downloading models, or updating weights. Validation rejects
+delegated commands that still contain absolute execution roots or argv path
+tokens before the receipt can become a public handoff.
 
 ```bash
 flightrecorder agentic-training-flow \

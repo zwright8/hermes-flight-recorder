@@ -3915,23 +3915,20 @@ def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
     for field_name in ("execution_cwd", "archive_root", "external_code_root"):
-        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
+        _validate_agentic_training_flow_command_path(target, f"{label}.{field_name}", value.get(field_name))
     argv = value.get("command_argv")
     if not _is_string_list(argv):
         target.errors.append(f"{label}.command_argv must be a list of strings.")
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
     for index, item in enumerate(clean_argv):
-        _warn_command_token_public_path(target, f"{label}.command_argv[{index}]", item)
+        _validate_agentic_training_flow_command_token_public_path(target, f"{label}.command_argv[{index}]", item)
     counts["command_arg_count"] = len(clean_argv)
     if "command_arg_count" in value and value.get("command_arg_count") != len(clean_argv):
         target.errors.append(f"{label}.command_arg_count must match command_argv length.")
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("command_shell") != expected_shell:
         target.errors.append(f"{label}.command_shell must match command_argv.")
-    command_shell = value.get("command_shell")
-    if isinstance(command_shell, str) and command_shell:
-        _warn_shell_tokens_public_paths(command_shell, target, f"{label}.command_shell")
     for field_name in ("trainer_input_count", "external_code_file_count"):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -3940,6 +3937,25 @@ def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget
     if not clean_argv:
         target.errors.append(f"{label}.command_argv must not be empty.")
     return counts
+
+
+def _validate_agentic_training_flow_command_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _is_safe_training_flow_metadata_path(value):
+        return
+    target.errors.append(f"{label} must be a safe relative path or redacted placeholder.")
+
+
+def _validate_agentic_training_flow_command_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
 
 
 def _validate_agentic_training_flow_metrics(
