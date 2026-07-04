@@ -24985,6 +24985,7 @@ def _validate_repair_replay(value: Any, target: ValidationTarget, label: str) ->
         target.errors.append(f"{label}.command must be a string.")
     if not isinstance(value.get("argv"), list) or not all(isinstance(part, str) for part in value.get("argv", [])):
         target.errors.append(f"{label}.argv must be a list of strings.")
+    _warn_replay_metadata_public_paths(value, target, label)
 
 
 def _validate_repair_queue_metrics(metrics: Any, target: ValidationTarget, totals: dict[str, Any], item_count: int) -> None:

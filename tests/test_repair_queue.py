@@ -172,6 +172,29 @@ class RepairQueueTests(unittest.TestCase):
             self.assertIn("repair_queue.items[0].source_artifacts.run_dir is absolute", warnings)
             self.assertIn("repair_queue.items[0].source_artifacts.scorecard is absolute", warnings)
 
+    def test_repair_queue_strict_warns_on_absolute_replay_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            queue_path = root / "repair_queue.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
+            self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path)]), 0)
+            queue = json.loads(queue_path.read_text(encoding="utf-8"))
+            replay = queue["items"][0]["replay"]
+            private_scenario = root / "private_scenario.json"
+            replay["command"] = f"python -m flightrecorder run --scenario={private_scenario}"
+            replay["argv"] = ["python", "-m", "flightrecorder", "run", "--scenario", str(private_scenario)]
+            queue_path.write_text(json.dumps(queue, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--out", str(summary_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict", "--out", str(summary_path)]), 1)
+            warnings = "\n".join(
+                warning for target in json.loads(summary_path.read_text(encoding="utf-8"))["targets"] for warning in target["warnings"]
+            )
+            self.assertIn("repair_queue.items[0].replay.argv[5] is absolute", warnings)
+            self.assertIn("repair_queue.items[0].replay.command[4] contains absolute path", warnings)
+
 
 if __name__ == "__main__":
     unittest.main()

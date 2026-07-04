@@ -954,7 +954,8 @@ regenerate it with `flightrecorder repair-queue --runs runs --out
 runs/repair_queue.json`. Each item points to a failed rule, evidence refs,
 bounded normalized-trace snippets, source artifacts, and a replay command,
 which makes it better suited to repair agents or issue trackers than aggregate
-suite metrics.
+suite metrics. Strict validation warns before public repair queues preserve
+absolute replay command or argv tokens.
 
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate

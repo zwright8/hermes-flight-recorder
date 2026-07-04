@@ -135,7 +135,7 @@ evidence.
   guessing.
 - Repair queues keep replayed source fingerprints relative to the queue
   location and warn before public handoffs include absolute source artifact
-  display paths.
+  display paths or replay command tokens.
 - Live-smoke summaries warn before runtime output paths or environment roots
   are published as public evidence.
 - Scenario-quality artifacts warn before scenario, trace, or state source paths
