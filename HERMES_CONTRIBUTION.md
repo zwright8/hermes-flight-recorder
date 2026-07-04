@@ -310,7 +310,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    Strict validation warns before preserved per-item source artifact paths are
    published in public review queues.
 17. Apply completed labels with `flightrecorder apply-review` to produce
-   human-reviewed SFT, reward-model, preference, and DPO views.
+   human-reviewed SFT, reward-model, preference, and DPO views. Strict
+   validation warns before reviewed-label rows publish preserved local
+   label-file or source artifact paths.
 18. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
 19. Compare deterministic scorecards with human labels using

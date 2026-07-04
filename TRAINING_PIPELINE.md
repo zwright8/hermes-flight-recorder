@@ -1012,7 +1012,9 @@ letting trainers or CI jobs filter low-confidence labels without losing
 provenance. Reviewed manifests also carry `dataset_version`, redaction status,
 label provenance, and a registry pointer so `trainer-preflight
 --require-dataset-version` can select reviewed datasets exactly like automated
-training exports.
+training exports. Strict validation also warns before reviewed-label rows
+publish preserved local label-file paths or inherited review-item source
+artifact paths.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed

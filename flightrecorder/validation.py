@@ -12418,6 +12418,7 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
         for field_name in ("episode_id", "scenario_id", "task_family", "prompt", "response", "human_label", "source_label_file"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_labels[{index}].{field_name} must be a string.")
+        _warn_absolute_public_path(target, f"reviewed_labels[{index}].source_label_file", row.get("source_label_file"))
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"reviewed_labels[{index}].review_item_sha256 must be a SHA-256 hex string.")
         if not _is_sha256(row.get("source_label_sha256")):
@@ -12440,8 +12441,16 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
             target.errors.append(f"reviewed_labels[{index}].accepted_evidence_refs must be a list.")
         if not isinstance(row.get("rejected_evidence_refs"), list):
             target.errors.append(f"reviewed_labels[{index}].rejected_evidence_refs must be a list.")
-        if not isinstance(row.get("source_artifacts"), dict):
+        source_artifacts = row.get("source_artifacts")
+        if not isinstance(source_artifacts, dict):
             target.errors.append(f"reviewed_labels[{index}].source_artifacts must be an object.")
+        else:
+            for artifact_name, artifact_path in source_artifacts.items():
+                _warn_absolute_public_path(
+                    target,
+                    f"reviewed_labels[{index}].source_artifacts.{artifact_name}",
+                    artifact_path,
+                )
         if not isinstance(row.get("scorecard"), dict):
             target.errors.append(f"reviewed_labels[{index}].scorecard must be an object.")
 

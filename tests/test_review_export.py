@@ -105,6 +105,48 @@ class ReviewExportTests(unittest.TestCase):
             self.assertTrue(any(".source_artifacts.run_dir is absolute" in warning for warning in warnings), warnings)
             self.assertTrue(any(".source_artifacts.report is absolute" in warning for warning in warnings), warnings)
 
+    def test_strict_validate_warns_on_absolute_reviewed_label_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            validation = Path(tmp) / "validation.json"
+            strict_validation = Path(tmp) / "strict_validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review), "--preserve-paths"])
+            write_completed_labels(review, labels_path)
+
+            code = run_cli(
+                [
+                    "apply-review",
+                    "--review-export",
+                    str(review),
+                    "--labels",
+                    str(labels_path),
+                    "--out",
+                    str(out),
+                    "--preserve-paths",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            reviewed_labels = read_jsonl(out / "reviewed_labels.jsonl")
+            self.assertTrue(Path(reviewed_labels[0]["source_label_file"]).is_absolute())
+            self.assertTrue(Path(reviewed_labels[0]["source_artifacts"]["run_dir"]).is_absolute())
+            self.assertTrue(Path(reviewed_labels[0]["source_artifacts"]["report"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--reviewed-export", str(out), "--out", str(validation)]), 0)
+            self.assertEqual(run_cli(["validate", "--reviewed-export", str(out), "--strict", "--out", str(strict_validation)]), 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(any("reviewed_labels[0].source_label_file is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any(".source_artifacts.run_dir is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any(".source_artifacts.report is absolute" in warning for warning in warnings), warnings)
+
     def test_export_review_only_failed_filters_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
