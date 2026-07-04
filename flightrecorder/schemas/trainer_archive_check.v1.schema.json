@@ -1,11 +1,11 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/trainer_archive_check.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Consumer-side readiness check over a portable trainer archive and local external trainer code paths.",
   "properties": {
     "archive": {
-      "type": "object"
+      "$ref": "#/$defs/archive"
     },
     "archive_path": {
       "minLength": 1,
@@ -22,7 +22,7 @@
       "type": "array"
     },
     "consumer_contract": {
-      "type": "object"
+      "$ref": "#/$defs/consumerContract"
     },
     "external_code_checks": {
       "items": {
@@ -31,7 +31,7 @@
       "type": "array"
     },
     "external_code_root": {
-      "type": "object"
+      "$ref": "#/$defs/externalCodeRoot"
     },
     "failed_check_count": {
       "minimum": 0,
@@ -54,7 +54,7 @@
       "type": "boolean"
     },
     "portable_command": {
-      "type": "object"
+      "$ref": "#/$defs/portableCommand"
     },
     "readiness": {
       "enum": [
@@ -105,7 +105,7 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -139,7 +139,7 @@
       "type": "object"
     },
     "externalCodeCheck": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -231,7 +231,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_validation_error_count": {
           "minimum": 0,
@@ -298,7 +298,7 @@
       "type": "object"
     },
     "trainerInputCheck": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -389,6 +389,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "index": {
           "minimum": 0,
           "type": "integer"
@@ -444,7 +448,7 @@
       "type": "object"
     },
     "validation": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "available": {
           "type": "boolean"
@@ -489,6 +493,186 @@
         "warning_count",
         "errors",
         "warnings"
+      ],
+      "type": "object"
+    },
+    "archive": {
+      "additionalProperties": false,
+      "properties": {
+        "external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "manifest_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ready_for_training": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "hfr.trainer_archive.v1"
+        },
+        "self_contained": {
+          "type": "boolean"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "manifest_path",
+        "schema_version",
+        "passed",
+        "self_contained",
+        "ready_for_training",
+        "trainer_input_count",
+        "external_command_path_count"
+      ],
+      "type": "object"
+    },
+    "externalCodeRoot": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "directory"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_directory": {
+          "type": "boolean"
+        },
+        "symlink": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "kind",
+        "regular_directory",
+        "symlink"
+      ],
+      "type": "object"
+    },
+    "portableCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "path_rewrite_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rewritten": {
+          "type": "boolean"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "approved",
+        "available",
+        "rewritten",
+        "path_rewrite_count",
+        "argv",
+        "shell"
+      ],
+      "type": "object"
+    },
+    "consumerContract": {
+      "additionalProperties": false,
+      "properties": {
+        "command_kind": {
+          "type": "string"
+        },
+        "execution_cwd": {
+          "type": "string"
+        },
+        "external_code_required": {
+          "type": "boolean"
+        },
+        "external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_command_paths": {
+          "items": {
+            "$ref": "#/$defs/externalCommandPath"
+          },
+          "type": "array"
+        },
+        "path_rewrite_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "portable_command_available": {
+          "type": "boolean"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "execution_cwd",
+        "command_kind",
+        "portable_command_available",
+        "trainer_input_count",
+        "path_rewrite_count",
+        "external_code_required",
+        "external_command_path_count",
+        "external_command_paths"
+      ],
+      "type": "object"
+    },
+    "externalCommandPath": {
+      "additionalProperties": false,
+      "properties": {
+        "argv_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "argv_index",
+        "token",
+        "path",
+        "reason"
       ],
       "type": "object"
     }

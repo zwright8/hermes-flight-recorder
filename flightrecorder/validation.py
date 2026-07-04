@@ -19990,8 +19990,127 @@ def _validate_trainer_archive_consumer_contract(
                     target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
 
 
+_TRAINER_ARCHIVE_CHECK_KEYS = {
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "archive",
+    "external_code_root",
+    "portable_command",
+    "consumer_contract",
+    "external_code_checks",
+    "trainer_input_checks",
+    "metrics",
+    "notes",
+}
+_TRAINER_ARCHIVE_CHECK_CHECK_KEYS = {"id", "passed", "actual", "expected", "scope", "summary"}
+_TRAINER_ARCHIVE_CHECK_VALIDATION_KEYS = {
+    "available",
+    "passed",
+    "strict",
+    "target_count",
+    "error_count",
+    "warning_count",
+    "errors",
+    "warnings",
+}
+_TRAINER_ARCHIVE_CHECK_ARCHIVE_KEYS = {
+    "path",
+    "manifest_path",
+    "schema_version",
+    "passed",
+    "self_contained",
+    "ready_for_training",
+    "trainer_input_count",
+    "external_command_path_count",
+}
+_TRAINER_ARCHIVE_CHECK_EXTERNAL_ROOT_KEYS = {
+    "path",
+    "exists",
+    "kind",
+    "regular_directory",
+    "symlink",
+}
+_TRAINER_ARCHIVE_CHECK_PORTABLE_COMMAND_KEYS = {
+    "approved",
+    "available",
+    "rewritten",
+    "path_rewrite_count",
+    "argv",
+    "shell",
+}
+_TRAINER_ARCHIVE_CHECK_CONSUMER_CONTRACT_KEYS = {
+    "execution_cwd",
+    "command_kind",
+    "portable_command_available",
+    "trainer_input_count",
+    "path_rewrite_count",
+    "external_code_required",
+    "external_command_path_count",
+    "external_command_paths",
+}
+_TRAINER_ARCHIVE_CHECK_EXTERNAL_PATH_KEYS = {"argv_index", "token", "path", "reason"}
+_TRAINER_ARCHIVE_CHECK_EXTERNAL_CODE_KEYS = {
+    "index",
+    "argv_index",
+    "token",
+    "path",
+    "resolved_path",
+    "exists",
+    "kind",
+    "regular_file",
+    "symlink",
+    "passed",
+    "reason",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_ARCHIVE_CHECK_TRAINER_INPUT_KEYS = {
+    "index",
+    "artifact_index",
+    "artifact_name",
+    "archive_path",
+    "resolved_path",
+    "kind",
+    "exists",
+    "regular_file",
+    "regular_directory",
+    "symlink",
+    "expected_sha256",
+    "expected_size_bytes",
+    "expected_file_count",
+    "file_count",
+    "passed",
+    "reason",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_ARCHIVE_CHECK_METRICS_KEYS = {
+    "archive_validation_passed",
+    "archive_validation_error_count",
+    "archive_validation_warning_count",
+    "external_command_path_count",
+    "relative_external_command_path_count",
+    "external_code_file_count",
+    "missing_external_code_count",
+    "trainer_input_count",
+    "trainer_input_available_count",
+    "missing_trainer_input_count",
+    "check_count",
+    "failed_check_count",
+}
+
+
 def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(check, "schema_version", TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION, target)
+    _validate_allowed_keys(check, _TRAINER_ARCHIVE_CHECK_KEYS, target, "trainer_archive_check")
     for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
         if not isinstance(check.get(field_name), str) or not check.get(field_name):
             target.errors.append(f"trainer_archive_check.{field_name} must be a non-empty string.")
@@ -20012,6 +20131,9 @@ def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTar
     if not _is_string_list(check.get("notes")):
         target.errors.append("trainer_archive_check.notes must be a list of strings.")
 
+    for index, item in enumerate(checks):
+        if isinstance(item, dict):
+            _validate_allowed_keys(item, _TRAINER_ARCHIVE_CHECK_CHECK_KEYS, target, f"trainer_archive_check.checks[{index}]")
     failed_checks = _validate_gate_like_checks(checks, target, "trainer_archive_check.checks")
     if check.get("check_count") != len(checks):
         target.errors.append(f"trainer_archive_check.check_count expected {len(checks)}, got {check.get('check_count')!r}.")
@@ -20052,6 +20174,7 @@ def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTar
 
 
 def _validate_trainer_archive_check_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(value, _TRAINER_ARCHIVE_CHECK_VALIDATION_KEYS, target, "trainer_archive_check.validation")
     _validate_trainer_compact_validation_record(
         value,
         target,
@@ -20065,6 +20188,7 @@ def _validate_trainer_archive_check_archive(value: Any, target: ValidationTarget
     if not isinstance(value, dict):
         target.errors.append("trainer_archive_check.archive must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_ARCHIVE_CHECK_ARCHIVE_KEYS, target, "trainer_archive_check.archive")
     for field_name in ("path", "manifest_path", "schema_version"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"trainer_archive_check.archive.{field_name} must be a non-empty string.")
@@ -20082,6 +20206,7 @@ def _validate_trainer_archive_check_external_root(value: Any, target: Validation
     if not isinstance(value, dict):
         target.errors.append("trainer_archive_check.external_code_root must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_ARCHIVE_CHECK_EXTERNAL_ROOT_KEYS, target, "trainer_archive_check.external_code_root")
     for field_name in ("path", "kind"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"trainer_archive_check.external_code_root.{field_name} must be a non-empty string.")
@@ -20096,6 +20221,7 @@ def _validate_trainer_archive_check_portable_command(value: Any, target: Validat
     if not isinstance(value, dict):
         target.errors.append("trainer_archive_check.portable_command must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_ARCHIVE_CHECK_PORTABLE_COMMAND_KEYS, target, "trainer_archive_check.portable_command")
     for field_name in ("approved", "available", "rewritten"):
         if not isinstance(value.get(field_name), bool):
             target.errors.append(f"trainer_archive_check.portable_command.{field_name} must be a boolean.")
@@ -20111,6 +20237,7 @@ def _validate_trainer_archive_check_consumer_contract(value: Any, target: Valida
     if not isinstance(value, dict):
         target.errors.append("trainer_archive_check.consumer_contract must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_ARCHIVE_CHECK_CONSUMER_CONTRACT_KEYS, target, "trainer_archive_check.consumer_contract")
     for field_name in ("execution_cwd", "command_kind"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"trainer_archive_check.consumer_contract.{field_name} must be a string.")
@@ -20129,6 +20256,7 @@ def _validate_trainer_archive_check_consumer_contract(value: Any, target: Valida
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_CHECK_EXTERNAL_PATH_KEYS, target, label)
         if not _is_non_negative_int(item.get("argv_index")):
             target.errors.append(f"{label}.argv_index must be a non-negative integer.")
         for field_name in ("token", "path", "reason"):
@@ -20146,6 +20274,7 @@ def _validate_trainer_archive_check_external_code(value: Any, target: Validation
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_CHECK_EXTERNAL_CODE_KEYS, target, label)
         if item.get("index") != index:
             target.errors.append(f"{label}.index expected {index}, got {item.get('index')!r}.")
         if not _is_non_negative_int(item.get("argv_index")):
@@ -20180,6 +20309,7 @@ def _validate_trainer_archive_check_inputs(value: Any, target: ValidationTarget)
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_CHECK_TRAINER_INPUT_KEYS, target, label)
         if item.get("index") != index:
             target.errors.append(f"{label}.index expected {index}, got {item.get('index')!r}.")
         if not _is_non_negative_int(item.get("artifact_index")):
@@ -20245,6 +20375,7 @@ def _validate_trainer_archive_check_metrics(
     failed_check_count: int,
     target: ValidationTarget,
 ) -> None:
+    _validate_allowed_keys(metrics, _TRAINER_ARCHIVE_CHECK_METRICS_KEYS, target, "trainer_archive_check.metrics")
     external_count = len(external_code_checks)
     external_available = sum(1 for item in external_code_checks if item.get("passed") is True)
     input_count = len(trainer_input_checks)

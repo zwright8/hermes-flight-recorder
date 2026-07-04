@@ -965,6 +965,72 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
             schema = check_schema_contract(check, name_or_id="trainer_archive_check")
             self.assertTrue(schema["passed"], schema["errors"])
+            forged = json.loads(json.dumps(check))
+            forged["provider_console_url"] = "redacted-provider-console"
+            forged["checks"][0]["provider_call"] = "forged"
+            forged["validation"]["credential_hint"] = "redacted"
+            forged["archive"]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["external_code_root"]["download_url"] = "redacted-download-url"
+            forged["portable_command"]["trainer_process_pid"] = 123
+            forged["consumer_contract"]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["consumer_contract"]["external_command_paths"][0]["provider_call"] = "forged"
+            forged["external_code_checks"][0]["execution_receipt"] = "not-created"
+            forged["trainer_input_checks"][0]["credential_value"] = "redacted"
+            forged["metrics"]["cloud_cost_incurred_usd"] = 0
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_archive_check")
+            self.assertFalse(forged_schema["passed"])
+            schema_errors = "\n".join(forged_schema["errors"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "credential_hint",
+                "cloud_job_url",
+                "download_url",
+                "trainer_process_pid",
+                "execution_receipt",
+                "credential_value",
+                "cloud_cost_incurred_usd",
+            ):
+                self.assertIn(field_name, schema_errors)
+            forged_archive_check = Path(tmp) / "trainer_archive_check_forged_side_effect_fields.json"
+            forged_archive_summary = Path(tmp) / "trainer_archive_check_forged_side_effect_fields_summary.json"
+            forged_archive_check.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(forged_archive_check),
+                    "--strict",
+                    "--out",
+                    str(forged_archive_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_archive_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive_check contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_archive_check.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("trainer_archive_check.validation contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn("trainer_archive_check.archive contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn("trainer_archive_check.external_code_root contains unknown field(s): ['download_url'].", errors)
+            self.assertIn(
+                "trainer_archive_check.portable_command contains unknown field(s): ['trainer_process_pid'].",
+                errors,
+            )
+            self.assertIn("trainer_archive_check.consumer_contract contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn(
+                "trainer_archive_check.consumer_contract.external_command_paths[0] contains unknown field(s): ['provider_call'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_archive_check.external_code_checks[0] contains unknown field(s): ['execution_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_archive_check.trainer_input_checks[0] contains unknown field(s): ['credential_value'].",
+                errors,
+            )
+            self.assertIn("trainer_archive_check.metrics contains unknown field(s): ['cloud_cost_incurred_usd'].", errors)
             forged_external = json.loads(json.dumps(check))
             passed_external = next(item for item in forged_external["external_code_checks"] if item["passed"])
             passed_external.pop("sha256")
