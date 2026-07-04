@@ -23786,7 +23786,7 @@ def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: Validatio
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
     for field_name in ("archive_root", "external_code_root"):
-        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
+        _validate_trainer_wrapper_would_run_path(target, f"{label}.{field_name}", value.get(field_name))
     if value.get("mode") != "dry_run":
         target.errors.append(f"{label}.mode must be dry_run.")
     if value.get("execution_cwd") not in {"", "archive_root"}:
@@ -23797,14 +23797,46 @@ def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: Validatio
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
     for index, item in enumerate(clean_argv):
-        _warn_command_token_public_path(target, f"{label}.argv[{index}]", item)
+        _validate_trainer_wrapper_would_run_token_public_path(target, f"{label}.argv[{index}]", item)
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("shell") != expected_shell:
         target.errors.append(f"{label}.shell must match argv.")
-    shell = value.get("shell")
-    if isinstance(shell, str) and shell:
-        _warn_shell_tokens_public_paths(shell, target, f"{label}.shell")
     return len(clean_argv)
+
+
+def _validate_trainer_wrapper_would_run_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _is_safe_trainer_wrapper_would_run_path(value):
+        return
+    target.errors.append(f"{label} must be a safe relative path or redacted placeholder.")
+
+
+def _validate_trainer_wrapper_would_run_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+
+
+def _is_safe_trainer_wrapper_would_run_path(value: str) -> bool:
+    if _is_redacted_placeholder(value):
+        return True
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _validate_trainer_wrapper_inputs(value: dict[str, Any], target: ValidationTarget) -> dict[str, int]:

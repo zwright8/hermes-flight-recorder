@@ -1888,6 +1888,8 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(receipt["passed"])
             self.assertEqual(receipt["recommendation"], "dry_run_ready")
             self.assertEqual(receipt["would_run"]["argv"][:2], ["python", "train.py"])
+            self.assertFalse(Path(receipt["would_run"]["archive_root"]).is_absolute())
+            self.assertFalse(Path(receipt["would_run"]["external_code_root"]).is_absolute())
             self.assertEqual(receipt["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(receipt["metrics"]["external_code_file_count"], contract["external_command_path_count"])
             self.assertEqual(run_cli(["schemas", "--check", str(wrapper_receipt)]), 0)
@@ -1907,26 +1909,22 @@ class TrainerPreflightTests(unittest.TestCase):
             ]
             would_run["shell"] = shlex.join(would_run["argv"])
             absolute_wrapper_receipt.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(run_cli(["validate", "--trainer-wrapper-dry-run", str(absolute_wrapper_receipt)]), 0)
             code = run_cli(
                 [
                     "validate",
                     "--trainer-wrapper-dry-run",
                     str(absolute_wrapper_receipt),
-                    "--strict",
                     "--out",
                     str(absolute_wrapper_summary),
                 ]
             )
             self.assertEqual(code, 1)
             validation = json.loads(absolute_wrapper_summary.read_text(encoding="utf-8"))
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("trainer_wrapper_dry_run.would_run.archive_root is absolute", warnings)
-            self.assertIn("trainer_wrapper_dry_run.would_run.external_code_root is absolute", warnings)
-            self.assertIn("trainer_wrapper_dry_run.would_run.argv[1] is absolute", warnings)
-            self.assertIn("trainer_wrapper_dry_run.would_run.argv[2] contains absolute path", warnings)
-            self.assertIn("trainer_wrapper_dry_run.would_run.shell[1] is absolute", warnings)
-            self.assertIn("trainer_wrapper_dry_run.would_run.shell[2] contains absolute path", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_wrapper_dry_run.would_run.archive_root must be a safe relative path", errors)
+            self.assertIn("trainer_wrapper_dry_run.would_run.external_code_root must be a safe relative path", errors)
+            self.assertIn("trainer_wrapper_dry_run.would_run.argv[1] must use a relative command token", errors)
+            self.assertIn("trainer_wrapper_dry_run.would_run.argv[2] must use a relative command token", errors)
 
             forged = json.loads(json.dumps(receipt))
             forged["provider_console_url"] = "redacted-provider-console"
