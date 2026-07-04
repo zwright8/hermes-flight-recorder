@@ -187,6 +187,55 @@ class ModelGraderTests(unittest.TestCase):
             self.assertTrue(all(len(row["label_sha256"]) == 64 for row in dry_payload["grader_labels"]))
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
 
+            forged_dry_payload = json.loads(json.dumps(dry_payload))
+            forged_dry_payload["paid_grader_invoice_id"] = "redacted-invoice"
+            forged_dry_payload["checks"][0]["provider_call"] = "forged"
+            forged_dry_payload["grader"]["provider_job_id"] = "redacted-provider-job"
+            forged_dry_payload["source_artifacts"]["provider_dataset"] = {"path": "redacted-provider-dataset"}
+            forged_dry_payload["source_artifacts"]["review_export"]["provider_dataset_id"] = "redacted-provider-dataset"
+            forged_dry_payload["source_artifacts"]["review_export"]["manifest"]["signed_url"] = "redacted-signed-url"
+            forged_dry_payload["source_artifacts"]["rubric_spec"]["credential_hint"] = "redacted"
+            forged_dry_payload["label_counts"][0]["source"] = "forged"
+            forged_dry_payload["grader_labels"][0]["provider_trace_id"] = "redacted-provider-trace"
+            forged_dry_payload["human_review_overrides"]["provider_queue_id"] = "redacted-provider-queue"
+            forged_dry_payload["training_admission"]["trainer_dataset_id"] = "redacted-trainer-dataset"
+            forged_dry_payload["execution_boundary"]["paid_model_grader_invoice_id"] = "redacted-invoice"
+            dry_run.write_text(json.dumps(forged_dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(dry_run)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(model_grader_dry_run_paths=[dry_run], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("model_grader_dry_run contains unknown field(s): ['paid_grader_invoice_id'].", errors)
+            self.assertIn("model_grader_dry_run.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("model_grader_dry_run.grader contains unknown field(s): ['provider_job_id'].", errors)
+            self.assertIn("model_grader_dry_run.source_artifacts contains unknown field(s): ['provider_dataset'].", errors)
+            self.assertIn(
+                "model_grader_dry_run.source_artifacts.review_export contains unknown field(s): ['provider_dataset_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_dry_run.source_artifacts.review_export.manifest contains unknown field(s): ['signed_url'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_dry_run.source_artifacts.rubric_spec contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn("model_grader_dry_run.label_counts[0] contains unknown field(s): ['source'].", errors)
+            self.assertIn("model_grader_dry_run.grader_labels[0] contains unknown field(s): ['provider_trace_id'].", errors)
+            self.assertIn(
+                "model_grader_dry_run.human_review_overrides contains unknown field(s): ['provider_queue_id'].",
+                errors,
+            )
+            self.assertIn("model_grader_dry_run.training_admission contains unknown field(s): ['trainer_dataset_id'].", errors)
+            self.assertIn(
+                "model_grader_dry_run.execution_boundary contains unknown field(s): ['paid_model_grader_invoice_id'].",
+                errors,
+            )
+            dry_run.write_text(json.dumps(dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             rubric_link = artifact_dir / "rubric_link.json"
             rubric_link.symlink_to(rubric)
             self.assert_validation_error(
@@ -583,6 +632,18 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(dry_payload["disagreement_queue"][0]["mock_model_label"], "needs_review")
             self.assertEqual(sum(1 for row in dry_payload["grader_labels"] if row["requires_human_review"]), 1)
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
+
+            unknown_queue_dry_run = root / "unknown_queue_dry_run.json"
+            unknown_queue_payload = json.loads(json.dumps(dry_payload))
+            unknown_queue_payload["disagreement_queue"][0]["provider_review_url"] = "redacted-provider-review"
+            unknown_queue_dry_run.write_text(json.dumps(unknown_queue_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            schema = check_schema_file(unknown_queue_dry_run)
+            self.assertFalse(schema["passed"], schema)
+            self.assert_validation_error(
+                unknown_queue_dry_run,
+                "model_grader_dry_run",
+                "model_grader_dry_run.disagreement_queue[0] contains unknown field(s): ['provider_review_url'].",
+            )
 
             stale_queue_dry_run = root / "stale_queue_dry_run.json"
             stale_queue_payload = json.loads(json.dumps(dry_payload))

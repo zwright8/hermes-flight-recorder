@@ -6357,6 +6357,37 @@ _MODEL_GRADER_GATE_KEYS = {
     "execution_boundary",
     "notes",
 }
+_MODEL_GRADER_DRY_RUN_KEYS = {
+    "schema_version",
+    "created_at",
+    "grader",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "graded_item_count",
+    "label_counts",
+    "grader_labels",
+    "disagreement_queue",
+    "human_review_overrides",
+    "training_admission",
+    "execution_boundary",
+    "notes",
+}
+_MODEL_GRADER_DRY_RUN_SOURCE_KEYS = {"review_export", "rubric_spec"}
+_MODEL_GRADER_REVIEW_EXPORT_KEYS = {"path", "manifest", "review_items"}
+_MODEL_GRADER_GRADER_KEYS = {
+    "provider",
+    "grader_id",
+    "mode",
+    "transport",
+    "provider_api_called",
+    "paid_model_grader_calls_started",
+}
 _MODEL_GRADER_GATE_SOURCE_KEYS = {
     "dry_run_receipt",
     "rubric_spec",
@@ -6364,6 +6395,42 @@ _MODEL_GRADER_GATE_SOURCE_KEYS = {
     "model_grader_override_receipt",
 }
 _MODEL_GRADER_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_MODEL_GRADER_LABEL_KEYS = {
+    "review_item_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "review_item_sha256",
+    "mock_model_label",
+    "mock_confidence",
+    "requires_human_review",
+    "rationale",
+    "grader_id",
+    "provider",
+    "label_sha256",
+}
+_MODEL_GRADER_LABEL_COUNT_KEYS = {"label", "count"}
+_MODEL_GRADER_DISAGREEMENT_KEYS = {
+    "review_item_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "review_item_sha256",
+    "mock_model_label",
+    "reason",
+    "source_report",
+}
+_MODEL_GRADER_DRY_RUN_HUMAN_REVIEW_OVERRIDES_KEYS = {
+    "required_before_training_admission",
+    "override_queue_path",
+    "override_count",
+    "accepted_override_count",
+}
+_MODEL_GRADER_DRY_RUN_TRAINING_ADMISSION_KEYS = {
+    "labels_allowed_for_training",
+    "labels_admitted_count",
+    "requires_calibrated_gate",
+}
 _MODEL_GRADER_FILE_REF_KEYS = {
     "role",
     "path",
@@ -6405,10 +6472,14 @@ _MODEL_GRADER_BOUNDARY_KEYS = {
 
 
 def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(receipt, _MODEL_GRADER_DRY_RUN_KEYS, target, "model_grader_dry_run")
     _require_equal(receipt, "schema_version", MODEL_GRADER_DRY_RUN_SCHEMA_VERSION, target, prefix="model_grader_dry_run.")
     _validate_model_grader_checked_artifact(receipt, target, "model_grader_dry_run")
+    _validate_model_grader_check_keys(receipt.get("checks"), target, "model_grader_dry_run.checks")
     source_paths = _validate_model_grader_dry_run_sources(receipt.get("source_artifacts"), target, source_path)
     grader = receipt.get("grader") if isinstance(receipt.get("grader"), dict) else {}
+    if isinstance(receipt.get("grader"), dict):
+        _validate_allowed_keys(grader, _MODEL_GRADER_GRADER_KEYS, target, "model_grader_dry_run.grader")
     if grader.get("mode") != "dry_run":
         target.errors.append("model_grader_dry_run.grader.mode must be dry_run.")
     if grader.get("transport") != "mock":
@@ -6435,6 +6506,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_LABEL_KEYS, target, label)
         for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "review_item_sha256", "mock_model_label", "mock_confidence", "rationale", "grader_id", "provider", "label_sha256"):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -6480,12 +6552,32 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
     if observed_disagreement_queue != expected_disagreement_queue:
         target.errors.append("model_grader_dry_run.disagreement_queue must match labels requiring human review.")
     admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
+    if isinstance(receipt.get("training_admission"), dict):
+        _validate_allowed_keys(admission, _MODEL_GRADER_DRY_RUN_TRAINING_ADMISSION_KEYS, target, "model_grader_dry_run.training_admission")
     if admission.get("labels_allowed_for_training") is not False:
         target.errors.append("model_grader_dry_run.training_admission.labels_allowed_for_training must be false.")
     if admission.get("labels_admitted_count") != 0:
         target.errors.append("model_grader_dry_run.training_admission.labels_admitted_count must be 0.")
     if admission.get("requires_calibrated_gate") is not True:
         target.errors.append("model_grader_dry_run.training_admission.requires_calibrated_gate must be true.")
+    overrides = receipt.get("human_review_overrides")
+    if not isinstance(overrides, dict):
+        target.errors.append("model_grader_dry_run.human_review_overrides must be an object.")
+    else:
+        _validate_allowed_keys(
+            overrides,
+            _MODEL_GRADER_DRY_RUN_HUMAN_REVIEW_OVERRIDES_KEYS,
+            target,
+            "model_grader_dry_run.human_review_overrides",
+        )
+        if overrides.get("required_before_training_admission") is not True:
+            target.errors.append("model_grader_dry_run.human_review_overrides.required_before_training_admission must be true.")
+        if overrides.get("override_queue_path") is not None:
+            target.errors.append("model_grader_dry_run.human_review_overrides.override_queue_path must be null.")
+        if overrides.get("override_count") != 0:
+            target.errors.append("model_grader_dry_run.human_review_overrides.override_count must be 0.")
+        if overrides.get("accepted_override_count") != 0:
+            target.errors.append("model_grader_dry_run.human_review_overrides.accepted_override_count must be 0.")
     _validate_model_grader_boundary(receipt.get("execution_boundary"), target, "model_grader_dry_run")
     target.details.update(
         {
@@ -6689,6 +6781,7 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
     if not isinstance(value, dict):
         target.errors.append("model_grader_dry_run.source_artifacts must be an object.")
         return paths
+    _validate_allowed_keys(value, _MODEL_GRADER_DRY_RUN_SOURCE_KEYS, target, "model_grader_dry_run.source_artifacts")
     review_export_paths = _validate_model_grader_review_export_ref(
         value.get("review_export"),
         target,
@@ -6794,6 +6887,7 @@ def _validate_model_grader_disagreement_queue(
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_DISAGREEMENT_KEYS, target, label)
         for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "review_item_sha256", "mock_model_label", "reason"):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -6941,6 +7035,7 @@ def _validate_model_grader_review_export_ref(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return paths
+    _validate_allowed_keys(value, _MODEL_GRADER_REVIEW_EXPORT_KEYS, target, label)
     if not isinstance(value.get("path"), str) or not value.get("path"):
         target.errors.append(f"{label}.path must be a non-empty string.")
     manifest_path = _validate_model_grader_source_file_ref(
@@ -7085,6 +7180,7 @@ def _model_grader_label_counts(value: Any, target: ValidationTarget, label: str)
         if not isinstance(row, dict):
             target.errors.append(f"{row_label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_LABEL_COUNT_KEYS, target, row_label)
         name = row.get("label")
         count = row.get("count")
         if name not in REVIEW_LABELS:

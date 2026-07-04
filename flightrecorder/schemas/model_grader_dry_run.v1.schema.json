@@ -1,64 +1,175 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/model_grader_dry_run.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Dry-run model-grader receipt with mock transport and no provider calls.",
   "properties": {
     "blocked_reasons": {
-      "items": { "type": "string" },
-      "type": "array"
-    },
-    "check_count": { "minimum": 0, "type": "integer" },
-    "checks": {
-      "items": { "$ref": "#/$defs/check" },
-      "type": "array"
-    },
-    "created_at": { "type": "string" },
-    "disagreement_queue": {
-      "items": { "type": "object" },
-      "type": "array"
-    },
-    "execution_boundary": { "$ref": "#/$defs/boundary" },
-    "failed_check_count": { "minimum": 0, "type": "integer" },
-    "graded_item_count": { "minimum": 0, "type": "integer" },
-    "grader": {
-      "additionalProperties": true,
-      "properties": {
-        "mode": { "const": "dry_run" },
-        "paid_model_grader_calls_started": { "const": false },
-        "provider": { "minLength": 1, "type": "string" },
-        "provider_api_called": { "const": false },
-        "transport": { "const": "mock" }
+      "items": {
+        "type": "string"
       },
-      "required": ["provider", "grader_id", "mode", "transport", "provider_api_called", "paid_model_grader_calls_started"],
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "disagreement_queue": {
+      "items": {
+        "$ref": "#/$defs/disagreement"
+      },
+      "type": "array"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/boundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "graded_item_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "grader": {
+      "additionalProperties": false,
+      "properties": {
+        "grader_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "const": "dry_run"
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "provider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "transport": {
+          "const": "mock"
+        }
+      },
+      "required": [
+        "provider",
+        "grader_id",
+        "mode",
+        "transport",
+        "provider_api_called",
+        "paid_model_grader_calls_started"
+      ],
       "type": "object"
     },
     "grader_labels": {
-      "items": { "$ref": "#/$defs/grader_label" },
+      "items": {
+        "$ref": "#/$defs/grader_label"
+      },
       "type": "array"
     },
-    "human_review_overrides": { "type": "object" },
+    "human_review_overrides": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_override_count": {
+          "const": 0
+        },
+        "override_count": {
+          "const": 0
+        },
+        "override_queue_path": {
+          "const": null
+        },
+        "required_before_training_admission": {
+          "const": true
+        }
+      },
+      "required": [
+        "required_before_training_admission",
+        "override_queue_path",
+        "override_count",
+        "accepted_override_count"
+      ],
+      "type": "object"
+    },
     "label_counts": {
-      "items": { "$ref": "#/$defs/label_count" },
+      "items": {
+        "$ref": "#/$defs/label_count"
+      },
       "type": "array"
     },
     "notes": {
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "type": "array"
     },
-    "passed": { "type": "boolean" },
-    "readiness": { "enum": ["ready_for_calibration_gate", "blocked"], "type": "string" },
-    "recommendation": { "enum": ["gate_before_training_admission", "fix_rubric_or_review_export"], "type": "string" },
-    "schema_version": { "const": "hfr.model_grader_dry_run.v1" },
-    "source_artifacts": { "type": "object" },
-    "training_admission": {
-      "additionalProperties": true,
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready_for_calibration_gate",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "recommendation": {
+      "enum": [
+        "gate_before_training_admission",
+        "fix_rubric_or_review_export"
+      ],
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.model_grader_dry_run.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
       "properties": {
-        "labels_admitted_count": { "const": 0 },
-        "labels_allowed_for_training": { "const": false },
-        "requires_calibrated_gate": { "const": true }
+        "review_export": {
+          "$ref": "#/$defs/reviewExport"
+        },
+        "rubric_spec": {
+          "$ref": "#/$defs/sourceArtifact"
+        }
       },
-      "required": ["labels_allowed_for_training", "labels_admitted_count", "requires_calibrated_gate"],
+      "required": [
+        "review_export",
+        "rubric_spec"
+      ],
+      "type": "object"
+    },
+    "training_admission": {
+      "additionalProperties": false,
+      "properties": {
+        "labels_admitted_count": {
+          "const": 0
+        },
+        "labels_allowed_for_training": {
+          "const": false
+        },
+        "requires_calibrated_gate": {
+          "const": true
+        }
+      },
+      "required": [
+        "labels_allowed_for_training",
+        "labels_admitted_count",
+        "requires_calibrated_gate"
+      ],
       "type": "object"
     }
   },
@@ -87,15 +198,29 @@
   "type": "object",
   "$defs": {
     "boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "cloud_cost_incurred_usd": { "const": 0 },
-        "credential_values_recorded": { "const": false },
-        "dry_run_only": { "const": true },
-        "labels_admitted_to_training": { "const": false },
-        "paid_model_grader_calls_started": { "const": false },
-        "provider_api_called": { "const": false },
-        "weights_updated_by_flight_recorder": { "const": false }
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "labels_admitted_to_training": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
       },
       "required": [
         "dry_run_only",
@@ -109,29 +234,188 @@
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "actual": {},
-        "expected": { "type": "object" },
-        "id": { "minLength": 1, "type": "string" },
-        "passed": { "type": "boolean" },
-        "summary": { "minLength": 1, "type": "string" }
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
       },
-      "required": ["id", "passed", "actual", "expected", "summary"],
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "disagreement": {
+      "additionalProperties": false,
+      "properties": {
+        "episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mock_model_label": {
+          "enum": [
+            "accept",
+            "reject",
+            "needs_review",
+            "unsafe",
+            "incomplete"
+          ],
+          "type": "string"
+        },
+        "reason": {
+          "const": "human_review_required_by_rubric_or_low_confidence"
+        },
+        "review_item_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_item_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_report": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_family": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "review_item_id",
+        "episode_id",
+        "scenario_id",
+        "task_family",
+        "review_item_sha256",
+        "mock_model_label",
+        "reason",
+        "source_report"
+      ],
+      "type": "object"
+    },
+    "fileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes"
+      ],
       "type": "object"
     },
     "grader_label": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "episode_id": { "minLength": 1, "type": "string" },
-        "label_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-        "mock_confidence": { "enum": ["high", "medium", "low", "unknown"], "type": "string" },
-        "mock_model_label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" },
-        "requires_human_review": { "type": "boolean" },
-        "review_item_id": { "minLength": 1, "type": "string" },
-        "review_item_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-        "scenario_id": { "minLength": 1, "type": "string" },
-        "task_family": { "minLength": 1, "type": "string" }
+        "episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "grader_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "label_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "mock_confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "mock_model_label": {
+          "enum": [
+            "accept",
+            "reject",
+            "needs_review",
+            "unsafe",
+            "incomplete"
+          ],
+          "type": "string"
+        },
+        "provider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requires_human_review": {
+          "type": "boolean"
+        },
+        "review_item_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_item_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "task_family": {
+          "minLength": 1,
+          "type": "string"
+        }
       },
       "required": [
         "review_item_id",
@@ -150,12 +434,119 @@
       "type": "object"
     },
     "label_count": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "count": { "minimum": 0, "type": "integer" },
-        "label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" }
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label": {
+          "enum": [
+            "accept",
+            "reject",
+            "needs_review",
+            "unsafe",
+            "incomplete"
+          ],
+          "type": "string"
+        }
       },
-      "required": ["label", "count"],
+      "required": [
+        "label",
+        "count"
+      ],
+      "type": "object"
+    },
+    "reviewExport": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_items": {
+          "$ref": "#/$defs/fileRef"
+        }
+      },
+      "required": [
+        "path",
+        "manifest",
+        "review_items"
+      ],
+      "type": "object"
+    },
+    "sourceArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "schema_passed": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "source_recommendation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_name",
+        "schema_passed",
+        "schema_error_count",
+        "schema_errors",
+        "source_passed",
+        "source_recommendation"
+      ],
       "type": "object"
     }
   }
