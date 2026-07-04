@@ -774,6 +774,9 @@ card, and dataset card decisions.
 - Decision-gate strict validation now warns on absolute artifact and
   source-artifact paths, catching preserved local gate coordinates before
   public promotion decisions are accepted.
+- Rejection-sampling gates now write their own gate path relative to the gate
+  output and strict validation warns on absolute gate or input-artifact refs
+  before public dataset-curation admission is accepted.
 - Promotion-ledger validation reopens recorded decision gates from the ledger
   file location and rejects missing, moved, stale, or cwd-substituted records.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,

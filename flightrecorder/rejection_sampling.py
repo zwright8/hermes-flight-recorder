@@ -130,6 +130,7 @@ def write_rejection_sampling_gate(path: str | Path, gate: dict[str, Any]) -> Non
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.loads(json.dumps(gate))
+    payload["gate_path"] = _output_relative_path(payload.get("gate_path"), out_path.parent)
     for rows in payload.get("input_artifacts", {}).values():
         if isinstance(rows, list):
             for row in rows:

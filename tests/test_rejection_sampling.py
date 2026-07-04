@@ -46,6 +46,7 @@ class RejectionSamplingGateTests(unittest.TestCase):
             self.assertTrue(validation["passed"], validation)
             payload = json.loads(out.read_text(encoding="utf-8"))
             self.assertTrue(payload["passed"], payload["blocked_reasons"])
+            self.assertEqual(payload["gate_path"], "rejection_sampling_gate.json")
             self.assertEqual(payload["readiness"], "ready_for_dataset_curation")
             self.assertEqual(payload["rollout_summary"]["mock_rollout_count"], 1)
             self.assertFalse(payload["execution_boundary"]["dataset_rows_written"])
@@ -89,6 +90,37 @@ class RejectionSamplingGateTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_strict_validation_rejects_absolute_rejection_sampling_gate_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            model_grader_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            out = root / "rejection_sampling_gate.json"
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[model_grader_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_rejection_sampling_gate(out, gate)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            payload["gate_path"] = str(out)
+            payload["input_artifacts"]["model_grader_gate"][0]["path"] = str(model_grader_gate)
+            out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(rejection_sampling_gate_paths=[out])
+            strict_validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
+
+            self.assertTrue(validation["passed"], validation)
+            self.assertFalse(strict_validation["passed"], strict_validation)
+            warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
+            self.assertIn("rejection_sampling_gate.gate_path is absolute", warnings)
+            self.assertIn("rejection_sampling_gate.input_artifacts.model_grader_gate[0].path is absolute", warnings)
 
     def test_gate_blocks_uncalibrated_or_missing_review_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:

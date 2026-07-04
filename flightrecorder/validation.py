@@ -7022,6 +7022,10 @@ _DATASET_CURATION_BOUNDARY_KEYS = {
 def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
     _validate_allowed_keys(gate, _REJECTION_SAMPLING_GATE_KEYS, target, "rejection_sampling_gate")
     _require_equal(gate, "schema_version", REJECTION_SAMPLING_GATE_SCHEMA_VERSION, target, prefix="rejection_sampling_gate.")
+    if not isinstance(gate.get("gate_path"), str):
+        target.errors.append("rejection_sampling_gate.gate_path must be a string.")
+    elif gate.get("gate_path"):
+        _warn_absolute_public_path(target, "rejection_sampling_gate.gate_path", gate.get("gate_path"))
     checks = gate.get("checks")
     if not isinstance(checks, list):
         target.errors.append("rejection_sampling_gate.checks must be a list.")
@@ -7130,6 +7134,8 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
     for field_name in ("role", "path", "kind", "schema_version", "readiness"):
         if not isinstance(row.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if isinstance(row.get("path"), str) and row.get("path"):
+        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
     if row.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
