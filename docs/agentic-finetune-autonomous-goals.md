@@ -97,7 +97,7 @@ evidence.
   would-run roots or argv tokens are rejected when they carry local absolute
   paths.
 - Validate agentic training plans before public use so preserved external
-  runner command tokens warn under strict validation.
+  runner command tokens are rejected when they carry local absolute paths.
 - Validate agentic training flow handoffs before public use so preserved
   delegated command cwd, archive roots, external code roots, or argv tokens
   are rejected when they contain absolute local paths.

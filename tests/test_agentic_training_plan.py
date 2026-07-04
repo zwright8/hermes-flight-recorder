@@ -283,7 +283,7 @@ class AgenticTrainingPlanTests(unittest.TestCase):
             self.assertTrue(validation["passed"], validation)
             self.assertEqual(validation["targets"][0]["type"], "agentic_training_plan")
 
-    def test_strict_validation_warns_on_absolute_external_runner_command_tokens(self):
+    def test_validation_rejects_absolute_external_runner_command_tokens(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             model = root / "model.json"
@@ -292,26 +292,15 @@ class AgenticTrainingPlanTests(unittest.TestCase):
             report = root / "validation.json"
             self.write_model_manifest(model)
             self.write_dataset_manifest(dataset)
-            plan = build_agentic_training_plan(
+            clean_plan = build_agentic_training_plan(
                 out_path=out,
                 mode="sft",
                 model_manifest_path=model,
                 dataset_manifest_path=dataset,
-                output_dir=root / "adapters",
+                output_dir="adapters",
             )
-            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-            non_strict = subprocess.run(
-                [sys.executable, "-m", "flightrecorder", "validate", "--agentic-training-plan", str(out), "--out", str(report)],
-                cwd=ROOT,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
-            self.assertEqual(non_strict.returncode, 0, non_strict.stderr + non_strict.stdout)
-
-            strict = subprocess.run(
+            out.write_text(json.dumps(clean_plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            clean = subprocess.run(
                 [
                     sys.executable,
                     "-m",
@@ -329,10 +318,32 @@ class AgenticTrainingPlanTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 check=False,
             )
-            self.assertEqual(strict.returncode, 1, strict.stderr + strict.stdout)
+            self.assertEqual(clean.returncode, 0, clean.stderr + clean.stdout)
+
+            plan = build_agentic_training_plan(
+                out_path=out,
+                mode="sft",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+                output_dir=root / "adapters",
+            )
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            non_strict = subprocess.run(
+                [sys.executable, "-m", "flightrecorder", "validate", "--agentic-training-plan", str(out), "--out", str(report)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(non_strict.returncode, 1, non_strict.stderr + non_strict.stdout)
             validation = json.loads(report.read_text(encoding="utf-8"))
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("agentic_training_plan.execution.external_runner_command[9] is absolute", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_plan.execution.external_runner_command[9] must use a relative command token",
+                errors,
+            )
 
     def test_schema_and_validate_reject_hidden_provider_plan_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
