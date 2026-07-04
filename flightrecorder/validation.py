@@ -6275,6 +6275,7 @@ def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: st
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(rubric, _MODEL_GRADER_RUBRIC_SPEC_KEYS, target, "rubric_spec")
     _require_equal(rubric, "schema_version", RUBRIC_SPEC_SCHEMA_VERSION, target, prefix="rubric_spec.")
     review_export_paths = _validate_model_grader_review_export_ref(
         rubric.get("review_export"),
@@ -6293,6 +6294,7 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_RUBRIC_CRITERION_KEYS, target, label)
         if not isinstance(row.get("criterion_id"), str) or not row.get("criterion_id"):
             target.errors.append(f"{label}.criterion_id must be a non-empty string.")
         if not isinstance(row.get("description"), str) or not row.get("description"):
@@ -6317,6 +6319,7 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_RUBRIC_FINGERPRINT_KEYS, target, label)
         for field_name in ("review_item_id", "episode_id", "scenario_id"):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -6328,10 +6331,21 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
         target,
     )
     requirements = rubric.get("calibration_requirements") if isinstance(rubric.get("calibration_requirements"), dict) else {}
+    if isinstance(rubric.get("calibration_requirements"), dict):
+        _validate_allowed_keys(
+            requirements,
+            _MODEL_GRADER_RUBRIC_CALIBRATION_REQUIREMENT_KEYS,
+            target,
+            "rubric_spec.calibration_requirements",
+        )
     if requirements.get("required_before_training_admission") is not True:
         target.errors.append("rubric_spec.calibration_requirements.required_before_training_admission must be true.")
+    if not isinstance(requirements.get("min_calibration_agreement_rate"), (int, float)) or not 0 <= requirements.get("min_calibration_agreement_rate") <= 1:
+        target.errors.append("rubric_spec.calibration_requirements.min_calibration_agreement_rate must be a number from 0 to 1.")
     if requirements.get("max_uncalibrated_labels_admitted") != 0:
         target.errors.append("rubric_spec.calibration_requirements.max_uncalibrated_labels_admitted must be 0.")
+    if requirements.get("human_override_queue_required") is not True:
+        target.errors.append("rubric_spec.calibration_requirements.human_override_queue_required must be true.")
     _validate_model_grader_boundary(rubric.get("execution_boundary"), target, "rubric_spec")
     target.details.update(
         {
@@ -6379,6 +6393,20 @@ _MODEL_GRADER_DRY_RUN_KEYS = {
     "execution_boundary",
     "notes",
 }
+_MODEL_GRADER_RUBRIC_SPEC_KEYS = {
+    "schema_version",
+    "rubric_id",
+    "created_at",
+    "review_export",
+    "criterion_count",
+    "criteria",
+    "label_options",
+    "calibration_requirements",
+    "review_item_count",
+    "review_item_fingerprints",
+    "execution_boundary",
+    "notes",
+}
 _MODEL_GRADER_OVERRIDE_RECEIPT_KEYS = {
     "schema_version",
     "created_at",
@@ -6415,6 +6443,19 @@ _MODEL_GRADER_GATE_SOURCE_KEYS = {
     "model_grader_override_receipt",
 }
 _MODEL_GRADER_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_MODEL_GRADER_RUBRIC_CRITERION_KEYS = {"criterion_id", "description", "required"}
+_MODEL_GRADER_RUBRIC_FINGERPRINT_KEYS = {
+    "review_item_id",
+    "episode_id",
+    "scenario_id",
+    "review_item_sha256",
+}
+_MODEL_GRADER_RUBRIC_CALIBRATION_REQUIREMENT_KEYS = {
+    "required_before_training_admission",
+    "min_calibration_agreement_rate",
+    "max_uncalibrated_labels_admitted",
+    "human_override_queue_required",
+}
 _MODEL_GRADER_LABEL_KEYS = {
     "review_item_id",
     "episode_id",

@@ -1,73 +1,90 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/rubric_spec.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Rubric spec for human/model-grader review calibration.",
   "properties": {
-    "calibration_requirements": { "type": "object" },
-    "created_at": { "type": "string" },
-    "criteria": {
-      "items": {
-        "additionalProperties": true,
-        "properties": {
-          "criterion_id": { "minLength": 1, "type": "string" },
-          "description": { "minLength": 1, "type": "string" },
-          "required": { "const": true }
-        },
-        "required": ["criterion_id", "description", "required"],
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "criterion_count": { "minimum": 0, "type": "integer" },
-    "execution_boundary": {
-      "additionalProperties": true,
+    "calibration_requirements": {
+      "additionalProperties": false,
       "properties": {
-        "cloud_cost_incurred_usd": { "const": 0 },
-        "credential_values_recorded": { "const": false },
-        "dry_run_only": { "const": true },
-        "labels_admitted_to_training": { "const": false },
-        "paid_model_grader_calls_started": { "const": false },
-        "provider_api_called": { "const": false },
-        "weights_updated_by_flight_recorder": { "const": false }
+        "human_override_queue_required": {
+          "const": true
+        },
+        "max_uncalibrated_labels_admitted": {
+          "const": 0
+        },
+        "min_calibration_agreement_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "required_before_training_admission": {
+          "const": true
+        }
       },
       "required": [
-        "dry_run_only",
-        "provider_api_called",
-        "paid_model_grader_calls_started",
-        "cloud_cost_incurred_usd",
-        "credential_values_recorded",
-        "labels_admitted_to_training",
-        "weights_updated_by_flight_recorder"
+        "required_before_training_admission",
+        "min_calibration_agreement_rate",
+        "max_uncalibrated_labels_admitted",
+        "human_override_queue_required"
       ],
       "type": "object"
     },
-    "label_options": {
-      "items": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" },
-      "type": "array"
+    "created_at": {
+      "type": "string"
     },
-    "notes": {
-      "items": { "type": "string" },
-      "type": "array"
-    },
-    "review_export": { "type": "object" },
-    "review_item_count": { "minimum": 0, "type": "integer" },
-    "review_item_fingerprints": {
+    "criteria": {
       "items": {
-        "additionalProperties": true,
-        "properties": {
-          "episode_id": { "minLength": 1, "type": "string" },
-          "review_item_id": { "minLength": 1, "type": "string" },
-          "review_item_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
-          "scenario_id": { "minLength": 1, "type": "string" }
-        },
-        "required": ["review_item_id", "episode_id", "scenario_id", "review_item_sha256"],
-        "type": "object"
+        "$ref": "#/$defs/criterion"
       },
       "type": "array"
     },
-    "rubric_id": { "minLength": 1, "type": "string" },
-    "schema_version": { "const": "hfr.rubric_spec.v1" }
+    "criterion_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/boundary"
+    },
+    "label_options": {
+      "items": {
+        "enum": [
+          "accept",
+          "reject",
+          "needs_review",
+          "unsafe",
+          "incomplete"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "review_export": {
+      "$ref": "#/$defs/reviewExport"
+    },
+    "review_item_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "review_item_fingerprints": {
+      "items": {
+        "$ref": "#/$defs/reviewItemFingerprint"
+      },
+      "type": "array"
+    },
+    "rubric_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rubric_spec.v1"
+    }
   },
   "required": [
     "schema_version",
@@ -84,5 +101,151 @@
     "notes"
   ],
   "title": "Hermes Flight Recorder Rubric Spec",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "labels_admitted_to_training": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "provider_api_called",
+        "paid_model_grader_calls_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "labels_admitted_to_training",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "criterion": {
+      "additionalProperties": false,
+      "properties": {
+        "criterion_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "required": {
+          "const": true
+        }
+      },
+      "required": [
+        "criterion_id",
+        "description",
+        "required"
+      ],
+      "type": "object"
+    },
+    "fileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "reviewExport": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_items": {
+          "$ref": "#/$defs/fileRef"
+        }
+      },
+      "required": [
+        "path",
+        "manifest",
+        "review_items"
+      ],
+      "type": "object"
+    },
+    "reviewItemFingerprint": {
+      "additionalProperties": false,
+      "properties": {
+        "episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_item_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_item_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "review_item_id",
+        "episode_id",
+        "scenario_id",
+        "review_item_sha256"
+      ],
+      "type": "object"
+    }
+  }
 }

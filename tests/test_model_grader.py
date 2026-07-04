@@ -118,6 +118,36 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(rubric_payload["review_export"]["manifest"]["path"], "../../review/manifest.json")
             self.assert_schema_and_validate(rubric, "rubric_spec")
 
+            forged_rubric_payload = json.loads(json.dumps(rubric_payload))
+            forged_rubric_payload["provider_rubric_url"] = "redacted-provider-rubric"
+            forged_rubric_payload["criteria"][0]["provider_weight"] = "forged"
+            forged_rubric_payload["review_export"]["provider_dataset_id"] = "redacted-provider-dataset"
+            forged_rubric_payload["review_export"]["manifest"]["signed_url"] = "redacted-signed-url"
+            forged_rubric_payload["review_item_fingerprints"][0]["provider_trace_id"] = "redacted-provider-trace"
+            forged_rubric_payload["calibration_requirements"]["paid_grader_allowed"] = True
+            forged_rubric_payload["execution_boundary"]["provider_api_receipt"] = "redacted-provider-receipt"
+            rubric.write_text(json.dumps(forged_rubric_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(rubric)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(rubric_spec_paths=[rubric], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("rubric_spec contains unknown field(s): ['provider_rubric_url'].", errors)
+            self.assertIn("rubric_spec.criteria[0] contains unknown field(s): ['provider_weight'].", errors)
+            self.assertIn("rubric_spec.review_export contains unknown field(s): ['provider_dataset_id'].", errors)
+            self.assertIn("rubric_spec.review_export.manifest contains unknown field(s): ['signed_url'].", errors)
+            self.assertIn(
+                "rubric_spec.review_item_fingerprints[0] contains unknown field(s): ['provider_trace_id'].",
+                errors,
+            )
+            self.assertIn(
+                "rubric_spec.calibration_requirements contains unknown field(s): ['paid_grader_allowed'].",
+                errors,
+            )
+            self.assertIn("rubric_spec.execution_boundary contains unknown field(s): ['provider_api_receipt'].", errors)
+            rubric.write_text(json.dumps(rubric_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             redirected_rubric = artifact_dir / "redirected_rubric.json"
             redirected_rubric.write_text("{}\n", encoding="utf-8")
             rubric_output_link = artifact_dir / "rubric_output_link.json"
