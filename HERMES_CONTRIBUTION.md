@@ -215,7 +215,8 @@ The generated review-calibration report gives maintainers a direct
 human-vs-scorecard agreement signal after labels are applied. It identifies
 false positives, false negatives, skipped `needs_review` rows, and concrete
 disagreement rows with source report and lineage pointers, so weak scenarios or
-label disputes can be repaired before training.
+label disputes can be repaired before training. Strict validation warns if a
+calibration report preserves local reviewed-export or reviewed-label paths.
 
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence, including

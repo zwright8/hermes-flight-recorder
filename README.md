@@ -683,6 +683,7 @@ flightrecorder schemas --check runs/suite_gate.json
 flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
+flightrecorder validate --review-calibration runs/review_calibration.json --strict
 flightrecorder schemas --check runs/model_grader_disagreement_queue.json
 flightrecorder schemas --check runs/model_grader_override_receipt.json
 flightrecorder schemas --check runs/model_grader_gate.json

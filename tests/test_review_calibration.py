@@ -110,6 +110,39 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
             self.assertIn("review calibration output must resolve to a regular non-symlink file", stderr.getvalue())
 
+    def test_strict_validate_warns_on_absolute_preserved_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            out = Path(tmp) / "review_calibration.json"
+            permissive_summary = Path(tmp) / "validation.json"
+            strict_summary = Path(tmp) / "strict_validation.json"
+
+            code = run_cli(
+                [
+                    "review-calibration",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(out),
+                    "--preserve-paths",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            calibration = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(Path(calibration["reviewed_export"]).is_absolute())
+            self.assertTrue(Path(calibration["source"]["reviewed_labels"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--out", str(permissive_summary)]), 0)
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict", "--out", str(strict_summary)]), 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_summary.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            warning_text = "\n".join(warnings)
+            self.assertIn("review_calibration.reviewed_export is absolute", warning_text)
+            self.assertIn("review_calibration.source.reviewed_labels is absolute", warning_text)
+
     def test_review_calibration_blocks_scorecard_human_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp, reject_good=True)

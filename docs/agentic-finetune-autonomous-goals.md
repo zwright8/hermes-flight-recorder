@@ -76,6 +76,8 @@ evidence.
   gate outputs where needed.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
+- Validate review-calibration receipts before public handoff so preserved
+  reviewed-export or reviewed-label source paths warn under strict validation.
 - Add a single evidence-readiness command or documented command sequence that
   produces a complete handoff bundle from runs.
 - Ensure failed evidence produces repair/curriculum work items instead of

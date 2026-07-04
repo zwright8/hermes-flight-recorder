@@ -24955,6 +24955,8 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
     _require_equal(calibration, "schema_version", REVIEW_CALIBRATION_SCHEMA_VERSION, target)
     if not isinstance(calibration.get("reviewed_export"), str) or not calibration.get("reviewed_export"):
         target.errors.append("review_calibration.reviewed_export must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "review_calibration.reviewed_export", calibration.get("reviewed_export"))
     source = calibration.get("source")
     if not isinstance(source, dict):
         target.errors.append("review_calibration.source must be an object.")
@@ -24962,6 +24964,12 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
         _validate_allowed_keys(source, _REVIEW_CALIBRATION_SOURCE_KEYS, target, "review_calibration.source")
         if not isinstance(source.get("reviewed_labels"), str) or not source.get("reviewed_labels"):
             target.errors.append("review_calibration.source.reviewed_labels must be a non-empty string.")
+        else:
+            _warn_absolute_public_path(
+                target,
+                "review_calibration.source.reviewed_labels",
+                source.get("reviewed_labels"),
+            )
     if not isinstance(calibration.get("passed"), bool):
         target.errors.append("review_calibration.passed must be a boolean.")
 
