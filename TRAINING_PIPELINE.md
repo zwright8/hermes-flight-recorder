@@ -362,7 +362,9 @@ preserve the history of those allow/block artifacts across iterations. The
 promotion ledger records latest recommendation, allowed/blocked counts,
 consecutive block or allow streaks, and source-artifact fingerprints, giving an
 external trainer launcher a stable "how did we get here?" artifact before it
-consumes the final decision gate. Use `flightrecorder gate-promotion-ledger`
+consumes the final decision gate. Promotion-ledger generation and validation
+reject symlinked recorded decision-gate paths before reading, hashing, or
+replaying those records. Use `flightrecorder gate-promotion-ledger`
 when trainer or CI automation needs a policy decision over that history, such
 as requiring a clean latest allow decision, capping blocked-rate or blocked
 streaks, and forbidding source `block_iteration` recommendations before launch.

@@ -21495,6 +21495,8 @@ def _validate_promotion_ledger_record_matches_gate(
     file_path = _resolve_gate_source_path(record.get("path"), source_path)
     if file_path is None or not file_path.exists() or not file_path.is_file():
         return
+    if file_path.is_symlink() or _path_has_symlink_component(file_path, include_leaf=False):
+        return
     try:
         gate = json.loads(file_path.read_text(encoding="utf-8"))
     except UnicodeDecodeError as exc:
@@ -21561,6 +21563,9 @@ def _validate_promotion_ledger_record_file_hash(
         return
     if file_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if _path_has_symlink_component(file_path, include_leaf=False):
+        target.errors.append(f"{label}.path must not traverse symlinked components.")
         return
     if not file_path.exists() or not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an existing file.")

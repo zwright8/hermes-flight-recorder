@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 
 PROMOTION_LEDGER_SCHEMA_VERSION = "hfr.promotion_ledger.v1"
 
@@ -49,8 +50,10 @@ def build_promotion_ledger(
 
 
 def _read_decision_gate(path: Path) -> dict[str, Any]:
-    if path.is_symlink():
-        raise PromotionLedgerError(f"Decision gate must not be a symlink: {path}")
+    if path.is_symlink() or _path_has_symlink_component(path, include_leaf=False):
+        raise PromotionLedgerError(
+            f"promotion_ledger.decision_gate_path must not traverse symlinked components: {path}"
+        )
     if not path.exists() or not path.is_file():
         raise PromotionLedgerError(f"Decision gate not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -88,7 +91,12 @@ def _decision_record(path: Path, gate: dict[str, Any], index: int, preserve_path
             "artifact_sha256": source_artifact.get("sha256") if _is_sha256(source_artifact.get("sha256")) else None,
         },
     }
-    if path.exists() and path.is_file():
+    if (
+        path.exists()
+        and path.is_file()
+        and not path.is_symlink()
+        and not _path_has_symlink_component(path, include_leaf=False)
+    ):
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record

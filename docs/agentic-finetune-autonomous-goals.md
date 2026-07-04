@@ -162,6 +162,8 @@ evidence.
   ledger paths before replaying metrics, checks, or decisions.
 - Decision gates reject symlinked source artifacts before trusting
   `source_artifact` fingerprints or replayed source decisions.
+- Promotion ledgers reject symlinked recorded decision-gate paths before
+  trusting record fingerprints or replayed gate contents.
 - Next-iteration schedules reject symlinked source ledger paths before trusting
   source ledger size, hash, metrics, or decision snapshots.
 - Governance receipts reject symlinked source loop ledger paths before trusting
@@ -887,7 +889,8 @@ card, and dataset card decisions.
   evidence while strict validation warns on absolute receipt or input-artifact
   refs.
 - Promotion-ledger validation reopens recorded decision gates from the ledger
-  file location and rejects missing, moved, stale, or cwd-substituted records.
+  file location and rejects missing, moved, stale, cwd-substituted, or symlinked
+  records before hashing or replaying them.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,
   replays gate evaluation, and rejects stale metrics, checks, decisions,
   symlinked source ledger refs, or omitted policy checks.

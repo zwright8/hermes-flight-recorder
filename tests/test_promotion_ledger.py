@@ -37,6 +37,29 @@ def _write_ready_action_ledger_gate(path):
     )
 
 
+def _write_blocked_decision_gate(path):
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.decision_gate.v1",
+                "passed": False,
+                "readiness": "blocked",
+                "recommendation": "block_promotion",
+                "expected_recommendation": "promote_iteration",
+                "expected_readiness": "ready",
+                "require_passed": True,
+                "check_count": 1,
+                "failed_check_count": 1,
+                "source_decision": {"recommendation": "block_iteration"},
+                "source_artifact": {"path": "forged.json", "exists": False},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _build_clean_promotion_ledger_gate(root, *, gate_args=None, policy=False):
     source = root / "action_ledger_gate.json"
     decision_gate = root / "decision_gate.json"
@@ -447,6 +470,96 @@ class PromotionLedgerTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(ledger_path.exists())
+
+    def test_promotion_ledger_rejects_parent_symlink_decision_gate_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            _, decision_gate, code = _build_ready_decision_gate(source_dir)
+            self.assertEqual(code, 0)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(source_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            ledger_path = root / "promotion_ledger.json"
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(linked_parent / decision_gate.name),
+                        "--out",
+                        str(ledger_path),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(ledger_path.exists())
+
+    def test_validate_rejects_promotion_ledger_parent_symlink_decision_gate_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            alias_dir = root / "alias_target"
+            source_dir.mkdir()
+            alias_dir.mkdir()
+            _, decision_gate, code = _build_ready_decision_gate(source_dir)
+            self.assertEqual(code, 0)
+            alternate_gate = alias_dir / decision_gate.name
+            _write_blocked_decision_gate(alternate_gate)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(alias_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            ledger_path = root / "promotion_ledger.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["records"][0]["path"] = str(Path(linked_parent.name) / decision_gate.name)
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].path must not traverse symlinked components.", errors)
+            self.assertNotIn("promotion_ledger.records[0].recommendation must match current decision gate", errors)
+
+    def test_validate_rejects_promotion_ledger_leaf_symlink_decision_gate_record_without_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            alias_dir = root / "alias_target"
+            source_dir.mkdir()
+            alias_dir.mkdir()
+            _, decision_gate, code = _build_ready_decision_gate(source_dir)
+            self.assertEqual(code, 0)
+            alternate_gate = alias_dir / decision_gate.name
+            _write_blocked_decision_gate(alternate_gate)
+            source_link = root / "decision_gate_link.json"
+            try:
+                source_link.symlink_to(alternate_gate)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            ledger_path = root / "promotion_ledger.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["records"][0]["path"] = source_link.name
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].path must not resolve to a symlink.", errors)
+            self.assertNotIn("promotion_ledger.records[0].recommendation must match current decision gate", errors)
 
     def test_gate_promotion_ledger_allows_clean_history(self):
         with tempfile.TemporaryDirectory() as tmp:
