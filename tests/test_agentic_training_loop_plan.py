@@ -172,6 +172,100 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
             self.assertEqual(validate_completed.returncode, 0, validate_completed.stderr + validate_completed.stdout)
 
+    def test_validate_rejects_forged_loop_plan_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-forged-side-effects",
+                artifact_paths=artifacts,
+                budget={"max_cloud_cost_usd": 0, "max_gpu_hours": 0},
+                provider_constraints={"providers": ["mock"], "regions": ["local"], "gpu_classes": ["none"]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            schema = check_schema_contract(plan, name_or_id="agentic_training_loop_plan")
+            self.assertTrue(schema["passed"], schema["errors"])
+
+            forged = json.loads(json.dumps(plan))
+            forged["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["budget"]["provider_billing_account"] = "redacted-account"
+            forged["participants"]["api_key_env"] = "RED_ACTED"
+            forged["provider_constraints"]["credential_value"] = "redacted-secret"
+            forged["artifact_role_counts"][0]["download_url"] = "redacted-download-url"
+            forged["checks"][0]["provider_call"] = "forged"
+            forged["source_artifacts"]["agentic_training_plan"][0]["signed_url"] = "redacted-signed-url"
+            forged["phases"][0]["live_execution_started"] = True
+            forged["cloud_training"]["provider_call_receipt"] = "forged"
+            forged["cloud_training_receipt_state"]["provider_console_url"] = "redacted-provider-console"
+            forged["cloud_training_lineage"]["provider"]["credential_value"] = "redacted-secret"
+            forged["cloud_training_lineage"]["role_counts"][0]["provider_call"] = "forged"
+            forged["cloud_training_lineage"]["links"][0]["provider_trace_url"] = "redacted-trace-url"
+            forged["execution_boundary"]["provider_console_url"] = "redacted-provider-console"
+            forged["handoff_contract"]["credential_hint"] = "redacted-secret"
+            forged["next_iteration"]["auto_schedule_started"] = True
+
+            forged_schema = check_schema_contract(forged, name_or_id="agentic_training_loop_plan")
+            self.assertFalse(forged_schema["passed"])
+            schema_errors = "\n".join(forged_schema["errors"])
+            for field_name in (
+                "cloud_job_url",
+                "provider_billing_account",
+                "api_key_env",
+                "credential_value",
+                "download_url",
+                "provider_call",
+                "signed_url",
+                "live_execution_started",
+                "provider_call_receipt",
+                "provider_console_url",
+                "provider_trace_url",
+                "credential_hint",
+                "auto_schedule_started",
+            ):
+                self.assertIn(field_name, schema_errors)
+
+            loop_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn("agentic_training_loop_plan.budget contains unknown field(s): ['provider_billing_account'].", errors)
+            self.assertIn("agentic_training_loop_plan.participants contains unknown field(s): ['api_key_env'].", errors)
+            self.assertIn("agentic_training_loop_plan.provider_constraints contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("agentic_training_loop_plan.artifact_role_counts[0] contains unknown field(s): ['download_url'].", errors)
+            self.assertIn("agentic_training_loop_plan.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "agentic_training_loop_plan.source_artifacts.agentic_training_plan[0] contains unknown field(s): ['signed_url'].",
+                errors,
+            )
+            self.assertIn("agentic_training_loop_plan.phases[0] contains unknown field(s): ['live_execution_started'].", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training contains unknown field(s): ['provider_call_receipt'].", errors)
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_receipt_state contains unknown field(s): ['provider_console_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_lineage.provider contains unknown field(s): ['credential_value'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_lineage.role_counts[0] contains unknown field(s): ['provider_call'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_lineage.links[0] contains unknown field(s): ['provider_trace_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.execution_boundary contains unknown field(s): ['provider_console_url'].",
+                errors,
+            )
+            self.assertIn("agentic_training_loop_plan.handoff_contract contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn("agentic_training_loop_plan.next_iteration contains unknown field(s): ['auto_schedule_started'].", errors)
+
     def test_validate_rejects_stale_or_moved_loop_plan_source_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

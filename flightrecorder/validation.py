@@ -3485,12 +3485,207 @@ AGENTIC_LOOP_CLOUD_TRAINING_ROLES: tuple[str, ...] = (
     "cloud_training_status_receipt",
 )
 
+_AGENTIC_TRAINING_LOOP_PLAN_KEYS = {
+    "schema_version",
+    "created_at",
+    "iteration_id",
+    "plan_path",
+    "objective",
+    "participants",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "missing_phase_inputs",
+    "artifact_count",
+    "artifact_role_counts",
+    "source_artifacts",
+    "phases",
+    "budget",
+    "provider_constraints",
+    "cloud_training",
+    "cloud_training_receipt_state",
+    "cloud_training_lineage",
+    "execution_boundary",
+    "handoff_contract",
+    "next_iteration",
+    "notes",
+}
+_AGENTIC_TRAINING_LOOP_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_AGENTIC_TRAINING_LOOP_ARTIFACT_REF_KEYS = {
+    "role",
+    "path",
+    "kind",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "readiness",
+}
+_AGENTIC_TRAINING_LOOP_BUDGET_KEYS = {
+    "max_rollouts",
+    "max_training_examples",
+    "max_cloud_cost_usd",
+    "max_gpu_hours",
+    "live_spend_allowed",
+}
+_AGENTIC_TRAINING_LOOP_PARTICIPANTS_KEYS = {"baseline_policy", "candidate_policy", "teacher_policy"}
+_AGENTIC_TRAINING_LOOP_PROVIDER_CONSTRAINTS_KEYS = {
+    "providers",
+    "regions",
+    "gpu_classes",
+    "requires_cost_estimate",
+    "requires_region_allowlist",
+    "requires_secret_redaction",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_TRAINING_KEYS = {
+    "required_artifacts",
+    "present_artifacts",
+    "missing_artifacts",
+    "artifact_count",
+    "provider_registry_present",
+    "preflight_present",
+    "artifact_manifest_present",
+    "launch_plan_present",
+    "launch_receipt_present",
+    "status_receipt_present",
+    "provider_api_calls_started",
+    "cloud_jobs_started",
+    "credential_values_recorded",
+    "live_spend_allowed",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_RECEIPT_STATE_KEYS = {
+    "launch_receipt_count",
+    "status_receipt_count",
+    "launch_receipt_passed",
+    "status_receipt_passed",
+    "receipts_passed",
+    "launch_mode",
+    "launch_readiness",
+    "launch_recommendation",
+    "live_launch_requested",
+    "status_provider_status",
+    "status_terminal",
+    "status_not_started",
+    "status_readiness",
+    "status_recommendation",
+    "provider_api_calls_started",
+    "cloud_jobs_started",
+    "provider_cancel_called",
+    "credential_values_recorded",
+    "cost_incurred_usd",
+    "fail_closed",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_KEYS = {
+    "passed",
+    "required_link_count",
+    "matched_link_count",
+    "missing_link_count",
+    "mismatched_link_count",
+    "ambiguous_link_count",
+    "duplicate_role_count",
+    "missing_links",
+    "mismatched_links",
+    "ambiguous_links",
+    "duplicate_roles",
+    "role_counts",
+    "provider",
+    "links",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_LINK_KEYS = {
+    "id",
+    "source_role",
+    "source_ref",
+    "target_role",
+    "source_artifact_count",
+    "target_artifact_count",
+    "source_schema_version",
+    "target_schema_version",
+    "source_ref_sha256",
+    "target_sha256",
+    "passed",
+    "status",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_PROVIDER_KEYS = {
+    "registry_provider_ids",
+    "pipeline_provider_ids",
+    "pipeline_provider_id",
+    "provider_by_role",
+    "provider_consistent",
+    "registry_contains_pipeline_provider",
+}
+_AGENTIC_TRAINING_LOOP_EXECUTION_BOUNDARY_KEYS = {
+    "dry_run_plan_only",
+    "cloud_jobs_started",
+    "paid_model_grader_calls_started",
+    "live_benchmarks_started",
+    "model_downloads_started",
+    "weights_updated_by_flight_recorder",
+    "credential_values_recorded",
+    "public_artifact_paths_redacted",
+}
+_AGENTIC_TRAINING_LOOP_HANDOFF_CONTRACT_KEYS = {
+    "flight_recorder_controls_preflight_and_receipts",
+    "external_trainers_own_weight_updates",
+    "live_launch_requires_explicit_opt_in",
+    "requires_environment_credentials_for_live",
+    "requires_trainer_preflight",
+    "requires_trainer_launch_check",
+    "requires_calibrated_review_before_training_data",
+    "requires_heldout_eval_before_promotion",
+    "requires_governance_decision_before_alias_update",
+    "default_live_execution_allowed",
+}
+_AGENTIC_TRAINING_LOOP_NEXT_ITERATION_KEYS = {"scheduled", "requires_governance_decision", "schedule", "recommendation"}
+_AGENTIC_TRAINING_LOOP_PHASE_KEYS = {
+    "id",
+    "name",
+    "status",
+    "required_artifacts",
+    "present_required_artifacts",
+    "missing_required_artifacts",
+    "produces",
+    "gate",
+}
+_AGENTIC_TRAINING_LOOP_ROLE_COUNT_KEYS = {"role", "count"}
+
+
+def _validate_agentic_training_loop_object_keys(
+    value: Any,
+    allowed_keys: set[str],
+    target: ValidationTarget,
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return {}
+    _validate_allowed_keys(value, allowed_keys, target, label)
+    return value
+
+
+def _validate_agentic_training_loop_role_count_rows(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, list):
+        return
+    for index, row in enumerate(value):
+        if isinstance(row, dict):
+            _validate_allowed_keys(row, _AGENTIC_TRAINING_LOOP_ROLE_COUNT_KEYS, target, f"{label}[{index}]")
+
+
 def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(plan, _AGENTIC_TRAINING_LOOP_PLAN_KEYS, target, "agentic_training_loop_plan")
     _require_equal(plan, "schema_version", AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION, target, prefix="agentic_training_loop_plan.")
     checks = plan.get("checks")
     if not isinstance(checks, list):
         target.errors.append("agentic_training_loop_plan.checks must be a list.")
         checks = []
+    else:
+        for index, check in enumerate(checks):
+            if isinstance(check, dict):
+                _validate_allowed_keys(check, _AGENTIC_TRAINING_LOOP_CHECK_KEYS, target, f"agentic_training_loop_plan.checks[{index}]")
     failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_loop_plan.checks")
     if plan.get("check_count") != len(checks):
         target.errors.append(f"agentic_training_loop_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
@@ -3507,6 +3702,35 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target.errors.append("agentic_training_loop_plan.plan_path must be a non-empty string.")
     elif not _is_safe_agentic_training_result_path(plan_path):
         target.errors.append("agentic_training_loop_plan.plan_path must be a safe relative path without traversal.")
+    _validate_agentic_training_loop_object_keys(
+        plan.get("budget"),
+        _AGENTIC_TRAINING_LOOP_BUDGET_KEYS,
+        target,
+        "agentic_training_loop_plan.budget",
+    )
+    _validate_agentic_training_loop_object_keys(
+        plan.get("participants"),
+        _AGENTIC_TRAINING_LOOP_PARTICIPANTS_KEYS,
+        target,
+        "agentic_training_loop_plan.participants",
+    )
+    _validate_agentic_training_loop_object_keys(
+        plan.get("provider_constraints"),
+        _AGENTIC_TRAINING_LOOP_PROVIDER_CONSTRAINTS_KEYS,
+        target,
+        "agentic_training_loop_plan.provider_constraints",
+    )
+    _validate_agentic_training_loop_object_keys(
+        plan.get("next_iteration"),
+        _AGENTIC_TRAINING_LOOP_NEXT_ITERATION_KEYS,
+        target,
+        "agentic_training_loop_plan.next_iteration",
+    )
+    _validate_agentic_training_loop_role_count_rows(
+        plan.get("artifact_role_counts"),
+        target,
+        "agentic_training_loop_plan.artifact_role_counts",
+    )
 
     source_artifacts = plan.get("source_artifacts")
     artifact_count = 0
@@ -3600,6 +3824,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
     if not isinstance(boundary, dict):
         target.errors.append("agentic_training_loop_plan.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _AGENTIC_TRAINING_LOOP_EXECUTION_BOUNDARY_KEYS, target, "agentic_training_loop_plan.execution_boundary")
         for field_name in ("dry_run_plan_only", "public_artifact_paths_redacted"):
             if boundary.get(field_name) is not True:
                 target.errors.append(f"agentic_training_loop_plan.execution_boundary.{field_name} must be true.")
@@ -3618,6 +3843,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
     if not isinstance(contract, dict):
         target.errors.append("agentic_training_loop_plan.handoff_contract must be an object.")
     else:
+        _validate_allowed_keys(contract, _AGENTIC_TRAINING_LOOP_HANDOFF_CONTRACT_KEYS, target, "agentic_training_loop_plan.handoff_contract")
         for field_name in (
             "flight_recorder_controls_preflight_and_receipts",
             "external_trainers_own_weight_updates",
@@ -3648,6 +3874,7 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
     if not isinstance(ref, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(ref, _AGENTIC_TRAINING_LOOP_ARTIFACT_REF_KEYS, target, label)
     for field_name in ("role", "path", "kind"):
         if not isinstance(ref.get(field_name), str) or not ref.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -3686,6 +3913,7 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
     if not isinstance(phase, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(phase, _AGENTIC_TRAINING_LOOP_PHASE_KEYS, target, label)
     for field_name in ("id", "name", "gate"):
         if not isinstance(phase.get(field_name), str) or not phase.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -3724,6 +3952,7 @@ def _validate_agentic_training_loop_cloud_training(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_TRAINING_KEYS, target, label)
     present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if _agentic_loop_role_count(source_artifacts, role) > 0]
     missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
     expected = {
@@ -3756,6 +3985,7 @@ def _validate_agentic_training_loop_cloud_training_receipt_state(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_RECEIPT_STATE_KEYS, target, label)
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match cloud training receipt artifacts.")
@@ -3771,6 +4001,14 @@ def _validate_agentic_training_loop_cloud_training_lineage(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_KEYS, target, label)
+    _validate_agentic_training_loop_object_keys(
+        value.get("provider"),
+        _AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_PROVIDER_KEYS,
+        target,
+        f"{label}.provider",
+    )
+    _validate_agentic_training_loop_role_count_rows(value.get("role_counts"), target, f"{label}.role_counts")
     expected = _expected_agentic_training_loop_cloud_training_lineage(source_artifacts, source_path)
     for field_name in (
         "passed",
@@ -3800,6 +4038,7 @@ def _validate_agentic_training_loop_cloud_training_lineage(
         if index >= len(links) or not isinstance(links[index], dict):
             target.errors.append(f"{label}.links[{index}] must be an object.")
             continue
+        _validate_allowed_keys(links[index], _AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_LINK_KEYS, target, f"{label}.links[{index}]")
         for field_name, expected_value in expected_link.items():
             if links[index].get(field_name) != expected_value:
                 target.errors.append(f"{label}.links[{index}].{field_name} must match cloud training source lineage.")

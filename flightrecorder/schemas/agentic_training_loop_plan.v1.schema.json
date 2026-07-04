@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_loop_plan.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Fail-closed closed-loop agentic training iteration contract.",
   "properties": {
     "artifact_count": {
@@ -155,7 +155,7 @@
   "type": "object",
   "$defs": {
     "artifactRef": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"
@@ -213,7 +213,7 @@
       "type": "object"
     },
     "budget": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "live_spend_allowed": {
           "const": false
@@ -253,7 +253,7 @@
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -283,7 +283,7 @@
       "type": "object"
     },
     "cloudTraining": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_count": {
           "minimum": 0,
@@ -357,7 +357,7 @@
       "type": "object"
     },
     "cloudTrainingLineage": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "ambiguous_link_count": {
           "minimum": 0,
@@ -445,7 +445,7 @@
       "type": "object"
     },
     "cloudTrainingReceiptState": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": {
           "type": "boolean"
@@ -536,7 +536,7 @@
       "type": "object"
     },
     "cloudTrainingLineageLink": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "id": {
           "minLength": 1,
@@ -599,7 +599,7 @@
       "type": "object"
     },
     "cloudTrainingLineageProvider": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "pipeline_provider_id": {
           "type": "string"
@@ -640,7 +640,7 @@
       "type": "object"
     },
     "executionBoundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": {
           "const": false
@@ -680,7 +680,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "default_live_execution_allowed": {
           "const": false
@@ -728,7 +728,7 @@
       "type": "object"
     },
     "nextIteration": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "recommendation": {
           "minLength": 1,
@@ -753,7 +753,7 @@
       "type": "object"
     },
     "participants": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "baseline_policy": {
           "type": "string"
@@ -773,7 +773,7 @@
       "type": "object"
     },
     "phase": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "gate": {
           "minLength": 1,
@@ -832,7 +832,7 @@
       "type": "object"
     },
     "providerConstraints": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "gpu_classes": {
           "items": {
@@ -873,7 +873,7 @@
       "type": "object"
     },
     "roleCount": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": {
           "minimum": 0,
