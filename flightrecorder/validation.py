@@ -4038,6 +4038,20 @@ def _validate_cloud_training_contract(
             target,
             source_path,
         )
+    if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
+        _validate_cloud_training_launch_receipt_readiness(
+            payload,
+            checks if isinstance(checks, list) else [],
+            target,
+            source_path,
+        )
+    if expected_schema_version == CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION:
+        _validate_cloud_training_status_receipt_readiness(
+            payload,
+            checks if isinstance(checks, list) else [],
+            target,
+            source_path,
+        )
     if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:
         upload_artifacts = payload.get("upload_artifacts")
         expected_download_artifacts = payload.get("expected_download_artifacts")
@@ -4281,18 +4295,18 @@ def _validate_cloud_training_launch_plan_readiness(
     source_path: Path | None,
 ) -> None:
     sources = payload.get("source_artifacts") if isinstance(payload.get("source_artifacts"), dict) else {}
-    preflight_state = _cloud_training_launch_plan_source_state(
+    preflight_state = _cloud_training_source_state(
         sources.get("preflight"),
         source_path,
         "cloud_training_preflight",
     )
-    artifact_manifest_state = _cloud_training_launch_plan_source_state(
+    artifact_manifest_state = _cloud_training_source_state(
         sources.get("artifact_manifest"),
         source_path,
         "cloud_training_artifact_manifest",
     )
     for role, state in (("preflight", preflight_state), ("artifact_manifest", artifact_manifest_state)):
-        _validate_cloud_training_launch_plan_source_state(role, state, target)
+        _validate_cloud_training_source_state(f"cloud_training_launch_plan.source_artifacts.{role}", state, target)
     expected_checks = {
         "preflight_ready": preflight_state["ready"],
         "artifact_manifest_ready": artifact_manifest_state["ready"],
@@ -4300,28 +4314,162 @@ def _validate_cloud_training_launch_plan_readiness(
         "dry_run_launch_only": True,
     }
     for check_id, expected_passed in expected_checks.items():
-        check = _cloud_training_check_by_id(checks, check_id, target)
+        check = _cloud_training_check_by_id(checks, check_id, target, "cloud_training_launch_plan.checks")
         if check is None:
             continue
         if check.get("passed") != expected_passed:
             target.errors.append(f"cloud_training_launch_plan.checks.{check_id}.passed must match source readiness.")
+    _validate_cloud_training_expected_state(
+        "cloud_training_launch_plan",
+        payload,
+        expected_checks,
+        ready_readiness="ready_for_dry_run_launch",
+        ready_recommendation="emit_dry_run_launch_receipt",
+        blocked_recommendation="block_launch_receipt",
+        target=target,
+    )
+
+
+def _validate_cloud_training_launch_receipt_readiness(
+    payload: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path | None,
+) -> None:
+    sources = payload.get("source_artifacts") if isinstance(payload.get("source_artifacts"), dict) else {}
+    launch_plan_state = _cloud_training_source_state(
+        sources.get("launch_plan"),
+        source_path,
+        "cloud_training_launch_plan",
+    )
+    _validate_cloud_training_source_state(
+        "cloud_training_launch_receipt.source_artifacts.launch_plan",
+        launch_plan_state,
+        target,
+    )
+    launch = payload.get("launch") if isinstance(payload.get("launch"), dict) else {}
+    if not isinstance(payload.get("launch"), dict):
+        target.errors.append("cloud_training_launch_receipt.launch must be an object.")
+    live_requested = launch.get("mode") == "live"
+    if launch.get("mode") not in {"dry_run", "live"}:
+        target.errors.append("cloud_training_launch_receipt.launch.mode must be dry_run or live.")
+    if launch.get("cloud_job_started") is not False:
+        target.errors.append("cloud_training_launch_receipt.launch.cloud_job_started must be false.")
+    if launch.get("provider_api_called") is not False:
+        target.errors.append("cloud_training_launch_receipt.launch.provider_api_called must be false.")
+    if launch.get("provider_job_id") is not None:
+        target.errors.append("cloud_training_launch_receipt.launch.provider_job_id must be null.")
+    if launch.get("cost_incurred_usd") != 0:
+        target.errors.append("cloud_training_launch_receipt.launch.cost_incurred_usd must be 0.")
+    boundary = payload.get("execution_boundary") if isinstance(payload.get("execution_boundary"), dict) else {}
+    if boundary.get("live_requested") != live_requested:
+        target.errors.append("cloud_training_launch_receipt.execution_boundary.live_requested must match launch.mode.")
+    if boundary.get("allow_live") is not False:
+        target.errors.append("cloud_training_launch_receipt.execution_boundary.allow_live must be false.")
+    cloud_job_not_started = (
+        launch.get("cloud_job_started") is False
+        and launch.get("provider_api_called") is False
+        and launch.get("provider_job_id") is None
+        and launch.get("cost_incurred_usd") == 0
+    )
+    expected_checks = {
+        "launch_plan_ready": launch_plan_state["ready"],
+        "live_launch_not_implemented": not live_requested,
+        "cloud_job_not_started": cloud_job_not_started,
+    }
+    for check_id, expected_passed in expected_checks.items():
+        check = _cloud_training_check_by_id(checks, check_id, target, "cloud_training_launch_receipt.checks")
+        if check is not None and check.get("passed") != expected_passed:
+            target.errors.append(f"cloud_training_launch_receipt.checks.{check_id}.passed must match source readiness.")
+    _validate_cloud_training_expected_state(
+        "cloud_training_launch_receipt",
+        payload,
+        expected_checks,
+        ready_readiness="dry_run_recorded",
+        ready_recommendation="safe_to_archive_dry_run_receipt",
+        blocked_recommendation="block_live_cloud_launch",
+        target=target,
+    )
+
+
+def _validate_cloud_training_status_receipt_readiness(
+    payload: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path | None,
+) -> None:
+    sources = payload.get("source_artifacts") if isinstance(payload.get("source_artifacts"), dict) else {}
+    launch_receipt_state = _cloud_training_source_state(
+        sources.get("launch_receipt"),
+        source_path,
+        "cloud_training_launch_receipt",
+    )
+    _validate_cloud_training_source_state(
+        "cloud_training_status_receipt.source_artifacts.launch_receipt",
+        launch_receipt_state,
+        target,
+    )
+    status = payload.get("status") if isinstance(payload.get("status"), dict) else {}
+    if not isinstance(payload.get("status"), dict):
+        target.errors.append("cloud_training_status_receipt.status must be an object.")
+    if status.get("provider_status") != "not_started":
+        target.errors.append("cloud_training_status_receipt.status.provider_status must be not_started.")
+    if status.get("terminal") is not True:
+        target.errors.append("cloud_training_status_receipt.status.terminal must be true.")
+    if not isinstance(status.get("cancel_requested"), bool):
+        target.errors.append("cloud_training_status_receipt.status.cancel_requested must be a boolean.")
+    if status.get("provider_cancel_called") is not False:
+        target.errors.append("cloud_training_status_receipt.status.provider_cancel_called must be false.")
+    if status.get("provider_api_called") is not False:
+        target.errors.append("cloud_training_status_receipt.status.provider_api_called must be false.")
+    if status.get("cost_incurred_usd") != 0:
+        target.errors.append("cloud_training_status_receipt.status.cost_incurred_usd must be 0.")
+    expected_checks = {
+        "launch_receipt_readable": launch_receipt_state["ref_exists"],
+        "status_check_did_not_call_provider": status.get("provider_api_called") is False,
+        "cancel_is_dry_run": status.get("provider_cancel_called") is False,
+    }
+    for check_id, expected_passed in expected_checks.items():
+        check = _cloud_training_check_by_id(checks, check_id, target, "cloud_training_status_receipt.checks")
+        if check is not None and check.get("passed") != expected_passed:
+            target.errors.append(f"cloud_training_status_receipt.checks.{check_id}.passed must match source readiness.")
+    _validate_cloud_training_expected_state(
+        "cloud_training_status_receipt",
+        payload,
+        expected_checks,
+        ready_readiness="status_recorded",
+        ready_recommendation="archive_status_receipt",
+        blocked_recommendation="inspect_launch_receipt",
+        target=target,
+    )
+
+
+def _validate_cloud_training_expected_state(
+    label: str,
+    payload: dict[str, Any],
+    expected_checks: dict[str, bool],
+    *,
+    ready_readiness: str,
+    ready_recommendation: str,
+    blocked_recommendation: str,
+    target: ValidationTarget,
+) -> None:
     expected_failed_count = sum(1 for passed in expected_checks.values() if not passed)
     expected_passed = expected_failed_count == 0
     if payload.get("failed_check_count") != expected_failed_count:
-        target.errors.append(f"cloud_training_launch_plan.failed_check_count expected {expected_failed_count}.")
+        target.errors.append(f"{label}.failed_check_count expected {expected_failed_count}.")
     if payload.get("passed") != expected_passed:
-        target.errors.append("cloud_training_launch_plan.passed must match source readiness.")
-    expected_readiness = "ready_for_dry_run_launch" if expected_passed else "blocked"
-    expected_recommendation = "emit_dry_run_launch_receipt" if expected_passed else "block_launch_receipt"
+        target.errors.append(f"{label}.passed must match source readiness.")
+    expected_readiness = ready_readiness if expected_passed else "blocked"
+    expected_recommendation = ready_recommendation if expected_passed else blocked_recommendation
     if payload.get("readiness") != expected_readiness:
-        target.errors.append(f"cloud_training_launch_plan.readiness must be {expected_readiness}.")
+        target.errors.append(f"{label}.readiness must be {expected_readiness}.")
     if payload.get("recommendation") != expected_recommendation:
-        target.errors.append(f"cloud_training_launch_plan.recommendation must be {expected_recommendation}.")
+        target.errors.append(f"{label}.recommendation must be {expected_recommendation}.")
 
 
-def _validate_cloud_training_launch_plan_source_state(role: str, state: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_cloud_training_source_state(label: str, state: dict[str, Any], target: ValidationTarget) -> None:
     ref = state["ref"]
-    label = f"cloud_training_launch_plan.source_artifacts.{role}"
     if not isinstance(ref, dict):
         return
     for field_name in ("schema_name", "schema_passed", "source_passed", "source_recommendation"):
@@ -4330,9 +4478,10 @@ def _validate_cloud_training_launch_plan_source_state(role: str, state: dict[str
             target.errors.append(f"{label}.{field_name} must match the referenced source artifact.")
 
 
-def _cloud_training_launch_plan_source_state(record: Any, source_path: Path | None, schema_name: str) -> dict[str, Any]:
+def _cloud_training_source_state(record: Any, source_path: Path | None, schema_name: str) -> dict[str, Any]:
     state = {
         "ref": record,
+        "ref_exists": isinstance(record, dict) and record.get("exists") is True,
         "schema_name": schema_name,
         "schema_passed": False,
         "source_passed": None,
@@ -4365,10 +4514,15 @@ def _cloud_training_schema_check_passed(path: Path | None, schema_name: str) -> 
         return False
 
 
-def _cloud_training_check_by_id(checks: list[Any], check_id: str, target: ValidationTarget) -> dict[str, Any] | None:
+def _cloud_training_check_by_id(
+    checks: list[Any],
+    check_id: str,
+    target: ValidationTarget,
+    label: str,
+) -> dict[str, Any] | None:
     matches = [check for check in checks if isinstance(check, dict) and check.get("id") == check_id]
     if len(matches) != 1:
-        target.errors.append(f"cloud_training_launch_plan.checks must include exactly one {check_id} check.")
+        target.errors.append(f"{label} must include exactly one {check_id} check.")
         return None
     return matches[0]
 

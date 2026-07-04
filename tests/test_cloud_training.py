@@ -243,6 +243,43 @@ class CloudTrainingTests(unittest.TestCase):
                 1,
             )
             self.assert_schema_and_validate(launch_receipt, "cloud_training_launch_receipt")
+            launch_receipt_payload = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            forged_launch_receipt = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            forged_launch_receipt["source_artifacts"]["launch_plan"]["source_passed"] = True
+            for check in forged_launch_receipt["checks"]:
+                if check["id"] == "launch_plan_ready":
+                    check["passed"] = True
+                    check["summary"] = "launch_plan_ready: passed=True"
+                    check["actual"]["artifact"]["source_passed"] = True
+            forged_launch_receipt["blocked_reasons"] = []
+            forged_launch_receipt["failed_check_count"] = 0
+            forged_launch_receipt["passed"] = True
+            forged_launch_receipt["readiness"] = "dry_run_recorded"
+            forged_launch_receipt["recommendation"] = "safe_to_archive_dry_run_receipt"
+            launch_receipt.write_text(json.dumps(forged_launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_receipt_paths=[launch_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_receipt.source_artifacts.launch_plan.source_passed must match the referenced source artifact.",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_receipt.checks.launch_plan_ready.passed must match source readiness.", errors)
+            self.assertIn("cloud_training_launch_receipt.failed_check_count expected 1.", errors)
+            launch_receipt.write_text(json.dumps(launch_receipt_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            forged_launch_receipt = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            forged_launch_receipt["launch"]["cloud_job_started"] = True
+            forged_launch_receipt["launch"]["provider_job_id"] = "job-forged"
+            forged_launch_receipt["launch"]["cost_incurred_usd"] = 1
+            launch_receipt.write_text(json.dumps(forged_launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_receipt_paths=[launch_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_receipt.launch.cloud_job_started must be false.", errors)
+            self.assertIn("cloud_training_launch_receipt.launch.provider_job_id must be null.", errors)
+            self.assertIn("cloud_training_launch_receipt.launch.cost_incurred_usd must be 0.", errors)
+            launch_receipt.write_text(json.dumps(launch_receipt_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             self.assertEqual(
                 run_cli(
@@ -285,6 +322,27 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertEqual(status_payload["status"]["provider_status"], "not_started")
             self.assertFalse(status_payload["status"]["provider_cancel_called"])
             self.assert_schema_and_validate(status_receipt, "cloud_training_status_receipt")
+            forged_status_receipt = json.loads(status_receipt.read_text(encoding="utf-8"))
+            forged_status_receipt["source_artifacts"]["launch_receipt"]["source_passed"] = True
+            status_receipt.write_text(json.dumps(forged_status_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_status_receipt_paths=[status_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_status_receipt.source_artifacts.launch_receipt.source_passed must match the referenced source artifact.",
+                errors,
+            )
+            status_receipt.write_text(json.dumps(status_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            forged_status_receipt = json.loads(status_receipt.read_text(encoding="utf-8"))
+            forged_status_receipt["status"]["provider_api_called"] = True
+            status_receipt.write_text(json.dumps(forged_status_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_status_receipt_paths=[status_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_status_receipt.status.provider_api_called must be false.", errors)
+            self.assertIn("cloud_training_status_receipt.checks.status_check_did_not_call_provider.passed must match source readiness.", errors)
+            status_receipt.write_text(json.dumps(status_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def test_cloud_training_source_refs_are_output_relative_and_reject_stale_files(self):
         with tempfile.TemporaryDirectory() as tmp:
