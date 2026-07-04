@@ -663,6 +663,9 @@ revalidation, plan-ready gating, or unredacted-trace blocking, while keeping
 reward-validation requirements mode-dependent. It also rejects
 delegated commands that still contain absolute execution roots or argv path
 tokens before the receipt can become a public handoff.
+Flow generation rejects plan, runtime-preflight, or trainer-consumer-plan
+inputs that are symlinks or traverse symlinked parent directories before
+reading those files or emitting `source_artifacts` fingerprints.
 
 ```bash
 flightrecorder agentic-training-flow \

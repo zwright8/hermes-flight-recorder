@@ -12,6 +12,7 @@ from typing import Any
 
 from .agentic_training_plan import AGENTIC_TRAINING_PLAN_SCHEMA_VERSION, DEFAULT_EXECUTABLE_MODES
 from .agentic_training_runtime import AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION, RUNTIME_READY_RECOMMENDATION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_file
 from .trainer_consumer_plan import TRAINER_CONSUMER_PLAN_SCHEMA_VERSION
 
@@ -61,6 +62,9 @@ def build_agentic_training_flow(
     plan_file = Path(plan_path)
     runtime_file = Path(runtime_preflight_path)
     consumer_file = Path(trainer_consumer_plan_path)
+    _reject_symlinked_source_input(plan_file, "agentic_training_flow.plan_path")
+    _reject_symlinked_source_input(runtime_file, "agentic_training_flow.runtime_preflight_path")
+    _reject_symlinked_source_input(consumer_file, "agentic_training_flow.trainer_consumer_plan_path")
     plan_payload, plan_read_errors = _read_json_object(plan_file)
     runtime_payload, runtime_read_errors = _read_json_object(runtime_file)
     consumer_payload, consumer_read_errors = _read_json_object(consumer_file)
@@ -312,6 +316,13 @@ def write_agentic_training_flow(path: str | Path, receipt: dict[str, Any]) -> No
     out_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _reject_symlinked_source_input(path: Path, label: str) -> None:
+    if path.is_symlink():
+        raise AgenticTrainingFlowError(f"{label} must not be a symlink: {path}")
+    if _path_has_symlink_component(path, include_leaf=False):
+        raise AgenticTrainingFlowError(f"{label} must not traverse symlinked components: {path}")
+
+
 def _read_json_object(path: Path) -> tuple[dict[str, Any], list[str]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -352,16 +363,18 @@ def _source_ref(
     receipt_base: Path | None,
     preserve_paths: bool,
 ) -> dict[str, Any]:
+    symlinked_path = path.is_symlink() or _path_has_symlink_component(path, include_leaf=False)
+    regular_file = path.is_file() and not symlinked_path
     ref: dict[str, Any] = {
         "role": role,
         "path": _display_path(path, receipt_base, preserve_paths),
         "exists": path.exists(),
-        "regular_file": path.is_file() and not path.is_symlink(),
+        "regular_file": regular_file,
         "schema_version": str(payload.get("schema_version") or ""),
         "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
         "recommendation": str(payload.get("recommendation") or ""),
-        "sha256": _sha256_or_none(path),
-        "size_bytes": path.stat().st_size if path.exists() and path.is_file() and not path.is_symlink() else None,
+        "sha256": _sha256_or_none(path) if regular_file else None,
+        "size_bytes": path.stat().st_size if path.exists() and regular_file else None,
     }
     return ref
 

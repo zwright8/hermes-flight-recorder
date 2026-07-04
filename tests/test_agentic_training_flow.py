@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan
-from flightrecorder.agentic_training_flow import build_agentic_training_flow, write_agentic_training_flow
+from flightrecorder.agentic_training_flow import AgenticTrainingFlowError, build_agentic_training_flow, write_agentic_training_flow
 from flightrecorder.agentic_training_runtime import build_agentic_training_runtime_preflight, write_agentic_training_runtime_preflight
 from flightrecorder.schema_registry import check_schema_file, list_schema_records
 from flightrecorder.trainer_consumer_plan import build_trainer_consumer_plan
@@ -135,6 +135,50 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertEqual(payload["flow_mode_gate"]["promotion_status"], "default_executable")
             validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_builder_rejects_symlinked_source_input_parents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            runtime = self.write_runtime_preflight(root, plan_path=local_plan)
+            consumer = self.write_trainer_consumer_plan(root, plan_path=local_plan)
+            out = root / "flow.json"
+            linked_parent = root / "linked_inputs"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            cases = [
+                (
+                    "plan",
+                    {"plan_path": linked_parent / local_plan.name},
+                    "agentic_training_flow.plan_path must not traverse symlinked components",
+                ),
+                (
+                    "runtime preflight",
+                    {"runtime_preflight_path": linked_parent / runtime.name},
+                    "agentic_training_flow.runtime_preflight_path must not traverse symlinked components",
+                ),
+                (
+                    "trainer consumer plan",
+                    {"trainer_consumer_plan_path": linked_parent / consumer.name},
+                    "agentic_training_flow.trainer_consumer_plan_path must not traverse symlinked components",
+                ),
+            ]
+            for case_name, overrides, expected_error in cases:
+                with self.subTest(case_name=case_name):
+                    kwargs = {
+                        "plan_path": local_plan,
+                        "runtime_preflight_path": runtime,
+                        "trainer_consumer_plan_path": consumer,
+                        "out_path": out,
+                        "created_at": "2026-07-03T00:00:00+00:00",
+                    }
+                    kwargs.update(overrides)
+                    with self.assertRaisesRegex(AgenticTrainingFlowError, expected_error):
+                        build_agentic_training_flow(**kwargs)
 
     def test_reward_mode_plan_is_blocked_at_flow_boundary(self):
         with tempfile.TemporaryDirectory() as tmp:
