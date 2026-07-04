@@ -540,6 +540,9 @@ def validate_artifacts(
 def validate_runs_dir(path: str | Path) -> list[ValidationTarget]:
     """Validate every completed run directory inside a runs directory."""
     root = Path(path)
+    target = ValidationTarget("runs", str(root))
+    if _reject_symlinked_validation_path(root, target, "Runs directory", "directory"):
+        return [target]
     if not root.exists():
         return [ValidationTarget("runs", str(root), errors=[f"Runs directory not found: {root}"])]
     if not root.is_dir():
@@ -560,6 +563,8 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     """Validate one Flight Recorder run directory."""
     run_dir = Path(path)
     target = ValidationTarget("run", str(run_dir))
+    if _reject_symlinked_validation_path(run_dir, target, "Run path", "directory"):
+        return target
     if not run_dir.exists():
         target.errors.append(f"Run directory not found: {run_dir}")
         return target

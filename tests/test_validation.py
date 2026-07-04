@@ -345,6 +345,31 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact_lineage.replay.input_fingerprints.scenario.size_bytes", errors)
 
+    def test_validate_rejects_symlinked_run_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            run_dir = runs / "good"
+            run_summary = root / "run_validation.json"
+            runs_summary = root / "runs_validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(run_dir)])
+            linked_run = root / "linked_run"
+            linked_runs = root / "linked_runs"
+            try:
+                linked_run.symlink_to(run_dir, target_is_directory=True)
+                linked_runs.symlink_to(runs, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            self.assertEqual(run_cli(["validate", "--run", str(linked_run), "--out", str(run_summary)]), 1)
+            self.assertEqual(run_cli(["validate", "--runs", str(linked_runs), "--out", str(runs_summary)]), 1)
+            run_errors = "\n".join(error for target in json.loads(run_summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            runs_errors = "\n".join(
+                error for target in json.loads(runs_summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"]
+            )
+            self.assertIn("Run path must resolve to a regular non-symlink directory", run_errors)
+            self.assertIn("Runs directory must resolve to a regular non-symlink directory", runs_errors)
+
     def test_strict_validate_warns_on_absolute_lineage_replay_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

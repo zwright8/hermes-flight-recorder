@@ -662,6 +662,8 @@ card, and dataset card decisions.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
   validation reject size drift or symlinked copied inputs between recorded
   inputs and replay metadata.
+- Run and runs-directory validation reject symlinked roots before trusting
+  generated trace, scorecard, report, or lineage artifacts.
 - Harness replay receipts bind lineage and scorecard paths to SHA-256 plus
   byte-size evidence and require non-symlink replay output directories;
   validation rejects stale replay references before trusting pass/fail summaries.

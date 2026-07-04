@@ -1333,7 +1333,9 @@ Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
 and `replay.self_contained` so regression and training loops can tell whether a
 run can be reproduced from the published paths. Use `flightrecorder replay`
 with `--lineage <run>/artifact_lineage.json --out <fresh-run>` to verify a
-lineage contract before adding its outputs to a training handoff. The replay
+lineage contract before adding its outputs to a training handoff. Validation
+rejects symlinked run or runs-directory roots before trusting generated trace,
+scorecard, report, or lineage artifacts. The replay
 command checks recorded scenario, trace, and state-snapshot hashes before
 regenerating artifacts. Use `flightrecorder replay-bundle` before publishing or
 moving evidence packages; it copies the scenario, trace, and state snapshot into
