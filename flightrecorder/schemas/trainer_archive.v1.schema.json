@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/trainer_archive.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Portable trainer handoff archive manifest with copied evidence artifact hashes.",
   "properties": {
     "archive_path": {
@@ -117,7 +117,7 @@
   "type": "object",
   "$defs": {
     "approvedCommand": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "approved": {
           "type": "boolean"
@@ -152,7 +152,7 @@
       "type": "object"
     },
     "artifact": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"
@@ -231,7 +231,7 @@
       "type": "object"
     },
     "countRow": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": {
           "minimum": 0,
@@ -248,7 +248,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_count": {
           "minimum": 0,
@@ -315,7 +315,7 @@
       "type": "object"
     },
     "consumerContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "command_kind": {
           "const": "advisory_portable_command"
@@ -372,7 +372,7 @@
       "type": "object"
     },
     "externalCommandPath": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "argv_index": {
           "minimum": 0,
@@ -400,7 +400,7 @@
       "type": "object"
     },
     "missing": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "index": {
           "minimum": 0,
@@ -431,7 +431,7 @@
       "type": "object"
     },
     "pathRewrite": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_path": {
           "minLength": 1,
@@ -461,7 +461,7 @@
       "type": "object"
     },
     "portableCommand": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "approved": {
           "type": "boolean"
@@ -504,7 +504,7 @@
       "type": "object"
     },
     "relationship": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "from": {
           "minLength": 1,
@@ -527,7 +527,7 @@
       "type": "object"
     },
     "trainerInput": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_path": {
           "minLength": 1,

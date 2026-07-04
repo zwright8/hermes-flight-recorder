@@ -929,6 +929,70 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["metrics"]["external_command_path_count"], contract["external_command_path_count"])
             self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
+            archive_schema = check_schema_contract(result, name_or_id="trainer_archive")
+            self.assertTrue(archive_schema["passed"], archive_schema["errors"])
+            forged_archive = json.loads(json.dumps(result))
+            forged_archive["provider_console_url"] = "redacted-provider-console"
+            forged_archive["approved_command"]["provider_call"] = "forged"
+            forged_archive["artifacts"][0]["cloud_upload_uri"] = "redacted-cloud-upload"
+            forged_archive["relationships"][0]["credential_value"] = "redacted-secret"
+            forged_archive["missing"].append(
+                {
+                    "role": "trainer_artifact",
+                    "index": 0,
+                    "reason": "missing for forged-field regression",
+                    "signed_url": "redacted-signed-url",
+                }
+            )
+            forged_archive["trainer_inputs"][0]["credential_value"] = "redacted-secret"
+            forged_archive["path_rewrites"][0]["signed_url"] = "redacted-signed-url"
+            forged_archive["portable_command"]["trainer_process_pid"] = "redacted-pid"
+            forged_archive["consumer_contract"]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged_archive["consumer_contract"]["external_command_paths"][0]["provider_call"] = "forged"
+            forged_archive["metrics"]["cloud_cost_incurred_usd"] = 1
+            forged_archive_schema = check_schema_contract(forged_archive, name_or_id="trainer_archive")
+            self.assertFalse(forged_archive_schema["passed"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "cloud_upload_uri",
+                "credential_value",
+                "signed_url",
+                "trainer_process_pid",
+                "cloud_job_url",
+                "cloud_cost_incurred_usd",
+            ):
+                self.assertIn(field_name, "\n".join(forged_archive_schema["errors"]))
+            forged_archive_path = archive / "trainer_archive_forged_side_effect_fields.json"
+            forged_archive_summary = Path(tmp) / "trainer_archive_forged_side_effect_fields_summary.json"
+            forged_archive_path.write_text(json.dumps(forged_archive, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive",
+                    str(forged_archive_path),
+                    "--strict",
+                    "--out",
+                    str(forged_archive_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_archive_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_archive.approved_command contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("trainer_archive.artifacts[0] contains unknown field(s): ['cloud_upload_uri'].", errors)
+            self.assertIn("trainer_archive.relationships[0] contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("trainer_archive.missing[0] contains unknown field(s): ['signed_url'].", errors)
+            self.assertIn("trainer_archive.trainer_inputs[0] contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("trainer_archive.path_rewrites[0] contains unknown field(s): ['signed_url'].", errors)
+            self.assertIn("trainer_archive.portable_command contains unknown field(s): ['trainer_process_pid'].", errors)
+            self.assertIn("trainer_archive.consumer_contract contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn(
+                "trainer_archive.consumer_contract.external_command_paths[0] contains unknown field(s): ['provider_call'].",
+                errors,
+            )
+            self.assertIn("trainer_archive.metrics contains unknown field(s): ['cloud_cost_incurred_usd'].", errors)
 
             trainer_code = Path(tmp) / "trainer_code"
             trainer_code.mkdir()

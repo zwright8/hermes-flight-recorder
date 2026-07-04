@@ -19667,7 +19667,96 @@ def _promotion_archive_count_map(values: Any) -> dict[str, int]:
     return counts
 
 
+_TRAINER_ARCHIVE_KEYS = {
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "self_contained",
+    "require_self_contained",
+    "ready_for_training",
+    "launch_check_included",
+    "approved_command",
+    "trainer_inputs",
+    "path_rewrites",
+    "portable_command",
+    "consumer_contract",
+    "artifacts",
+    "missing",
+    "relationships",
+    "metrics",
+    "notes",
+}
+_TRAINER_ARCHIVE_APPROVED_COMMAND_KEYS = {"approved", "provided", "raw", "argv", "parseable", "shell"}
+_TRAINER_ARCHIVE_ARTIFACT_KEYS = {
+    "index",
+    "name",
+    "role",
+    "kind",
+    "path",
+    "original_path",
+    "exists",
+    "size_bytes",
+    "sha256",
+    "schema_version",
+    "source_passed",
+    "tree_hash_algorithm",
+    "file_count",
+}
+_TRAINER_ARCHIVE_MISSING_KEYS = {"role", "index", "name", "reason"}
+_TRAINER_ARCHIVE_METRICS_KEYS = {
+    "artifact_count",
+    "file_artifact_count",
+    "directory_artifact_count",
+    "trainer_input_count",
+    "path_rewrite_count",
+    "external_command_path_count",
+    "missing_count",
+    "total_size_bytes",
+    "role_counts",
+    "missing_role_counts",
+    "unique_sha256_count",
+}
+_TRAINER_ARCHIVE_TRAINER_INPUT_KEYS = {
+    "artifact_index",
+    "artifact_name",
+    "kind",
+    "original_path",
+    "archive_path",
+    "size_bytes",
+    "sha256",
+    "file_count",
+    "tree_hash_algorithm",
+}
+_TRAINER_ARCHIVE_PATH_REWRITE_KEYS = {"artifact_name", "kind", "original_path", "archive_path"}
+_TRAINER_ARCHIVE_PORTABLE_COMMAND_KEYS = {
+    "approved",
+    "available",
+    "rewritten",
+    "path_rewrite_count",
+    "argv",
+    "shell",
+    "notes",
+}
+_TRAINER_ARCHIVE_CONSUMER_CONTRACT_KEYS = {
+    "execution_cwd",
+    "command_kind",
+    "portable_command_available",
+    "portable_command_rewritten",
+    "trainer_input_count",
+    "path_rewrite_count",
+    "external_code_required",
+    "external_command_path_count",
+    "external_command_paths",
+    "notes",
+}
+_TRAINER_ARCHIVE_EXTERNAL_COMMAND_PATH_KEYS = {"argv_index", "token", "path", "reason"}
+
+
 def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget, archive_root: Path) -> None:
+    _validate_allowed_keys(archive, _TRAINER_ARCHIVE_KEYS, target, "trainer_archive")
     _require_equal(archive, "schema_version", TRAINER_ARCHIVE_SCHEMA_VERSION, target)
     for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
         if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
@@ -19771,6 +19860,7 @@ def _validate_trainer_archive_artifact(
     if not isinstance(artifact, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(artifact, _TRAINER_ARCHIVE_ARTIFACT_KEYS, target, label)
     if artifact.get("index") != expected_index:
         target.errors.append(f"{label}.index expected {expected_index}, got {artifact.get('index')!r}.")
     for field_name in ("name", "role", "kind", "path", "original_path"):
@@ -19841,6 +19931,7 @@ def _validate_trainer_archive_missing(item: Any, target: ValidationTarget, label
     if not isinstance(item, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(item, _TRAINER_ARCHIVE_MISSING_KEYS, target, label)
     valid_roles = {"trainer_launch_check", "gate", "validation_summary", "trainer_artifact", "schema_contract"}
     if item.get("role") not in valid_roles:
         target.errors.append(f"{label}.role is invalid.")
@@ -19859,6 +19950,7 @@ def _validate_trainer_archive_metrics(
     consumer_contract: Any,
     target: ValidationTarget,
 ) -> None:
+    _validate_allowed_keys(metrics, _TRAINER_ARCHIVE_METRICS_KEYS, target, "trainer_archive.metrics")
     valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
     valid_missing = [item for item in missing if isinstance(item, dict)]
     expected = {
@@ -19907,6 +19999,7 @@ def _validate_trainer_archive_inputs(value: Any, artifacts: list[dict[str, Any]]
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_TRAINER_INPUT_KEYS, target, label)
         for field_name in ("artifact_name", "kind", "original_path", "archive_path", "sha256"):
             if not isinstance(item.get(field_name), str) or not item.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -19936,6 +20029,7 @@ def _validate_trainer_archive_rewrites(value: Any, inputs: Any, target: Validati
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_PATH_REWRITE_KEYS, target, label)
         for field_name in ("artifact_name", "kind", "original_path", "archive_path"):
             if not isinstance(item.get(field_name), str) or not item.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -19954,6 +20048,8 @@ def _validate_trainer_archive_commands(
     if not isinstance(approved_command, dict):
         target.errors.append("trainer_archive.approved_command must be an object.")
         approved_command = {}
+    else:
+        _validate_allowed_keys(approved_command, _TRAINER_ARCHIVE_APPROVED_COMMAND_KEYS, target, "trainer_archive.approved_command")
     for field_name in ("approved", "provided", "parseable"):
         if not isinstance(approved_command.get(field_name), bool):
             target.errors.append(f"trainer_archive.approved_command.{field_name} must be a boolean.")
@@ -19969,6 +20065,7 @@ def _validate_trainer_archive_commands(
     if not isinstance(portable_command, dict):
         target.errors.append("trainer_archive.portable_command must be an object.")
         return
+    _validate_allowed_keys(portable_command, _TRAINER_ARCHIVE_PORTABLE_COMMAND_KEYS, target, "trainer_archive.portable_command")
     for field_name in ("approved", "available", "rewritten"):
         if not isinstance(portable_command.get(field_name), bool):
             target.errors.append(f"trainer_archive.portable_command.{field_name} must be a boolean.")
@@ -20011,6 +20108,7 @@ def _validate_trainer_archive_consumer_contract(
     if not isinstance(contract, dict):
         target.errors.append("trainer_archive.consumer_contract must be an object.")
         return
+    _validate_allowed_keys(contract, _TRAINER_ARCHIVE_CONSUMER_CONTRACT_KEYS, target, "trainer_archive.consumer_contract")
     if contract.get("execution_cwd") != "archive_root":
         target.errors.append("trainer_archive.consumer_contract.execution_cwd must be archive_root.")
     if contract.get("command_kind") != "advisory_portable_command":
@@ -20054,6 +20152,7 @@ def _validate_trainer_archive_consumer_contract(
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _TRAINER_ARCHIVE_EXTERNAL_COMMAND_PATH_KEYS, target, label)
         if not _is_non_negative_int(item.get("argv_index")):
             target.errors.append(f"{label}.argv_index must be a non-negative integer.")
         for field_name in ("token", "path", "reason"):
