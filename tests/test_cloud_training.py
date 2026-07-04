@@ -65,6 +65,39 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("adapter_contract.live_launch_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
+    def test_provider_registry_rejects_unknown_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "providers.json"
+            registry = build_cloud_training_provider_registry(["modal"], created_at="2026-07-03T00:00:00+00:00")
+            registry["provider_console_url"] = "redacted-provider-console"
+            registry["execution_boundary"]["provider_registry_receipt"] = "not-created"
+            registry["providers"][0]["provider_endpoint_url"] = "redacted-provider-endpoint"
+            registry["providers"][0]["adapter_contract"]["live_launch_url"] = "redacted-live-launch-url"
+            registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(registry_path)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_provider_registry contains unknown field(s): ['provider_console_url'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_provider_registry.execution_boundary contains unknown field(s): ['provider_registry_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_provider_registry.providers[0] contains unknown field(s): ['provider_endpoint_url'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_provider_registry.providers[0].adapter_contract contains unknown field(s): ['live_launch_url'].",
+                errors,
+            )
+
     def test_cli_emits_schema_checkable_fail_closed_provider_flow(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

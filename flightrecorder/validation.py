@@ -5470,6 +5470,14 @@ def _safe_non_negative_number(value: Any) -> int | float:
 
 
 _CLOUD_TRAINING_RECEIPT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_CLOUD_TRAINING_PROVIDER_REGISTRY_KEYS = {
+    "schema_version",
+    "created_at",
+    "provider_count",
+    "providers",
+    "execution_boundary",
+    "notes",
+}
 _CLOUD_TRAINING_PREFLIGHT_KEYS = {
     "schema_version",
     "created_at",
@@ -5697,6 +5705,7 @@ def _validate_cloud_training_contract(
         target.errors.append(f"{target.target_type}.execution_boundary must be an object.")
     else:
         if expected_schema_version in {
+            CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION,
             CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
             CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
@@ -5842,6 +5851,8 @@ def _validate_cloud_training_receipt_allowed_keys(
         "source_artifacts",
         "execution_boundary",
     }
+    if expected_schema_version == CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, _CLOUD_TRAINING_PROVIDER_REGISTRY_KEYS, target, "cloud_training_provider_registry")
     if expected_schema_version == CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION:
         _validate_allowed_keys(payload, common | {"provider", "constraints", "credential_checks", "live_preflight", "handoff_contract", "notes"}, target, "cloud_training_preflight")
     if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:

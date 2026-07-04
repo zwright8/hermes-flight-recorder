@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_provider_registry.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Provider-neutral cloud training capability registry.",
   "properties": {
     "created_at": {
@@ -42,8 +42,11 @@
   "type": "object",
   "$defs": {
     "boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "allow_live": {
+          "const": false
+        },
         "cloud_job_started": {
           "const": false
         },
@@ -56,6 +59,15 @@
         "dry_run_only": {
           "const": true
         },
+        "live_preflight_requested": {
+          "const": false
+        },
+        "live_requested": {
+          "const": false
+        },
+        "model_downloads_started": {
+          "const": false
+        },
         "provider_api_called": {
           "const": false
         },
@@ -65,16 +77,20 @@
       },
       "required": [
         "dry_run_only",
+        "live_preflight_requested",
+        "live_requested",
+        "allow_live",
         "provider_api_called",
         "cloud_job_started",
         "cloud_cost_incurred_usd",
+        "model_downloads_started",
         "credential_values_recorded",
         "weights_updated_by_flight_recorder"
       ],
       "type": "object"
     },
     "provider": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_protocols": {
           "items": {
@@ -84,6 +100,12 @@
         },
         "adapter_contract": {
           "$ref": "#/$defs/adapterContract"
+        },
+        "client_import_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "credential_env_vars": {
           "items": {
@@ -130,6 +152,7 @@
         "gpu_classes",
         "job_modes",
         "artifact_protocols",
+        "client_import_names",
         "adapter_contract",
         "live_status",
         "default_live_execution_allowed"
@@ -137,7 +160,7 @@
       "type": "object"
     },
     "adapterContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "adapter_id": {
           "minLength": 1,
