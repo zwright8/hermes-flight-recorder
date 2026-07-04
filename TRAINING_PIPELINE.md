@@ -361,7 +361,9 @@ the original workspace paths disappear. Recorded artifact references must be
 safe relative paths before they are copied, and validation rejects symlinked
 archive artifacts plus relationships that point at unknown artifacts or invalid
 role pairs. Keep shared promotion archives in the default redacted mode; use
-`--preserve-paths` only for private local debugging.
+`--preserve-paths` only for private local debugging. Strict promotion-archive
+validation warns if preserved archive or original artifact paths would enter a
+public promotion handoff.
 
 Before any external registry process moves `candidate`, `champion`, or
 `rollback` aliases, run a top-level governance decision:

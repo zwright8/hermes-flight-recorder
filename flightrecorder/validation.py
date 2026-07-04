@@ -21575,6 +21575,7 @@ def _validate_promotion_archive(archive: dict[str, Any], target: ValidationTarge
     for field_name in ("archive_path", "manifest_path"):
         if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
             target.errors.append(f"promotion_archive.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"promotion_archive.{field_name}", archive.get(field_name))
     for field_name in ("passed", "self_contained", "require_self_contained"):
         if not isinstance(archive.get(field_name), bool):
             target.errors.append(f"promotion_archive.{field_name} must be a boolean.")
@@ -21654,6 +21655,7 @@ def _validate_promotion_archive_artifact(
     for field_name in ("name", "role", "path", "original_path", "schema_version"):
         if not isinstance(artifact.get(field_name), str) or not artifact.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    _warn_absolute_public_path(target, f"{label}.original_path", artifact.get("original_path"))
     if artifact.get("role") not in {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact", "promotion_release_record"}:
         target.errors.append(f"{label}.role is invalid.")
     if artifact.get("exists") is not True:

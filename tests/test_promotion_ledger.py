@@ -995,6 +995,48 @@ class PromotionLedgerTests(unittest.TestCase):
             release_record_path.unlink()
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_strict_warns_on_preserved_source_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            summary_path = root / "promotion_archive_summary.json"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "promotion-archive",
+                        "--promotion-ledger",
+                        str(ledger_path),
+                        "--out",
+                        str(archive_dir),
+                        "--require-self-contained",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--promotion-archive",
+                    str(archive_dir),
+                    "--strict",
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("promotion_archive.archive_path is absolute", warnings)
+            self.assertIn("promotion_archive.artifacts[0].original_path is absolute", warnings)
+
     def test_validate_promotion_archive_rejects_unknown_control_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

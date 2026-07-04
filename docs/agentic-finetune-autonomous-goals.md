@@ -858,6 +858,8 @@ card, and dataset card decisions.
 - Promotion archives compare ledger-recorded decision gate hashes and
   decision-recorded source artifact hashes before copying, blocking evidence that
   changed after approval.
+- Promotion-archive strict validation now warns on preserved archive and
+  original artifact paths before public promotion handoffs are accepted.
 - Trainer-preflight validation reopens gates, validation summaries, schema
   contracts, and trainer artifacts from the preflight file location and rejects
   missing, moved, stale, or cwd-substituted records.
