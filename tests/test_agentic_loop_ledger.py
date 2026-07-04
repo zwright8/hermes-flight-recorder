@@ -1247,6 +1247,32 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("agentic_loop_governance_receipt.source_ledger.size_bytes does not match the current file.", errors)
             self.assertIn("agentic_loop_governance_receipt.source_ledger.sha256 does not match the current file.", errors)
 
+    def test_validate_rejects_parent_symlink_governance_source_ledger(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            blocked_plan = self.write_loop_plan(source / "plans" / "blocked.json", "loop-001", {})
+            ledger = source / "ledger.json"
+            receipt = root / "governance_reject.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["agentic-loop", "governance", "--ledger", str(ledger), "--action", "reject", "--out", str(receipt)]), 0)
+            linked_source = root / "linked_source"
+            linked_source.symlink_to(source, target_is_directory=True)
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["source_ledger"]["path"] = str(Path("linked_source") / "ledger.json")
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_loop_governance_receipt.source_ledger.path must resolve to a regular non-symlink source ledger.",
+                errors,
+            )
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_loop_ledger", names)

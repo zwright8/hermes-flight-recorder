@@ -6082,6 +6082,9 @@ def _validate_agentic_loop_governance_source_ledger(
 
     if ledger_path is None or value.get("exists") is not True:
         return None
+    if _path_has_symlink_component(ledger_path, include_leaf=True) or not ledger_path.is_file():
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink source ledger.")
+        return None
     ledger_payload = _read_json_object_silent(ledger_path)
     if not ledger_payload:
         target.errors.append(f"{label}.path must resolve to a JSON object.")

@@ -157,6 +157,8 @@ evidence.
   ledger paths before replaying metrics, checks, or decisions.
 - Next-iteration schedules reject symlinked source ledger paths before trusting
   source ledger size, hash, metrics, or decision snapshots.
+- Governance receipts reject symlinked source loop ledger paths before trusting
+  replayed readiness digests, execution boundaries, or decisions.
 
 ### Verification
 
