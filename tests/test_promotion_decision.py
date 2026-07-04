@@ -442,6 +442,74 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("registry_alias_history_list", failed_check_ids(receipt))
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
 
+    def test_promotion_alias_apply_blocks_symlinked_registry_parent_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            linked_registry = linked_target / "model_registry.json"
+            linked_registry.write_text(registry_path.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_registry"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            before = json.loads(linked_registry.read_text(encoding="utf-8"))
+
+            code = run_cli(promotion_alias_apply_args(linked_parent / "model_registry.json", decision_path, receipt_path))
+
+            self.assertEqual(code, 1)
+            after = json.loads(linked_registry.read_text(encoding="utf-8"))
+            self.assertEqual(after, before)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            registry_artifact = receipt["artifacts"]["registry"]
+            self.assertFalse(registry_artifact["exists"])
+            self.assertEqual(registry_artifact["kind"], "other")
+            self.assertNotIn("sha256", registry_artifact)
+            failed_ids = failed_check_ids(receipt)
+            self.assertIn("registry_present", failed_ids)
+            self.assertIn("registry_schema", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+
+    def test_promotion_alias_apply_blocks_symlinked_decision_parent_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "promotion_decision.json").write_text(decision_path.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_decision"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            before = json.loads(registry_path.read_text(encoding="utf-8"))
+
+            code = run_cli(promotion_alias_apply_args(registry_path, linked_parent / "promotion_decision.json", receipt_path))
+
+            self.assertEqual(code, 1)
+            after = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(after, before)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            decision_artifact = receipt["artifacts"]["promotion_decision"]
+            self.assertFalse(decision_artifact["exists"])
+            self.assertEqual(decision_artifact["kind"], "other")
+            self.assertNotIn("sha256", decision_artifact)
+            failed_ids = failed_check_ids(receipt)
+            self.assertIn("promotion_decision_present", failed_ids)
+            self.assertIn("promotion_decision_schema", failed_ids)
+            self.assertIn("promotion_decision_validated", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+
     def test_promotion_rollback_receipt_validates_current_champion_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -461,6 +529,33 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(receipt["registry"]["size_bytes"], receipt["artifacts"]["registry"]["size_bytes"])
             self.assertEqual(run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_promotion_rollback_receipt_blocks_symlinked_registry_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = write_model_registry(root)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "model_registry.json").write_text(registry_path.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_registry"
+            receipt_path = root / "rollback.json"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(promotion_rollback_receipt_args(linked_parent / "model_registry.json", receipt_path))
+
+            self.assertEqual(code, 1)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            registry_artifact = receipt["artifacts"]["registry"]
+            self.assertFalse(registry_artifact["exists"])
+            self.assertEqual(registry_artifact["kind"], "other")
+            self.assertNotIn("sha256", registry_artifact)
+            failed_ids = failed_check_ids(receipt)
+            self.assertIn("registry_present", failed_ids)
+            self.assertIn("registry_schema", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict"]), 0)
 
     def test_validate_promotion_rollback_receipt_rejects_forged_registry_size(self):
         with tempfile.TemporaryDirectory() as tmp:

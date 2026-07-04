@@ -471,7 +471,9 @@ traverse symlinked parent directories before reading, hashing, or binding them.
 registry, proves the rollback target is registered, and blocks when the target
 no longer matches the current champion before promotion. Validation also reads
 the fingerprinted registry artifact and rejects stale embedded alias snapshots
-that no longer match the registry file.
+that no longer match the registry file. Rollback-receipt generation rejects
+registry paths that are symlinks or traverse symlinked parent directories before
+reading or fingerprinting them.
 `--promotion-policy` records the policy artifact that declares the required
 decision/release artifact contract, allowed model classes, zero-tolerance eval
 limits, required forbidden-rule blockers, license, rollback, card, and
@@ -484,7 +486,9 @@ decision, requires a `hfr.model_registry.v1` registry with registered
 `candidate`, `champion`, and `rollback` targets, verifies the live champion
 alias still matches the decision's previous champion, then updates aliases and
 appends an alias-history entry. Blocked receipts leave registry aliases
-unchanged.
+unchanged. Alias-apply generation rejects registry and promotion-decision inputs
+that are symlinks or traverse symlinked parent directories before validation,
+hashing, replay, or registry mutation.
 `promotion-release-record` binds the final publishable evidence set: promotion
 decision, generated cards, alias receipt, rollback metadata, eval compare gate,
 and release notes. Validation rehashes every referenced artifact and matches

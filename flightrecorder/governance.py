@@ -408,10 +408,10 @@ def apply_promotion_aliases(
     registry_file = Path(registry_path)
     decision_file = Path(promotion_decision_path)
     receipt_path = Path(out_path)
-    registry_before_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
-    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths, receipt_path)
-    registry = _read_json_artifact(registry_file)
-    decision = _read_json_artifact(decision_file)
+    registry_before_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
+    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths, receipt_path, reject_symlink_components=True)
+    registry = _read_json_artifact(registry_file, reject_symlink_components=True)
+    decision = _read_json_artifact(decision_file, reject_symlink_components=True)
     registry_obj = registry if isinstance(registry, dict) else {}
     decision_obj = decision if isinstance(decision, dict) else {}
     aliases_before = _registry_aliases(registry_obj)
@@ -570,7 +570,7 @@ def apply_promotion_aliases(
         }
         history.append(alias_history_entry)
         _write_json(registry_file, updated)
-        registry_after_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
+        registry_after_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
         aliases_after = _registry_aliases(updated)
         alias_history_count_after += 1
 
@@ -638,8 +638,8 @@ def build_promotion_rollback_receipt(
     """Prove the rollback target is registered before a promotion decision consumes it."""
     registry_file = Path(registry_path)
     receipt_path = Path(out_path)
-    registry_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
-    registry = _read_json_artifact(registry_file)
+    registry_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
+    registry = _read_json_artifact(registry_file, reject_symlink_components=True)
     registry_obj = registry if isinstance(registry, dict) else {}
     aliases = _registry_aliases(registry_obj)
     model_ids = _registry_model_ids(registry_obj)
@@ -1303,7 +1303,7 @@ def _artifact_record(
     if path is None or not path.exists():
         return record
     if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
-        record["kind"] = "other"
+        record.update({"kind": "other", "size_bytes": 0})
         return record
     if path.is_dir():
         record.update(

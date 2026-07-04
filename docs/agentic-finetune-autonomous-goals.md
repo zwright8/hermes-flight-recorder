@@ -172,6 +172,8 @@ evidence.
   traverse symlinked parents before reading, hashing, or binding those refs.
 - Promotion release records reject required source artifacts and release notes
   that traverse symlinked parents before reading or binding those refs.
+- Promotion alias-apply and rollback receipts reject symlinked registry or
+  promotion-decision inputs before hashing, replaying, or mutating aliases.
 - Next-iteration schedules reject symlinked source ledger paths before trusting
   source ledger size, hash, metrics, or decision snapshots.
 - Governance receipts reject symlinked source loop ledger paths before trusting
@@ -921,6 +923,9 @@ card, and dataset card decisions.
   promotion-decision, applied-registry, and rollback-registry refs to the same
   SHA-256 and byte-size evidence carried by their fingerprinted artifact
   records.
+- Promotion alias-apply and rollback receipt generation now refuse symlinked
+  registry or promotion-decision inputs before hashing, replaying, or writing
+  registry alias movement.
 - Promotion archives reject symlinked source inputs and recorded source refs
   before reading, hashing, or copying promotion evidence into portable bundles.
 - Promotion archives reopen ledger-recorded decision gates from the ledger file
