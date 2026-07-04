@@ -542,14 +542,31 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
 
 
 def _display_path_for_output_source(path: Path, output_path: Path | None, preserve_paths: bool = False) -> str:
-    if preserve_paths or output_path is None:
+    if output_path is None:
         return _display_path(path, preserve_paths)
+    relative = _safe_output_relative_path(path, output_path.parent)
+    if relative is None:
+        raise AgenticLoopLedgerError(
+            "Loop plan source must be replayable from the ledger output directory; "
+            "write the ledger beside the plan or copy the plan under the ledger output directory."
+        )
+    return relative
+
+
+def _safe_output_relative_path(path: Path, output_dir: Path) -> str | None:
     raw = str(path)
     if _is_windows_absolute(raw):
-        return f"<redacted:{_basename(raw)}>"
-    resolved = path.resolve()
-    out_dir = output_path.parent.resolve()
-    return os.path.relpath(resolved, out_dir)
+        return None
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return None
+    return relative if _is_safe_public_path(relative) else None
+
+
+def _is_safe_public_path(value: str) -> bool:
+    path = Path(value)
+    return bool(value) and not path.is_absolute() and not _is_windows_absolute(value) and "\\" not in value and "~" not in path.parts and ".." not in path.parts
 
 
 def _is_windows_absolute(value: str) -> bool:

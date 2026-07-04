@@ -3566,7 +3566,11 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_ledger = agentic_loop_subparsers.add_parser("ledger", help="Write a longitudinal ledger over loop plans")
     agentic_loop_ledger.add_argument("--plan", action="append", required=True, help="agentic_training_loop_plan JSON in chronological order; may be repeated")
     agentic_loop_ledger.add_argument("--out", help="Write hfr.agentic_loop_ledger.v1 JSON to this path")
-    agentic_loop_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in ledger output")
+    agentic_loop_ledger.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Preserve source paths only when no ledger output file is written; ledger files require replayable relative plan paths",
+    )
     agentic_loop_ledger.set_defaults(func=cmd_agentic_loop_ledger)
 
     agentic_loop_governance = agentic_loop_subparsers.add_parser(

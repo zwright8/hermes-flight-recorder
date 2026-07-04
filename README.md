@@ -371,7 +371,9 @@ paths do not leak into public loop artifacts. Validation also reopens referenced
 `promotion_decision`, and `promotion_ledger` artifacts before trusting held-out
 eval or governance readiness, and readiness-bearing sources with public-unsafe
 absolute paths do not count as ready. Placeholder or path-leaky source files
-cannot unlock a ready loop. The ledger `decision` also lists the explicit governance actions
+cannot unlock a ready loop. Ledger source plan paths must also be replayable from
+the ledger output directory; external plan locations block ledger creation
+instead of serializing traversal paths. The ledger `decision` also lists the explicit governance actions
 available from the latest iteration:
 `approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
 are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to

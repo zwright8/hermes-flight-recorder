@@ -2,7 +2,7 @@ import hashlib
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -201,6 +201,24 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("sha256 does not match the current file", errors)
+
+    def test_agentic_loop_ledger_blocks_unreplayable_source_plan_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = self.write_loop_plan(root / "plans" / "loop.json", "loop-001", {})
+            report_dir = root / "reports"
+            report_dir.mkdir()
+            ledger = report_dir / "agentic_loop_ledger.json"
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as exc:
+                run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger), "--preserve-paths"])
+
+            self.assertEqual(exc.exception.code, 2)
+            self.assertFalse(ledger.exists())
+            error_text = stderr.getvalue()
+            self.assertIn("Loop plan source must be replayable from the ledger output directory", error_text)
+            self.assertNotIn(str(root), error_text)
 
     def test_validate_replays_source_plan_eval_summary_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -876,6 +876,9 @@ provider API / model download / credential flags are replayed from the archived
 receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
+Loop ledgers also require each source loop plan to be replayable from the ledger
+output directory; a plan that would need an absolute or traversal path blocks
+ledger creation instead of producing a public artifact that cannot validate.
 Validation also reopens the referenced `eval_summary`, `promotion_decision`,
 and `promotion_ledger` artifacts before trusting held-out eval or governance
 readiness, and readiness-bearing sources with public-unsafe absolute paths do
