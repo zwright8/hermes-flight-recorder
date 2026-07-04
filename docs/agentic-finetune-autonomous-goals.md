@@ -155,6 +155,8 @@ evidence.
   size evidence before downstream gates trust recurring-work metrics.
 - Action, improvement, and promotion ledger gates reject symlinked source
   ledger paths before replaying metrics, checks, or decisions.
+- Next-iteration schedules reject symlinked source ledger paths before trusting
+  source ledger size, hash, metrics, or decision snapshots.
 
 ### Verification
 

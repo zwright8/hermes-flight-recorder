@@ -6831,6 +6831,9 @@ def _validate_next_iteration_schedule_ref(
     if not ledger_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an existing ledger file.")
         return metrics if isinstance(metrics, dict) else {}
+    if _path_has_symlink_component(ledger_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink ledger file.")
+        return metrics if isinstance(metrics, dict) else {}
     if _is_non_negative_int(row.get("size_bytes")) and ledger_path.stat().st_size != row.get("size_bytes"):
         target.errors.append(f"{label}.size_bytes does not match the current file.")
     if _is_sha256(row.get("sha256")) and _sha256(ledger_path) != row.get("sha256"):

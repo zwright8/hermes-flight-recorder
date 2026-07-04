@@ -309,6 +309,47 @@ class NextIterationScheduleTests(unittest.TestCase):
             self.assertIn("next_iteration_schedule.pressure.open_action_count must match source ledgers.", errors)
             self.assertIn("next_iteration_schedule.pressure.total_open_signal_count must match source ledgers.", errors)
 
+    def test_validation_rejects_parent_symlink_source_ledgers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source_ledgers"
+            source.mkdir()
+            loop = self.write_loop_ledger(source / "agentic_loop_ledger.json")
+            action = self.write_action_ledger(source / "action_ledger.json")
+            improvement = self.write_improvement_ledger(source / "improvement_ledger.json")
+            out = root / "schedule.json"
+            schedule = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=action,
+                improvement_ledger_path=improvement,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_next_iteration_schedule(out, schedule)
+            linked_source = root / "linked_source"
+            linked_source.symlink_to(source, target_is_directory=True)
+            base_payload = json.loads(out.read_text(encoding="utf-8"))
+            source_files = {
+                "agentic_loop_ledger": "agentic_loop_ledger.json",
+                "action_ledger": "action_ledger.json",
+                "improvement_ledger": "improvement_ledger.json",
+            }
+
+            for role, filename in source_files.items():
+                with self.subTest(role=role):
+                    payload = json.loads(json.dumps(base_payload))
+                    payload["source_ledgers"][role][0]["path"] = str(Path("linked_source") / filename)
+                    out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                    validation = validate_artifacts(next_iteration_schedule_paths=[out], strict=True)
+
+                    self.assertFalse(validation["passed"], validation)
+                    errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                    self.assertIn(
+                        f"next_iteration_schedule.source_ledgers.{role}[0].path must resolve to a regular non-symlink ledger file.",
+                        errors,
+                    )
+
     def test_validation_and_schema_reject_unknown_schedule_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

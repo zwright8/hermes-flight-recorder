@@ -920,7 +920,9 @@ source ledgers from the schedule file, checks SHA-256 and byte size, compares
 the compact metrics snapshot, and recomputes schedule pressure so stale or
 forged schedules fail closed. Schedule paths and source-ledger paths are
 public-safe by default: unsafe absolute/traversal paths are redacted, and source
-ledgers that cannot be represented as safe relative paths block scheduling.
+ledgers that cannot be represented as safe relative paths block scheduling. When
+a schedule source-ledger ref is replayable, validation requires it to resolve to
+a regular non-symlink file before trusting its size, hash, metrics, or decision.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,
