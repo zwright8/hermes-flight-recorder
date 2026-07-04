@@ -15623,6 +15623,8 @@ def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget,
     _require_equal(gate, "schema_version", ACTION_LEDGER_GATE_SCHEMA_VERSION, target)
     if not isinstance(gate.get("action_ledger"), str) or not gate.get("action_ledger"):
         target.errors.append("action_ledger_gate.action_ledger must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "action_ledger_gate.action_ledger", gate.get("action_ledger"))
     if not isinstance(gate.get("passed"), bool):
         target.errors.append("action_ledger_gate.passed must be a boolean.")
     checks = gate.get("checks")
@@ -15915,6 +15917,8 @@ def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTa
     _require_equal(value, "schema_version", ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, target, prefix="action_ledger_gate.policy.")
     if not isinstance(value.get("path"), str) or not value.get("path"):
         target.errors.append("action_ledger_gate.policy.path must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "action_ledger_gate.policy.path", value.get("path"))
     if "description" in value and not isinstance(value.get("description"), str):
         target.errors.append("action_ledger_gate.policy.description must be a string when present.")
     effective = value.get("effective")

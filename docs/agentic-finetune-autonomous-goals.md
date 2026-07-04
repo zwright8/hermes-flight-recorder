@@ -707,6 +707,9 @@ card, and dataset card decisions.
 - Action-ledger strict validation now warns on absolute ledger, bundle, metric,
   and occurrence paths, catching preserved local evidence coordinates before
   public action-review packets are accepted.
+- Action-ledger gate strict validation now warns on absolute source ledger and
+  policy paths, catching preserved local gate coordinates before public
+  action-review decisions are accepted.
 - Improvement-ledger strict validation now warns on absolute ledger, plan,
   metric, and occurrence paths, catching preserved local improvement-plan
   coordinates before public iteration-review packets are accepted.
