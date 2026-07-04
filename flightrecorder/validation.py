@@ -6542,6 +6542,11 @@ def _validate_next_iteration_schedule(schedule: dict[str, Any], target: Validati
         target,
         "next_iteration_schedule",
     )
+    schedule_path = schedule.get("schedule_path")
+    if not isinstance(schedule_path, str):
+        target.errors.append("next_iteration_schedule.schedule_path must be a string.")
+    elif schedule_path and not _is_safe_next_iteration_schedule_path(schedule_path):
+        target.errors.append("next_iteration_schedule.schedule_path must be a safe relative path or redacted placeholder.")
     checks = schedule.get("checks")
     if not isinstance(checks, list):
         target.errors.append("next_iteration_schedule.checks must be a list.")
@@ -6763,8 +6768,13 @@ def _validate_next_iteration_schedule_ref(
         target.errors.append(f"{label}.schema_version must be {schema_version!r}.")
     if row.get("passed") is not True:
         target.errors.append(f"{label}.passed must be true.")
+    path_is_safe = False
     if not isinstance(row.get("path"), str) or not row.get("path"):
         target.errors.append(f"{label}.path must be a non-empty string.")
+    else:
+        path_is_safe = _is_safe_next_iteration_schedule_path(row["path"])
+        if not path_is_safe:
+            target.errors.append(f"{label}.path must be a safe relative path or redacted placeholder.")
     if not _is_sha256(row.get("sha256")):
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
     if not _is_non_negative_int(row.get("size_bytes")):
@@ -6788,6 +6798,8 @@ def _validate_next_iteration_schedule_ref(
 
     path_value = row.get("path")
     if not isinstance(path_value, str) or not path_value:
+        return metrics if isinstance(metrics, dict) else {}
+    if not path_is_safe or path_value.startswith("<redacted:"):
         return metrics if isinstance(metrics, dict) else {}
     ledger_path = _next_iteration_schedule_ref_path(path_value, source_path)
     if not ledger_path.is_file():
@@ -6904,6 +6916,23 @@ def _next_iteration_schedule_ref_path(value: str, source_path: Path) -> Path:
     if path.is_absolute():
         return path
     return source_path.parent / path
+
+
+def _is_safe_next_iteration_schedule_path(value: str) -> bool:
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return bool(basename) and "/" not in basename and "\\" not in basename and ".." not in basename and "~" not in basename
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
 
 
 def _safe_non_negative_int(value: Any) -> int:

@@ -381,7 +381,9 @@ paid graders, or update weights. Promotion, rollback, and alias movement remain
 separate governed receipts. Next-iteration schedules are also replayable:
 validation reopens the referenced loop, action, and improvement ledgers from the
 schedule file, compares SHA-256/size and compact metrics, and recomputes
-pressure before accepting the proposed next iteration.
+pressure before accepting the proposed next iteration. Schedule paths and
+source-ledger paths must be safe relative paths or redacted placeholders; an
+external source that cannot be represented safely blocks the schedule.
 The plan and ledger also include `cloud_training`,
 `cloud_training_receipt_state`, and `cloud_training_lineage` summaries. Presence
 alone is not enough: the preflight must link the trainer

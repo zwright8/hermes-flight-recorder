@@ -880,7 +880,9 @@ the loop, action, and improvement ledgers without creating automations, threads,
 calendar events, cloud jobs, or weight updates. Validation replays those three
 source ledgers from the schedule file, checks SHA-256 and byte size, compares
 the compact metrics snapshot, and recomputes schedule pressure so stale or
-forged schedules fail closed.
+forged schedules fail closed. Schedule paths and source-ledger paths are
+public-safe by default: unsafe absolute/traversal paths are redacted, and source
+ledgers that cannot be represented as safe relative paths block scheduling.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,

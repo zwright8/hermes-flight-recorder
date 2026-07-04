@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION = "hfr.next_iteration_schedule.v1"
@@ -29,9 +29,10 @@ def build_next_iteration_schedule(
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic next-iteration schedule proposal without scheduling anything."""
-    loop_ref = _artifact_ref(Path(loop_ledger_path), "agentic_loop_ledger", preserve_paths)
-    action_ref = _artifact_ref(Path(action_ledger_path), "action_ledger", preserve_paths)
-    improvement_ref = _artifact_ref(Path(improvement_ledger_path), "improvement_ledger", preserve_paths)
+    output_path = Path(out_path) if out_path is not None else None
+    loop_ref = _artifact_ref(Path(loop_ledger_path), "agentic_loop_ledger", preserve_paths, output_path)
+    action_ref = _artifact_ref(Path(action_ledger_path), "action_ledger", preserve_paths, output_path)
+    improvement_ref = _artifact_ref(Path(improvement_ledger_path), "improvement_ledger", preserve_paths, output_path)
     ledger_inputs = {
         "agentic_loop_ledger": [loop_ref],
         "action_ledger": [action_ref],
@@ -103,7 +104,7 @@ def build_next_iteration_schedule(
     return {
         "schema_version": NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "schedule_path": _display_path(Path(out_path), preserve_paths) if out_path else "",
+        "schedule_path": _display_path(output_path, preserve_paths) if output_path else "",
         "passed": not failed,
         "readiness": "ready_to_schedule" if not failed else "blocked",
         "recommendation": recommendation,
@@ -150,15 +151,18 @@ def write_next_iteration_schedule(path: str | Path, schedule: dict[str, Any]) ->
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _artifact_ref(path: Path, role: str, preserve_paths: bool) -> dict[str, Any]:
+def _artifact_ref(path: Path, role: str, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
     payload = _read_json(path)
+    exists = path.exists() and path.is_file()
+    display_path, replayable = _source_display_path(path, output_path, preserve_paths)
+    public_exists = exists and replayable
     ref: dict[str, Any] = {
         "role": role,
-        "path": _display_path(path, preserve_paths),
+        "path": display_path,
         "kind": "file",
-        "exists": path.exists() and path.is_file(),
-        "sha256": _sha256(path) if path.exists() and path.is_file() else None,
-        "size_bytes": path.stat().st_size if path.exists() and path.is_file() else None,
+        "exists": public_exists,
+        "sha256": _sha256(path) if public_exists else None,
+        "size_bytes": path.stat().st_size if public_exists else None,
         "schema_version": str(payload.get("schema_version") or ""),
         "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
     }
@@ -244,25 +248,84 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:
+    if path is None:
+        return ""
+    raw = str(path)
     if preserve_paths:
-        return str(path)
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
     if not path.is_absolute():
-        return str(path)
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
-        return str(path)
+        return f"<redacted:{path.name}>"
+    return relative if _is_safe_public_path(relative) else f"<redacted:{path.name}>"
+
+
+def _source_display_path(path: Path, output_path: Path | None, preserve_paths: bool) -> tuple[str, bool]:
+    if preserve_paths:
+        raw = str(path)
+        if _is_safe_public_path(raw):
+            return raw, True
+        return f"<redacted:{_basename(raw)}>", False
+    if output_path is not None and path.exists():
+        raw = str(path)
+        if _is_windows_absolute(raw):
+            return f"<redacted:{_basename(raw)}>", False
+        try:
+            relative = os.path.relpath(path.resolve(), output_path.parent.resolve())
+        except OSError:
+            return f"<redacted:{path.name}>", False
+        if _is_safe_public_path(relative):
+            return relative, True
+        return f"<redacted:{path.name}>", False
+    displayed = _display_path(path, preserve_paths)
+    return displayed, _is_safe_public_path(displayed)
 
 
 def _output_relative_path(value: Any, output_dir: Path) -> Any:
     if not isinstance(value, str) or not value:
         return value
+    if value.startswith("<redacted:"):
+        return value
     path = Path(value)
+    if _is_windows_absolute(value):
+        return f"<redacted:{_basename(value)}>"
     if not path.is_absolute():
         if not path.exists():
-            return value
+            return value if _is_safe_public_path(value) else f"<redacted:{_basename(value)}>"
         path = path.resolve()
-    return os.path.relpath(path.resolve(), output_dir.resolve())
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return f"<redacted:{path.name}>"
+    return relative if _is_safe_public_path(relative) else f"<redacted:{path.name}>"
+
+
+def _is_windows_absolute(value: str) -> bool:
+    normalized = value.replace("/", "\\")
+    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
+
+
+def _is_safe_public_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
 
 
 def _sha256(path: Path) -> str:

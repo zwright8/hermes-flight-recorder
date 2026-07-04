@@ -46,6 +46,151 @@ class NextIterationScheduleTests(unittest.TestCase):
             self.assertFalse(payload["execution_boundary"]["automations_created"])
             self.assertEqual(payload["pressure"]["total_open_signal_count"], 6)
 
+    def test_schedule_redacts_external_output_path_and_keeps_local_sources_replayable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loop = self.write_loop_ledger(root / "agentic_loop_ledger.json")
+            action = self.write_action_ledger(root / "action_ledger.json")
+            improvement = self.write_improvement_ledger(root / "improvement_ledger.json")
+            out = root / "next_iteration_schedule.json"
+
+            schedule = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=action,
+                improvement_ledger_path=improvement,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_next_iteration_schedule(out, schedule)
+
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            self.assertEqual(payload["schedule_path"], "<redacted:next_iteration_schedule.json>")
+            self.assertEqual(payload["source_ledgers"]["agentic_loop_ledger"][0]["path"], "agentic_loop_ledger.json")
+            self.assertEqual(payload["source_ledgers"]["action_ledger"][0]["path"], "action_ledger.json")
+            self.assertEqual(payload["source_ledgers"]["improvement_ledger"][0]["path"], "improvement_ledger.json")
+            self.assertNotIn(str(root), rendered)
+            self.assertTrue(validate_artifacts(next_iteration_schedule_paths=[out], strict=True)["passed"])
+
+    def test_schedule_blocks_unreplayable_external_source_ledgers(self):
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory(dir=Path.cwd()) as out_tmp:
+            source_root = Path(source_tmp)
+            out_root = Path(out_tmp)
+            loop = self.write_loop_ledger(source_root / "agentic_loop_ledger.json")
+            action = self.write_action_ledger(source_root / "action_ledger.json")
+            improvement = self.write_improvement_ledger(source_root / "improvement_ledger.json")
+            out = out_root / "schedule.json"
+
+            schedule = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=action,
+                improvement_ledger_path=improvement,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_next_iteration_schedule(out, schedule)
+
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["passed"])
+            self.assertEqual(payload["recommendation"], "fix_schedule_inputs")
+            for role in ("agentic_loop_ledger", "action_ledger", "improvement_ledger"):
+                ref = payload["source_ledgers"][role][0]
+                self.assertEqual(ref["path"], f"<redacted:{role}.json>")
+                self.assertFalse(ref["exists"])
+                self.assertIsNone(ref["sha256"])
+                self.assertIsNone(ref["size_bytes"])
+            self.assertNotIn(str(source_root), rendered)
+            self.assertTrue(check_schema_file(out)["passed"])
+            validation = validate_artifacts(next_iteration_schedule_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("next_iteration_schedule.source_ledgers.agentic_loop_ledger[0].exists must be true.", errors)
+            self.assertIn("next_iteration_schedule.source_ledgers.agentic_loop_ledger[0].sha256 must be a SHA-256 hex string.", errors)
+            self.assertNotIn("next_iteration_schedule.source_ledgers.agentic_loop_ledger[0].path does not resolve to an existing ledger file.", errors)
+
+    def test_validation_rejects_absolute_schedule_and_source_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loop = self.write_loop_ledger(root / "agentic_loop_ledger.json")
+            action = self.write_action_ledger(root / "action_ledger.json")
+            improvement = self.write_improvement_ledger(root / "improvement_ledger.json")
+            out = root / "schedule.json"
+            schedule = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=action,
+                improvement_ledger_path=improvement,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_next_iteration_schedule(out, schedule)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            payload["schedule_path"] = str(out.resolve())
+            payload["source_ledgers"]["action_ledger"][0]["path"] = str(action.resolve())
+            out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(next_iteration_schedule_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("next_iteration_schedule.schedule_path must be a safe relative path or redacted placeholder.", errors)
+            self.assertIn(
+                "next_iteration_schedule.source_ledgers.action_ledger[0].path must be a safe relative path or redacted placeholder.",
+                errors,
+            )
+            self.assertNotIn("next_iteration_schedule.source_ledgers.action_ledger[0].path does not resolve to an existing ledger file.", errors)
+            self.assertNotIn("next_iteration_schedule.source_ledgers.action_ledger[0].size_bytes does not match the current file.", errors)
+            self.assertNotIn("next_iteration_schedule.source_ledgers.action_ledger[0].sha256 does not match the current file.", errors)
+
+    def test_validation_rejects_unsafe_source_paths_without_dereferencing_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loop = self.write_loop_ledger(root / "agentic_loop_ledger.json")
+            action = self.write_action_ledger(root / "action_ledger.json")
+            improvement = self.write_improvement_ledger(root / "improvement_ledger.json")
+            out = root / "schedule.json"
+            schedule = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=action,
+                improvement_ledger_path=improvement,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_next_iteration_schedule(out, schedule)
+            base_payload = json.loads(out.read_text(encoding="utf-8"))
+            cases = (
+                (str(action.resolve()), "existing"),
+                (str((root / "missing_action_ledger.json").resolve()), "missing"),
+                ("../action_ledger.json", "traversal"),
+            )
+
+            for unsafe_path, case_name in cases:
+                with self.subTest(case=case_name):
+                    payload = json.loads(json.dumps(base_payload))
+                    payload["source_ledgers"]["action_ledger"][0]["path"] = unsafe_path
+                    out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                    validation = validate_artifacts(next_iteration_schedule_paths=[out], strict=True)
+
+                    self.assertFalse(validation["passed"], validation)
+                    errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                    self.assertIn(
+                        "next_iteration_schedule.source_ledgers.action_ledger[0].path must be a safe relative path or redacted placeholder.",
+                        errors,
+                    )
+                    self.assertNotIn(
+                        "next_iteration_schedule.source_ledgers.action_ledger[0].path does not resolve to an existing ledger file.",
+                        errors,
+                    )
+                    self.assertNotIn(
+                        "next_iteration_schedule.source_ledgers.action_ledger[0].size_bytes does not match the current file.",
+                        errors,
+                    )
+                    self.assertNotIn(
+                        "next_iteration_schedule.source_ledgers.action_ledger[0].sha256 does not match the current file.",
+                        errors,
+                    )
+
     def test_cli_writes_valid_next_iteration_schedule(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
