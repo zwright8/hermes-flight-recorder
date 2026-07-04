@@ -109,11 +109,11 @@
     "critical_open_work_item_count": 2,
     "high_open_work_item_count": 0,
     "latest_loop_readiness": "planned_fail_closed",
-    "latest_missing_phase_input_count": 17,
+    "latest_missing_phase_input_count": 15,
     "open_action_count": 2,
     "open_work_item_count": 2,
     "recurring_action_count": 0,
-    "total_open_signal_count": 21
+    "total_open_signal_count": 19
   },
   "readiness": "ready_to_schedule",
   "recommendation": "create_next_loop_plan",
@@ -142,21 +142,21 @@
         "decision": {
           "readiness": "blocked",
           "recommendation": "continue_iteration",
-          "summary": "Latest loop iteration demo-loop-001 is fail-closed with 17 missing phase input(s)."
+          "summary": "Latest loop iteration demo-loop-001 is fail-closed with 15 missing phase input(s)."
         },
         "exists": true,
         "kind": "file",
         "metrics": {
           "latest_iteration_id": "demo-loop-001",
-          "latest_missing_phase_input_count": 17,
+          "latest_missing_phase_input_count": 15,
           "latest_readiness": "planned_fail_closed"
         },
         "passed": true,
         "path": "loop_ledger.json",
         "role": "agentic_loop_ledger",
         "schema_version": "hfr.agentic_loop_ledger.v1",
-        "sha256": "cc0c3dd6c9edb4c7ad7a4872570475a8a915e4082f2ef48e299354b216364bf1",
-        "size_bytes": 21808
+        "sha256": "7fdd6606664158c3fdbecafec4a07d0862f39d8e1e981a136db094e70b99e05b",
+        "size_bytes": 21831
       }
     ],
     "improvement_ledger": [

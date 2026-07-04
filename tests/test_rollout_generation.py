@@ -60,6 +60,35 @@ class RolloutGenerationTests(unittest.TestCase):
         self.assertTrue(schema["passed"], schema["errors"])
         self.assertTrue(validation["passed"], validation)
 
+    def test_committed_agentic_training_rollout_bundle_is_public_safe_and_valid(self):
+        plan_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_plan.json"
+        receipt_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_receipt.json"
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(plan["passed"], plan["blocked_reasons"])
+        self.assertEqual(plan["budget"]["planned_rollouts"], 6)
+        self.assertFalse(plan["execution_boundary"]["rollouts_started"])
+        self.assertFalse(plan["execution_boundary"]["model_provider_calls_started"])
+        self.assertFalse(plan["execution_boundary"]["dataset_rows_written"])
+        self.assertTrue(receipt["passed"], receipt["blocked_reasons"])
+        self.assertEqual(receipt["source_plan"]["path"], "rollout_plan.json")
+        self.assertEqual(receipt["mock_rollout_count"], 6)
+        self.assertFalse(receipt["execution_boundary"]["live_rollouts_started"])
+        self.assertFalse(receipt["execution_boundary"]["model_provider_calls_started"])
+        self.assertFalse(receipt["lineage"]["dataset_rows_created"])
+        self.assertTrue(all(not Path(row["path"]).is_absolute() for row in plan["scenarios"]))
+
+        validation = validate_artifacts(
+            agentic_rollout_plan_paths=[plan_path],
+            agentic_rollout_receipt_paths=[receipt_path],
+            strict=True,
+        )
+
+        self.assertTrue(check_schema_file(plan_path)["passed"])
+        self.assertTrue(check_schema_file(receipt_path)["passed"])
+        self.assertTrue(validation["passed"], validation)
+
     def test_rollout_plan_builds_policy_scenario_matrix_without_running(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

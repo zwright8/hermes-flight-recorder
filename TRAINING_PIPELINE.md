@@ -729,7 +729,10 @@ flightrecorder validate \
 
 The committed fixture at `examples/rollout_generation/rollout_plan.json` is a
 schema- and validation-checked plan-only rollout batch with no provider,
-verifier, grader, or dataset-write side effects.
+verifier, grader, or dataset-write side effects. The closed-loop demo also
+keeps a replayable rollout plan plus deterministic mock receipt under
+`examples/agentic_training/rollouts/` so the loop ledger can distinguish
+rollout readiness from later harness, scoring, and curation work.
 
 Archive a deterministic mock rollout receipt before scoring or review. This
 records one mock row per planned batch and proves Flight Recorder did not start
@@ -927,8 +930,9 @@ provider API / model download / credential flags are replayed from the archived
 receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
-The committed agentic-training loop example binds a local model-grader bundle,
-action ledger, and improvement ledger so review, improvement-planning, and
+The committed agentic-training loop example binds loop-local rollout plan and
+mock-receipt artifacts, a local model-grader bundle, action ledger, and
+improvement ledger so rollout references, review, improvement-planning, and
 next-iteration phases are replayable without pulling sibling example paths into
 the public loop contract.
 Loop ledgers also require each source loop plan to be replayable from the ledger

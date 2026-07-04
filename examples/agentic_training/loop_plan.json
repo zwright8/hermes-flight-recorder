@@ -1,9 +1,17 @@
 {
-  "artifact_count": 18,
+  "artifact_count": 20,
   "artifact_role_counts": [
     {
       "count": 1,
       "role": "action_ledger"
+    },
+    {
+      "count": 1,
+      "role": "agentic_rollout_plan"
+    },
+    {
+      "count": 1,
+      "role": "agentic_rollout_receipt"
     },
     {
       "count": 1,
@@ -75,7 +83,6 @@
     }
   ],
   "blocked_reasons": [
-    "rollout_receipt_required_before_review: passed=False",
     "uncalibrated_labels_block_training_data: passed=False",
     "dataset_curation_receipt_required_for_trainer_handoff: passed=False",
     "external_trainer_handoff_is_preflighted: passed=False",
@@ -148,16 +155,16 @@
     },
     {
       "actual": {
-        "agentic_rollout_plan_present": false,
-        "agentic_rollout_receipt_present": false
+        "agentic_rollout_plan_present": true,
+        "agentic_rollout_receipt_present": true
       },
       "expected": {
         "agentic_rollout_plan_present": true,
         "agentic_rollout_receipt_present": true
       },
       "id": "rollout_receipt_required_before_review",
-      "passed": false,
-      "summary": "rollout_receipt_required_before_review: passed=False"
+      "passed": true,
+      "summary": "rollout_receipt_required_before_review: passed=True"
     },
     {
       "actual": {
@@ -795,7 +802,7 @@
     "recommendation": "",
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 7,
+  "failed_check_count": 6,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -810,8 +817,6 @@
   },
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
-    "agentic_rollout_plan",
-    "agentic_rollout_receipt",
     "dataset_curation_receipt",
     "eval_summary",
     "evidence_bundle",
@@ -864,12 +869,13 @@
       "gate": "rollouts must stay inside declared budget and environment descriptors.",
       "id": "rollout_collection",
       "missing_required_artifacts": [
-        "agentic_rollout_plan",
-        "agentic_rollout_receipt",
         "harness_result"
       ],
       "name": "Rollout collection",
-      "present_required_artifacts": [],
+      "present_required_artifacts": [
+        "agentic_rollout_plan",
+        "agentic_rollout_receipt"
+      ],
       "produces": [
         "trace",
         "scorecard",
@@ -1140,6 +1146,32 @@
         "schema_version": "hfr.action_ledger.v1",
         "sha256": "326140dbe3e5f542e58a1a5a7dba94e8a3dcfd39759d8f8eb2de1c273176d90b",
         "size_bytes": 3791
+      }
+    ],
+    "agentic_rollout_plan": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "rollouts/rollout_plan.json",
+        "readiness": "ready_for_harness_batch",
+        "role": "agentic_rollout_plan",
+        "schema_version": "hfr.agentic_rollout_plan.v1",
+        "sha256": "9efb06cb31c184231847b65faeeac394942471d80d9617ada84e45105fb73649",
+        "size_bytes": 7546
+      }
+    ],
+    "agentic_rollout_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "rollouts/rollout_receipt.json",
+        "readiness": "mock_rollouts_recorded",
+        "role": "agentic_rollout_receipt",
+        "schema_version": "hfr.agentic_rollout_receipt.v1",
+        "sha256": "8b8e6f3b92de54fc14f477d17f92d0985a503962c0aca44ecaad99c224e40947",
+        "size_bytes": 6783
       }
     ],
     "agentic_training_flow": [

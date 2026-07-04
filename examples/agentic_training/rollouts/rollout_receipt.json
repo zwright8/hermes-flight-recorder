@@ -1,0 +1,211 @@
+{
+  "blocked_reasons": [],
+  "check_count": 5,
+  "checks": [
+    {
+      "actual": {
+        "schema_version": "hfr.agentic_rollout_plan.v1"
+      },
+      "expected": {
+        "schema_version": "hfr.agentic_rollout_plan.v1"
+      },
+      "id": "plan_schema_supported",
+      "passed": true,
+      "summary": "plan_schema_supported: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true,
+        "readiness": "ready_for_harness_batch"
+      },
+      "expected": {
+        "passed": true,
+        "readiness": "ready_for_harness_batch"
+      },
+      "id": "plan_ready_for_mock_rollouts",
+      "passed": true,
+      "summary": "plan_ready_for_mock_rollouts: passed=True"
+    },
+    {
+      "actual": {
+        "batch_count": 6
+      },
+      "expected": {
+        "batch_count": ">=1"
+      },
+      "id": "harness_batches_present",
+      "passed": true,
+      "summary": "harness_batches_present: passed=True"
+    },
+    {
+      "actual": {
+        "harness_modes": [
+          "offline_mock"
+        ]
+      },
+      "expected": {
+        "harness_mode": "offline_mock"
+      },
+      "id": "mock_rollout_only",
+      "passed": true,
+      "summary": "mock_rollout_only: passed=True"
+    },
+    {
+      "actual": {
+        "live_rollouts_started": false,
+        "model_provider_calls_started": false
+      },
+      "expected": {
+        "live_rollouts_started": false,
+        "model_provider_calls_started": false
+      },
+      "id": "flight_recorder_did_not_call_model_provider",
+      "passed": true,
+      "summary": "flight_recorder_did_not_call_model_provider: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "environment": {
+    "external_state_verifier_gate": {
+      "all_declared_verifiers_resolved": true,
+      "credential_values_recorded": false,
+      "declared_count": 1,
+      "required_for_external_state_checks": true,
+      "resolved_count": 1,
+      "verification_side_effects_started": false
+    },
+    "external_state_verifiers": [
+      {
+        "exists": true,
+        "path": "verifiers/sqlite_task_state.verifier.json",
+        "role": "verifier_config",
+        "sha256": "227b94fe9110506542142dcc577982ee598a766923a38681ce8b7b98718c223e",
+        "size_bytes": 399
+      }
+    ],
+    "id": "offline_mock",
+    "network_default": "disabled",
+    "replayable": true
+  },
+  "execution_boundary": {
+    "dataset_rows_written": false,
+    "live_rollouts_started": false,
+    "mock_receipt_only": true,
+    "mock_rollouts_recorded": true,
+    "model_provider_calls_started": false,
+    "paid_model_grader_calls_started": false
+  },
+  "failed_check_count": 0,
+  "iteration_id": "demo-loop-001",
+  "lineage": {
+    "dataset_rows_created": false,
+    "ready_for_rejection_sampling": true,
+    "scorecards_written": false,
+    "trace_files_written": false
+  },
+  "mock_rollout_count": 6,
+  "mock_rollouts": [
+    {
+      "batch_id": "prompt_injection_good::baseline",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-baseline",
+      "policy_role": "baseline",
+      "rollout_id": "mock-rollout-0001",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    },
+    {
+      "batch_id": "prompt_injection_good::candidate",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-candidate",
+      "policy_role": "candidate",
+      "rollout_id": "mock-rollout-0002",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    },
+    {
+      "batch_id": "prompt_injection_good::teacher",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-teacher",
+      "policy_role": "teacher",
+      "rollout_id": "mock-rollout-0003",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    },
+    {
+      "batch_id": "email_reply_completion_good::baseline",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-baseline",
+      "policy_role": "baseline",
+      "rollout_id": "mock-rollout-0004",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    },
+    {
+      "batch_id": "email_reply_completion_good::candidate",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-candidate",
+      "policy_role": "candidate",
+      "rollout_id": "mock-rollout-0005",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    },
+    {
+      "batch_id": "email_reply_completion_good::teacher",
+      "dataset_row_written": false,
+      "harness_mode": "offline_mock",
+      "model_provider_called": false,
+      "policy_id": "local/mock-teacher",
+      "policy_role": "teacher",
+      "rollout_id": "mock-rollout-0006",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "scorecard_written": false,
+      "status": "mock_recorded",
+      "trace_written": false
+    }
+  ],
+  "notes": [
+    "This receipt records deterministic mock rollout rows only.",
+    "It does not call model providers, run paid graders, write traces, or add rows to training datasets."
+  ],
+  "passed": true,
+  "readiness": "mock_rollouts_recorded",
+  "receipt_path": "rollout_receipt.json",
+  "recommendation": "score_and_review_mock_rollouts",
+  "schema_version": "hfr.agentic_rollout_receipt.v1",
+  "source_plan": {
+    "exists": true,
+    "passed": true,
+    "path": "rollout_plan.json",
+    "readiness": "ready_for_harness_batch",
+    "schema_version": "hfr.agentic_rollout_plan.v1",
+    "sha256": "9efb06cb31c184231847b65faeeac394942471d80d9617ada84e45105fb73649",
+    "size_bytes": 7546
+  }
+}

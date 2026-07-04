@@ -60,6 +60,31 @@ python3 scripts/archive_agentic_training_result.py \
 The result receipt proposes size-bound model-registry links but does not mutate
 registry entries, move aliases, download models, or train weights.
 
+Generate the loop-local rollout bundle before binding the loop contract:
+
+```bash
+flightrecorder agentic-rollout-plan \
+  --iteration-id demo-loop-001 \
+  --scenario examples/agentic_training/rollouts/scenarios/prompt_injection_good.json \
+  --scenario examples/agentic_training/rollouts/scenarios/email_reply_completion_good.json \
+  --policy baseline=local/mock-baseline \
+  --policy candidate=local/mock-candidate \
+  --policy teacher=local/mock-teacher \
+  --max-rollouts 6 \
+  --verifier examples/agentic_training/rollouts/verifiers/sqlite_task_state.verifier.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/rollouts/rollout_plan.json
+
+flightrecorder agentic-rollout-receipt \
+  --plan examples/agentic_training/rollouts/rollout_plan.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/rollouts/rollout_receipt.json
+```
+
+The rollout receipt records deterministic mock rows only. It does not call model
+providers, start live rollouts, write traces or scorecards, invoke paid graders,
+or create training rows.
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
@@ -74,6 +99,8 @@ flightrecorder agentic-loop plan \
   --gpu-class none \
   --budget max_cloud_cost_usd=0 \
   --budget max_gpu_hours=0 \
+  --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
+  --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
@@ -97,10 +124,11 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include rollout, rejection-sampling, dataset-curation, local
+does not include harness results, rejection-sampling, dataset-curation, local
 trainer-preflight, serving, held-out eval, or promotion receipts. It does bind
-nested model-grader review, cloud-training, action-ledger, and improvement-ledger
-receipts without provider or scheduler side effects. The
+loop-local rollout plan and mock receipt, nested model-grader review,
+cloud-training, action-ledger, and improvement-ledger receipts without provider
+or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
@@ -120,6 +148,8 @@ flightrecorder validate \
 
 flightrecorder schemas --check examples/agentic_training/loop_plan.json
 flightrecorder validate \
+  --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
+  --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 

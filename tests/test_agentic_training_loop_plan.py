@@ -26,6 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
     def test_committed_example_loop_plan_replays_fail_closed_sources(self):
         plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
+        rollout_plan_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_plan.json"
+        rollout_receipt_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_receipt.json"
         provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
         model_grader_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json"
         action_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json"
@@ -33,6 +35,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
 
         expected_refs = {
+            "agentic_rollout_plan": ("rollouts/rollout_plan.json", rollout_plan_path),
+            "agentic_rollout_receipt": ("rollouts/rollout_receipt.json", rollout_receipt_path),
             "cloud_training_provider_registry": ("cloud_training/provider_registry.json", provider_registry_path),
             "model_grader_gate": ("model_grader/passing_gate.json", model_grader_gate_path),
             "action_ledger": ("iteration_ledgers/action_ledger.json", action_ledger_path),
@@ -45,7 +49,13 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
+        self.assertEqual(plan["artifact_count"], 20)
+        self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
+        self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
+        self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         phases = {phase["id"]: phase for phase in plan["phases"]}
+        self.assertEqual(set(phases["rollout_collection"]["present_required_artifacts"]), {"agentic_rollout_plan", "agentic_rollout_receipt"})
+        self.assertIn("harness_result", phases["rollout_collection"]["missing_required_artifacts"])
         self.assertEqual(phases["rubric_model_grader_review"]["status"], "ready")
         self.assertEqual(phases["improvement_planning"]["status"], "ready")
         self.assertEqual(phases["next_iteration"]["status"], "ready")
