@@ -897,6 +897,33 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.metrics.serving_lifecycle.preflight_artifact_count expected 3", errors)
 
+    def test_validate_evidence_bundle_rejects_symlinked_serving_lifecycle_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lifecycle_path = _write_serving_lifecycle(root)
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["evidence-bundle", "--serving-lifecycle", str(lifecycle_path), "--out", str(bundle_path)]), 0)
+            lifecycle_link = root / "serving_lifecycle_link.json"
+            try:
+                lifecycle_link.symlink_to(lifecycle_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["serving_lifecycle"]["path"] = lifecycle_link.name
+            bundle["artifacts"]["serving_lifecycle"]["exists"] = False
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "evidence_bundle.artifacts.serving_lifecycle.path must resolve to a regular non-symlink file when serving_lifecycle metrics are present.",
+                errors,
+            )
+
     def test_evidence_bundle_includes_eval_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1155,6 +1182,37 @@ class EvidenceBundleTests(unittest.TestCase):
             summary = json.loads(validation.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to a regular file when exists is true.", errors)
+
+    def test_validate_evidence_bundle_rejects_symlinked_eval_summary_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_dir = root / "real"
+            real_dir.mkdir()
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = real_dir / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            linked_parent = root / "linked"
+            try:
+                linked_parent.symlink_to(real_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["path"] = str(Path("linked") / "eval_summary.json")
+            bundle["artifacts"]["eval_summary"]["exists"] = False
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "evidence_bundle.artifacts.eval_summary.path must resolve to a regular non-symlink file when eval_summary metrics are present.",
+                errors,
+            )
 
     def test_validate_evidence_bundle_rejects_missing_existing_directory_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
