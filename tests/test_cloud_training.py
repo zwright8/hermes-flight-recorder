@@ -26,19 +26,35 @@ class CloudTrainingTests(unittest.TestCase):
         registry = build_cloud_training_provider_registry(created_at="2026-07-03T00:00:00+00:00")
 
         provider_ids = {provider["id"] for provider in registry["providers"]}
-        self.assertGreaterEqual(len(provider_ids), 12)
-        self.assertIn("huggingface_jobs", provider_ids)
-        self.assertIn("modal", provider_ids)
-        self.assertIn("runpod", provider_ids)
-        self.assertIn("aws_sagemaker", provider_ids)
-        self.assertIn("gcp_vertex_ai", provider_ids)
-        self.assertIn("azure_ml", provider_ids)
-        self.assertIn("databricks_mosaic", provider_ids)
-        self.assertIn("nvidia_dgx_cloud", provider_ids)
-        self.assertIn("brev", provider_ids)
+        expected_provider_ids = {
+            "aws_sagemaker",
+            "azure_ml",
+            "brev",
+            "coreweave",
+            "databricks_mosaic",
+            "fireworks",
+            "gcp_vertex_ai",
+            "huggingface_jobs",
+            "lambda_labs",
+            "modal",
+            "nvidia_dgx_cloud",
+            "replicate",
+            "runpod",
+            "together",
+        }
+        self.assertEqual(provider_ids, expected_provider_ids)
+        self.assertEqual(provider_choices(), sorted(expected_provider_ids))
+        self.assertEqual(registry["provider_count"], len(expected_provider_ids))
         self.assertTrue(all(provider["default_live_execution_allowed"] is False for provider in registry["providers"]))
         self.assertTrue(all(isinstance(provider["client_import_names"], list) for provider in registry["providers"]))
         for provider in registry["providers"]:
+            self.assertEqual(provider["live_status"], "preflight_only")
+            self.assertTrue(provider["credential_env_vars"], provider["id"])
+            self.assertTrue(provider["regions"], provider["id"])
+            self.assertTrue(provider["gpu_classes"], provider["id"])
+            self.assertTrue(provider["job_modes"], provider["id"])
+            self.assertTrue(provider["artifact_protocols"], provider["id"])
+            self.assertTrue(provider["client_import_names"], provider["id"])
             contract = provider["adapter_contract"]
             self.assertEqual(contract["provider_id"], provider["id"])
             self.assertEqual(contract["dry_run_transport"], "mock_receipts")
@@ -46,7 +62,7 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertFalse(contract["live_launch_supported"])
             self.assertFalse(contract["provider_api_called_by_flight_recorder"])
             self.assertFalse(contract["credential_values_recorded"])
-            self.assertTrue(set(PROVIDER_ADAPTER_RECEIPT_TYPES).issubset(set(contract["receipt_types"])))
+            self.assertEqual(sorted(contract["receipt_types"]), sorted(PROVIDER_ADAPTER_RECEIPT_TYPES))
         self.assertFalse(registry["execution_boundary"]["provider_api_called"])
         schema = check_schema_contract(registry)
         self.assertTrue(schema["passed"], schema["errors"])
@@ -56,14 +72,19 @@ class CloudTrainingTests(unittest.TestCase):
             root = Path(tmp)
             registry_path = root / "providers.json"
             registry = build_cloud_training_provider_registry(["modal"], created_at="2026-07-03T00:00:00+00:00")
+            registry["providers"][0]["live_status"] = "launch_enabled"
             registry["providers"][0]["adapter_contract"]["live_launch_supported"] = True
             registry["providers"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
             registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+            schema = check_schema_file(registry_path)
+            self.assertFalse(schema["passed"], schema)
             validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
 
             self.assertFalse(validation["passed"])
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("live_status", "\n".join(schema["errors"]))
+            self.assertIn("cloud_training_provider_registry.providers[0].live_status must be preflight_only.", errors)
             self.assertIn("adapter_contract.live_launch_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 

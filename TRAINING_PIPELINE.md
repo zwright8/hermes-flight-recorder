@@ -987,6 +987,9 @@ region/GPU constraints, artifact manifests, and status/cancel receipts.
 Provider registry entries include an `adapter_contract` with the exact receipt
 types implemented, mock dry-run transport, metadata-only live preflight
 transport, disabled live launch support, and zero provider API calls.
+Each provider record is also schema- and validator-pinned to
+`live_status: preflight_only`, so adding live launch support requires an
+intentional contract migration rather than a data-only registry edit.
 Artifact manifests also carry a derived `transfer_plan` that must match the
 upload/download rows and provider protocols while proving Flight Recorder did
 not upload artifacts, download outputs, record credentials, or call provider

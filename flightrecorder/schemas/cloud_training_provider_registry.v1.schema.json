@@ -135,7 +135,7 @@
           "type": "array"
         },
         "live_status": {
-          "type": "string"
+          "const": "preflight_only"
         },
         "regions": {
           "items": {

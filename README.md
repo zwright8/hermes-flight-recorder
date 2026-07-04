@@ -423,7 +423,9 @@ absolute or traversal paths are redacted and treated as missing, so those
 receipts block instead of publishing local filesystem details.
 Every provider registry record includes an `adapter_contract` attesting that the
 implemented transport is mock receipts plus metadata-only live preflight, with
-live launch support disabled by default.
+live launch support disabled by default. Registry validation also pins every
+provider `live_status` to `preflight_only`; any future live-launch adapter must
+change that contract deliberately alongside schema and validator updates.
 Artifact manifests include a `transfer_plan` that counts upload inputs and
 expected downloads, records provider artifact protocols, and keeps actual
 upload/download/API side effects false for the external runner to perform.

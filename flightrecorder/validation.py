@@ -7403,6 +7403,8 @@ def _validate_cloud_training_provider_record(record: Any, target: ValidationTarg
         provider_id = ""
     if record.get("default_live_execution_allowed") is not False:
         target.errors.append(f"{label}.default_live_execution_allowed must be false.")
+    if record.get("live_status") != "preflight_only":
+        target.errors.append(f"{label}.live_status must be preflight_only.")
     contract = record.get("adapter_contract")
     _validate_cloud_training_adapter_contract(contract, target, f"{label}.adapter_contract", provider_id)
 
