@@ -292,11 +292,11 @@
     "modeExternalRunnerContract": {
       "additionalProperties": false,
       "properties": {
-        "runner_must_block_unredacted_traces": { "type": "boolean" },
-        "runner_must_require_recommendation": { "type": "string" },
-        "runner_must_revalidate_inputs": { "type": "boolean" },
+        "runner_must_block_unredacted_traces": { "const": true },
+        "runner_must_require_recommendation": { "const": "ready_for_external_trainer_plan" },
+        "runner_must_revalidate_inputs": { "const": true },
         "runner_must_validate_reward_contract": { "type": "boolean" },
-        "runner_owns_execution": { "type": "boolean" }
+        "runner_owns_execution": { "const": true }
       },
       "required": [
         "runner_owns_execution",

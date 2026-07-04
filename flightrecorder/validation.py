@@ -3862,16 +3862,17 @@ def _validate_agentic_training_flow_external_runner_contract(value: Any, target:
         target.errors.append(f"{label} must be an object.")
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_EXTERNAL_RUNNER_KEYS, target, label)
-    if not isinstance(value.get("runner_must_require_recommendation"), str):
-        target.errors.append(f"{label}.runner_must_require_recommendation must be a string.")
+    if value.get("runner_must_require_recommendation") != _AGENTIC_TRAINING_PLAN_READY_RECOMMENDATION:
+        target.errors.append(f"{label}.runner_must_require_recommendation must be ready_for_external_trainer_plan.")
     for field_name in (
         "runner_owns_execution",
         "runner_must_revalidate_inputs",
-        "runner_must_validate_reward_contract",
         "runner_must_block_unredacted_traces",
     ):
-        if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"{label}.{field_name} must be a boolean.")
+        if value.get(field_name) is not True:
+            target.errors.append(f"{label}.{field_name} must be true.")
+    if not isinstance(value.get("runner_must_validate_reward_contract"), bool):
+        target.errors.append(f"{label}.runner_must_validate_reward_contract must be a boolean.")
 
 
 def _validate_agentic_training_flow_mode_gate(

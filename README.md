@@ -320,6 +320,8 @@ Runtime preflight preserves those invariants by schema-pinning embedded
 Flow validation preserves that boundary in the mirrored `mode_contract_check`:
 paid/secret reward defaults, provider credentials, paid graders, cloud jobs,
 downloads, training starts, and weight updates must all remain fail-closed.
+The mirrored external-runner contract must also keep runner ownership, input
+revalidation, plan-ready gating, and unredacted-trace blocking pinned on.
 
 After an external trainer finishes or fails, archive a receipt:
 

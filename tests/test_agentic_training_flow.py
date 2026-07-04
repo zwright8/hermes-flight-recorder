@@ -361,6 +361,58 @@ class AgenticTrainingFlowTests(unittest.TestCase):
                 errors,
             )
 
+    def test_validation_rejects_forged_flow_runner_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            runner_contract = receipt["mode_contract_check"]["external_runner_contract"]
+            runner_contract["runner_owns_execution"] = False
+            runner_contract["runner_must_revalidate_inputs"] = False
+            runner_contract["runner_must_require_recommendation"] = "launch_anyway"
+            runner_contract["runner_must_block_unredacted_traces"] = False
+            write_agentic_training_flow(out, receipt)
+
+            schema = check_schema_file(out)
+            self.assertFalse(schema["passed"])
+            schema_errors = "\n".join(schema["errors"])
+            for field_name in (
+                "runner_owns_execution",
+                "runner_must_revalidate_inputs",
+                "runner_must_require_recommendation",
+                "runner_must_block_unredacted_traces",
+            ):
+                self.assertIn(field_name, schema_errors)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.external_runner_contract.runner_owns_execution must be true.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.external_runner_contract.runner_must_revalidate_inputs must be true.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.external_runner_contract.runner_must_require_recommendation must be ready_for_external_trainer_plan.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.external_runner_contract.runner_must_block_unredacted_traces must be true.",
+                errors,
+            )
+
     def test_validation_rejects_flow_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

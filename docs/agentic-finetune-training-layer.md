@@ -159,6 +159,9 @@ promotion requirement.
 Flow receipts keep the mirrored mode contract fail-closed too: paid/secret
 reward defaults, provider credentials, paid graders, cloud jobs, downloads,
 training starts, and weight updates must remain disabled.
+The mirrored external-runner contract must keep runner ownership, input
+revalidation, plan-ready gating, and unredacted-trace blocking enabled; only the
+reward-validation requirement remains mode-dependent.
 
 ## Result Receipts
 

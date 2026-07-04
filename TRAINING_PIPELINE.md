@@ -656,7 +656,9 @@ boundary without starting a subprocess, importing trainer modules, creating
 cloud jobs, downloading models, or updating weights. Validation rejects
 mirrored mode contracts that enable paid/secret reward defaults, provider
 credentials, paid graders, cloud jobs, downloads, training starts, or weight
-updates. It also rejects
+updates, and mirrored external-runner contracts that drop runner ownership, input
+revalidation, plan-ready gating, or unredacted-trace blocking, while keeping
+reward-validation requirements mode-dependent. It also rejects
 delegated commands that still contain absolute execution roots or argv path
 tokens before the receipt can become a public handoff.
 
