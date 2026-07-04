@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_artifact_manifest.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Upload and expected-download manifest for cloud training handoffs.",
   "properties": {
     "artifact_protocols": {
@@ -21,7 +21,7 @@
     },
     "checks": {
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/check"
       },
       "type": "array"
     },
@@ -29,7 +29,7 @@
       "type": "string"
     },
     "execution_boundary": {
-      "type": "object"
+      "$ref": "#/$defs/boundary"
     },
     "expected_download_artifacts": {
       "items": {
@@ -44,7 +44,7 @@
       "type": "boolean"
     },
     "provider": {
-      "type": "object"
+      "$ref": "#/$defs/provider"
     },
     "readiness": {
       "enum": [
@@ -85,8 +85,95 @@
   "title": "Hermes Flight Recorder Cloud Training Artifact Manifest",
   "type": "object",
   "$defs": {
+    "adapterContract": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "type": "string"
+        },
+        "client_modules_imported_by_flight_recorder": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_transport": {
+          "const": "mock_receipts"
+        },
+        "live_launch_supported": {
+          "const": false
+        },
+        "live_preflight_supported": {
+          "const": true
+        },
+        "live_preflight_transport": {
+          "const": "metadata_only"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called_by_flight_recorder": {
+          "const": false
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "receipt_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requires_cost_limit": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_explicit_live_opt_in": {
+          "const": true
+        },
+        "requires_region_and_gpu_constraints": {
+          "const": true
+        },
+        "schema_version": {
+          "const": "hfr.cloud_training_provider_adapter.v1"
+        },
+        "status_cancel_receipts_supported": {
+          "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "adapter_id",
+        "provider_id",
+        "receipt_types",
+        "dry_run_transport",
+        "live_preflight_transport",
+        "live_preflight_supported",
+        "live_launch_supported",
+        "status_cancel_receipts_supported",
+        "provider_api_called_by_flight_recorder",
+        "client_modules_imported_by_flight_recorder",
+        "credential_values_recorded",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints"
+      ],
+      "type": "object"
+    },
     "artifact": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"
@@ -121,8 +208,154 @@
       ],
       "type": "object"
     },
+    "boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_live": {
+          "type": "boolean"
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "cloud_job_started": {
+          "const": false
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "live_preflight_requested": {
+          "type": "boolean"
+        },
+        "live_requested": {
+          "type": "boolean"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "live_preflight_requested",
+        "live_requested",
+        "allow_live",
+        "provider_api_called",
+        "cloud_job_started",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_contract": {
+          "$ref": "#/$defs/adapterContract"
+        },
+        "artifact_protocols": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "client_import_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "credential_env_vars": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "gpu_classes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "job_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "live_status": {
+          "type": "string"
+        },
+        "regions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "credential_env_vars",
+        "regions",
+        "gpu_classes",
+        "job_modes",
+        "artifact_protocols",
+        "client_import_names",
+        "live_status",
+        "default_live_execution_allowed",
+        "adapter_contract"
+      ],
+      "type": "object"
+    },
     "transferPlan": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_protocols": {
           "items": {

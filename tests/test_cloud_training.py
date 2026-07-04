@@ -968,6 +968,65 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_artifact_manifest.transfer_plan.flight_recorder_downloaded_artifacts must be false.", errors)
             self.assertIn("cloud_training_artifact_manifest.transfer_plan.provider_api_called must be false.", errors)
 
+    def test_artifact_manifest_rejects_unknown_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = root / "artifacts.json"
+            manifest = build_cloud_training_artifact_manifest(
+                provider_id="modal",
+                upload_paths=[EXAMPLE_PLAN],
+                expected_downloads=["adapters/candidate/adapter_model.safetensors"],
+                output_base_dir=root,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            manifest["provider_console_url"] = "redacted-provider-console"
+            manifest["checks"][0]["provider_call"] = "forged"
+            manifest["provider"]["provider_signed_url"] = "redacted-provider-url"
+            manifest["provider"]["adapter_contract"]["provider_invoice_id"] = "redacted-invoice"
+            manifest["upload_artifacts"][0]["upload_receipt_url"] = "redacted-upload-receipt"
+            manifest["expected_download_artifacts"][0]["downloaded_to"] = "redacted-download-path"
+            manifest["transfer_plan"]["provider_upload_receipt"] = "redacted-provider-receipt"
+            manifest["execution_boundary"]["artifact_upload_receipt"] = "not-created"
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(manifest_path)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_artifact_manifest_paths=[manifest_path], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_artifact_manifest contains unknown field(s): ['provider_console_url'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.checks[0] contains unknown field(s): ['provider_call'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.provider contains unknown field(s): ['provider_signed_url'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.provider.adapter_contract contains unknown field(s): ['provider_invoice_id'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.upload_artifacts[0] contains unknown field(s): ['upload_receipt_url'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.expected_download_artifacts[0] contains unknown field(s): ['downloaded_to'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.transfer_plan contains unknown field(s): ['provider_upload_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.execution_boundary contains unknown field(s): ['artifact_upload_receipt'].",
+                errors,
+            )
+
     def test_launch_plan_blocks_mismatched_preflight_and_artifact_manifest_providers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

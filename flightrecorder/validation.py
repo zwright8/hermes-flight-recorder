@@ -5513,6 +5513,37 @@ _CLOUD_TRAINING_LIVE_PREFLIGHT_KEYS = {
     "client_dependency_required_count",
 }
 _CLOUD_TRAINING_LIVE_DEPENDENCY_CHECK_KEYS = {"module", "available", "module_imported"}
+_CLOUD_TRAINING_ARTIFACT_MANIFEST_KEYS = {
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "upload_artifacts",
+    "expected_download_artifacts",
+    "artifact_protocols",
+    "transfer_plan",
+    "execution_boundary",
+}
+_CLOUD_TRAINING_TRANSFER_ARTIFACT_KEYS = {"role", "path", "exists", "sha256", "size_bytes"}
+_CLOUD_TRAINING_TRANSFER_PLAN_KEYS = {
+    "mode",
+    "upload_count",
+    "expected_download_count",
+    "upload_size_bytes",
+    "artifact_protocols",
+    "requires_external_runner_upload",
+    "requires_external_runner_download",
+    "download_artifacts_expected_to_exist_before_launch",
+    "flight_recorder_uploaded_artifacts",
+    "flight_recorder_downloaded_artifacts",
+    "provider_api_called",
+    "credential_values_recorded",
+}
 _CLOUD_TRAINING_LAUNCH_PLAN_KEYS = {
     "schema_version",
     "created_at",
@@ -5647,6 +5678,7 @@ def _validate_cloud_training_contract(
         failed_checks = _validate_gate_like_checks(checks, target, f"{target.target_type}.checks")
         if expected_schema_version in {
             CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+            CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
@@ -5666,6 +5698,7 @@ def _validate_cloud_training_contract(
     else:
         if expected_schema_version in {
             CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+            CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
@@ -5811,6 +5844,8 @@ def _validate_cloud_training_receipt_allowed_keys(
     }
     if expected_schema_version == CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION:
         _validate_allowed_keys(payload, common | {"provider", "constraints", "credential_checks", "live_preflight", "handoff_contract", "notes"}, target, "cloud_training_preflight")
+    if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, _CLOUD_TRAINING_ARTIFACT_MANIFEST_KEYS, target, "cloud_training_artifact_manifest")
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION:
         _validate_allowed_keys(payload, common | {"provider", "provider_chain", "launch", "handoff_contract"}, target, "cloud_training_launch_plan")
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
@@ -5959,7 +5994,13 @@ def _validate_cloud_training_artifact_refs(
     if require_non_empty and not value:
         target.errors.append(f"{label} must include at least one artifact.")
     for index, record in enumerate(value):
-        _validate_cloud_training_artifact_ref(record, target, f"{label}[{index}]", source_path)
+        _validate_cloud_training_artifact_ref(
+            record,
+            target,
+            f"{label}[{index}]",
+            source_path,
+            allowed_keys=_CLOUD_TRAINING_TRANSFER_ARTIFACT_KEYS,
+        )
 
 
 def _validate_cloud_training_transfer_plan(
@@ -5973,6 +6014,7 @@ def _validate_cloud_training_transfer_plan(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_TRANSFER_PLAN_KEYS, target, label)
     uploads = upload_artifacts if isinstance(upload_artifacts, list) else []
     downloads = expected_download_artifacts if isinstance(expected_download_artifacts, list) else []
     protocols = artifact_protocols if _is_string_list(artifact_protocols) else []
@@ -6377,11 +6419,18 @@ def _cloud_training_required_source_artifacts(schema_version: str) -> tuple[str,
     }.get(schema_version, ())
 
 
-def _validate_cloud_training_artifact_ref(record: Any, target: ValidationTarget, label: str, source_path: Path | None) -> None:
+def _validate_cloud_training_artifact_ref(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+    *,
+    allowed_keys: set[str] | None = None,
+) -> None:
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
-    _validate_allowed_keys(record, _CLOUD_TRAINING_SOURCE_ARTIFACT_KEYS, target, label)
+    _validate_allowed_keys(record, allowed_keys or _CLOUD_TRAINING_SOURCE_ARTIFACT_KEYS, target, label)
     if not isinstance(record.get("role"), str) or not record.get("role"):
         target.errors.append(f"{label}.role must be a non-empty string.")
     if not isinstance(record.get("exists"), bool):
