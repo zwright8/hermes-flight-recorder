@@ -1024,7 +1024,7 @@ def validate_dataset_curation_receipt(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("dataset_curation_receipt", str(receipt_path))
     receipt = _read_object(receipt_path, target, "dataset_curation_receipt.json")
     if receipt is not None:
-        _validate_dataset_curation_receipt(receipt, target)
+        _validate_dataset_curation_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -7315,7 +7315,7 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
             target.errors.append(f"{label}.dataset_rows_written must be false.")
 
 
-def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _validate_allowed_keys(receipt, _DATASET_CURATION_RECEIPT_KEYS, target, "dataset_curation_receipt")
     _require_equal(receipt, "schema_version", DATASET_CURATION_RECEIPT_SCHEMA_VERSION, target, prefix="dataset_curation_receipt.")
     checks = receipt.get("checks")
@@ -7342,6 +7342,10 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
         )
     if not _is_string_list(receipt.get("blocked_reasons")):
         target.errors.append("dataset_curation_receipt.blocked_reasons must be a list of strings.")
+    if not isinstance(receipt.get("receipt_path"), str):
+        target.errors.append("dataset_curation_receipt.receipt_path must be a string.")
+    else:
+        _warn_absolute_public_path(target, "dataset_curation_receipt.receipt_path", receipt.get("receipt_path"))
 
     artifacts = receipt.get("input_artifacts")
     if not isinstance(artifacts, dict):
@@ -7361,13 +7365,22 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
                 "rejection_sampling_gate",
                 "hfr.rejection_sampling_gate.v1",
                 "ready_for_dataset_curation",
+                source_path,
             )
     export_rows = artifacts.get("training_export")
     if not isinstance(export_rows, list) or not export_rows:
         target.errors.append("dataset_curation_receipt.input_artifacts.training_export must contain at least one ref.")
     else:
         for index, row in enumerate(export_rows):
-            _validate_dataset_curation_ref(row, target, f"dataset_curation_receipt.input_artifacts.training_export[{index}]", "training_export", "", "")
+            _validate_dataset_curation_ref(
+                row,
+                target,
+                f"dataset_curation_receipt.input_artifacts.training_export[{index}]",
+                "training_export",
+                "",
+                "",
+                source_path,
+            )
 
     summary = receipt.get("curation_summary")
     if not isinstance(summary, dict):
@@ -7418,7 +7431,15 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     )
 
 
-def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: str, role: str, schema_version: str, readiness: str) -> None:
+def _validate_dataset_curation_ref(
+    row: Any,
+    target: ValidationTarget,
+    label: str,
+    role: str,
+    schema_version: str,
+    readiness: str,
+    source_path: Path,
+) -> None:
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -7427,6 +7448,8 @@ def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: st
     for field_name in ("role", "path", "kind"):
         if not isinstance(row.get(field_name), str) or not row.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if isinstance(row.get("path"), str) and row.get("path"):
+        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
     if row.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
@@ -7445,13 +7468,74 @@ def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: st
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for file refs.")
         if not _is_non_negative_int(row.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for file refs.")
+        _validate_dataset_curation_file_ref(row, target, label, source_path)
     if row.get("kind") == "directory":
+        if not isinstance(row.get("manifest_path"), str) or not row.get("manifest_path"):
+            target.errors.append(f"{label}.manifest_path must be a non-empty string for directory refs.")
+        elif isinstance(row.get("manifest_path"), str):
+            _warn_absolute_public_path(target, f"{label}.manifest_path", row.get("manifest_path"))
         if row.get("manifest_exists") is not True:
             target.errors.append(f"{label}.manifest_exists must be true for directory refs.")
         if not _is_sha256(row.get("manifest_sha256")):
             target.errors.append(f"{label}.manifest_sha256 must be a SHA-256 hex string for directory refs.")
         if not _is_non_negative_int(row.get("manifest_size_bytes")):
             target.errors.append(f"{label}.manifest_size_bytes must be a non-negative integer for directory refs.")
+        _validate_dataset_curation_directory_ref(row, target, label, source_path)
+
+
+def _validate_dataset_curation_file_ref(row: dict[str, Any], target: ValidationTarget, label: str, source_path: Path) -> None:
+    if row.get("exists") is not True:
+        return
+    file_path = _resolve_dataset_curation_ref_path(row.get("path"), source_path)
+    if file_path is None:
+        return
+    if _path_has_symlink_component(file_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing file.")
+        return
+    if _is_non_negative_int(row.get("size_bytes")) and file_path.stat().st_size != row.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_sha256(row.get("sha256")) and _sha256(file_path) != row.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_dataset_curation_directory_ref(row: dict[str, Any], target: ValidationTarget, label: str, source_path: Path) -> None:
+    if row.get("exists") is not True:
+        return
+    directory_path = _resolve_dataset_curation_ref_path(row.get("path"), source_path)
+    if directory_path is not None:
+        if _path_has_symlink_component(directory_path, include_leaf=True):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink directory.")
+            return
+        if not directory_path.exists() or not directory_path.is_dir():
+            target.errors.append(f"{label}.path must resolve to an existing directory.")
+            return
+    if row.get("manifest_exists") is not True:
+        return
+    manifest_path = _resolve_dataset_curation_ref_path(row.get("manifest_path"), source_path)
+    if manifest_path is None:
+        return
+    if _path_has_symlink_component(manifest_path, include_leaf=True):
+        target.errors.append(f"{label}.manifest_path must resolve to a regular non-symlink file.")
+        return
+    if not manifest_path.exists() or not manifest_path.is_file():
+        target.errors.append(f"{label}.manifest_path must resolve to an existing file.")
+        return
+    if _is_non_negative_int(row.get("manifest_size_bytes")) and manifest_path.stat().st_size != row.get("manifest_size_bytes"):
+        target.errors.append(f"{label}.manifest_size_bytes does not match the current file.")
+    if _is_sha256(row.get("manifest_sha256")) and _sha256(manifest_path) != row.get("manifest_sha256"):
+        target.errors.append(f"{label}.manifest_sha256 does not match the current file.")
+
+
+def _resolve_dataset_curation_ref_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:") or _is_windows_absolute(value):
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

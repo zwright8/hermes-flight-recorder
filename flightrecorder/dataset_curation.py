@@ -104,6 +104,8 @@ def write_dataset_curation_receipt(path: str | Path, receipt: dict[str, Any]) ->
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.loads(json.dumps(receipt))
+    if isinstance(payload.get("receipt_path"), str):
+        payload["receipt_path"] = _output_relative_path(payload.get("receipt_path"), out_path.parent)
     for rows in payload.get("input_artifacts", {}).values():
         if isinstance(rows, list):
             for row in rows:

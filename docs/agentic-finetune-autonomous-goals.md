@@ -790,6 +790,10 @@ card, and dataset card decisions.
 - Rejection-sampling gates now write their own gate path relative to the gate
   output and strict validation warns on absolute gate or input-artifact refs
   before public dataset-curation admission is accepted.
+- Dataset-curation receipts reopen rejection-sampling gate and training-export
+  manifest refs from the receipt location, rejecting stale byte-size or SHA-256
+  evidence while strict validation warns on absolute receipt or input-artifact
+  refs.
 - Promotion-ledger validation reopens recorded decision gates from the ledger
   file location and rejects missing, moved, stale, or cwd-substituted records.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,
