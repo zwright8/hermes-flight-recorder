@@ -823,6 +823,58 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(launch["recommendation"], "launch_allowed")
             self.assertEqual(launch["approved_command"]["argv"][:2], ["python", "train.py"])
             self.assertTrue(launch["approved_command"]["approved"])
+            launch_schema = check_schema_contract(launch, name_or_id="trainer_launch_check")
+            self.assertTrue(launch_schema["passed"], launch_schema["errors"])
+            forged_launch = json.loads(json.dumps(launch))
+            forged_launch["provider_console_url"] = "redacted-provider-console"
+            forged_launch["checks"][0]["provider_call"] = "forged"
+            forged_launch["validation"]["credential_hint"] = "redacted"
+            forged_launch["gates"][0]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged_launch["artifacts"]["upload_receipt"] = "not-created"
+            forged_launch["dataset_selection"][0]["trainer_secret"] = "redacted"
+            forged_launch["dataset_selection"][0]["trainer_views"]["provider_endpoint"] = "redacted-provider-endpoint"
+            forged_launch["approved_command"]["trainer_process_pid"] = 123
+            forged_launch_schema = check_schema_contract(forged_launch, name_or_id="trainer_launch_check")
+            self.assertFalse(forged_launch_schema["passed"])
+            launch_schema_errors = "\n".join(forged_launch_schema["errors"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "credential_hint",
+                "cloud_job_url",
+                "upload_receipt",
+                "trainer_secret",
+                "provider_endpoint",
+                "trainer_process_pid",
+            ):
+                self.assertIn(field_name, launch_schema_errors)
+            forged_launch_path = Path(tmp) / "trainer_launch_check_forged_side_effect_fields.json"
+            forged_launch_summary = Path(tmp) / "trainer_launch_check_forged_side_effect_fields_summary.json"
+            forged_launch_path.write_text(json.dumps(forged_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-launch-check",
+                    str(forged_launch_path),
+                    "--strict",
+                    "--out",
+                    str(forged_launch_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_launch_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_launch_check contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_launch_check.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("trainer_launch_check.validation contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn("trainer_launch_check.gates[0] contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn("trainer_launch_check.artifacts contains unknown field(s): ['upload_receipt'].", errors)
+            self.assertIn("trainer_launch_check.dataset_selection[0] contains unknown field(s): ['trainer_secret'].", errors)
+            self.assertIn(
+                "trainer_launch_check.dataset_selection[0].trainer_views contains unknown field(s): ['provider_endpoint'].",
+                errors,
+            )
+            self.assertIn("trainer_launch_check.approved_command contains unknown field(s): ['trainer_process_pid'].", errors)
             self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check), "--strict"]), 0)
 
             archive = Path(tmp) / "trainer_archive"
