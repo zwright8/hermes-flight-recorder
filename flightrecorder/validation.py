@@ -16629,6 +16629,8 @@ def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget, sour
     _require_equal(gate, "schema_version", DECISION_GATE_SCHEMA_VERSION, target)
     if not isinstance(gate.get("artifact"), str) or not gate.get("artifact"):
         target.errors.append("decision_gate.artifact must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "decision_gate.artifact", gate.get("artifact"))
     source_artifact = gate.get("source_artifact")
     if not isinstance(source_artifact, dict):
         target.errors.append("decision_gate.source_artifact must be an object.")
@@ -16694,6 +16696,8 @@ def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget, sour
 def _validate_decision_gate_source_artifact(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(record.get("path"), str) or not record.get("path"):
         target.errors.append("decision_gate.source_artifact.path must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "decision_gate.source_artifact.path", record.get("path"))
     if record.get("kind") != "file":
         target.errors.append("decision_gate.source_artifact.kind must be file.")
     if not isinstance(record.get("exists"), bool):

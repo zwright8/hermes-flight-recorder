@@ -43,6 +43,8 @@ class DecisionGateTests(unittest.TestCase):
             root = Path(tmp)
             source = root / "action_ledger_gate.json"
             decision_gate = root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
             source.write_text(
                 json.dumps(
                     {
@@ -91,7 +93,12 @@ class DecisionGateTests(unittest.TestCase):
             self.assertEqual(len(gate["source_artifact"]["sha256"]), 64)
             self.assertEqual(gate["source_decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate["source_decision"]["key_metrics"]["recurring_action_count"], 0)
-            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--out", str(summary_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(strict_summary_path)]), 1)
+            summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("decision_gate.artifact is absolute", warnings)
+            self.assertIn("decision_gate.source_artifact.path is absolute", warnings)
 
             tampered = json.loads(json.dumps(gate))
             tampered["source_decision"]["recommendation"] = "block_iteration"
@@ -99,7 +106,7 @@ class DecisionGateTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
 
             decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 0)
 
             source.write_text(source.read_text(encoding="utf-8").replace("promote_iteration", "block_iteration"), encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
