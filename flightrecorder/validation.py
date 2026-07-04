@@ -19281,6 +19281,7 @@ def _validate_evidence_bundle_decision(
         target.errors.append("evidence_bundle.decision.next_actions must be a list.")
         next_actions = []
     else:
+        valid_action_artifacts = set(artifacts) | set(metrics) | {"evidence_bundle"}
         for index, action in enumerate(next_actions):
             label = f"evidence_bundle.decision.next_actions[{index}]"
             if not isinstance(action, dict):
@@ -19289,6 +19290,11 @@ def _validate_evidence_bundle_decision(
             for field_name in ("id", "priority", "artifact", "summary"):
                 if not isinstance(action.get(field_name), str) or not action.get(field_name):
                     target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+            artifact_name = action.get("artifact")
+            if isinstance(artifact_name, str) and artifact_name and artifact_name not in valid_action_artifacts:
+                target.errors.append(
+                    f"{label}.artifact must reference an evidence_bundle.artifacts key, metrics key, or evidence_bundle."
+                )
             if action.get("priority") not in {"critical", "high", "medium", "low"}:
                 target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
             if not isinstance(action.get("evidence"), dict):

@@ -20,6 +20,18 @@ def run_cli(args):
         return main(args)
 
 
+def bundle_action_fingerprint(action: dict) -> str:
+    evidence = action.get("evidence") if isinstance(action.get("evidence"), dict) else {}
+    payload = {
+        "id": action.get("id"),
+        "priority": action.get("priority"),
+        "artifact": action.get("artifact"),
+        "evidence": evidence,
+    }
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 class EvidenceBundleTests(unittest.TestCase):
     def test_evidence_bundle_summarizes_ready_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1495,6 +1507,33 @@ class EvidenceBundleTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_fingerprint does not match", errors)
+
+    def test_validate_rejects_bundle_action_unknown_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "failed_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            action = bundle["decision"]["next_actions"][0]
+            action["artifact"] = "missing_artifact"
+            action["action_fingerprint"] = bundle_action_fingerprint(action)
+            action["routing_key"] = f"{action['artifact']}:{action['id']}:{action['action_fingerprint'][:12]}"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact must reference an evidence_bundle.artifacts key, metrics key, or evidence_bundle", errors)
 
     def test_strict_validate_rejects_absolute_bundle_artifact_paths(self):
         with tempfile.TemporaryDirectory() as tmp:

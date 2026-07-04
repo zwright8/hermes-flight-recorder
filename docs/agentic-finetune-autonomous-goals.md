@@ -682,7 +682,9 @@ card, and dataset card decisions.
   metadata that no longer matches the verified manifest file.
 - Evidence bundles reject stale existing file-artifact fingerprints and reject
   missing or non-regular existing file and directory artifact paths when those
-  paths are expected to exist during validation.
+  paths are expected to exist during validation; decision next-actions must
+  also reference declared bundle artifacts, metrics, or the bundle itself
+  before handoff instructions are trusted.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
