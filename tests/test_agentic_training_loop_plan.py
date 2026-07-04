@@ -631,6 +631,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
 
             self.assertFalse(plan["passed"])
             self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertFalse(plan["cloud_training_receipt_state"]["launch_receipt_passed"])
+            self.assertFalse(plan["cloud_training_receipt_state"]["receipts_passed"])
             self.assertFalse(plan["cloud_training_lineage"]["passed"])
             self.assertIn("launch_receipt_links_launch_plan", plan["cloud_training_lineage"]["mismatched_links"])
             self.assertIn(
@@ -639,6 +641,12 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
             schema = check_schema_contract(plan)
             self.assertTrue(schema["passed"], schema["errors"])
+            loop_plan = root / "loop.json"
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            receipt_validation = validate_artifacts(cloud_training_launch_receipt_paths=[receipt], strict=True)
+            self.assertTrue(validation["passed"], validation)
+            self.assertFalse(receipt_validation["passed"], receipt_validation)
 
     def test_duplicate_cloud_training_lineage_roles_keep_loop_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:

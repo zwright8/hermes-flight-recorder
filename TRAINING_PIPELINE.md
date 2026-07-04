@@ -842,8 +842,10 @@ The digest includes cloud-training lineage posture as well: a latest iteration
 is not ready unless the provider id is consistent and every cloud handoff
 receipt points to its required upstream receipt by SHA-256. It also carries
 `cloud_training_receipt_state`, derived from the referenced launch/status
-receipts, so provider API calls, cloud jobs, cancellation calls, credential
-recording, or non-zero cost remain visible and keep the loop fail-closed.
+receipts. Launch/status receipt pass flags are counted only after replaying
+those receipts from their linked sources, and provider API calls, cloud jobs,
+cancellation calls, credential recording, or non-zero cost remain visible and
+keep the loop fail-closed.
 Review group counts include `model_grader_disagreement_queue` and
 `model_grader_override_receipt` when human override resolution is needed, and
 eval group counts include both `external_eval_plan` and `external_eval_receipt`

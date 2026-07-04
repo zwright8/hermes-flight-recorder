@@ -376,6 +376,26 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("cloud_training_receipt_state.cost_incurred_usd must match source loop plan cloud training receipt artifacts", errors)
             self.assertIn("cloud_training_receipt_state.live_launch_requested must match source loop plan cloud training receipt artifacts", errors)
 
+    def test_forged_cloud_launch_receipt_keeps_ledger_receipt_state_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            launch_receipt = ready_artifacts["cloud_training_launch_receipt"][0]
+            launch_payload = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            launch_payload["source_artifacts"]["launch_plan"]["sha256"] = "0" * 64
+            launch_payload["passed"] = True
+            launch_receipt.write_text(json.dumps(launch_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertFalse(payload["iterations"][0]["cloud_training_receipt_state"]["launch_receipt_passed"])
+            self.assertFalse(payload["iterations"][0]["cloud_training_receipt_state"]["receipts_passed"])
+            self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--cloud-training-launch-receipt", str(launch_receipt), "--strict"]), 1)
+
     def test_live_launch_request_alone_blocks_ledger_governance_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

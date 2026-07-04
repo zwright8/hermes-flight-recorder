@@ -382,9 +382,11 @@ alone is not enough: the preflight must link the trainer
 plan/preflight/launch check, the launch plan must link the preflight and
 artifact manifest, the launch receipt must link the launch plan, and the status
 receipt must link the launch receipt by SHA-256 before the loop can be ready for
-governance review. Receipt state is recomputed from the referenced launch/status
-receipts, so provider API calls, cloud jobs, cancellation calls, credential
-recording, or non-zero cost keep the loop fail-closed. Repeated artifacts for a
+governance review. Receipt pass flags are replayed from those linked
+launch/status sources before the loop counts them as passed; receipt state is
+also recomputed from the referenced launch/status receipts, so provider API
+calls, cloud jobs, cancellation calls, credential recording, or non-zero cost
+keep the loop fail-closed. Repeated artifacts for a
 lineage role are recorded but treated as ambiguous, so they keep the loop
 fail-closed.
 

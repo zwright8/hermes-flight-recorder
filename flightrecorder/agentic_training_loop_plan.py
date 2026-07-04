@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .cloud_training import build_cloud_training_launch_receipt, build_cloud_training_status_receipt
 from .external_eval import ExternalEvalPlanError, build_external_eval_receipt
 
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
@@ -621,8 +622,10 @@ def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state
 
 
 def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
-    launch_payloads = _payloads(artifact_paths, "cloud_training_launch_receipt")
-    status_payloads = _payloads(artifact_paths, "cloud_training_status_receipt")
+    launch_records = _payload_records(artifact_paths, "cloud_training_launch_receipt")
+    status_records = _payload_records(artifact_paths, "cloud_training_status_receipt")
+    launch_payloads = [record["payload"] for record in launch_records]
+    status_payloads = [record["payload"] for record in status_records]
     all_payloads = [*launch_payloads, *status_payloads]
     first_launch_payload = launch_payloads[0] if launch_payloads else {}
     first_status_payload = status_payloads[0] if status_payloads else {}
@@ -663,14 +666,22 @@ def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict
         and live_launch_requested is False
         and cost_incurred_usd == 0
     )
+    launch_receipt_passed = bool(launch_records) and all(
+        record["payload"].get("passed") is True
+        and _cloud_training_launch_receipt_semantic_passed(record["path"], record["payload"])
+        for record in launch_records
+    )
+    status_receipt_passed = bool(status_records) and all(
+        record["payload"].get("passed") is True
+        and _cloud_training_status_receipt_semantic_passed(record["path"], record["payload"])
+        for record in status_records
+    )
     return {
         "launch_receipt_count": len(launch_payloads),
         "status_receipt_count": len(status_payloads),
-        "launch_receipt_passed": bool(launch_payloads) and all(payload.get("passed") is True for payload in launch_payloads),
-        "status_receipt_passed": bool(status_payloads) and all(payload.get("passed") is True for payload in status_payloads),
-        "receipts_passed": bool(launch_payloads)
-        and bool(status_payloads)
-        and all(payload.get("passed") is True for payload in all_payloads),
+        "launch_receipt_passed": launch_receipt_passed,
+        "status_receipt_passed": status_receipt_passed,
+        "receipts_passed": launch_receipt_passed and status_receipt_passed,
         "launch_mode": launch_mode,
         "launch_readiness": str(first_launch_payload.get("readiness") or ""),
         "launch_recommendation": str(first_launch_payload.get("recommendation") or ""),
@@ -932,6 +943,94 @@ def _payload_records(artifact_paths: dict[str, list[Path]], role: str) -> list[d
         if payload:
             records.append({"path": path, "payload": payload})
     return records
+
+
+def _cloud_training_launch_receipt_semantic_passed(receipt_path: Path, receipt: dict[str, Any]) -> bool:
+    launch_plan_path = _cloud_training_receipt_source_path(receipt_path, receipt, "launch_plan")
+    if launch_plan_path is None:
+        return False
+    launch = _cloud_training_launch(receipt)
+    mode = launch.get("mode")
+    if mode not in {"dry_run", "live"}:
+        return False
+    try:
+        expected = build_cloud_training_launch_receipt(
+            launch_plan_path=launch_plan_path,
+            live=mode == "live",
+            output_base_dir=receipt_path.parent,
+            created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+        )
+    except (OSError, TypeError, ValueError):
+        return False
+    return _cloud_training_receipt_matches_replay(
+        receipt,
+        expected,
+        (
+            "passed",
+            "readiness",
+            "recommendation",
+            "check_count",
+            "failed_check_count",
+            "checks",
+            "blocked_reasons",
+            "source_artifacts",
+            "launch",
+            "execution_boundary",
+        ),
+    )
+
+
+def _cloud_training_status_receipt_semantic_passed(receipt_path: Path, receipt: dict[str, Any]) -> bool:
+    launch_receipt_path = _cloud_training_receipt_source_path(receipt_path, receipt, "launch_receipt")
+    if launch_receipt_path is None:
+        return False
+    status = _cloud_training_status(receipt)
+    cancel_requested = status.get("cancel_requested")
+    if not isinstance(cancel_requested, bool):
+        return False
+    try:
+        expected = build_cloud_training_status_receipt(
+            launch_receipt_path=launch_receipt_path,
+            cancel_requested=cancel_requested,
+            output_base_dir=receipt_path.parent,
+            created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+        )
+    except (OSError, TypeError, ValueError):
+        return False
+    return _cloud_training_receipt_matches_replay(
+        receipt,
+        expected,
+        (
+            "passed",
+            "readiness",
+            "recommendation",
+            "check_count",
+            "failed_check_count",
+            "checks",
+            "blocked_reasons",
+            "source_artifacts",
+            "status",
+            "execution_boundary",
+        ),
+    )
+
+
+def _cloud_training_receipt_source_path(receipt_path: Path, receipt: dict[str, Any], ref_name: str) -> Path | None:
+    sources = receipt.get("source_artifacts")
+    if not isinstance(sources, dict):
+        return None
+    ref = sources.get(ref_name)
+    if not isinstance(ref, dict) or ref.get("exists") is not True:
+        return None
+    value = ref.get("path")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else receipt_path.parent / path
+
+
+def _cloud_training_receipt_matches_replay(receipt: dict[str, Any], expected: dict[str, Any], fields: tuple[str, ...]) -> bool:
+    return all(receipt.get(field_name) == expected.get(field_name) for field_name in fields)
 
 
 def _external_eval_receipt_semantic_passed(receipt_path: Path, receipt: dict[str, Any]) -> bool:

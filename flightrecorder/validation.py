@@ -38,6 +38,8 @@ from .agentic_training_loop_plan import (
     AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
     CLOUD_TRAINING_LINEAGE_LINKS,
+    _cloud_training_launch_receipt_semantic_passed as _loop_cloud_training_launch_receipt_semantic_passed,
+    _cloud_training_status_receipt_semantic_passed as _loop_cloud_training_status_receipt_semantic_passed,
     _external_eval_receipt_semantic_passed as _loop_external_eval_receipt_semantic_passed,
 )
 from .agentic_loop_ledger import (
@@ -4938,8 +4940,10 @@ def _expected_agentic_training_loop_cloud_training_receipt_state(
     source_artifacts: dict[str, Any],
     source_path: Path,
 ) -> dict[str, Any]:
-    launch_payloads = _agentic_training_loop_payloads(source_artifacts, "cloud_training_launch_receipt", source_path)
-    status_payloads = _agentic_training_loop_payloads(source_artifacts, "cloud_training_status_receipt", source_path)
+    launch_records = _agentic_training_loop_payload_records(source_artifacts, "cloud_training_launch_receipt", source_path)
+    status_records = _agentic_training_loop_payload_records(source_artifacts, "cloud_training_status_receipt", source_path)
+    launch_payloads = [record["payload"] for record in launch_records]
+    status_payloads = [record["payload"] for record in status_records]
     all_payloads = [*launch_payloads, *status_payloads]
     first_launch_payload = launch_payloads[0] if launch_payloads else {}
     first_status_payload = status_payloads[0] if status_payloads else {}
@@ -4993,14 +4997,22 @@ def _expected_agentic_training_loop_cloud_training_receipt_state(
         and live_launch_requested is False
         and cost_incurred_usd == 0
     )
+    launch_receipt_passed = bool(launch_records) and all(
+        record["payload"].get("passed") is True
+        and _loop_cloud_training_launch_receipt_semantic_passed(record["path"], record["payload"])
+        for record in launch_records
+    )
+    status_receipt_passed = bool(status_records) and all(
+        record["payload"].get("passed") is True
+        and _loop_cloud_training_status_receipt_semantic_passed(record["path"], record["payload"])
+        for record in status_records
+    )
     return {
         "launch_receipt_count": len(launch_payloads),
         "status_receipt_count": len(status_payloads),
-        "launch_receipt_passed": bool(launch_payloads) and all(payload.get("passed") is True for payload in launch_payloads),
-        "status_receipt_passed": bool(status_payloads) and all(payload.get("passed") is True for payload in status_payloads),
-        "receipts_passed": bool(launch_payloads)
-        and bool(status_payloads)
-        and all(payload.get("passed") is True for payload in all_payloads),
+        "launch_receipt_passed": launch_receipt_passed,
+        "status_receipt_passed": status_receipt_passed,
+        "receipts_passed": launch_receipt_passed and status_receipt_passed,
         "launch_mode": launch_mode,
         "launch_readiness": str(first_launch_payload.get("readiness") or ""),
         "launch_recommendation": str(first_launch_payload.get("recommendation") or ""),
