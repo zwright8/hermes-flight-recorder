@@ -308,7 +308,6 @@ class EvalSummaryTests(unittest.TestCase):
                     f"external={adapter_plan}",
                     "--serving-check",
                     f"candidate={serving_check}",
-                    "--preserve-paths",
                     "--out",
                     str(out),
                 ]
@@ -363,6 +362,59 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertEqual(validate_code, 0)
             summary = _read_json(out)
             self.assertEqual(summary["arms"][0]["path"], "../sources/candidate_suite.json")
+
+    def test_strict_validate_warns_on_absolute_eval_summary_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            gate = _compare_gate(root / "compare_gate.json")
+            adapter_plan = _external_adapter_plan(root / "external_eval_plan.json")
+            serving_check = _serving_check(root / "serving_check.json", passed=True)
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            strict_validation = root / "strict_validation.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--compare-gate",
+                    f"candidate={gate}",
+                    "--external-adapter-plan",
+                    f"external={adapter_plan}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--preserve-paths",
+                    "--out",
+                    str(out),
+                ]
+            )
+            non_strict_code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+            strict_code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(strict_validation)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(non_strict_code, 0)
+            self.assertEqual(strict_code, 1)
+            warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
+            strict_warnings = "\n".join(
+                warning for target in _read_json(strict_validation)["targets"] for warning in target["warnings"]
+            )
+            for expected in (
+                "eval_summary.arms[0].path is absolute",
+                "eval_summary.comparisons[0].manifest is absolute",
+                "eval_summary.compare_gates[0].path is absolute",
+                "eval_summary.external_adapter_plans[0].path is absolute",
+                "eval_summary.arms[1].serving_preflight.path is absolute",
+            ):
+                self.assertIn(expected, warnings)
+                self.assertIn(expected, strict_warnings)
 
     def test_validate_rejects_eval_summary_cwd_relative_source_fallback(self):
         original_cwd = Path.cwd()

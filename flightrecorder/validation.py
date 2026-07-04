@@ -13668,6 +13668,7 @@ def _validate_eval_summary_source_file_ref(
     if not isinstance(raw_path, str) or not raw_path:
         target.errors.append(f"{label}.{path_field} must be a non-empty string.")
         return
+    _warn_absolute_public_path(target, f"{label}.{path_field}", raw_path)
     expected_sha = record.get(sha_field)
     expected_size = record.get(size_field)
     if not _is_lowercase_sha256(expected_sha):
