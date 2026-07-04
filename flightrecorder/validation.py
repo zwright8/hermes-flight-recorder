@@ -24802,8 +24802,13 @@ def _validate_trainer_command(command: Any, target: ValidationTarget) -> None:
         target.errors.append("trainer_preflight.trainer_command.provided must be a boolean.")
     if not isinstance(command.get("raw"), str):
         target.errors.append("trainer_preflight.trainer_command.raw must be a string.")
+    else:
+        _warn_shell_tokens_public_paths(command.get("raw"), target, "trainer_preflight.trainer_command.raw")
     if not isinstance(command.get("argv"), list) or not all(isinstance(item, str) for item in command.get("argv", [])):
         target.errors.append("trainer_preflight.trainer_command.argv must be a list of strings.")
+    else:
+        for index, item in enumerate(command.get("argv", [])):
+            _warn_command_token_public_path(target, f"trainer_preflight.trainer_command.argv[{index}]", item)
     if "parseable" in command and not isinstance(command.get("parseable"), bool):
         target.errors.append("trainer_preflight.trainer_command.parseable must be a boolean when present.")
 

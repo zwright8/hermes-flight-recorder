@@ -547,6 +547,8 @@ creates the signed-off evidence contract; `trainer-launch-check` is the
 consumer-side check an external training launcher can call immediately before it
 runs. It re-validates the preflight hashes and prints the approved command only
 when the launch contract still passes. Before public handoff, strict
+trainer-preflight validation warns if the trainer-command raw string or argv
+tokens still carry absolute paths, and strict
 trainer-launch-check validation warns if the approved-command raw string, argv,
 or shell tokens still carry absolute paths. Strict trainer-archive validation
 repeats that warning for the preserved approved command and archive source paths

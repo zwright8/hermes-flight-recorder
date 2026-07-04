@@ -245,7 +245,13 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(result["schema_contracts"]["agentic_training_plan"]["passed"])
             self.assertEqual(result["schema_contracts"]["agentic_training_plan"]["schema_name"], "agentic_training_plan")
             self.assertFalse(any(check["id"] == "agentic_training_plan_ready" and not check["passed"] for check in result["checks"]))
-            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+            preflight_summary = root / "trainer_preflight_command_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--out", str(preflight_summary)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict", "--out", str(preflight_summary)]), 1)
+            validation = json.loads(preflight_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_preflight.trainer_command.argv[3] is absolute", warnings)
+            self.assertIn("trainer_preflight.trainer_command.raw[3] is absolute", warnings)
 
             launch_check = root / "trainer_launch_check.json"
             self.assertEqual(
@@ -260,7 +266,6 @@ class TrainerPreflightTests(unittest.TestCase):
                         "launcher=agentic-dry-run",
                         "--out",
                         str(launch_check),
-                        "--strict",
                         "--preserve-paths",
                     ]
                 ),
@@ -812,7 +817,14 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
-            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+            command_summary = Path(tmp) / "trainer_preflight_command_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--out", str(command_summary)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict", "--out", str(command_summary)]), 1)
+            warnings = "\n".join(
+                warning for target in json.loads(command_summary.read_text(encoding="utf-8"))["targets"] for warning in target["warnings"]
+            )
+            self.assertIn("trainer_preflight.trainer_command.argv[3] is absolute", warnings)
+            self.assertIn("trainer_preflight.trainer_command.raw[3] is absolute", warnings)
 
             launch_check = Path(tmp) / "trainer_launch_check.json"
             self.assertEqual(
