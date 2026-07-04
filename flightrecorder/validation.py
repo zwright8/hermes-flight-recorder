@@ -53,6 +53,7 @@ from .agentic_loop_governance import (
 )
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import (
+    EVIDENCE_BUNDLE_NOTES,
     EVIDENCE_BUNDLE_SCHEMA_VERSION,
     HARNESS_RUN_MANIFEST_SCHEMA_VERSION,
     HARNESS_RUN_RESULT_SCHEMA_VERSION,
@@ -14094,6 +14095,8 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     notes = bundle.get("notes")
     if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
         target.errors.append("evidence_bundle.notes must be a list of strings.")
+    elif notes != list(EVIDENCE_BUNDLE_NOTES):
+        target.errors.append("evidence_bundle.notes must match the producer notes.")
 
     failed_checks = _validate_evidence_bundle_checks(checks, target)
     blocking_check_rows = _evidence_bundle_blocking_check_rows(checks)

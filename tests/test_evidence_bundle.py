@@ -1485,6 +1485,25 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("evidence_bundle.decision.recommendation", errors)
             self.assertIn("evidence_bundle.decision.next_action_count", errors)
 
+    def test_validate_rejects_stale_bundle_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["notes"][0] = "Evidence bundles can include rescored traces from manual review."
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.notes must match the producer notes", errors)
+
     def test_validate_rejects_stale_bundle_action_fingerprint(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

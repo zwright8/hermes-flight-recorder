@@ -23,6 +23,10 @@ RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
+EVIDENCE_BUNDLE_NOTES = (
+    "Evidence bundles summarize existing artifacts; they do not rescore traces or mutate outputs.",
+    "A ready bundle means included gates and readiness artifacts passed, not that the agent is sandboxed or trained.",
+)
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
@@ -433,10 +437,7 @@ def build_evidence_bundle(
         "checks": checks,
         "artifacts": artifacts,
         "metrics": metrics,
-        "notes": [
-            "Evidence bundles summarize existing artifacts; they do not rescore traces or mutate outputs.",
-            "A ready bundle means included gates and readiness artifacts passed, not that the agent is sandboxed or trained.",
-        ],
+        "notes": list(EVIDENCE_BUNDLE_NOTES),
     }
     return bundle
 
