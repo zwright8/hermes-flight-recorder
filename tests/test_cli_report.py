@@ -317,6 +317,30 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("replay_bundle.inputs", errors)
             self.assertIn("sha256", errors)
 
+    def test_validate_replay_bundle_rejects_symlinked_copied_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            bundle = Path(tmp) / "bundle"
+            summary_path = Path(tmp) / "validation.json"
+            external_input = Path(tmp) / "external_scenario.json"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(source)]), 0)
+            self.assertEqual(run_cli(["replay-bundle", "--lineage", str(source / "artifact_lineage.json"), "--out", str(bundle)]), 0)
+            bundled_input = bundle / "inputs" / "scenario.json"
+            shutil.copyfile(bundled_input, external_input)
+            bundled_input.unlink()
+            try:
+                bundled_input.symlink_to(external_input)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--replay-bundle", str(bundle), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("replay_bundle.inputs", errors)
+            self.assertIn("must resolve to a regular non-symlink file", errors)
+
     def test_validate_replay_bundle_rejects_stale_lineage_input_size(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"

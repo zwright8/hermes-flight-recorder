@@ -25252,6 +25252,9 @@ def _validate_replay_bundle_input_record(record: dict[str, Any], bundle_dir: Pat
         target.errors.append(f"{label}.path must be relative to the replay bundle directory.")
         return
     file_path = bundle_dir / path_value
+    if _path_has_symlink_component(file_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return
     if not file_path.exists() or not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to a bundled file.")
         return
@@ -25301,6 +25304,9 @@ def _validate_replay_bundle_copied_lineage_inputs(inputs: dict[str, dict[str, An
             target.errors.append(f"artifact_lineage.inputs.{name}.path must be relative to the replay bundle directory.")
             continue
         file_path = bundle_dir / path_value
+        if _path_has_symlink_component(file_path, include_leaf=True):
+            target.errors.append(f"artifact_lineage.inputs.{name}.path must resolve to a regular non-symlink file.")
+            continue
         if not file_path.exists() or not file_path.is_file():
             target.errors.append(f"artifact_lineage.inputs.{name}.path does not resolve to a bundled file.")
             continue

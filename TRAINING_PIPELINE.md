@@ -1338,7 +1338,8 @@ a portable directory and rewrites replay paths to those copied inputs. Validate
 portable bundles with `flightrecorder validate` and
 `--replay-bundle <bundle-dir> --strict` before publishing them as reproducible
 evidence. Validation checks both manifest inputs and copied lineage inputs
-against the bundled files, including recorded sizes and SHA-256 fingerprints.
+against regular non-symlink bundled files, including recorded sizes and
+SHA-256 fingerprints.
 Use `--preserve-paths` only for private runs when absolute replay
 commands are acceptable; strict validation warns when `artifact_lineage.json`
 publishes absolute output paths, replay args, commands, or input fingerprint

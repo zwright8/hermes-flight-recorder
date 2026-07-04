@@ -660,7 +660,8 @@ card, and dataset card decisions.
   missing-file and directory diagnostics; validation rejects stale captured
   file sizes when paths resolve.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
-  validation reject size drift between recorded inputs and replay metadata.
+  validation reject size drift or symlinked copied inputs between recorded
+  inputs and replay metadata.
 - Harness replay receipts bind lineage and scorecard paths to SHA-256 plus
   byte-size evidence; validation rejects stale replay references before trusting
   pass/fail summaries.
