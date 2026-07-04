@@ -370,6 +370,67 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("eval_summary.external_adapter_plans[0].sha256 does not match the current file.", errors)
             self.assertIn("eval_summary.arms[1].serving_preflight.sha256 does not match the current file.", errors)
 
+    def test_validate_rejects_symlink_eval_summary_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            compare_manifest = compare_export / "manifest.json"
+            gate = _compare_gate(root / "compare_gate.json")
+            adapter_plan = _external_adapter_plan(root / "external_eval_plan.json")
+            serving_check = _serving_check(root / "serving_check.json", passed=True)
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            links = {
+                root / "baseline_suite-link.json": baseline.name,
+                compare_export / "manifest-link.json": compare_manifest.name,
+                root / "compare_gate-link.json": gate.name,
+                root / "external_eval_plan-link.json": adapter_plan.name,
+                root / "serving_check-link.json": serving_check.name,
+            }
+            try:
+                for link, target in links.items():
+                    link.symlink_to(target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--compare-gate",
+                    f"candidate={gate}",
+                    "--external-adapter-plan",
+                    f"external={adapter_plan}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["arms"][0]["path"] = "baseline_suite-link.json"
+            summary["comparisons"][0]["manifest"] = "compare_rl/manifest-link.json"
+            summary["compare_gates"][0]["path"] = "compare_gate-link.json"
+            summary["external_adapter_plans"][0]["path"] = "external_eval_plan-link.json"
+            summary["arms"][1]["serving_preflight"]["path"] = "serving_check-link.json"
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("eval_summary.arms[0].path must resolve to a regular non-symlink file.", errors)
+            self.assertIn("eval_summary.comparisons[0].manifest must resolve to a regular non-symlink file.", errors)
+            self.assertIn("eval_summary.compare_gates[0].path must resolve to a regular non-symlink file.", errors)
+            self.assertIn("eval_summary.external_adapter_plans[0].path must resolve to a regular non-symlink file.", errors)
+            self.assertIn("eval_summary.arms[1].serving_preflight.path must resolve to a regular non-symlink file.", errors)
+
     def test_eval_summary_writes_source_refs_relative_to_output_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

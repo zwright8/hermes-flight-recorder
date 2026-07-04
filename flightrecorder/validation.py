@@ -16194,6 +16194,9 @@ def _validate_eval_summary_source_file_ref(
     if source_path is None or not source_path.exists() or not source_path.is_file():
         target.errors.append(f"{label}.{path_field} must resolve to an existing file.")
         return
+    if _path_has_symlink_component(source_path, include_leaf=True):
+        target.errors.append(f"{label}.{path_field} must resolve to a regular non-symlink file.")
+        return
     if _is_non_negative_int(expected_size) and source_path.stat().st_size != expected_size:
         target.errors.append(f"{label}.{size_field} does not match the current file.")
     if _is_lowercase_sha256(expected_sha) and _sha256(source_path) != expected_sha:
