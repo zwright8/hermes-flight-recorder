@@ -22419,6 +22419,8 @@ def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTar
     for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
         if not isinstance(check.get(field_name), str) or not check.get(field_name):
             target.errors.append(f"trainer_archive_check.{field_name} must be a non-empty string.")
+    for field_name in ("archive_path", "manifest_path"):
+        _warn_absolute_public_path(target, f"trainer_archive_check.{field_name}", check.get(field_name))
     if not isinstance(check.get("passed"), bool):
         target.errors.append("trainer_archive_check.passed must be a boolean.")
     checks = check.get("checks")
@@ -22497,6 +22499,8 @@ def _validate_trainer_archive_check_archive(value: Any, target: ValidationTarget
     for field_name in ("path", "manifest_path", "schema_version"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"trainer_archive_check.archive.{field_name} must be a non-empty string.")
+    for field_name in ("path", "manifest_path"):
+        _warn_absolute_public_path(target, f"trainer_archive_check.archive.{field_name}", value.get(field_name))
     if value.get("schema_version") != TRAINER_ARCHIVE_SCHEMA_VERSION:
         target.errors.append(f"trainer_archive_check.archive.schema_version must be {TRAINER_ARCHIVE_SCHEMA_VERSION}.")
     for field_name in ("passed", "self_contained", "ready_for_training"):
@@ -22515,6 +22519,7 @@ def _validate_trainer_archive_check_external_root(value: Any, target: Validation
     for field_name in ("path", "kind"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"trainer_archive_check.external_code_root.{field_name} must be a non-empty string.")
+    _warn_absolute_public_path(target, "trainer_archive_check.external_code_root.path", value.get("path"))
     if value.get("kind") != "directory":
         target.errors.append("trainer_archive_check.external_code_root.kind must be directory.")
     for field_name in ("exists", "regular_directory", "symlink"):
@@ -22534,8 +22539,15 @@ def _validate_trainer_archive_check_portable_command(value: Any, target: Validat
         target.errors.append("trainer_archive_check.portable_command.path_rewrite_count must be a non-negative integer.")
     if not isinstance(value.get("shell"), str):
         target.errors.append("trainer_archive_check.portable_command.shell must be a string.")
-    if not _is_string_list(value.get("argv")):
+    argv = value.get("argv")
+    if not _is_string_list(argv):
         target.errors.append("trainer_archive_check.portable_command.argv must be a list of strings.")
+        argv = []
+    for index, item in enumerate(item for item in argv if isinstance(item, str)):
+        _warn_command_token_public_path(target, f"trainer_archive_check.portable_command.argv[{index}]", item)
+    shell = value.get("shell")
+    if isinstance(shell, str) and shell:
+        _warn_shell_tokens_public_paths(shell, target, "trainer_archive_check.portable_command.shell")
 
 
 def _validate_trainer_archive_check_consumer_contract(value: Any, target: ValidationTarget) -> None:
@@ -22567,6 +22579,8 @@ def _validate_trainer_archive_check_consumer_contract(value: Any, target: Valida
         for field_name in ("token", "path", "reason"):
             if not isinstance(item.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
+        _warn_command_token_public_path(target, f"{label}.token", item.get("token"))
+        _warn_absolute_public_path(target, f"{label}.path", item.get("path"))
 
 
 def _validate_trainer_archive_check_external_code(value: Any, target: ValidationTarget) -> list[dict[str, Any]]:
@@ -22587,6 +22601,9 @@ def _validate_trainer_archive_check_external_code(value: Any, target: Validation
         for field_name in ("token", "path", "resolved_path", "kind", "reason"):
             if not isinstance(item.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
+        _warn_command_token_public_path(target, f"{label}.token", item.get("token"))
+        for field_name in ("path", "resolved_path"):
+            _warn_absolute_public_path(target, f"{label}.{field_name}", item.get(field_name))
         if item.get("kind") != "file":
             target.errors.append(f"{label}.kind must be file.")
         for field_name in ("exists", "regular_file", "symlink", "passed"):
@@ -22622,6 +22639,8 @@ def _validate_trainer_archive_check_inputs(value: Any, target: ValidationTarget)
         for field_name in ("artifact_name", "archive_path", "resolved_path", "kind", "expected_sha256", "reason"):
             if not isinstance(item.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
+        for field_name in ("archive_path", "resolved_path"):
+            _warn_absolute_public_path(target, f"{label}.{field_name}", item.get(field_name))
         if item.get("kind") not in {"file", "directory"}:
             target.errors.append(f"{label}.kind must be file or directory.")
         for field_name in ("exists", "regular_file", "regular_directory", "symlink", "passed"):

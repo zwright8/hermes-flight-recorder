@@ -326,7 +326,6 @@ class TrainerPreflightTests(unittest.TestCase):
                         str(archive_check),
                         "--out",
                         str(consumer_plan),
-                        "--strict",
                         "--preserve-paths",
                     ]
                 ),
@@ -1101,6 +1100,58 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
             schema = check_schema_contract(check, name_or_id="trainer_archive_check")
             self.assertTrue(schema["passed"], schema["errors"])
+            archive_check_summary = Path(tmp) / "trainer_archive_check_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(archive_check),
+                    "--strict",
+                    "--out",
+                    str(archive_check_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(archive_check_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive_check.archive_path is absolute", warnings)
+            self.assertIn("trainer_archive_check.manifest_path is absolute", warnings)
+            self.assertIn("trainer_archive_check.archive.path is absolute", warnings)
+            self.assertIn("trainer_archive_check.archive.manifest_path is absolute", warnings)
+            self.assertIn("trainer_archive_check.external_code_root.path is absolute", warnings)
+            self.assertIn("trainer_archive_check.external_code_checks[0].resolved_path is absolute", warnings)
+            self.assertIn("trainer_archive_check.trainer_input_checks[0].resolved_path is absolute", warnings)
+
+            absolute_archive_check = Path(tmp) / "trainer_archive_check_absolute_command.json"
+            absolute_archive_summary = Path(tmp) / "trainer_archive_check_absolute_command_summary.json"
+            forged_check = json.loads(json.dumps(check))
+            portable = forged_check["portable_command"]
+            portable["argv"] = [
+                "python",
+                "/opt/hermes/trainer-code/train.py",
+                "--dataset=/opt/hermes/archive/training_export",
+            ]
+            portable["shell"] = shlex.join(portable["argv"])
+            absolute_archive_check.write_text(json.dumps(forged_check, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(absolute_archive_check)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(absolute_archive_check),
+                    "--strict",
+                    "--out",
+                    str(absolute_archive_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(absolute_archive_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive_check.portable_command.argv[1] is absolute", warnings)
+            self.assertIn("trainer_archive_check.portable_command.argv[2] contains absolute path", warnings)
+            self.assertIn("trainer_archive_check.portable_command.shell[1] is absolute", warnings)
+            self.assertIn("trainer_archive_check.portable_command.shell[2] contains absolute path", warnings)
             forged = json.loads(json.dumps(check))
             forged["provider_console_url"] = "redacted-provider-console"
             forged["checks"][0]["provider_call"] = "forged"
@@ -1220,7 +1271,7 @@ class TrainerPreflightTests(unittest.TestCase):
             failed_input["trainer_input_checks"][0].pop("expected_size_bytes")
             failed_input_schema = check_schema_contract(failed_input, name_or_id="trainer_archive_check")
             self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
-            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check)]), 0)
 
             missing_external_path_check = Path(tmp) / "trainer_archive_check_missing_external_path.json"
             missing_external_path_summary = Path(tmp) / "trainer_archive_check_missing_external_path_summary.json"
@@ -1302,7 +1353,6 @@ class TrainerPreflightTests(unittest.TestCase):
                         str(archive_check),
                         "--out",
                         str(consumer_plan),
-                        "--strict",
                         "--preserve-paths",
                     ]
                 ),
@@ -2026,7 +2076,23 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertGreater(missing["metrics"]["missing_external_code_count"], 0)
             self.assertTrue(any(not item["passed"] and "sha256" not in item for item in missing["external_code_checks"]))
             self.assertEqual(run_cli(["schemas", "--check", str(missing_check)]), 0)
-            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(missing_check), "--strict"]), 0)
+            missing_check_summary = Path(tmp) / "trainer_archive_check_missing_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(missing_check)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(missing_check),
+                    "--strict",
+                    "--out",
+                    str(missing_check_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_check_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive_check.archive_path is absolute", warnings)
+            self.assertIn("trainer_archive_check.external_code_root.path is absolute", warnings)
 
             blocked_plan = Path(tmp) / "trainer_consumer_plan_blocked.json"
             self.assertEqual(

@@ -568,6 +568,8 @@ scripts, that still must be supplied by external training infrastructure.
 launcher: it validates the archive, confirms archive-local trainer inputs still
 match their recorded hashes and byte counts, and checks that caller-provided
 trainer code paths such as `train.py` exist under `--external-code-root`.
+Strict archive-check validation warns before preserved archive roots, external
+code roots, resolved paths, or portable command tokens enter public handoffs.
 Passed trainer input rows carry expected hash and size payloads so validation
 can reject forged redacted receipts without needing the original producer's
 local paths.

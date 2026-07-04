@@ -522,6 +522,9 @@ Strict trainer-launch-check validation warns before approved-command raw, argv,
 or shell tokens carry absolute machine coordinates into public handoffs.
 Strict trainer-archive validation repeats that warning for preserved approved
 commands while keeping the rewritten portable command auditable.
+Strict trainer-archive-check validation warns before preserved archive roots,
+external code roots, resolved paths, or portable command tokens carry absolute
+machine coordinates into public handoffs.
 Strict trainer-consumer-plan validation warns before archive roots, external
 code roots, argv paths, or shell tokens carry absolute machine coordinates into
 public handoffs.
