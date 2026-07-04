@@ -1,34 +1,23 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/promotion_release_record.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Reviewable release record binding promotion decision, cards, alias receipt, rollback, eval gate, and notes.",
   "properties": {
-    "artifact_validation": {"type": "object"},
-    "artifacts": {"type": "object"},
-    "bindings": {"type": "object"},
+    "artifact_validation": {"$ref": "#/$defs/validationSummary"},
+    "artifacts": {"$ref": "#/$defs/releaseArtifacts"},
+    "bindings": {"$ref": "#/$defs/releaseBindings"},
     "check_count": {"minimum": 0, "type": "integer"},
-    "checks": {"items": {"type": "object"}, "type": "array"},
+    "checks": {"items": {"$ref": "#/$defs/gateCheck"}, "type": "array"},
     "failed_check_count": {"minimum": 0, "type": "integer"},
-    "metadata": {"type": "object"},
-    "metrics": {"type": "object"},
+    "metadata": {"additionalProperties": {"type": "string"}, "type": "object"},
+    "metrics": {"$ref": "#/$defs/releaseMetrics"},
     "notes": {"items": {"type": "string"}, "type": "array"},
     "passed": {"type": "boolean"},
-    "policy": {"type": "object"},
+    "policy": {"$ref": "#/$defs/releasePolicyEnvelope"},
     "readiness": {"enum": ["ready", "blocked"], "type": "string"},
     "recommendation": {"enum": ["publish_release", "hold_release"], "type": "string"},
-    "release": {
-      "additionalProperties": true,
-      "properties": {
-        "candidate_id": {"type": "string"},
-        "champion_previous_target": {"type": "string"},
-        "dataset_id": {"type": "string"},
-        "id": {"type": "string"},
-        "rollback_id": {"type": "string"}
-      },
-      "required": ["id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"],
-      "type": "object"
-    },
+    "release": {"$ref": "#/$defs/release"},
     "release_record_path": {"type": "string"},
     "schema_version": {"const": "hfr.promotion_release_record.v1"}
   },
@@ -49,6 +38,210 @@
     "metrics",
     "notes"
   ],
+  "$defs": {
+    "emptyObject": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "fingerprintedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "file_count": {"minimum": 0, "type": "integer"},
+        "kind": {"enum": ["file", "directory", "missing", "other"], "type": "string"},
+        "path": {"type": "string"},
+        "role": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "exists", "kind"],
+      "type": "object"
+    },
+    "gateCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": true,
+        "expected": {"additionalProperties": true, "type": "object"},
+        "id": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "scope": {"additionalProperties": true, "type": "object"},
+        "summary": {"type": "string"}
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "policyLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_baseline_wins": {"minimum": 0, "type": "integer"},
+        "max_contract_drifts": {"minimum": 0, "type": "integer"},
+        "max_new_critical_failures": {"minimum": 0, "type": "integer"},
+        "max_rule_regressions": {"minimum": 0, "type": "integer"},
+        "max_task_completion_regressions": {"minimum": 0, "type": "integer"},
+        "max_unverified_contracts": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "max_task_completion_regressions",
+        "max_baseline_wins",
+        "max_contract_drifts",
+        "max_unverified_contracts",
+        "max_new_critical_failures",
+        "max_rule_regressions"
+      ],
+      "type": "object"
+    },
+    "policyRequirements": {
+      "additionalProperties": false,
+      "properties": {
+        "require_accepted_terms": {"type": "boolean"},
+        "require_artifact_validation": {"type": "boolean"},
+        "require_known_license": {"type": "boolean"},
+        "require_rollback_metadata": {"type": "boolean"},
+        "require_supported_cards": {"type": "boolean"}
+      },
+      "required": [
+        "require_known_license",
+        "require_accepted_terms",
+        "require_rollback_metadata",
+        "require_supported_cards",
+        "require_artifact_validation"
+      ],
+      "type": "object"
+    },
+    "promotionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_candidate_classes": {"items": {"type": "string"}, "type": "array"},
+        "allowed_champion_classes": {"items": {"type": "string"}, "type": "array"},
+        "artifact": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "description": {"type": "string"},
+        "forbid_new_critical_rules": {"items": {"type": "string"}, "type": "array"},
+        "forbid_regressed_rules": {"items": {"type": "string"}, "type": "array"},
+        "id": {"type": "string"},
+        "limits": {"$ref": "#/$defs/policyLimits"},
+        "release_required_artifacts": {"items": {"type": "string"}, "type": "array"},
+        "required_artifacts": {"items": {"type": "string"}, "type": "array"},
+        "requirements": {"$ref": "#/$defs/policyRequirements"},
+        "schema_version": {"const": "hfr.promotion_policy.v1"},
+        "source": {"enum": ["default", "file"], "type": "string"}
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "description",
+        "source",
+        "required_artifacts",
+        "release_required_artifacts",
+        "allowed_candidate_classes",
+        "allowed_champion_classes",
+        "limits",
+        "forbid_new_critical_rules",
+        "forbid_regressed_rules",
+        "requirements"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "champion_previous_target": {"type": "string"},
+        "dataset_id": {"type": "string"},
+        "id": {"type": "string"},
+        "rollback_id": {"type": "string"}
+      },
+      "required": ["id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"],
+      "type": "object"
+    },
+    "releaseArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "compare_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "promotion_alias_apply": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "promotion_cards": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "promotion_decision": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "release_notes": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "rollback_metadata": {"$ref": "#/$defs/fingerprintedArtifact"}
+      },
+      "required": [
+        "promotion_decision",
+        "promotion_cards",
+        "promotion_alias_apply",
+        "rollback_metadata",
+        "compare_gate",
+        "release_notes"
+      ],
+      "type": "object"
+    },
+    "releaseBindings": {
+      "additionalProperties": false,
+      "properties": {
+        "compare_gate_sha256": {"type": ["string", "null"]},
+        "dataset_card_sha256": {"type": ["string", "null"]},
+        "model_card_sha256": {"type": ["string", "null"]},
+        "promotion_alias_apply_sha256": {"type": ["string", "null"]},
+        "promotion_cards_sha256": {"type": ["string", "null"]},
+        "promotion_decision_sha256": {"type": ["string", "null"]},
+        "release_notes_sha256": {"type": ["string", "null"]},
+        "rollback_metadata_sha256": {"type": ["string", "null"]}
+      },
+      "required": [
+        "promotion_decision_sha256",
+        "promotion_cards_sha256",
+        "promotion_alias_apply_sha256",
+        "rollback_metadata_sha256",
+        "compare_gate_sha256",
+        "release_notes_sha256",
+        "model_card_sha256",
+        "dataset_card_sha256"
+      ],
+      "type": "object"
+    },
+    "releaseMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "check_count": {"minimum": 0, "type": "integer"},
+        "failed_check_count": {"minimum": 0, "type": "integer"},
+        "release_notes_size_bytes": {"minimum": 0, "type": "integer"},
+        "required_artifact_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["check_count", "failed_check_count", "required_artifact_count", "release_notes_size_bytes"],
+      "type": "object"
+    },
+    "releasePolicyEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "promotion_decision_policy": {"oneOf": [{"$ref": "#/$defs/emptyObject"}, {"$ref": "#/$defs/promotionPolicy"}]},
+        "release_policy": {"$ref": "#/$defs/promotionPolicy"}
+      },
+      "required": ["promotion_decision_policy"],
+      "type": "object"
+    },
+    "validationSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": {"minimum": 0, "type": "integer"},
+        "passed": {"type": ["boolean", "null"]},
+        "target_count": {"minimum": 0, "type": "integer"},
+        "targets": {"items": {"$ref": "#/$defs/validationTarget"}, "type": "array"},
+        "warning_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["passed", "target_count", "error_count", "warning_count", "targets"],
+      "type": "object"
+    },
+    "validationTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": {"minimum": 0, "type": "integer"},
+        "passed": {"type": ["boolean", "null"]},
+        "type": {"type": "string"},
+        "warning_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["type", "passed", "error_count", "warning_count"],
+      "type": "object"
+    }
+  },
   "title": "Hermes Flight Recorder Promotion Release Record",
   "type": "object"
 }

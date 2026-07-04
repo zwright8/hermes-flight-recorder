@@ -494,6 +494,61 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(release_record_path)]), 0)
 
+    def test_validate_promotion_release_record_rejects_unknown_control_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+            self.assertEqual(
+                run_cli(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                ),
+                0,
+            )
+
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            record["publish_endpoint_url"] = "https://provider.invalid/release"
+            record["release"]["cloud_job_id"] = "job-123"
+            record["checks"][0]["credential_value"] = "redacted-secret"
+            record["artifacts"]["promotion_decision"]["private_path"] = "secret/promotion_decision.json"
+            record["artifact_validation"]["provider_job_id"] = "job-123"
+            record["artifact_validation"]["targets"][0]["signed_url"] = "https://provider.invalid/validation"
+            record["bindings"]["model_download_path"] = "artifact.bin"
+            record["metrics"]["cloud_cost_usd"] = 5
+            record["policy"]["promotion_decision_policy"]["live_override"] = True
+            release_record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(release_record_path)]), 1)
+            code = run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_release_record contains unknown field(s): ['publish_endpoint_url'].", errors)
+            self.assertIn("promotion_release_record.release contains unknown field(s): ['cloud_job_id'].", errors)
+            self.assertIn("promotion_release_record.checks[0] contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("promotion_release_record.artifact_validation contains unknown field(s): ['provider_job_id'].", errors)
+            self.assertIn("promotion_release_record.bindings contains unknown field(s): ['model_download_path'].", errors)
+
     def test_validate_promotion_release_record_rejects_forged_card_binding_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

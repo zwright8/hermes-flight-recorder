@@ -16572,6 +16572,44 @@ _PROMOTION_ROLLBACK_RECEIPT_KEYS = {
 _PROMOTION_ROLLBACK_BLOCK_KEYS = {"id", "target_model_id", "champion_id", "available"}
 _PROMOTION_ROLLBACK_ARTIFACT_KEYS = {"registry"}
 _PROMOTION_ROLLBACK_METRICS_KEYS = {"check_count", "failed_check_count", "registered_model_count", "alias_count"}
+_PROMOTION_RELEASE_RECORD_KEYS = {
+    "schema_version",
+    "release_record_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "release",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "policy",
+    "artifact_validation",
+    "bindings",
+    "metrics",
+    "notes",
+    "metadata",
+}
+_PROMOTION_RELEASE_RECORD_RELEASE_KEYS = {"id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"}
+_PROMOTION_RELEASE_RECORD_BINDINGS_KEYS = {
+    "promotion_decision_sha256",
+    "promotion_cards_sha256",
+    "promotion_alias_apply_sha256",
+    "rollback_metadata_sha256",
+    "compare_gate_sha256",
+    "release_notes_sha256",
+    "model_card_sha256",
+    "dataset_card_sha256",
+}
+_PROMOTION_RELEASE_RECORD_METRICS_KEYS = {
+    "check_count",
+    "failed_check_count",
+    "required_artifact_count",
+    "release_notes_size_bytes",
+}
+_PROMOTION_RELEASE_RECORD_POLICY_KEYS = {"promotion_decision_policy", "release_policy"}
+_COMPACT_VALIDATION_SUMMARY_KEYS = {"passed", "target_count", "error_count", "warning_count", "targets"}
+_COMPACT_VALIDATION_TARGET_KEYS = {"type", "passed", "error_count", "warning_count"}
 
 
 def _validate_promotion_gate_check_keys(checks: list[Any], target: ValidationTarget, label: str) -> None:
@@ -16851,6 +16889,7 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
 
 
 def _validate_promotion_release_record(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(record, _PROMOTION_RELEASE_RECORD_KEYS, target, "promotion_release_record")
     _require_equal(record, "schema_version", PROMOTION_RELEASE_RECORD_SCHEMA_VERSION, target)
     if not isinstance(record.get("release_record_path"), str):
         target.errors.append("promotion_release_record.release_record_path must be a string.")
@@ -16861,6 +16900,7 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
         target.errors.append("promotion_release_record.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_release_record.checks")
+    _validate_promotion_gate_check_keys(checks, target, "promotion_release_record.checks")
     if record.get("check_count") != len(checks):
         target.errors.append(f"promotion_release_record.check_count expected {len(checks)}, got {record.get('check_count')!r}.")
     if record.get("failed_check_count") != failed_checks:
@@ -16883,6 +16923,8 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
     if not isinstance(release, dict):
         target.errors.append("promotion_release_record.release must be an object.")
         release = {}
+    else:
+        _validate_allowed_keys(release, _PROMOTION_RELEASE_RECORD_RELEASE_KEYS, target, "promotion_release_record.release")
     for field_name in ("id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"):
         if not isinstance(release.get(field_name), str):
             target.errors.append(f"promotion_release_record.release.{field_name} must be a string.")
@@ -16891,8 +16933,10 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
     if not isinstance(artifacts, dict):
         target.errors.append("promotion_release_record.artifacts must be an object.")
         artifacts = {}
+    else:
+        _validate_allowed_keys(artifacts, set(PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS), target, "promotion_release_record.artifacts")
     for role in PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS:
-        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_release_record.artifacts")
+        _validate_promotion_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_release_record.artifacts")
 
     _validate_promotion_release_record_validation(record.get("artifact_validation"), expected_passed, target)
     _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target, source_path)
@@ -16933,6 +16977,7 @@ def _validate_strict_compact_validation_summary(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _COMPACT_VALIDATION_SUMMARY_KEYS, target, label)
     passed = value.get("passed")
     if passed is not None and not isinstance(passed, bool):
         target.errors.append(f"{label}.passed must be a boolean or null.")
@@ -16961,6 +17006,7 @@ def _validate_strict_compact_validation_summary(
             target_counts_valid = False
             target.errors.append(f"{item_label} must be an object.")
             continue
+        _validate_allowed_keys(item, _COMPACT_VALIDATION_TARGET_KEYS, target, item_label)
         item_type = item.get("type")
         if not isinstance(item_type, str) or not item_type:
             target.errors.append(f"{item_label}.type must be a non-empty string.")
@@ -17008,6 +17054,7 @@ def _validate_promotion_release_record_bindings(
     if not isinstance(value, dict):
         target.errors.append("promotion_release_record.bindings must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_RELEASE_RECORD_BINDINGS_KEYS, target, "promotion_release_record.bindings")
     expected_artifact_fields = {
         "promotion_decision_sha256": "promotion_decision",
         "promotion_cards_sha256": "promotion_cards",
@@ -17076,6 +17123,7 @@ def _validate_promotion_release_record_metrics(value: Any, checks: list[Any], ta
     if not isinstance(value, dict):
         target.errors.append("promotion_release_record.metrics must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_RELEASE_RECORD_METRICS_KEYS, target, "promotion_release_record.metrics")
     expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
     expected = {
         "check_count": len(checks),
@@ -17095,6 +17143,7 @@ def _validate_promotion_release_record_policy(value: Any, target: ValidationTarg
     if not isinstance(value, dict):
         target.errors.append("promotion_release_record.policy must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_RELEASE_RECORD_POLICY_KEYS, target, "promotion_release_record.policy")
     decision_policy = value.get("promotion_decision_policy")
     if isinstance(decision_policy, dict) and decision_policy:
         _validate_promotion_policy_section(
