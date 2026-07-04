@@ -16,6 +16,7 @@ from .agentic_training_result import (
 )
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
 from .gate_contract import summarize_gate_contract
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_file
 
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "hfr.evidence_bundle.v1"
@@ -123,6 +124,7 @@ def build_evidence_bundle(
 
     if runs_dir is not None:
         runs_path = Path(runs_dir)
+        _reject_symlinked_source_path(runs_path, "runs_dir")
         artifacts["runs_dir"] = _dir_record(runs_path, preserve_paths, output_path)
         _add_presence_check(checks, "runs_dir_exists", runs_path.exists() and runs_path.is_dir(), {"artifact": "runs_dir"})
         _summarize_run_digest_coverage(runs_path, metrics, checks, preserve_paths)
@@ -217,6 +219,7 @@ def build_evidence_bundle(
 
     if training_export_dir is not None:
         training_dir = Path(training_export_dir)
+        _reject_symlinked_source_path(training_dir, "training_export")
         manifest_path = training_dir / "manifest.json"
         dataset_metrics_path = training_dir / "dataset_metrics.json"
         curriculum_path = training_dir / "curriculum.json"
@@ -253,6 +256,7 @@ def build_evidence_bundle(
 
     if compare_export_dir is not None:
         compare_dir = Path(compare_export_dir)
+        _reject_symlinked_source_path(compare_dir, "compare_export")
         artifacts["compare_export"] = _dir_record(compare_dir, preserve_paths, output_path)
         manifest = _read_optional_json(compare_dir / "manifest.json")
         _add_presence_check(checks, "compare_export_exists", compare_dir.exists() and compare_dir.is_dir(), {"artifact": "compare_export"})
@@ -276,6 +280,7 @@ def build_evidence_bundle(
 
     if review_export_dir is not None:
         review_dir = Path(review_export_dir)
+        _reject_symlinked_source_path(review_dir, "review_export")
         artifacts["review_export"] = _dir_record(review_dir, preserve_paths, output_path)
         manifest = _read_optional_json(review_dir / "manifest.json")
         _add_presence_check(checks, "review_export_exists", review_dir.exists() and review_dir.is_dir(), {"artifact": "review_export"})
@@ -288,6 +293,7 @@ def build_evidence_bundle(
 
     if reviewed_export_dir is not None:
         reviewed_dir = Path(reviewed_export_dir)
+        _reject_symlinked_source_path(reviewed_dir, "reviewed_export")
         artifacts["reviewed_export"] = _dir_record(reviewed_dir, preserve_paths, output_path)
         manifest = _read_optional_json(reviewed_dir / "manifest.json")
         _add_presence_check(checks, "reviewed_export_exists", reviewed_dir.exists() and reviewed_dir.is_dir(), {"artifact": "reviewed_export"})
@@ -1108,7 +1114,16 @@ def _summarize_run_digest_coverage(
     checks: list[dict[str, Any]],
     preserve_paths: bool,
 ) -> None:
-    completed_runs = sorted(path for path in runs_path.iterdir() if path.is_dir() and (path / "scorecard.json").exists()) if runs_path.is_dir() else []
+    _reject_symlinked_source_path(runs_path, "runs_dir")
+    completed_runs: list[Path] = []
+    if runs_path.is_dir():
+        for path in sorted(runs_path.iterdir()):
+            scorecard_path = path / "scorecard.json"
+            if not path.is_dir() or not scorecard_path.exists():
+                continue
+            _reject_symlinked_source_path(path, "run_digest_coverage run directory")
+            _reject_symlinked_source_path(scorecard_path, "run_digest_coverage scorecard")
+            completed_runs.append(path)
     digest_count = 0
     passed_digest_count = 0
     failed_digest_count = 0
@@ -1909,6 +1924,7 @@ def _read_json_artifact(
     preserve_paths: bool,
     output_path: Path | None,
 ) -> dict[str, Any]:
+    _reject_symlinked_source_path(path, f"{name} artifact")
     artifacts[name] = _file_record(path, preserve_paths, output_path)
     if not path.exists():
         raise EvidenceBundleError(f"Evidence artifact not found: {path}")
@@ -1928,6 +1944,7 @@ def _read_json_manifest_artifact(
     preserve_paths: bool,
     output_path: Path | None,
 ) -> dict[str, Any]:
+    _reject_symlinked_source_path(path, f"{name} artifact")
     if not path.is_dir():
         return _read_json_artifact(path, artifacts, name, preserve_paths, output_path)
     artifacts[name] = _dir_record(path, preserve_paths, output_path)
@@ -1939,6 +1956,7 @@ def _read_json_manifest_artifact(
 
 
 def _read_optional_json(path: Path) -> Any:
+    _reject_symlinked_source_path(path, "optional JSON artifact")
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
@@ -1991,6 +2009,9 @@ def _gate_validation_metrics(gate: dict[str, Any]) -> dict[str, Any]:
 
 def _file_record(path: Path, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
     record: dict[str, Any] = {"path": _display_path_for_output_source(path, output_path, preserve_paths), "exists": path.exists(), "kind": "file"}
+    if _path_has_symlink_component(path, include_leaf=True):
+        record["exists"] = False
+        return record
     if path.exists() and path.is_file():
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
@@ -1999,17 +2020,26 @@ def _file_record(path: Path, preserve_paths: bool, output_path: Path | None) -> 
 
 def _dir_record(path: Path, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
     record: dict[str, Any] = {"path": _display_path_for_output_source(path, output_path, preserve_paths), "exists": path.exists(), "kind": "directory"}
+    if _path_has_symlink_component(path, include_leaf=True):
+        record["exists"] = False
+        return record
     if path.exists() and path.is_dir():
         record["entry_count"] = sum(1 for _ in path.iterdir())
     return record
 
 
 def _sha256(path: Path) -> str:
+    _reject_symlinked_source_path(path, "evidence artifact")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _reject_symlinked_source_path(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise EvidenceBundleError(f"{label} must not traverse symlinked components: {path}")
 
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:

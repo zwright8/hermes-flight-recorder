@@ -157,10 +157,12 @@ flightrecorder evidence-bundle \
 ```
 
 The bundle records artifact hashes, readiness checks, gate results, compact
-metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
-useful for provenance and job routing, but it should not be read as permission
-to train unless the included scenario, evidence-coverage, validation, review,
-and gate policies are also appropriate for the target job.
+metrics, and a `decision` block with `promote_handoff` or `block_handoff`.
+Bundle inputs that are symlinks or traverse symlinked parent directories are
+rejected before the producer reads JSON, hashes sources, or summarizes run
+digests. The bundle is useful for provenance and job routing, but it should not
+be read as permission to train unless the included scenario, evidence-coverage,
+validation, review, and gate policies are also appropriate for the target job.
 Use `--require-gate` at trainer, Eval, or Governance boundaries so a bundle
 cannot pass without at least one gate summary. Included gates must carry the
 shared `decision` contract; weak legacy gates without `readiness`,

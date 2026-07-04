@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -404,6 +404,100 @@ class EvidenceBundleTests(unittest.TestCase):
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
+
+    def test_evidence_bundle_blocks_symlinked_required_json_source_before_hashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_dir = root / "real"
+            real_dir.mkdir()
+            suite = _write_eval_suite_summary(real_dir / "candidate_suite.json")
+            eval_summary = real_dir / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            linked_parent = root / "linked"
+            try:
+                linked_parent.symlink_to(real_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            stderr = StringIO()
+            with redirect_stdout(StringIO()), redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                main(
+                    [
+                        "evidence-bundle",
+                        "--eval-summary",
+                        str(linked_parent / "eval_summary.json"),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("eval_summary artifact must not traverse symlinked components", stderr.getvalue())
+            self.assertFalse(bundle_path.exists())
+
+    def test_evidence_bundle_blocks_symlinked_export_manifest_before_summarizing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            training_export = root / "training_export"
+            training_export.mkdir()
+            manifest_target = root / "manifest_target.json"
+            manifest_target.write_text(json.dumps({"episode_count": 1}, sort_keys=True) + "\n", encoding="utf-8")
+            try:
+                (training_export / "manifest.json").symlink_to(manifest_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle_path = root / "evidence_bundle.json"
+
+            stderr = StringIO()
+            with redirect_stdout(StringIO()), redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                main(
+                    [
+                        "evidence-bundle",
+                        "--training-export",
+                        str(training_export),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("optional JSON artifact must not traverse symlinked components", stderr.getvalue())
+            self.assertFalse(bundle_path.exists())
+
+    def test_evidence_bundle_blocks_symlinked_run_digest_before_summarizing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            run_dir = runs / "scenario_a"
+            run_dir.mkdir(parents=True)
+            (run_dir / "scorecard.json").write_text(json.dumps({"passed": True}, sort_keys=True) + "\n", encoding="utf-8")
+            digest_target = root / "run_digest_target.json"
+            digest_target.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.run_digest.v1",
+                        "scenario": {"id": "scenario_a"},
+                        "outcome": {"passed": True, "task_completion_status": "complete"},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            try:
+                (run_dir / "run_digest.json").symlink_to(digest_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle_path = root / "evidence_bundle.json"
+
+            stderr = StringIO()
+            with redirect_stdout(StringIO()), redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                main(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("optional JSON artifact must not traverse symlinked components", stderr.getvalue())
+            self.assertFalse(bundle_path.exists())
 
     def test_evidence_bundle_blocks_missing_required_harness_and_gate_summaries(self):
         with tempfile.TemporaryDirectory() as tmp:
