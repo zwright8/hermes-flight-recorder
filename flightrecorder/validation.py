@@ -5528,7 +5528,7 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
 def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(receipt, "schema_version", MODEL_GRADER_DRY_RUN_SCHEMA_VERSION, target, prefix="model_grader_dry_run.")
     _validate_model_grader_checked_artifact(receipt, target, "model_grader_dry_run")
-    _validate_model_grader_dry_run_sources(receipt.get("source_artifacts"), target, source_path)
+    source_paths = _validate_model_grader_dry_run_sources(receipt.get("source_artifacts"), target, source_path)
     grader = receipt.get("grader") if isinstance(receipt.get("grader"), dict) else {}
     if grader.get("mode") != "dry_run":
         target.errors.append("model_grader_dry_run.grader.mode must be dry_run.")
@@ -5548,6 +5548,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
         )
     labels_requiring_review = 0
     expected_disagreement_queue: list[dict[str, str]] = []
+    observed_label_source_keys: list[dict[str, Any]] = []
     label_counts = _model_grader_label_counts(receipt.get("label_counts"), target, "model_grader_dry_run.label_counts")
     expected_counts = {label: 0 for label in REVIEW_LABELS}
     for index, row in enumerate(labels):
@@ -5576,6 +5577,13 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             target.errors.append(f"{label}.label_sha256 must be a sha256 hex digest.")
         elif label_hash != _model_grader_label_sha256(row):
             target.errors.append(f"{label}.label_sha256 does not match label contents.")
+        observed_label_source_keys.append(_model_grader_label_source_key(row))
+    _validate_model_grader_dry_run_labels_match_review_items(
+        observed_label_source_keys,
+        source_paths.get("review_items"),
+        grader,
+        target,
+    )
     for label_name, expected in expected_counts.items():
         if label_counts.get(label_name) != expected:
             target.errors.append(
@@ -5783,17 +5791,20 @@ def _validate_model_grader_checked_artifact(payload: dict[str, Any], target: Val
     return failed_checks
 
 
-def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
     if not isinstance(value, dict):
         target.errors.append("model_grader_dry_run.source_artifacts must be an object.")
-        return
-    _validate_model_grader_review_export_ref(
+        return paths
+    review_export_paths = _validate_model_grader_review_export_ref(
         value.get("review_export"),
         target,
         "model_grader_dry_run.source_artifacts.review_export",
         source_path,
     )
-    _validate_model_grader_referenced_artifact(
+    if "review_items" in review_export_paths:
+        paths["review_items"] = review_export_paths["review_items"]
+    rubric_path = _validate_model_grader_referenced_artifact(
         value.get("rubric_spec"),
         target,
         "model_grader_dry_run.source_artifacts.rubric_spec",
@@ -5801,6 +5812,10 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
         validate_rubric_spec,
         allow_missing=False,
     )
+    if rubric_path is not None:
+        paths["rubric_spec"] = rubric_path
+        _validate_model_grader_dry_run_review_export_matches_rubric(review_export_paths, rubric_path, target)
+    return paths
 
 
 def _validate_rubric_review_item_fingerprints(
@@ -5826,6 +5841,54 @@ def _validate_rubric_review_item_fingerprints(
     ]
     if fingerprints != expected:
         target.errors.append("rubric_spec.review_item_fingerprints must match review_export.review_items.")
+
+
+def _validate_model_grader_dry_run_labels_match_review_items(
+    label_source_keys: list[dict[str, Any]],
+    review_items_path: Path | None,
+    grader: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if review_items_path is None:
+        return
+    review_items = _read_jsonl_objects(
+        review_items_path,
+        target,
+        "model_grader_dry_run.source_artifacts.review_export.review_items",
+    )
+    expected = [_model_grader_expected_label_source_key(item, grader) for item in review_items]
+    if label_source_keys != expected:
+        target.errors.append("model_grader_dry_run.grader_labels must match source_artifacts.review_export.review_items.")
+
+
+def _validate_model_grader_dry_run_review_export_matches_rubric(
+    dry_run_paths: dict[str, Path],
+    rubric_path: Path,
+    target: ValidationTarget,
+) -> None:
+    if not dry_run_paths:
+        return
+    try:
+        rubric = json.loads(rubric_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(rubric, dict):
+        return
+    rubric_paths = _validate_model_grader_review_export_ref(
+        rubric.get("review_export"),
+        target,
+        "model_grader_dry_run.source_artifacts.rubric_spec.review_export",
+        rubric_path,
+    )
+    for field_name in ("manifest", "review_items"):
+        dry_path = dry_run_paths.get(field_name)
+        rubric_review_path = rubric_paths.get(field_name)
+        if dry_path is not None and rubric_review_path is not None and not _same_model_grader_source_file(
+            dry_path,
+            rubric_review_path,
+        ):
+            target.errors.append("model_grader_dry_run.source_artifacts.review_export must match rubric_spec.review_export.")
+            return
 
 
 def _validate_model_grader_disagreement_queue(
@@ -5861,6 +5924,41 @@ def _model_grader_disagreement_queue_key(row: dict[str, Any]) -> dict[str, str]:
         "task_family": str(row.get("task_family") or ""),
         "review_item_sha256": str(row.get("review_item_sha256") or ""),
         "mock_model_label": str(row.get("mock_model_label") or ""),
+    }
+
+
+def _model_grader_label_source_key(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "review_item_id": str(row.get("review_item_id") or ""),
+        "episode_id": str(row.get("episode_id") or ""),
+        "scenario_id": str(row.get("scenario_id") or ""),
+        "task_family": str(row.get("task_family") or ""),
+        "review_item_sha256": str(row.get("review_item_sha256") or ""),
+        "mock_model_label": str(row.get("mock_model_label") or ""),
+        "mock_confidence": str(row.get("mock_confidence") or ""),
+        "requires_human_review": row.get("requires_human_review") if isinstance(row.get("requires_human_review"), bool) else None,
+        "grader_id": str(row.get("grader_id") or ""),
+        "provider": str(row.get("provider") or ""),
+    }
+
+
+def _model_grader_expected_label_source_key(item: dict[str, Any], grader: dict[str, Any]) -> dict[str, Any]:
+    scorecard = item.get("scorecard") if isinstance(item.get("scorecard"), dict) else {}
+    suggested = str(item.get("suggested_human_label") or ("accept" if scorecard.get("passed") is True else "reject"))
+    if suggested not in REVIEW_LABELS:
+        suggested = "needs_review"
+    confidence = "medium" if suggested in {"accept", "reject"} else "low"
+    return {
+        "review_item_id": str(item.get("review_item_id") or ""),
+        "episode_id": str(item.get("episode_id") or ""),
+        "scenario_id": str(item.get("scenario_id") or ""),
+        "task_family": str(item.get("task_family") or "unknown"),
+        "review_item_sha256": review_item_sha256(item),
+        "mock_model_label": suggested,
+        "mock_confidence": confidence,
+        "requires_human_review": suggested in {"needs_review", "unsafe", "incomplete"} or confidence == "low",
+        "grader_id": str(grader.get("grader_id") or ""),
+        "provider": str(grader.get("provider") or ""),
     }
 
 
@@ -5980,15 +6078,16 @@ def _validate_model_grader_referenced_artifact(
     validator: Any,
     *,
     allow_missing: bool,
-) -> None:
+) -> Path | None:
     if allow_missing and record is None:
-        return
+        return None
     artifact_path = _validate_model_grader_source_file_ref(record, target, label, source_path, allow_missing=allow_missing)
     if artifact_path is None:
-        return
+        return None
     referenced = validator(artifact_path)
     target.warnings.extend(f"{label}: {warning}" for warning in referenced.warnings)
     target.errors.extend(f"{label}: {error}" for error in referenced.errors)
+    return artifact_path
 
 
 def _validate_model_grader_source_file_ref(
@@ -6044,6 +6143,17 @@ def _resolve_model_grader_source_path(value: Any, source_path: Path) -> Path | N
     if _is_windows_absolute(value):
         return None
     return source_path.parent / path
+
+
+def _same_model_grader_source_file(left: Path, right: Path) -> bool:
+    try:
+        if left.resolve() == right.resolve():
+            return True
+        if left.stat().st_size != right.stat().st_size:
+            return False
+        return _sha256(left) == _sha256(right)
+    except OSError:
+        return False
 
 
 def _validate_model_grader_boundary(value: Any, target: ValidationTarget, label: str) -> None:

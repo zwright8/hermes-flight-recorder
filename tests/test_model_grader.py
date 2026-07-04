@@ -1,4 +1,6 @@
+import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -21,6 +23,12 @@ def run_cli(args):
 
 def read_jsonl(path: Path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def model_grader_row_sha256(row: dict) -> str:
+    payload = {key: item for key, item in row.items() if key != "label_sha256"}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
@@ -321,6 +329,65 @@ class ModelGraderTests(unittest.TestCase):
                 stale_label_dry_run,
                 "model_grader_dry_run",
                 "label_sha256 does not match label contents",
+            )
+
+            stale_source_label_dry_run = artifact_dir / "stale_source_label_dry_run.json"
+            stale_source_label_payload = json.loads(json.dumps(dry_payload))
+            stale_source_label_payload["grader_labels"][0]["review_item_id"] = "stale-review-item-id"
+            stale_source_label_payload["grader_labels"][0]["label_sha256"] = model_grader_row_sha256(
+                stale_source_label_payload["grader_labels"][0]
+            )
+            stale_source_label_dry_run.write_text(
+                json.dumps(stale_source_label_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                stale_source_label_dry_run,
+                "model_grader_dry_run",
+                "grader_labels must match source_artifacts.review_export.review_items",
+            )
+
+            alternate_review = root / "alternate_review"
+            shutil.copytree(review, alternate_review)
+            alternate_rows = read_jsonl(alternate_review / "review_items.jsonl")
+            alternate_rows[0]["suggested_human_label"] = "needs_review"
+            alternate_rows[0]["notes"] = "Fixture creates a distinct review export for rubric mismatch validation."
+            alternate_rows[0]["review_item_sha256"] = review_item_sha256(alternate_rows[0])
+            (alternate_review / "review_items.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in alternate_rows),
+                encoding="utf-8",
+            )
+            alternate_rubric = artifact_dir / "alternate_rubric.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "rubric",
+                        "--review-export",
+                        str(alternate_review),
+                        "--rubric-id",
+                        "alternate-prompt-injection-rubric",
+                        "--out",
+                        str(alternate_rubric),
+                    ]
+                ),
+                0,
+            )
+            mismatched_rubric_dry_run = artifact_dir / "mismatched_rubric_dry_run.json"
+            mismatched_rubric_payload = json.loads(json.dumps(dry_payload))
+            mismatched_rubric_payload["source_artifacts"]["rubric_spec"]["path"] = alternate_rubric.name
+            mismatched_rubric_payload["source_artifacts"]["rubric_spec"]["sha256"] = hashlib.sha256(
+                alternate_rubric.read_bytes()
+            ).hexdigest()
+            mismatched_rubric_payload["source_artifacts"]["rubric_spec"]["size_bytes"] = alternate_rubric.stat().st_size
+            mismatched_rubric_dry_run.write_text(
+                json.dumps(mismatched_rubric_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                mismatched_rubric_dry_run,
+                "model_grader_dry_run",
+                "source_artifacts.review_export must match rubric_spec.review_export",
             )
 
             stale_gate = artifact_dir / "stale_gate.json"

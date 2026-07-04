@@ -712,6 +712,10 @@ card, and dataset card decisions.
 - Model-grader dry-run validation also binds disagreement-queue rows to the
   labels that require human review, so queued override work cannot drift from
   the label identities that triggered review.
+- Model-grader dry-run validation binds label rows back to the current
+  review-export items and requires its review export to match the referenced
+  rubric's review export, blocking self-consistent but provenance-mismatched
+  grader receipts.
 - Training and reviewed dataset selection keys hash pathless fingerprint
   identity while manifests keep display paths as provenance, so registry keys
   remain stable across cwd and path-redaction presentation changes.
