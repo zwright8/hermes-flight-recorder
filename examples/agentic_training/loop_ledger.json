@@ -19,11 +19,9 @@
       },
       {
         "action": "rollback",
-        "available": false,
-        "blocked_reason_count": 1,
-        "blocked_reasons": [
-          "missing_rollback_receipt"
-        ],
+        "available": true,
+        "blocked_reason_count": 0,
+        "blocked_reasons": [],
         "summary": "Rollback is available only when a rollback receipt is present in governance artifacts."
       },
       {
@@ -53,7 +51,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 35,
+      "artifact_count": 40,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -72,7 +70,7 @@
           "group": "evidence"
         },
         {
-          "count": 2,
+          "count": 4,
           "group": "governance"
         },
         {
@@ -203,11 +201,31 @@
         },
         {
           "count": 1,
+          "role": "promotion_alias_apply"
+        },
+        {
+          "count": 1,
+          "role": "promotion_archive"
+        },
+        {
+          "count": 1,
+          "role": "promotion_cards"
+        },
+        {
+          "count": 1,
           "role": "promotion_decision"
         },
         {
           "count": 1,
           "role": "promotion_ledger"
+        },
+        {
+          "count": 1,
+          "role": "promotion_release_record"
+        },
+        {
+          "count": 1,
+          "role": "promotion_rollback_receipt"
         },
         {
           "count": 1,
@@ -505,22 +523,22 @@
         "weights_updated_by_flight_recorder": false
       },
       "governance": {
-        "artifact_count": 2,
+        "artifact_count": 4,
         "cloud_jobs_started": false,
         "group": "governance",
         "paid_model_grader_calls_started": false,
         "promotion_decision_present": true,
         "promotion_ledger_present": true,
         "roles_missing": [
-          "agentic_loop_governance_receipt",
-          "promotion_alias_apply",
-          "promotion_rollback_receipt"
+          "agentic_loop_governance_receipt"
         ],
         "roles_present": [
           "promotion_decision",
-          "promotion_ledger"
+          "promotion_ledger",
+          "promotion_alias_apply",
+          "promotion_rollback_receipt"
         ],
-        "rollback_receipt_present": false,
+        "rollback_receipt_present": true,
         "weights_updated_by_flight_recorder": false
       },
       "index": 0,
@@ -558,8 +576,8 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "db9d57ca116f94ea36bee2d78ced67061ef237e26b9f8bf851ba2e46e52bdd5d",
-      "size_bytes": 53083,
+      "sha256": "2d78d7898b713ab04600d3e363c7262b158efc7535b600baff7f48bf5f405531",
+      "size_bytes": 55416,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -595,7 +613,7 @@
         "group": "evidence"
       },
       {
-        "count": 2,
+        "count": 4,
         "group": "governance"
       },
       {
@@ -643,7 +661,7 @@
         "id": "approve_iteration_execution"
       }
     ],
-    "rollback_receipt_count": 0,
+    "rollback_receipt_count": 1,
     "scheduled_next_iteration_count": 0,
     "total_max_cloud_cost_usd": 0,
     "total_max_gpu_hours": 0
@@ -697,7 +715,7 @@
     "recommendation": "approve_iteration_execution",
     "recommended_governance_action": "approve",
     "requires_governance_decision": true,
-    "rollback_receipt_present": false,
+    "rollback_receipt_present": true,
     "side_effects_started": false,
     "summary": "Latest loop iteration demo-loop-001 is ready for governance review."
   },

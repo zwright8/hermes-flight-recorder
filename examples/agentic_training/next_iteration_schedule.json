@@ -155,8 +155,8 @@
         "path": "loop_ledger.json",
         "role": "agentic_loop_ledger",
         "schema_version": "hfr.agentic_loop_ledger.v1",
-        "sha256": "8583753940dceca542bee968a1c3e06561650edc6641932e1bacf4d9e2b01357",
-        "size_bytes": 21988
+        "sha256": "3de86368ea0e9e99d7c012d9838eadcc3f68cdd76d4d94af039bb82c10125c52",
+        "size_bytes": 22362
       }
     ],
     "improvement_ledger": [

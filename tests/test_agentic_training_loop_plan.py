@@ -48,6 +48,15 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         improvement_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "improvement_ledger.json"
         promotion_decision_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_decision.json"
         promotion_ledger_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_ledger.json"
+        promotion_cards_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_cards"
+        promotion_alias_apply_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_alias_apply.json"
+        promotion_rollback_receipt_path = (
+            ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_rollback_receipt.json"
+        )
+        promotion_release_record_path = (
+            ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_release_record.json"
+        )
+        promotion_archive_path = ROOT / "examples" / "agentic_training" / "promotion_governance" / "promotion_archive"
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
 
         expected_refs = {
@@ -73,15 +82,31 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "improvement_ledger": ("iteration_ledgers/improvement_ledger.json", improvement_ledger_path),
             "promotion_decision": ("promotion_governance/promotion_decision.json", promotion_decision_path),
             "promotion_ledger": ("promotion_governance/promotion_ledger.json", promotion_ledger_path),
+            "promotion_cards": ("promotion_governance/promotion_cards", promotion_cards_path),
+            "promotion_alias_apply": ("promotion_governance/promotion_alias_apply.json", promotion_alias_apply_path),
+            "promotion_rollback_receipt": (
+                "promotion_governance/promotion_rollback_receipt.json",
+                promotion_rollback_receipt_path,
+            ),
+            "promotion_release_record": (
+                "promotion_governance/promotion_release_record.json",
+                promotion_release_record_path,
+            ),
+            "promotion_archive": ("promotion_governance/promotion_archive", promotion_archive_path),
         }
         for role, (expected_path, source_path) in expected_refs.items():
             ref = plan["source_artifacts"][role][0]
             self.assertEqual(ref["path"], expected_path)
-            self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
-            self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
+            if source_path.is_dir():
+                self.assertEqual(ref["kind"], "directory")
+                self.assertTrue(ref["exists"])
+                self.assertIsNone(ref["sha256"])
+            else:
+                self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
+                self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertTrue(plan["passed"])
         self.assertEqual(plan["readiness"], "ready_for_governance_review")
-        self.assertEqual(plan["artifact_count"], 35)
+        self.assertEqual(plan["artifact_count"], 40)
         self.assertEqual(plan["missing_phase_inputs"], [])
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
@@ -609,6 +634,11 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 ("--improvement-plan", "improvement_plan"),
                 ("--promotion-decision", "promotion_decision"),
                 ("--promotion-ledger", "promotion_ledger"),
+                ("--promotion-cards", "promotion_cards"),
+                ("--promotion-alias-apply", "promotion_alias_apply"),
+                ("--promotion-rollback-receipt", "promotion_rollback_receipt"),
+                ("--promotion-release-record", "promotion_release_record"),
+                ("--promotion-archive", "promotion_archive"),
                 ("--next-iteration-schedule", "next_iteration_schedule"),
                 ("--action-ledger", "action_ledger"),
             ):
@@ -1219,6 +1249,17 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
             "promotion_decision": [write_valid_promotion_decision(root)],
             "promotion_ledger": [write_valid_promotion_ledger(root)],
+            "promotion_cards": [self.write_json(root / "promotion_cards.json", "hfr.promotion_cards.v1")],
+            "promotion_alias_apply": [
+                self.write_json(root / "promotion_alias_apply.json", "hfr.promotion_alias_apply.v1")
+            ],
+            "promotion_rollback_receipt": [
+                self.write_json(root / "promotion_rollback_receipt.json", "hfr.promotion_rollback_receipt.v1")
+            ],
+            "promotion_release_record": [
+                self.write_json(root / "promotion_release_record.json", "hfr.promotion_release_record.v1")
+            ],
+            "promotion_archive": [self.write_json(root / "promotion_archive.json", "hfr.promotion_archive.v1")],
             "next_iteration_schedule": [self.write_json(root / "next_iteration_schedule.json", "hfr.next_iteration_schedule.v1")],
             "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
         }

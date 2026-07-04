@@ -1515,8 +1515,13 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "improvement_ledger": args.improvement_ledger,
         "improvement_plan": args.improvement_plan,
         "agentic_loop_governance_receipt": args.agentic_loop_governance_receipt,
+        "promotion_alias_apply": args.promotion_alias_apply,
+        "promotion_archive": args.promotion_archive,
+        "promotion_cards": args.promotion_cards,
         "promotion_decision": args.promotion_decision,
         "promotion_ledger": args.promotion_ledger,
+        "promotion_release_record": args.promotion_release_record,
+        "promotion_rollback_receipt": args.promotion_rollback_receipt,
         "rubric_spec": args.rubric_spec,
         "model_grader_dry_run": args.model_grader_dry_run,
         "model_grader_disagreement_queue": args.model_grader_disagreement_queue,
@@ -3553,6 +3558,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     agentic_loop_plan.add_argument("--promotion-decision", action="append", default=[], help="promotion_decision artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-cards", action="append", default=[], help="promotion_cards artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-alias-apply", action="append", default=[], help="promotion_alias_apply artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-rollback-receipt", action="append", default=[], help="promotion_rollback_receipt artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-release-record", action="append", default=[], help="promotion_release_record artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-archive", action="append", default=[], help="promotion_archive artifact; may be repeated")
     agentic_loop_plan.add_argument("--next-iteration-schedule", action="append", default=[], help="next_iteration_schedule artifact; may be repeated")
     agentic_loop_plan.add_argument("--rubric-spec", action="append", default=[], help="rubric_spec artifact; may be repeated")
     agentic_loop_plan.add_argument("--model-grader-dry-run", action="append", default=[], help="model_grader_dry_run artifact; may be repeated")

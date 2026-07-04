@@ -1,0 +1,674 @@
+{
+  "artifact_validation": {
+    "error_count": 0,
+    "passed": true,
+    "target_count": 3,
+    "targets": [
+      {
+        "error_count": 0,
+        "passed": true,
+        "type": "promotion_cards",
+        "warning_count": 0
+      },
+      {
+        "error_count": 0,
+        "passed": true,
+        "type": "promotion_decision",
+        "warning_count": 0
+      },
+      {
+        "error_count": 0,
+        "passed": true,
+        "type": "promotion_alias_apply",
+        "warning_count": 0
+      }
+    ],
+    "warning_count": 0
+  },
+  "artifacts": {
+    "compare_gate": {
+      "exists": true,
+      "kind": "file",
+      "path": "compare_gate.json",
+      "role": "compare_gate",
+      "schema_version": "hfr.compare_gate.v1",
+      "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+      "size_bytes": 16328
+    },
+    "promotion_alias_apply": {
+      "exists": true,
+      "kind": "file",
+      "path": "promotion_alias_apply.json",
+      "role": "promotion_alias_apply",
+      "schema_version": "hfr.promotion_alias_apply.v1",
+      "sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
+      "size_bytes": 8372
+    },
+    "promotion_cards": {
+      "exists": true,
+      "file_count": 3,
+      "kind": "directory",
+      "path": "promotion_cards",
+      "role": "promotion_cards",
+      "sha256": "c6869dd06f85cdbb8b73848d13a1485d5c2480eb735f71e17b2d6c2d24de2ce4"
+    },
+    "promotion_decision": {
+      "exists": true,
+      "kind": "file",
+      "path": "promotion_decision.json",
+      "role": "promotion_decision",
+      "schema_version": "hfr.promotion_decision.v1",
+      "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "size_bytes": 32793
+    },
+    "release_notes": {
+      "exists": true,
+      "kind": "file",
+      "path": "RELEASE_NOTES.md",
+      "role": "release_notes",
+      "sha256": "c5d6ba8f4563b659c9aae9a52fc9f115274efa26bbdd5521f7b2802580fa0dd0",
+      "size_bytes": 374
+    },
+    "rollback_metadata": {
+      "exists": true,
+      "kind": "file",
+      "path": "promotion_rollback_receipt.json",
+      "role": "rollback_metadata",
+      "schema_version": "hfr.promotion_rollback_receipt.v1",
+      "sha256": "343ad264f6f4058df1cffba4fa8ee23bb407625b589959ded228503f8428ff39",
+      "size_bytes": 4608
+    }
+  },
+  "bindings": {
+    "compare_gate_sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+    "dataset_card_sha256": "626ad2476973bb18977190d1b69e10b72af931ea4628312098fb45f96b92307c",
+    "model_card_sha256": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f",
+    "promotion_alias_apply_sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
+    "promotion_cards_sha256": "c6869dd06f85cdbb8b73848d13a1485d5c2480eb735f71e17b2d6c2d24de2ce4",
+    "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+    "release_notes_sha256": "c5d6ba8f4563b659c9aae9a52fc9f115274efa26bbdd5521f7b2802580fa0dd0",
+    "rollback_metadata_sha256": "343ad264f6f4058df1cffba4fa8ee23bb407625b589959ded228503f8428ff39"
+  },
+  "check_count": 28,
+  "checks": [
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "release_id_present",
+      "passed": true,
+      "summary": "release id is present"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "promotion_decision.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "promotion_decision_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion_decision artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "directory",
+        "path": "promotion_cards"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "promotion_cards_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_cards"
+      },
+      "summary": "promotion_cards artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "promotion_alias_apply.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "promotion_alias_apply_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_alias_apply"
+      },
+      "summary": "promotion_alias_apply artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "promotion_rollback_receipt.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "rollback_metadata_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback_metadata artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "compare_gate.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "compare_gate_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "RELEASE_NOTES.md"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "release_notes_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "release_notes"
+      },
+      "summary": "release_notes artifact is present and fingerprinted"
+    },
+    {
+      "actual": "hfr.promotion_decision.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_decision.v1"
+      },
+      "id": "promotion_decision_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision uses the expected schema"
+    },
+    {
+      "actual": "hfr.promotion_cards.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_cards.v1"
+      },
+      "id": "promotion_cards_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_cards"
+      },
+      "summary": "promotion cards manifest uses the expected schema"
+    },
+    {
+      "actual": "hfr.promotion_alias_apply.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_alias_apply.v1"
+      },
+      "id": "promotion_alias_apply_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_alias_apply"
+      },
+      "summary": "promotion alias receipt uses the expected schema"
+    },
+    {
+      "actual": "hfr.compare_gate.v1",
+      "expected": {
+        "schema_version": "hfr.compare_gate.v1"
+      },
+      "id": "compare_gate_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate uses the expected schema version"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_decision_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion_decision reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_cards_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_cards"
+      },
+      "summary": "promotion_cards reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_alias_apply_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_alias_apply"
+      },
+      "summary": "promotion_alias_apply reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "compare_gate_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "input_artifacts_validated",
+      "passed": true,
+      "summary": "release-record input artifacts passed validation immediately before binding"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "../../promotion_policy.demo.json"
+      },
+      "expected": {
+        "exists": true,
+        "kind": "file"
+      },
+      "id": "promotion_policy_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy artifact is present for release binding"
+    },
+    {
+      "actual": "hfr.promotion_policy.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_policy.v1"
+      },
+      "id": "promotion_policy_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy uses the expected schema version"
+    },
+    {
+      "actual": {
+        "missing": [],
+        "roles": [
+          "compare_gate",
+          "promotion_alias_apply",
+          "promotion_cards",
+          "promotion_decision",
+          "release_notes",
+          "rollback_metadata"
+        ],
+        "unknown": []
+      },
+      "expected": {
+        "roles": [
+          "promotion_decision",
+          "promotion_cards",
+          "promotion_alias_apply",
+          "rollback_metadata",
+          "compare_gate",
+          "release_notes"
+        ]
+      },
+      "id": "promotion_policy_release_artifacts_complete",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "promotion policy covers every release-record artifact role"
+    },
+    {
+      "actual": {
+        "decision_policy_sha256": "2dccdde7f888baf452391e73ea14f2bf9ee94f7814136a2d5eb1d675fceeb12f",
+        "release_policy_sha256": "2dccdde7f888baf452391e73ea14f2bf9ee94f7814136a2d5eb1d675fceeb12f"
+      },
+      "expected": {
+        "same_sha256": true
+      },
+      "id": "promotion_policy_matches_decision",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_policy"
+      },
+      "summary": "release policy artifact matches the policy embedded in the promotion decision"
+    },
+    {
+      "actual": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "expected": {
+        "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d"
+      },
+      "id": "alias_receipt_matches_decision",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_alias_apply"
+      },
+      "summary": "alias receipt references the exact promotion decision"
+    },
+    {
+      "actual": {
+        "candidate_id": "local/mock-candidate",
+        "rollback_id": "local/mock-baseline"
+      },
+      "expected": {
+        "candidate_id": "local/mock-candidate",
+        "rollback_id": "local/mock-baseline"
+      },
+      "id": "alias_receipt_targets_match_decision",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_alias_apply"
+      },
+      "summary": "alias receipt candidate and rollback targets match the decision"
+    },
+    {
+      "actual": {
+        "cards_dataset_card": "626ad2476973bb18977190d1b69e10b72af931ea4628312098fb45f96b92307c",
+        "cards_model_card": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f",
+        "decision_dataset_card": "626ad2476973bb18977190d1b69e10b72af931ea4628312098fb45f96b92307c",
+        "decision_model_card": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f"
+      },
+      "expected": {
+        "cards": "match_decision_card_hashes"
+      },
+      "id": "cards_match_decision",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_cards"
+      },
+      "summary": "promotion cards are the same cards consumed by the promotion decision"
+    },
+    {
+      "actual": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+      "expected": {
+        "decision_compare_gate_sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3"
+      },
+      "id": "compare_gate_matches_decision",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "release eval compare gate matches the promotion decision compare gate"
+    },
+    {
+      "actual": {
+        "available": true,
+        "rollback_id": "local/mock-baseline"
+      },
+      "expected": {
+        "available": "not false",
+        "rollback_id": "local/mock-baseline"
+      },
+      "id": "rollback_metadata_matches_target",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback metadata points at the declared rollback target"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "rollback_receipt_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback metadata is a passing rollback receipt"
+    },
+    {
+      "actual": {
+        "nonempty": true,
+        "size_bytes": 374
+      },
+      "expected": {
+        "nonempty": true
+      },
+      "id": "release_notes_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "release_notes"
+      },
+      "summary": "release notes are present and non-empty"
+    },
+    {
+      "actual": {
+        "unsupported_markers": []
+      },
+      "expected": {
+        "unsupported_markers": []
+      },
+      "id": "release_notes_claims_supported",
+      "passed": true,
+      "scope": {
+        "artifact_role": "release_notes"
+      },
+      "summary": "release notes contain no TODO/TBD/unsupported-claim markers"
+    }
+  ],
+  "failed_check_count": 0,
+  "metrics": {
+    "check_count": 28,
+    "failed_check_count": 0,
+    "release_notes_size_bytes": 374,
+    "required_artifact_count": 6
+  },
+  "notes": [
+    "Release records are review artifacts; they do not move aliases or publish external artifacts.",
+    "A release record binds the exact promotion decision, generated cards, alias-apply receipt, rollback metadata, eval compare gate, and release notes."
+  ],
+  "passed": true,
+  "policy": {
+    "promotion_decision_policy": {
+      "allowed_candidate_classes": [
+        "base",
+        "candidate",
+        "champion",
+        "frontier",
+        "trace-only"
+      ],
+      "allowed_champion_classes": [
+        "base",
+        "candidate",
+        "champion",
+        "frontier",
+        "trace-only"
+      ],
+      "artifact": {
+        "exists": true,
+        "kind": "file",
+        "path": "../../promotion_policy.demo.json",
+        "role": "promotion_policy",
+        "schema_version": "hfr.promotion_policy.v1",
+        "sha256": "2dccdde7f888baf452391e73ea14f2bf9ee94f7814136a2d5eb1d675fceeb12f",
+        "size_bytes": 1573
+      },
+      "description": "Zero-tolerance governance policy for promotion decisions and release records.",
+      "forbid_new_critical_rules": [
+        "final_answer",
+        "forbidden_actions",
+        "secret_exposure"
+      ],
+      "forbid_regressed_rules": [
+        "final_answer",
+        "forbidden_actions",
+        "secret_exposure"
+      ],
+      "id": "strict-governance-promotion-policy",
+      "limits": {
+        "max_baseline_wins": 0,
+        "max_contract_drifts": 0,
+        "max_new_critical_failures": 0,
+        "max_rule_regressions": 0,
+        "max_task_completion_regressions": 0,
+        "max_unverified_contracts": 0
+      },
+      "release_required_artifacts": [
+        "compare_gate",
+        "promotion_alias_apply",
+        "promotion_cards",
+        "promotion_decision",
+        "release_notes",
+        "rollback_metadata"
+      ],
+      "required_artifacts": [
+        "agentic_training_result",
+        "compare_gate",
+        "dataset_card",
+        "evidence_bundle",
+        "license_review",
+        "model_card",
+        "model_registry_entry",
+        "promotion_ledger_gate",
+        "redaction_check",
+        "rollback_metadata",
+        "safety_gate",
+        "serving_profile",
+        "serving_report",
+        "trainer_launch_check"
+      ],
+      "requirements": {
+        "require_accepted_terms": true,
+        "require_artifact_validation": true,
+        "require_known_license": true,
+        "require_rollback_metadata": true,
+        "require_supported_cards": true
+      },
+      "schema_version": "hfr.promotion_policy.v1",
+      "source": "file"
+    },
+    "release_policy": {
+      "allowed_candidate_classes": [
+        "base",
+        "candidate",
+        "champion",
+        "frontier",
+        "trace-only"
+      ],
+      "allowed_champion_classes": [
+        "base",
+        "candidate",
+        "champion",
+        "frontier",
+        "trace-only"
+      ],
+      "artifact": {
+        "exists": true,
+        "kind": "file",
+        "path": "../../promotion_policy.demo.json",
+        "role": "promotion_policy",
+        "schema_version": "hfr.promotion_policy.v1",
+        "sha256": "2dccdde7f888baf452391e73ea14f2bf9ee94f7814136a2d5eb1d675fceeb12f",
+        "size_bytes": 1573
+      },
+      "description": "Zero-tolerance governance policy for promotion decisions and release records.",
+      "forbid_new_critical_rules": [
+        "final_answer",
+        "forbidden_actions",
+        "secret_exposure"
+      ],
+      "forbid_regressed_rules": [
+        "final_answer",
+        "forbidden_actions",
+        "secret_exposure"
+      ],
+      "id": "strict-governance-promotion-policy",
+      "limits": {
+        "max_baseline_wins": 0,
+        "max_contract_drifts": 0,
+        "max_new_critical_failures": 0,
+        "max_rule_regressions": 0,
+        "max_task_completion_regressions": 0,
+        "max_unverified_contracts": 0
+      },
+      "release_required_artifacts": [
+        "compare_gate",
+        "promotion_alias_apply",
+        "promotion_cards",
+        "promotion_decision",
+        "release_notes",
+        "rollback_metadata"
+      ],
+      "required_artifacts": [
+        "agentic_training_result",
+        "compare_gate",
+        "dataset_card",
+        "evidence_bundle",
+        "license_review",
+        "model_card",
+        "model_registry_entry",
+        "promotion_ledger_gate",
+        "redaction_check",
+        "rollback_metadata",
+        "safety_gate",
+        "serving_profile",
+        "serving_report",
+        "trainer_launch_check"
+      ],
+      "requirements": {
+        "require_accepted_terms": true,
+        "require_artifact_validation": true,
+        "require_known_license": true,
+        "require_rollback_metadata": true,
+        "require_supported_cards": true
+      },
+      "schema_version": "hfr.promotion_policy.v1",
+      "source": "file"
+    }
+  },
+  "readiness": "ready",
+  "recommendation": "publish_release",
+  "release": {
+    "candidate_id": "local/mock-candidate",
+    "champion_previous_target": "local/mock-baseline",
+    "dataset_id": "agentic-training-export",
+    "id": "demo-loop-001-release",
+    "rollback_id": "local/mock-baseline"
+  },
+  "release_record_path": "examples/agentic_training/promotion_governance/promotion_release_record.json",
+  "schema_version": "hfr.promotion_release_record.v1"
+}

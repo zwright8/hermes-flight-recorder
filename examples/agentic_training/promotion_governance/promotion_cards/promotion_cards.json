@@ -1,0 +1,321 @@
+{
+  "artifacts": {
+    "compare_gate": {
+      "exists": true,
+      "kind": "file",
+      "path": "../compare_gate.json",
+      "role": "compare_gate",
+      "schema_version": "hfr.compare_gate.v1",
+      "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+      "size_bytes": 16328
+    },
+    "dataset_card": {
+      "exists": true,
+      "kind": "file",
+      "path": "DATASET_CARD.md",
+      "role": "dataset_card",
+      "sha256": "626ad2476973bb18977190d1b69e10b72af931ea4628312098fb45f96b92307c",
+      "size_bytes": 701
+    },
+    "evidence_bundle": {
+      "exists": true,
+      "kind": "file",
+      "path": "../../evidence_handoff/evidence_bundle.json",
+      "role": "evidence_bundle",
+      "schema_version": "hfr.evidence_bundle.v1",
+      "sha256": "2f14ec69f4b74105f78938aa98871deb757194ebefdaf61a1c5a35a876b63296",
+      "size_bytes": 16431
+    },
+    "model_card": {
+      "exists": true,
+      "kind": "file",
+      "path": "MODEL_CARD.md",
+      "role": "model_card",
+      "sha256": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f",
+      "size_bytes": 810
+    },
+    "redaction_check": {
+      "exists": true,
+      "kind": "file",
+      "path": "../redaction_check.json",
+      "role": "redaction_check",
+      "sha256": "b1db9a657fa51a0578ce443649bee325355d475bb29d8a0563923ee0af51ee20",
+      "size_bytes": 103
+    },
+    "safety_gate": {
+      "exists": true,
+      "kind": "file",
+      "path": "../safety_gate.json",
+      "role": "safety_gate",
+      "sha256": "092ac39a67fdca4f1370ebd46dee298a1f0689a08e078e2efb38aaf1e52f6278",
+      "size_bytes": 107
+    },
+    "training_export": {
+      "exists": true,
+      "file_count": 38,
+      "kind": "directory",
+      "path": "../../training_export",
+      "role": "training_export",
+      "sha256": "74e8e00d84adc0af9462d67b650d5a9c0e8c88cdbf8a3b7d03dd77ce0b65010a"
+    }
+  },
+  "candidate": {
+    "id": "local/mock-candidate",
+    "license_status": "known",
+    "model_source": "examples/agentic_training/completed_result.json"
+  },
+  "cards_dir": "examples/agentic_training/promotion_governance/promotion_cards",
+  "check_count": 18,
+  "checks": [
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "candidate_id_present",
+      "passed": true,
+      "summary": "candidate model id is present"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "dataset_id_present",
+      "passed": true,
+      "summary": "dataset id is present"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "model_source_present",
+      "passed": true,
+      "summary": "model source is present"
+    },
+    {
+      "actual": "known",
+      "expected": {
+        "license_status": "known"
+      },
+      "id": "license_status_known",
+      "passed": true,
+      "scope": {
+        "field": "license_status"
+      },
+      "summary": "license status is known before card generation"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../../evidence_handoff/evidence_bundle.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "evidence_bundle_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle input artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../../training_export"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "training_export_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "training_export"
+      },
+      "summary": "training_export input artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../compare_gate.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "compare_gate_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate input artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../redaction_check.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "redaction_check_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "redaction_check"
+      },
+      "summary": "redaction_check input artifact is present and fingerprinted"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "path": "../safety_gate.json"
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "safety_gate_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "safety_gate"
+      },
+      "summary": "safety_gate input artifact is present and fingerprinted"
+    },
+    {
+      "actual": "hfr.evidence_bundle.v1",
+      "expected": {
+        "schema_version": "hfr.evidence_bundle.v1"
+      },
+      "id": "evidence_bundle_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle uses the expected schema version"
+    },
+    {
+      "actual": "hfr.compare_gate.v1",
+      "expected": {
+        "schema_version": "hfr.compare_gate.v1"
+      },
+      "id": "compare_gate_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate uses the expected schema version"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "evidence_bundle_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "evidence_bundle"
+      },
+      "summary": "evidence_bundle reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "compare_gate_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare_gate reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "redaction_check_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "redaction_check"
+      },
+      "summary": "redaction_check reports passed=true"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "safety_gate_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "safety_gate"
+      },
+      "summary": "safety_gate reports passed=true"
+    },
+    {
+      "actual": {
+        "invalid_counts": [],
+        "invalid_maps": [],
+        "missing": []
+      },
+      "expected": {
+        "fields": [
+          "baseline_win_count",
+          "contract_drift_count",
+          "new_critical_failure_counts",
+          "regressed_rule_counts",
+          "task_completion_regression_count",
+          "unverified_contract_count"
+        ]
+      },
+      "id": "compare_metrics_complete",
+      "passed": true,
+      "scope": {
+        "artifact_role": "compare_gate"
+      },
+      "summary": "compare gate exposes complete promotion movement metrics"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "task_completion_regressions_absent",
+      "passed": true,
+      "summary": "task_completion_regressions_absent: actual=0, max=0"
+    },
+    {
+      "actual": {
+        "counts": {},
+        "total": 0
+      },
+      "expected": {
+        "max": 0
+      },
+      "id": "new_critical_failures_absent",
+      "passed": true,
+      "summary": "new critical failures: actual=0, max=0"
+    }
+  ],
+  "dataset": {
+    "id": "agentic-training-export"
+  },
+  "failed_check_count": 0,
+  "manifest_path": "examples/agentic_training/promotion_governance/promotion_cards/promotion_cards.json",
+  "metrics": {
+    "check_count": 18,
+    "failed_check_count": 0,
+    "new_critical_failure_count": 0,
+    "required_input_count": 5,
+    "task_completion_regression_count": 0
+  },
+  "notes": [
+    "Promotion cards are generated review artifacts; they do not train models or move registry aliases.",
+    "Cards are blocked when required inputs are missing, stale, unsafe, unredacted, or license status is unknown."
+  ],
+  "passed": true,
+  "readiness": "ready",
+  "recommendation": "use_cards_for_promotion_decision",
+  "schema_version": "hfr.promotion_cards.v1"
+}

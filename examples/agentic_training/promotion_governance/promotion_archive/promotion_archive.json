@@ -1,0 +1,156 @@
+{
+  "archive_path": "examples/agentic_training/promotion_governance/promotion_archive",
+  "artifacts": [
+    {
+      "exists": true,
+      "index": 0,
+      "name": "promotion_ledger",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_ledger.json",
+      "path": "artifacts/promotion_ledger.json",
+      "role": "promotion_ledger",
+      "schema_version": "hfr.promotion_ledger.v1",
+      "sha256": "85b80d41688e361009bbdbf8313a23a884ab702ebbeba89d6bfa63627188904e",
+      "size_bytes": 2215
+    },
+    {
+      "exists": true,
+      "index": 1,
+      "name": "promotion_ledger_gate",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_ledger_gate.json",
+      "path": "artifacts/promotion_ledger_gate.json",
+      "role": "promotion_ledger_gate",
+      "schema_version": "hfr.promotion_ledger_gate.v1",
+      "sha256": "9e284a5845ae3bc07d9f576f26a75b5d63caa410239efd7040c1077d15efb67c",
+      "size_bytes": 4673
+    },
+    {
+      "exists": true,
+      "index": 2,
+      "name": "decision_gate_000",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_history_decision_gate.json",
+      "path": "artifacts/decision_gate_000.json",
+      "role": "decision_gate",
+      "schema_version": "hfr.decision_gate.v1",
+      "sha256": "0a77efb5fa985579bd33ceef5e46a4328745ba85f57830c1e781c6d7a11fcfd2",
+      "size_bytes": 3940
+    },
+    {
+      "exists": true,
+      "index": 3,
+      "name": "decision_gate_001",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_decision_gate.json",
+      "path": "artifacts/decision_gate_001.json",
+      "role": "decision_gate",
+      "schema_version": "hfr.decision_gate.v1",
+      "sha256": "47c5bc72ed830aca9762cf65835d0133539f6d021b6e602fd0e8159c92b2c290",
+      "size_bytes": 2331
+    },
+    {
+      "exists": true,
+      "index": 4,
+      "name": "source_artifact_000",
+      "original_path": "examples/agentic_training/promotion_governance/compare_gate.json",
+      "path": "artifacts/source_artifact_000.json",
+      "role": "source_artifact",
+      "schema_version": "hfr.compare_gate.v1",
+      "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+      "size_bytes": 16328
+    },
+    {
+      "exists": true,
+      "index": 5,
+      "name": "source_artifact_001",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_decision.json",
+      "path": "artifacts/source_artifact_001.json",
+      "role": "source_artifact",
+      "schema_version": "hfr.promotion_decision.v1",
+      "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "size_bytes": 32793
+    },
+    {
+      "exists": true,
+      "index": 6,
+      "name": "promotion_release_record_000",
+      "original_path": "examples/agentic_training/promotion_governance/promotion_release_record.json",
+      "path": "artifacts/promotion_release_record_000.json",
+      "role": "promotion_release_record",
+      "schema_version": "hfr.promotion_release_record.v1",
+      "sha256": "779198b0383fdc675e2095f68eeda6c26e539c1dfe1bdde7a5ab67e3163b4e94",
+      "size_bytes": 19412
+    }
+  ],
+  "manifest_path": "promotion_archive.json",
+  "metrics": {
+    "artifact_count": 7,
+    "decision_gate_count": 2,
+    "missing_count": 0,
+    "missing_role_counts": [],
+    "promotion_release_record_count": 1,
+    "role_counts": [
+      {
+        "count": 2,
+        "id": "decision_gate"
+      },
+      {
+        "count": 1,
+        "id": "promotion_ledger"
+      },
+      {
+        "count": 1,
+        "id": "promotion_ledger_gate"
+      },
+      {
+        "count": 1,
+        "id": "promotion_release_record"
+      },
+      {
+        "count": 2,
+        "id": "source_artifact"
+      }
+    ],
+    "source_artifact_count": 2,
+    "unique_sha256_count": 7
+  },
+  "missing": [],
+  "notes": [
+    "Promotion archives copy promotion-history evidence into a portable directory; they do not rerun gates, train models, or mutate CI.",
+    "Archive validation checks copied artifact hashes, so original local source paths are not required after the archive is built.",
+    "Optional promotion release records can be copied as final publication evidence without making the archive mutate registry aliases."
+  ],
+  "passed": true,
+  "relationships": [
+    {
+      "from": "promotion_ledger_gate",
+      "to": "promotion_ledger",
+      "type": "gates"
+    },
+    {
+      "from": "promotion_ledger",
+      "to": "decision_gate_000",
+      "type": "summarizes"
+    },
+    {
+      "from": "promotion_ledger",
+      "to": "decision_gate_001",
+      "type": "summarizes"
+    },
+    {
+      "from": "decision_gate_000",
+      "to": "source_artifact_000",
+      "type": "source_artifact"
+    },
+    {
+      "from": "decision_gate_001",
+      "to": "source_artifact_001",
+      "type": "source_artifact"
+    },
+    {
+      "from": "promotion_release_record_000",
+      "to": "promotion_ledger",
+      "type": "release_record"
+    }
+  ],
+  "require_self_contained": true,
+  "schema_version": "hfr.promotion_archive.v1",
+  "self_contained": true
+}

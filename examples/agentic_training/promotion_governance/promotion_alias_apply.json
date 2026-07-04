@@ -1,0 +1,309 @@
+{
+  "alias_history_entry": {
+    "previous_aliases": {
+      "candidate": "local/mock-candidate",
+      "champion": "local/mock-baseline",
+      "rollback": "local/mock-baseline"
+    },
+    "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+    "updated_aliases": {
+      "candidate": "local/mock-candidate",
+      "champion": "local/mock-candidate",
+      "rollback": "local/mock-baseline"
+    }
+  },
+  "artifacts": {
+    "promotion_decision": {
+      "exists": true,
+      "kind": "file",
+      "path": "promotion_decision.json",
+      "role": "promotion_decision",
+      "schema_version": "hfr.promotion_decision.v1",
+      "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "size_bytes": 32793
+    },
+    "registry": {
+      "exists": true,
+      "kind": "file",
+      "path": "model_registry.json",
+      "role": "registry",
+      "schema_version": "hfr.model_registry.v1",
+      "sha256": "4543be5a40cfaa9ec73de61167e765b0bb99ae5dcaf531ad9f8d52db94fb60f7",
+      "size_bytes": 1674
+    }
+  },
+  "check_count": 15,
+  "checks": [
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file"
+      },
+      "expected": {
+        "exists": true,
+        "kind": "file"
+      },
+      "id": "registry_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry file is present"
+    },
+    {
+      "actual": "hfr.model_registry.v1",
+      "expected": {
+        "schema_version": "hfr.model_registry.v1"
+      },
+      "id": "registry_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry uses the expected schema version"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file"
+      },
+      "expected": {
+        "exists": true,
+        "kind": "file"
+      },
+      "id": "promotion_decision_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision file is present"
+    },
+    {
+      "actual": "hfr.promotion_decision.v1",
+      "expected": {
+        "schema_version": "hfr.promotion_decision.v1"
+      },
+      "id": "promotion_decision_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision uses the expected schema version"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_decision_passed",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision passed before aliases can move"
+    },
+    {
+      "actual": {
+        "authorized": true,
+        "recommendation": "apply_alias_update"
+      },
+      "expected": {
+        "authorized": true,
+        "recommendation": "apply_alias_update"
+      },
+      "id": "promotion_decision_authorizes_alias_update",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision explicitly authorizes alias movement"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "passed": true
+      },
+      "id": "promotion_decision_validated",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision validation passed immediately before alias movement"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-baseline"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "champion_previous_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "current champion previous target is registered"
+    },
+    {
+      "actual": {
+        "candidate": "local/mock-candidate",
+        "champion": "local/mock-candidate",
+        "rollback": "local/mock-baseline"
+      },
+      "expected": {
+        "candidate": "local/mock-candidate",
+        "champion": "local/mock-candidate",
+        "rollback": "local/mock-baseline"
+      },
+      "id": "promotion_decision_alias_targets_match_models",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision alias receipt matches named candidate and rollback models"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-candidate"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "candidate_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "candidate"
+      },
+      "summary": "candidate alias target is registered"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-candidate"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "champion_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "champion alias target is registered"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-baseline"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "rollback_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "rollback"
+      },
+      "summary": "rollback alias target is registered"
+    },
+    {
+      "actual": {
+        "champion_alias": "local/mock-baseline",
+        "expected_previous": "local/mock-baseline"
+      },
+      "expected": {
+        "champion_alias": "local/mock-baseline"
+      },
+      "id": "champion_alias_matches_previous_target",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "current champion alias matches the promotion decision previous target"
+    },
+    {
+      "actual": "dict",
+      "expected": {
+        "type": "object"
+      },
+      "id": "registry_aliases_object",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry aliases are stored as an object"
+    },
+    {
+      "actual": "list",
+      "expected": {
+        "type": "list_or_missing"
+      },
+      "id": "registry_alias_history_list",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry alias history can record the alias movement"
+    }
+  ],
+  "failed_check_count": 0,
+  "metrics": {
+    "alias_count_after": 3,
+    "alias_count_before": 3,
+    "alias_history_count_after": 1,
+    "alias_history_count_before": 0,
+    "check_count": 15,
+    "failed_check_count": 0,
+    "registered_model_count": 2
+  },
+  "notes": [
+    "Promotion alias application is the guarded side-effectful step after promotion-decision validation.",
+    "Registry aliases are written only when the decision passed, authorized alias movement, and the current champion alias still matches the decision previous target."
+  ],
+  "passed": true,
+  "promotion_decision": {
+    "candidate_id": "local/mock-candidate",
+    "champion_previous_target": "local/mock-baseline",
+    "path": "promotion_decision.json",
+    "rollback_id": "local/mock-baseline",
+    "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+    "size_bytes": 32793
+  },
+  "promotion_decision_validation": {
+    "error_count": 0,
+    "passed": true,
+    "target_count": 1,
+    "targets": [
+      {
+        "error_count": 0,
+        "passed": true,
+        "type": "promotion_decision",
+        "warning_count": 0
+      }
+    ],
+    "warning_count": 0
+  },
+  "readiness": "applied",
+  "receipt_path": "examples/agentic_training/promotion_governance/promotion_alias_apply.json",
+  "recommendation": "alias_update_applied",
+  "registry_after": {
+    "aliases": {
+      "candidate": "local/mock-candidate",
+      "champion": "local/mock-candidate",
+      "rollback": "local/mock-baseline"
+    },
+    "path": "model_registry.json",
+    "sha256": "4543be5a40cfaa9ec73de61167e765b0bb99ae5dcaf531ad9f8d52db94fb60f7",
+    "size_bytes": 1674
+  },
+  "registry_before": {
+    "aliases": {
+      "candidate": "local/mock-candidate",
+      "champion": "local/mock-baseline",
+      "rollback": "local/mock-baseline"
+    }
+  },
+  "schema_version": "hfr.promotion_alias_apply.v1"
+}

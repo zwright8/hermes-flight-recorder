@@ -842,8 +842,11 @@ evidence bundle for a deterministic prompt-injection scenario. The
 preflight with no model download, provider call, or live endpoint exposure. The
 `promotion_governance/` fixture records a real offline compare export, compare
 gate, promotion-history ledger gate, and passing promotion decision. That
-decision authorizes a reviewable alias update, but aliases remain held until a
-separate guarded `promotion-alias-apply` receipt is executed.
+decision authorizes a reviewable alias update. The fixture also includes
+generated promotion cards, pre-promotion rollback proof, a guarded local
+`promotion-alias-apply` receipt, release record, and self-contained promotion
+archive; none of those artifacts call providers, publish externally, or update
+weights.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -877,6 +880,11 @@ flightrecorder agentic-loop plan \
   --eval-summary runs/eval_summary.json \
   --promotion-decision runs/promotion_decision.json \
   --promotion-ledger runs/promotion_ledger.json \
+  --promotion-cards runs/promotion_cards \
+  --promotion-alias-apply runs/promotion_alias_apply.json \
+  --promotion-rollback-receipt runs/rollback.json \
+  --promotion-release-record runs/promotion_release_record.json \
+  --promotion-archive runs/promotion_archive \
   --out runs/agentic_training_loop_plan.json
 
 flightrecorder validate \
@@ -895,7 +903,7 @@ flightrecorder agentic-loop governance \
   --ledger runs/agentic_loop_ledger.json \
   --action approve \
   --requested-by governance-review \
-  --reason "Latest loop is ready for governance review; record approval without applying side effects." \
+  --reason "Latest loop is ready for governance review; record approval without provider, benchmark, alias, or weight side effects." \
   --out runs/agentic_loop_governance_receipt.json
 
 flightrecorder validate \
@@ -914,6 +922,21 @@ flightrecorder validate \
   --next-iteration-schedule runs/next_iteration_schedule.json \
   --strict
 ```
+
+The plan is side-effect free. It records artifact paths and hashes, missing phase
+inputs, provider constraints, live-spend boundaries, next-iteration scheduling
+intent, and a handoff contract declaring that external trainers own weight
+updates. It becomes `ready_for_governance_review` only when rollout, evidence,
+calibrated review, rejection sampling, dataset curation, trainer preflight,
+serving, held-out eval, improvement, promotion decision, promotion ledger, and
+release-governance receipts are present and fail-closed. Release-governance
+receipts can include generated promotion cards, rollback proof, guarded
+alias-apply receipt, release record, and promotion archive. The loop planner and
+governance receipt do not move aliases or publish artifacts; alias movement stays
+isolated in the explicit `promotion-alias-apply` command against a registry
+artifact. Missing required phase inputs keep the loop blocked and recommend
+another iteration. Public plans reject absolute home paths, `/tmp` paths, secret
+path fragments, and credential-looking strings.
 
 External benchmark adapters stay fail-closed until a separate runner executes
 them. The built-in `local_mock` adapter is available for deterministic offline

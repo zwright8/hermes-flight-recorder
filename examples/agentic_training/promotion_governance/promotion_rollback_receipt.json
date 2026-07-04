@@ -1,0 +1,174 @@
+{
+  "artifacts": {
+    "registry": {
+      "exists": true,
+      "kind": "file",
+      "path": "model_registry_before_alias_apply.json",
+      "role": "registry",
+      "schema_version": "hfr.model_registry.v1",
+      "sha256": "0e1ed605e3b713e46990e7ea7bca11ef14c8304ad72afb9d831e157609e6c738",
+      "size_bytes": 1222
+    }
+  },
+  "available": true,
+  "champion_id": "local/mock-baseline",
+  "check_count": 9,
+  "checks": [
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "rollback_id_present",
+      "passed": true,
+      "summary": "rollback target model id is present"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "kind": "file",
+        "path": "model_registry_before_alias_apply.json"
+      },
+      "expected": {
+        "exists": true,
+        "kind": "file"
+      },
+      "id": "registry_present",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry file is present"
+    },
+    {
+      "actual": "hfr.model_registry.v1",
+      "expected": {
+        "schema_version": "hfr.model_registry.v1"
+      },
+      "id": "registry_schema",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry uses the expected schema version"
+    },
+    {
+      "actual": "dict",
+      "expected": {
+        "type": "object"
+      },
+      "id": "registry_aliases_object",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry aliases are stored as an object"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "present": true
+      },
+      "id": "champion_id_present",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "current champion model id is known"
+    },
+    {
+      "actual": {
+        "champion_alias": "local/mock-baseline",
+        "expected_champion": "local/mock-baseline"
+      },
+      "expected": {
+        "champion_alias": "local/mock-baseline"
+      },
+      "id": "champion_alias_matches_target",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "registry champion alias matches the expected current champion"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-baseline"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "rollback_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "rollback"
+      },
+      "summary": "rollback target is registered in the model registry"
+    },
+    {
+      "actual": {
+        "registered": true,
+        "target": "local/mock-baseline"
+      },
+      "expected": {
+        "registered": true
+      },
+      "id": "champion_target_registered",
+      "passed": true,
+      "scope": {
+        "alias": "champion"
+      },
+      "summary": "champion target is registered in the model registry"
+    },
+    {
+      "actual": {
+        "champion_id": "local/mock-baseline",
+        "rollback_id": "local/mock-baseline"
+      },
+      "expected": {
+        "same_model": true
+      },
+      "id": "rollback_target_is_current_champion",
+      "passed": true,
+      "scope": {
+        "artifact_role": "rollback_metadata"
+      },
+      "summary": "rollback target points to the current champion before candidate promotion"
+    }
+  ],
+  "failed_check_count": 0,
+  "metrics": {
+    "alias_count": 3,
+    "check_count": 9,
+    "failed_check_count": 0,
+    "registered_model_count": 2
+  },
+  "notes": [
+    "Rollback receipts are side-effect free; they do not move registry aliases.",
+    "A passing receipt proves the rollback target is registered and still matches the current champion before promotion."
+  ],
+  "passed": true,
+  "readiness": "ready",
+  "receipt_path": "examples/agentic_training/promotion_governance/promotion_rollback_receipt.json",
+  "recommendation": "use_rollback_target",
+  "registry": {
+    "aliases": {
+      "candidate": "local/mock-candidate",
+      "champion": "local/mock-baseline",
+      "rollback": "local/mock-baseline"
+    },
+    "path": "model_registry_before_alias_apply.json",
+    "sha256": "0e1ed605e3b713e46990e7ea7bca11ef14c8304ad72afb9d831e157609e6c738",
+    "size_bytes": 1222
+  },
+  "rollback": {
+    "available": true,
+    "champion_id": "local/mock-baseline",
+    "id": "local/mock-baseline",
+    "target_model_id": "local/mock-baseline"
+  },
+  "rollback_id": "local/mock-baseline",
+  "schema_version": "hfr.promotion_rollback_receipt.v1",
+  "target_model_id": "local/mock-baseline"
+}

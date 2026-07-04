@@ -33,11 +33,21 @@ class PromotionDecisionTests(unittest.TestCase):
         ledger_path = root / "promotion_ledger.json"
         history_gate_path = root / "promotion_history_decision_gate.json"
         ledger_gate_path = root / "promotion_ledger_gate.json"
+        cards_path = root / "promotion_cards"
+        rollback_receipt_path = root / "promotion_rollback_receipt.json"
+        alias_apply_path = root / "promotion_alias_apply.json"
+        release_record_path = root / "promotion_release_record.json"
+        archive_path = root / "promotion_archive"
         compare_gate = json.loads(compare_gate_path.read_text(encoding="utf-8"))
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
         gate = json.loads(gate_path.read_text(encoding="utf-8"))
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
         ledger_gate = json.loads(ledger_gate_path.read_text(encoding="utf-8"))
+        cards = json.loads((cards_path / "promotion_cards.json").read_text(encoding="utf-8"))
+        rollback_receipt = json.loads(rollback_receipt_path.read_text(encoding="utf-8"))
+        alias_apply = json.loads(alias_apply_path.read_text(encoding="utf-8"))
+        release_record = json.loads(release_record_path.read_text(encoding="utf-8"))
+        archive = json.loads((archive_path / "promotion_archive.json").read_text(encoding="utf-8"))
 
         self.assertTrue(compare_gate["passed"])
         self.assertEqual(compare_gate["metrics"]["candidate_win_count"], 1)
@@ -53,6 +63,8 @@ class PromotionDecisionTests(unittest.TestCase):
         self.assertEqual(failed_ids, set())
         self.assertTrue(decision["artifacts"]["evidence_bundle"]["exists"])
         self.assertTrue(decision["artifacts"]["serving_profile"]["exists"])
+        self.assertEqual(decision["artifacts"]["model_card"]["path"], "promotion_cards/MODEL_CARD.md")
+        self.assertEqual(decision["artifacts"]["dataset_card"]["path"], "promotion_cards/DATASET_CARD.md")
 
         self.assertTrue(gate["passed"])
         self.assertEqual(gate["source_decision"]["recommendation"], "apply_alias_update")
@@ -60,12 +72,31 @@ class PromotionDecisionTests(unittest.TestCase):
         self.assertEqual(ledger["metrics"]["blocked_count"], 0)
         self.assertEqual(ledger["metrics"]["allowed_count"], 1)
         self.assertEqual(ledger["metrics"]["latest_recommendation"], "allow_promotion")
+        self.assertTrue(cards["passed"])
+        self.assertTrue(rollback_receipt["passed"])
+        self.assertTrue(alias_apply["passed"])
+        self.assertEqual(alias_apply["registry_before"]["aliases"]["champion"], "local/mock-baseline")
+        self.assertEqual(alias_apply["registry_after"]["aliases"]["champion"], "local/mock-candidate")
+        self.assertTrue(release_record["passed"])
+        self.assertEqual(release_record["release"]["id"], "demo-loop-001-release")
+        self.assertEqual(release_record["release"]["rollback_id"], "local/mock-baseline")
+        self.assertTrue(archive["passed"])
+        self.assertTrue(archive["self_contained"])
+        self.assertEqual(archive["metrics"]["promotion_release_record_count"], 1)
         self.assertEqual(
             run_cli(
                 [
                     "validate",
+                    "--promotion-cards",
+                    str(cards_path),
                     "--promotion-decision",
                     str(decision_path),
+                    "--promotion-alias-apply",
+                    str(alias_apply_path),
+                    "--promotion-rollback-receipt",
+                    str(rollback_receipt_path),
+                    "--promotion-release-record",
+                    str(release_record_path),
                     "--decision-gate",
                     str(history_gate_path),
                     "--decision-gate",
@@ -74,12 +105,19 @@ class PromotionDecisionTests(unittest.TestCase):
                     str(ledger_path),
                     "--promotion-ledger-gate",
                     str(ledger_gate_path),
+                    "--promotion-archive",
+                    str(archive_path),
                     "--strict",
                 ]
             ),
             0,
         )
         self.assertEqual(run_cli(["schemas", "--check", str(compare_gate_path)]), 0)
+        self.assertEqual(run_cli(["schemas", "--check", str(cards_path / "promotion_cards.json")]), 0)
+        self.assertEqual(run_cli(["schemas", "--check", str(alias_apply_path)]), 0)
+        self.assertEqual(run_cli(["schemas", "--check", str(rollback_receipt_path)]), 0)
+        self.assertEqual(run_cli(["schemas", "--check", str(release_record_path)]), 0)
+        self.assertEqual(run_cli(["schemas", "--check", str(archive_path / "promotion_archive.json")]), 0)
 
     def test_promotion_cards_generate_valid_model_and_dataset_cards(self):
         with tempfile.TemporaryDirectory() as tmp:

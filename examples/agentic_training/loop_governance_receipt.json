@@ -163,7 +163,7 @@
     "available": true,
     "blocked_reason_count": 0,
     "blocked_reasons": [],
-    "reason": "Demo ledger is ready for governance review; this approval receipt records review readiness without side effects.",
+    "reason": "Demo ledger is ready for promotion review; this approval receipt records review readiness without provider, benchmark, alias, or weight side effects.",
     "requested_by": "example-governance",
     "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
   },
@@ -187,11 +187,9 @@
         },
         {
           "action": "rollback",
-          "available": false,
-          "blocked_reason_count": 1,
-          "blocked_reasons": [
-            "missing_rollback_receipt"
-          ],
+          "available": true,
+          "blocked_reason_count": 0,
+          "blocked_reasons": [],
           "summary": "Rollback is available only when a rollback receipt is present in governance artifacts."
         },
         {
@@ -231,13 +229,13 @@
       "ready_for_governance_review": true,
       "recommendation": "approve_iteration_execution",
       "recommended_governance_action": "approve",
-      "rollback_receipt_present": false,
+      "rollback_receipt_present": true,
       "side_effects_started": false,
       "summary": "Latest loop iteration demo-loop-001 is ready for governance review."
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "8583753940dceca542bee968a1c3e06561650edc6641932e1bacf4d9e2b01357",
-    "size_bytes": 21988
+    "sha256": "3de86368ea0e9e99d7c012d9838eadcc3f68cdd76d4d94af039bb82c10125c52",
+    "size_bytes": 22362
   }
 }

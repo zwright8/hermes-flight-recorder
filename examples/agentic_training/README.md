@@ -318,12 +318,91 @@ flightrecorder gate-promotion-ledger \
   --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
   --policy examples/promotion_ledger_gate_policy.demo.json \
   --out examples/agentic_training/promotion_governance/promotion_ledger_gate.json
+
+flightrecorder promotion-cards \
+  --candidate-id local/mock-candidate \
+  --dataset-id agentic-training-export \
+  --model-source examples/agentic_training/completed_result.json \
+  --license-status known \
+  --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
+  --training-export examples/agentic_training/training_export \
+  --compare-gate examples/agentic_training/promotion_governance/compare_gate.json \
+  --redaction-check examples/agentic_training/promotion_governance/redaction_check.json \
+  --safety-gate examples/agentic_training/promotion_governance/safety_gate.json \
+  --out examples/agentic_training/promotion_governance/promotion_cards
+
+flightrecorder promotion-decision \
+  --candidate-id local/mock-candidate \
+  --champion-id local/mock-baseline \
+  --rollback-id local/mock-baseline \
+  --candidate-class trace-only \
+  --champion-class trace-only \
+  --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
+  --promotion-ledger-gate examples/agentic_training/promotion_governance/promotion_ledger_gate.json \
+  --compare-gate examples/agentic_training/promotion_governance/compare_gate.json \
+  --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
+  --model-registry-entry examples/agentic_training/promotion_governance/model_registry_entry.json \
+  --agentic-training-result examples/agentic_training/completed_result.json \
+  --model-card examples/agentic_training/promotion_governance/promotion_cards/MODEL_CARD.md \
+  --dataset-card examples/agentic_training/promotion_governance/promotion_cards/DATASET_CARD.md \
+  --rollback-metadata examples/agentic_training/promotion_governance/rollback_metadata.json \
+  --license-review examples/agentic_training/promotion_governance/license_review.json \
+  --redaction-check examples/agentic_training/promotion_governance/redaction_check.json \
+  --safety-gate examples/agentic_training/promotion_governance/safety_gate.json \
+  --serving-profile examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_profile.json \
+  --serving-report examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_check.json \
+  --promotion-policy examples/promotion_policy.demo.json \
+  --out examples/agentic_training/promotion_governance/promotion_decision.json
+
+flightrecorder gate-decision \
+  --artifact examples/agentic_training/promotion_governance/promotion_decision.json \
+  --expect-recommendation apply_alias_update \
+  --expect-readiness ready \
+  --require-passed \
+  --out examples/agentic_training/promotion_governance/promotion_decision_gate.json
+
+flightrecorder promotion-rollback-receipt \
+  --registry examples/agentic_training/promotion_governance/model_registry_before_alias_apply.json \
+  --rollback-id local/mock-baseline \
+  --champion-id local/mock-baseline \
+  --out examples/agentic_training/promotion_governance/promotion_rollback_receipt.json
+
+cp examples/agentic_training/promotion_governance/model_registry_before_alias_apply.json \
+  examples/agentic_training/promotion_governance/model_registry.json
+
+flightrecorder promotion-alias-apply \
+  --registry examples/agentic_training/promotion_governance/model_registry.json \
+  --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --out examples/agentic_training/promotion_governance/promotion_alias_apply.json
+
+flightrecorder promotion-release-record \
+  --release-id demo-loop-001-release \
+  --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --promotion-cards examples/agentic_training/promotion_governance/promotion_cards \
+  --promotion-alias-apply examples/agentic_training/promotion_governance/promotion_alias_apply.json \
+  --rollback-metadata examples/agentic_training/promotion_governance/promotion_rollback_receipt.json \
+  --compare-gate examples/agentic_training/promotion_governance/compare_gate.json \
+  --release-notes examples/agentic_training/promotion_governance/RELEASE_NOTES.md \
+  --promotion-policy examples/promotion_policy.demo.json \
+  --out examples/agentic_training/promotion_governance/promotion_release_record.json
+
+flightrecorder promotion-archive \
+  --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
+  --promotion-ledger-gate examples/agentic_training/promotion_governance/promotion_ledger_gate.json \
+  --decision-gate examples/agentic_training/promotion_governance/promotion_history_decision_gate.json \
+  --decision-gate examples/agentic_training/promotion_governance/promotion_decision_gate.json \
+  --promotion-release-record examples/agentic_training/promotion_governance/promotion_release_record.json \
+  --out examples/agentic_training/promotion_governance/promotion_archive \
+  --require-self-contained \
+  --force
 ```
 
 The committed promotion decision consumes that compare gate and promotion
-history gate. It authorizes a reviewable alias update, but it does not apply
-aliases, mutate the registry, update weights, or call a provider; alias movement
-requires the separate guarded `promotion-alias-apply` command.
+history gate. It authorizes a reviewable alias update, but it does not update
+weights or call a provider. Alias movement is represented only by the separate
+guarded `promotion-alias-apply` command against a local mock
+`model_registry.json`; the release record and archive bind those receipts
+without publishing external artifacts.
 
 Bind the example receipts into a fail-closed loop contract:
 
@@ -374,26 +453,36 @@ flightrecorder agentic-loop plan \
   --action-ledger examples/agentic_training/iteration_ledgers/action_ledger.json \
   --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
   --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
+  --promotion-cards examples/agentic_training/promotion_governance/promotion_cards \
+  --promotion-alias-apply examples/agentic_training/promotion_governance/promotion_alias_apply.json \
+  --promotion-rollback-receipt examples/agentic_training/promotion_governance/promotion_rollback_receipt.json \
+  --promotion-release-record examples/agentic_training/promotion_governance/promotion_release_record.json \
+  --promotion-archive examples/agentic_training/promotion_governance/promotion_archive \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_plan.json
 ```
 
 The committed plan is `ready_for_governance_review` because this example binds
 passing offline held-out eval, compare, promotion-history, promotion-decision,
-and promotion-ledger receipts. It also binds a loop-local rollout plan
+promotion-ledger, rollback, alias-apply, release-record, and promotion-archive
+receipts. It also binds a loop-local rollout plan
 and mock receipt, harness/evidence handoff artifacts, a managed mock serving
 lifecycle, nested model-grader review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
-action-ledger, improvement-ledger, and promotion-governance receipts without provider, dataset-write,
-benchmark-launch, or scheduler side effects. The
+action-ledger, improvement-ledger, and promotion-governance receipts without
+provider, dataset-write, benchmark-launch, scheduler, or weight side effects.
+The loop plan and governance receipt do not move aliases; the explicit
+alias-apply receipt is a local JSON-registry fixture. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
 records the SHA-256 chain from preflight through launch plan, launch receipt,
 and status receipt. The example ledger's governance decision recommends
 `approve`, while still listing `approve`, `reject`, `rollback`, and
-`request_another_iteration` as schema-checkable action rows. Approval is a
-receipt-only governance choice; it does not move aliases or update weights.
+`request_another_iteration` as schema-checkable action rows. Because the
+rollback receipt is present, rollback is also available as a governance action.
+Approval is a receipt-only governance choice; it does not move aliases or
+update weights.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:
@@ -428,11 +517,16 @@ flightrecorder validate \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
   --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
+  --promotion-cards examples/agentic_training/promotion_governance/promotion_cards \
   --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --promotion-alias-apply examples/agentic_training/promotion_governance/promotion_alias_apply.json \
+  --promotion-rollback-receipt examples/agentic_training/promotion_governance/promotion_rollback_receipt.json \
+  --promotion-release-record examples/agentic_training/promotion_governance/promotion_release_record.json \
   --decision-gate examples/agentic_training/promotion_governance/promotion_history_decision_gate.json \
   --decision-gate examples/agentic_training/promotion_governance/promotion_decision_gate.json \
   --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
   --promotion-ledger-gate examples/agentic_training/promotion_governance/promotion_ledger_gate.json \
+  --promotion-archive examples/agentic_training/promotion_governance/promotion_archive \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 
@@ -448,7 +542,7 @@ flightrecorder agentic-loop governance \
   --ledger examples/agentic_training/loop_ledger.json \
   --action approve \
   --requested-by example-governance \
-  --reason "Demo ledger is ready for governance review; this approval receipt records review readiness without side effects." \
+  --reason "Demo ledger is ready for promotion review; this approval receipt records review readiness without provider, benchmark, alias, or weight side effects." \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_governance_receipt.json
 

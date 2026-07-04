@@ -1,5 +1,5 @@
 {
-  "artifact_count": 35,
+  "artifact_count": 40,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -103,11 +103,31 @@
     },
     {
       "count": 1,
+      "role": "promotion_alias_apply"
+    },
+    {
+      "count": 1,
+      "role": "promotion_archive"
+    },
+    {
+      "count": 1,
+      "role": "promotion_cards"
+    },
+    {
+      "count": 1,
       "role": "promotion_decision"
     },
     {
       "count": 1,
       "role": "promotion_ledger"
+    },
+    {
+      "count": 1,
+      "role": "promotion_release_record"
+    },
+    {
+      "count": 1,
+      "role": "promotion_rollback_receipt"
     },
     {
       "count": 1,
@@ -1502,6 +1522,45 @@
         "size_bytes": 7754
       }
     ],
+    "promotion_alias_apply": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "promotion_governance/promotion_alias_apply.json",
+        "readiness": "applied",
+        "role": "promotion_alias_apply",
+        "schema_version": "hfr.promotion_alias_apply.v1",
+        "sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
+        "size_bytes": 8372
+      }
+    ],
+    "promotion_archive": [
+      {
+        "exists": true,
+        "kind": "directory",
+        "passed": null,
+        "path": "promotion_governance/promotion_archive",
+        "readiness": "",
+        "role": "promotion_archive",
+        "schema_version": "",
+        "sha256": null,
+        "size_bytes": null
+      }
+    ],
+    "promotion_cards": [
+      {
+        "exists": true,
+        "kind": "directory",
+        "passed": null,
+        "path": "promotion_governance/promotion_cards",
+        "readiness": "",
+        "role": "promotion_cards",
+        "schema_version": "",
+        "sha256": null,
+        "size_bytes": null
+      }
+    ],
     "promotion_decision": [
       {
         "exists": true,
@@ -1511,8 +1570,8 @@
         "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "91fdcbd7952c661dc2e75cbebbf8905e700b94196132c07343274c52ae2b80cb",
-        "size_bytes": 32729
+        "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+        "size_bytes": 32793
       }
     ],
     "promotion_ledger": [
@@ -1526,6 +1585,32 @@
         "schema_version": "hfr.promotion_ledger.v1",
         "sha256": "85b80d41688e361009bbdbf8313a23a884ab702ebbeba89d6bfa63627188904e",
         "size_bytes": 2215
+      }
+    ],
+    "promotion_release_record": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "promotion_governance/promotion_release_record.json",
+        "readiness": "ready",
+        "role": "promotion_release_record",
+        "schema_version": "hfr.promotion_release_record.v1",
+        "sha256": "779198b0383fdc675e2095f68eeda6c26e539c1dfe1bdde7a5ab67e3163b4e94",
+        "size_bytes": 19412
+      }
+    ],
+    "promotion_rollback_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "promotion_governance/promotion_rollback_receipt.json",
+        "readiness": "ready",
+        "role": "promotion_rollback_receipt",
+        "schema_version": "hfr.promotion_rollback_receipt.v1",
+        "sha256": "343ad264f6f4058df1cffba4fa8ee23bb407625b589959ded228503f8428ff39",
+        "size_bytes": 4608
       }
     ],
     "rejection_sampling_gate": [

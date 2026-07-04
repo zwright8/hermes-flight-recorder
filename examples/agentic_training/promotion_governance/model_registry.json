@@ -1,0 +1,53 @@
+{
+  "alias_history": [
+    {
+      "previous_aliases": {
+        "candidate": "local/mock-candidate",
+        "champion": "local/mock-baseline",
+        "rollback": "local/mock-baseline"
+      },
+      "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "updated_aliases": {
+        "candidate": "local/mock-candidate",
+        "champion": "local/mock-candidate",
+        "rollback": "local/mock-baseline"
+      }
+    }
+  ],
+  "aliases": {
+    "candidate": "local/mock-candidate",
+    "champion": "local/mock-candidate",
+    "rollback": "local/mock-baseline"
+  },
+  "entries": {
+    "local/mock-baseline": {
+      "id": "local/mock-baseline",
+      "role": "champion",
+      "source": "examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_profile.json",
+      "status": "current_champion"
+    },
+    "local/mock-candidate": {
+      "id": "local/mock-candidate",
+      "role": "candidate",
+      "source": "examples/agentic_training/completed_result.json",
+      "status": "promotion_candidate"
+    }
+  },
+  "models": {
+    "local/mock-baseline": {
+      "id": "local/mock-baseline",
+      "role": "champion"
+    },
+    "local/mock-candidate": {
+      "id": "local/mock-candidate",
+      "role": "candidate"
+    }
+  },
+  "notes": [
+    "Pre-promotion registry snapshot used by the fail-closed rollback receipt.",
+    "This fixture contains only local mock identifiers; it is not a live model registry."
+  ],
+  "registry_path": "examples/agentic_training/promotion_governance/model_registry_before_alias_apply.json",
+  "schema_version": "hfr.model_registry.v1",
+  "updated_at": "2026-07-03T00:00:00Z"
+}
