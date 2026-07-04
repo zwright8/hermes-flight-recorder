@@ -298,6 +298,16 @@ class ModelGraderTests(unittest.TestCase):
             stale_dry_run.write_text(json.dumps(stale_dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assert_validation_error(stale_dry_run, "model_grader_dry_run", "rubric_spec.size_bytes does not match the current file")
 
+            stale_label_dry_run = artifact_dir / "stale_label_dry_run.json"
+            stale_label_payload = json.loads(json.dumps(dry_payload))
+            stale_label_payload["grader_labels"][0]["label_sha256"] = "0" * 64
+            stale_label_dry_run.write_text(json.dumps(stale_label_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                stale_label_dry_run,
+                "model_grader_dry_run",
+                "label_sha256 does not match label contents",
+            )
+
             stale_gate = artifact_dir / "stale_gate.json"
             stale_gate_payload = dict(passing_payload)
             stale_gate_payload["source_artifacts"] = dict(passing_payload["source_artifacts"])

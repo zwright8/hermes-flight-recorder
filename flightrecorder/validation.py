@@ -5564,8 +5564,11 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             labels_requiring_review += 1
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
-        if not _is_sha256(row.get("label_sha256")):
+        label_hash = row.get("label_sha256")
+        if not _is_sha256(label_hash):
             target.errors.append(f"{label}.label_sha256 must be a sha256 hex digest.")
+        elif label_hash != _model_grader_label_sha256(row):
+            target.errors.append(f"{label}.label_sha256 does not match label contents.")
     for label_name, expected in expected_counts.items():
         if label_counts.get(label_name) != expected:
             target.errors.append(
@@ -5785,6 +5788,12 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
         validate_rubric_spec,
         allow_missing=False,
     )
+
+
+def _model_grader_label_sha256(row: dict[str, Any]) -> str:
+    payload = {key: item for key, item in row.items() if key != "label_sha256"}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:

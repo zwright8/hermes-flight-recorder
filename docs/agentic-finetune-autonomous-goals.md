@@ -705,6 +705,9 @@ card, and dataset card decisions.
   so optional refs, top-level receipts, missing fingerprint blocks, anchor
   manifests or registries, stale source artifacts, or redirected generated
   evidence are blocked before labels can be trusted.
+- Model-grader dry-run validation recomputes each label hash from label
+  contents, so stale or tampered grader labels are blocked even when the hash
+  still has a SHA-256 shape.
 - Training and reviewed dataset selection keys hash pathless fingerprint
   identity while manifests keep display paths as provenance, so registry keys
   remain stable across cwd and path-redaction presentation changes.
