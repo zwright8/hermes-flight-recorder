@@ -81,6 +81,8 @@ evidence.
   args, commands, and input fingerprint paths warn under strict validation.
 - Validate trainer launch checks before public use so preserved approved-command
   raw, argv, or shell tokens warn under strict validation.
+- Validate trainer archives before public use so preserved approved-command raw,
+  argv, or shell tokens warn under strict validation.
 - Validate trainer consumer plans before public use so preserved archive roots,
   external code roots, argv, or shell tokens warn under strict validation.
 - Validate trainer wrapper dry-run receipts before public use so preserved

@@ -520,6 +520,8 @@ Strict run validation also warns before `artifact_lineage.json` publishes
 absolute output paths, replay args, commands, or input fingerprint paths.
 Strict trainer-launch-check validation warns before approved-command raw, argv,
 or shell tokens carry absolute machine coordinates into public handoffs.
+Strict trainer-archive validation repeats that warning for preserved approved
+commands while keeping the rewritten portable command auditable.
 Strict trainer-consumer-plan validation warns before archive roots, external
 code roots, argv paths, or shell tokens carry absolute machine coordinates into
 public handoffs.

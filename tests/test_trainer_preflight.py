@@ -287,7 +287,15 @@ class TrainerPreflightTests(unittest.TestCase):
             archive_manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
             self.assertTrue(archive_manifest["passed"])
             self.assertIn("agentic_training_plan", {item["artifact_name"] for item in archive_manifest["trainer_inputs"]})
-            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+            archive_summary = root / "trainer_archive_command_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive)]), 0)
+            code = run_cli(["validate", "--trainer-archive", str(archive), "--strict", "--out", str(archive_summary)])
+            self.assertEqual(code, 1)
+            validation = json.loads(archive_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive.approved_command.argv[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.raw[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.shell[3] is absolute", warnings)
 
             trainer_code = root / "trainer_code"
             trainer_code.mkdir()
@@ -303,7 +311,6 @@ class TrainerPreflightTests(unittest.TestCase):
                         str(trainer_code),
                         "--out",
                         str(archive_check),
-                        "--strict",
                         "--preserve-paths",
                     ]
                 ),
@@ -631,7 +638,15 @@ class TrainerPreflightTests(unittest.TestCase):
                 )
             )
             self.assertFalse(any(path.name == "late_after_preflight.json" for path in (archive / "artifacts").rglob("*.json")))
-            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+            archive_summary = root / "trainer_archive_stale_directory_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive)]), 0)
+            code = run_cli(["validate", "--trainer-archive", str(archive), "--strict", "--out", str(archive_summary)])
+            self.assertEqual(code, 1)
+            validation = json.loads(archive_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive.approved_command.argv[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.raw[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.shell[3] is absolute", warnings)
 
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -961,7 +976,24 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(result["metrics"]["path_rewrite_count"], len(result["path_rewrites"]))
             self.assertEqual(result["metrics"]["external_command_path_count"], contract["external_command_path_count"])
-            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+            archive_command_summary = Path(tmp) / "trainer_archive_command_summary.json"
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive",
+                    str(archive),
+                    "--strict",
+                    "--out",
+                    str(archive_command_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(archive_command_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive.approved_command.argv[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.raw[3] is absolute", warnings)
+            self.assertIn("trainer_archive.approved_command.shell[3] is absolute", warnings)
             self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
             archive_schema = check_schema_contract(result, name_or_id="trainer_archive")
             self.assertTrue(archive_schema["passed"], archive_schema["errors"])
@@ -1042,7 +1074,6 @@ class TrainerPreflightTests(unittest.TestCase):
                         str(trainer_code),
                         "--out",
                         str(archive_check),
-                        "--strict",
                         "--preserve-paths",
                     ]
                 ),
@@ -1055,6 +1086,13 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(check["metrics"]["missing_external_code_count"], 0)
             self.assertEqual(check["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(check["metrics"]["trainer_input_available_count"], len(result["trainer_inputs"]))
+            self.assertTrue(check["validation"]["passed"])
+            self.assertFalse(check["validation"]["strict"])
+            self.assertGreaterEqual(check["validation"]["warning_count"], 3)
+            self.assertIn(
+                "trainer_archive.approved_command.argv[3] is absolute",
+                "\n".join(check["validation"]["warnings"]),
+            )
             external = check["external_code_checks"]
             self.assertEqual(len(external), contract["external_command_path_count"])
             self.assertIn("train.py", {item["path"] for item in external})

@@ -22075,6 +22075,12 @@ def _validate_trainer_archive_commands(
     if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
         target.errors.append("trainer_archive.approved_command.argv must be a list of strings.")
         argv = []
+    for index, item in enumerate(item for item in argv if isinstance(item, str)):
+        _warn_command_token_public_path(target, f"trainer_archive.approved_command.argv[{index}]", item)
+    for field_name in ("raw", "shell"):
+        value = approved_command.get(field_name)
+        if isinstance(value, str) and value:
+            _warn_shell_tokens_public_paths(value, target, f"trainer_archive.approved_command.{field_name}")
 
     if not isinstance(portable_command, dict):
         target.errors.append("trainer_archive.portable_command must be an object.")
