@@ -293,9 +293,13 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(code, 1)
             validation = json.loads(archive_summary.read_text(encoding="utf-8"))
             warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_archive.archive_path is absolute", warnings)
+            self.assertIn("trainer_archive.artifacts[0].original_path is absolute", warnings)
             self.assertIn("trainer_archive.approved_command.argv[3] is absolute", warnings)
             self.assertIn("trainer_archive.approved_command.raw[3] is absolute", warnings)
             self.assertIn("trainer_archive.approved_command.shell[3] is absolute", warnings)
+            self.assertIn("trainer_archive.trainer_inputs[0].original_path is absolute", warnings)
+            self.assertIn("trainer_archive.path_rewrites[0].original_path is absolute", warnings)
 
             trainer_code = root / "trainer_code"
             trainer_code.mkdir()
@@ -1087,11 +1091,10 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(check["metrics"]["trainer_input_available_count"], len(result["trainer_inputs"]))
             self.assertTrue(check["validation"]["passed"])
             self.assertFalse(check["validation"]["strict"])
-            self.assertGreaterEqual(check["validation"]["warning_count"], 3)
-            self.assertIn(
-                "trainer_archive.approved_command.argv[3] is absolute",
-                "\n".join(check["validation"]["warnings"]),
-            )
+            self.assertGreaterEqual(check["validation"]["warning_count"], 20)
+            validation_warnings = "\n".join(check["validation"]["warnings"])
+            self.assertIn("trainer_archive.archive_path is absolute", validation_warnings)
+            self.assertIn("trainer_archive.artifacts[0].original_path is absolute", validation_warnings)
             external = check["external_code_checks"]
             self.assertEqual(len(external), contract["external_command_path_count"])
             self.assertIn("train.py", {item["path"] for item in external})

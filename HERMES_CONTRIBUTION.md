@@ -521,7 +521,8 @@ absolute output paths, replay args, commands, or input fingerprint paths.
 Strict trainer-launch-check validation warns before approved-command raw, argv,
 or shell tokens carry absolute machine coordinates into public handoffs.
 Strict trainer-archive validation repeats that warning for preserved approved
-commands while keeping the rewritten portable command auditable.
+commands and archive source paths while keeping the rewritten portable command
+auditable.
 Strict trainer-archive-check validation warns before preserved archive roots,
 external code roots, resolved paths, or portable command tokens carry absolute
 machine coordinates into public handoffs.

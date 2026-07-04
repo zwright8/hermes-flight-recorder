@@ -21886,6 +21886,8 @@ def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget,
     for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
         if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
             target.errors.append(f"trainer_archive.{field_name} must be a non-empty string.")
+    for field_name in ("archive_path", "manifest_path"):
+        _warn_absolute_public_path(target, f"trainer_archive.{field_name}", archive.get(field_name))
     for field_name in ("passed", "self_contained", "require_self_contained", "ready_for_training", "launch_check_included"):
         if not isinstance(archive.get(field_name), bool):
             target.errors.append(f"trainer_archive.{field_name} must be a boolean.")
@@ -21991,6 +21993,7 @@ def _validate_trainer_archive_artifact(
     for field_name in ("name", "role", "kind", "path", "original_path"):
         if not isinstance(artifact.get(field_name), str) or not artifact.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    _warn_absolute_public_path(target, f"{label}.original_path", artifact.get("original_path"))
     valid_roles = {"trainer_preflight", "trainer_launch_check", "gate", "validation_summary", "trainer_artifact", "schema_contract"}
     if artifact.get("role") not in valid_roles:
         target.errors.append(f"{label}.role is invalid.")
@@ -22128,6 +22131,7 @@ def _validate_trainer_archive_inputs(value: Any, artifacts: list[dict[str, Any]]
         for field_name in ("artifact_name", "kind", "original_path", "archive_path", "sha256"):
             if not isinstance(item.get(field_name), str) or not item.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.original_path", item.get("original_path"))
         for field_name in ("artifact_index", "size_bytes"):
             if not _is_non_negative_int(item.get(field_name)):
                 target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -22158,6 +22162,7 @@ def _validate_trainer_archive_rewrites(value: Any, inputs: Any, target: Validati
         for field_name in ("artifact_name", "kind", "original_path", "archive_path"):
             if not isinstance(item.get(field_name), str) or not item.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.original_path", item.get("original_path"))
         if index < len(expected):
             for field_name, expected_value in expected[index].items():
                 if item.get(field_name) != expected_value:
