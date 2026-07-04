@@ -15301,6 +15301,8 @@ def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget, so
     _require_equal(ledger, "schema_version", ACTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("action_ledger.ledger_path must be a string.")
+    else:
+        _warn_absolute_public_path(target, "action_ledger.ledger_path", ledger.get("ledger_path"))
     if ledger.get("passed") is not True:
         target.errors.append("action_ledger.passed must be true.")
 
@@ -19696,6 +19698,8 @@ def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label:
     for field_name in ("path", "schema_version", "readiness", "recommendation"):
         if not isinstance(bundle.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if isinstance(bundle.get("path"), str):
+        _warn_absolute_public_path(target, f"{label}.path", bundle.get("path"))
     if bundle.get("schema_version") != EVIDENCE_BUNDLE_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {EVIDENCE_BUNDLE_SCHEMA_VERSION}.")
     for field_name in ("exists", "passed"):
@@ -19718,6 +19722,9 @@ def _validate_action_ledger_entry(entry: Any, target: ValidationTarget, label: s
     for field_name in ("routing_key", "action_fingerprint", "id", "priority", "artifact", "summary", "status", "first_seen_path", "last_seen_path"):
         if not isinstance(entry.get(field_name), str) or not entry.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    for field_name in ("first_seen_path", "last_seen_path"):
+        if isinstance(entry.get(field_name), str):
+            _warn_absolute_public_path(target, f"{label}.{field_name}", entry.get(field_name))
     if not _is_sha256(entry.get("action_fingerprint")):
         target.errors.append(f"{label}.action_fingerprint must be a SHA-256 hex string.")
     expected_routing_key = f"{entry.get('artifact')}:{entry.get('id')}:{str(entry.get('action_fingerprint') or '')[:12]}"
@@ -19783,6 +19790,8 @@ def _validate_action_ledger_occurrence(occurrence: Any, target: ValidationTarget
     for field_name in ("bundle_path", "summary", "priority", "artifact"):
         if not isinstance(occurrence.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if isinstance(occurrence.get("bundle_path"), str):
+        _warn_absolute_public_path(target, f"{label}.bundle_path", occurrence.get("bundle_path"))
     if occurrence.get("priority") not in {"critical", "high", "medium", "low"}:
         target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
 
@@ -19805,6 +19814,9 @@ def _validate_action_ledger_bundle_action_counts(value: Any, bundles: list[Any],
         for bundle in bundles
         if isinstance(bundle, dict)
     ]
+    for index, row in enumerate(value):
+        if isinstance(row, dict) and isinstance(row.get("path"), str):
+            _warn_absolute_public_path(target, f"{label}[{index}].path", row.get("path"))
     if value != expected:
         target.errors.append(f"{label} must match action_ledger.bundles action counts.")
 

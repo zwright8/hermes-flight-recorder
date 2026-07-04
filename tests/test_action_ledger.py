@@ -150,6 +150,44 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertTrue(all(occurrence["bundle_path"] == "../src/bundle.json" for entry in ledger["entries"] for occurrence in entry["occurrences"]))
             self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
 
+    def test_strict_validate_rejects_absolute_action_ledger_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = _build_action_ledger(root)
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
+            absolute_bundle_path = str(root / "bundle.json")
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["ledger_path"] = str(ledger_path)
+            ledger["bundles"][0]["path"] = absolute_bundle_path
+            ledger["metrics"]["bundle_action_counts"][0]["path"] = absolute_bundle_path
+            for entry in ledger["entries"]:
+                entry["first_seen_path"] = absolute_bundle_path
+                entry["last_seen_path"] = absolute_bundle_path
+                for occurrence in entry["occurrences"]:
+                    occurrence["bundle_path"] = absolute_bundle_path
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            for expected in (
+                "action_ledger.ledger_path is absolute",
+                "action_ledger.bundles[0].path is absolute",
+                "action_ledger.metrics.bundle_action_counts[0].path is absolute",
+                "action_ledger.entries[0].first_seen_path is absolute",
+                "action_ledger.entries[0].last_seen_path is absolute",
+                "action_ledger.entries[0].occurrences[0].bundle_path is absolute",
+            ):
+                self.assertIn(expected, warnings)
+            strict_summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
+            self.assertIn("action_ledger.ledger_path is absolute", strict_warnings)
+
     def test_validate_rejects_action_ledger_cwd_relative_source_bundle_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

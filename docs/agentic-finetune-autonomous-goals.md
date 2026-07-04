@@ -704,6 +704,9 @@ card, and dataset card decisions.
 - Evidence-bundle strict validation now warns on absolute top-level bundle paths,
   catching preserved or forged local paths before public evidence packages are
   accepted.
+- Action-ledger strict validation now warns on absolute ledger, bundle, metric,
+  and occurrence paths, catching preserved local evidence coordinates before
+  public action-review packets are accepted.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
