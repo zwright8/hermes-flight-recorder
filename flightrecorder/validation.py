@@ -20219,8 +20219,115 @@ def _visible_local_path(value: Any) -> Path | None:
     return Path(value)
 
 
+_TRAINER_CONSUMER_PLAN_KEYS = {
+    "schema_version",
+    "plan_path",
+    "archive_check_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "source_archive_check",
+    "execution",
+    "handoff_contract",
+    "blocked_reasons",
+    "metrics",
+    "notes",
+}
+_TRAINER_CONSUMER_PLAN_CHECK_KEYS = {"id", "passed", "actual", "expected", "scope", "summary"}
+_TRAINER_CONSUMER_PLAN_VALIDATION_KEYS = {
+    "available",
+    "passed",
+    "strict",
+    "target_count",
+    "error_count",
+    "warning_count",
+    "errors",
+    "warnings",
+}
+_TRAINER_CONSUMER_PLAN_SOURCE_KEYS = {
+    "path",
+    "schema_version",
+    "passed",
+    "readiness",
+    "recommendation",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_CONSUMER_PLAN_EXECUTION_KEYS = {
+    "execution_cwd",
+    "archive_root",
+    "external_code_root",
+    "command_approved",
+    "command_available",
+    "command_argv",
+    "command_shell",
+    "external_code_files",
+    "trainer_inputs",
+}
+_TRAINER_CONSUMER_PLAN_EXTERNAL_CODE_FILE_KEYS = {
+    "index",
+    "argv_index",
+    "token",
+    "path",
+    "resolved_path",
+    "exists",
+    "regular_file",
+    "symlink",
+    "passed",
+    "reason",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_CONSUMER_PLAN_TRAINER_INPUT_KEYS = {
+    "index",
+    "artifact_index",
+    "artifact_name",
+    "archive_path",
+    "resolved_path",
+    "kind",
+    "exists",
+    "regular_file",
+    "regular_directory",
+    "symlink",
+    "expected_sha256",
+    "expected_size_bytes",
+    "expected_file_count",
+    "file_count",
+    "passed",
+    "reason",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_CONSUMER_PLAN_HANDOFF_KEYS = {
+    "flight_recorder_executed_command",
+    "runner_owns_execution",
+    "runner_must_run_from",
+    "runner_must_require_recommendation",
+    "trainer_input_count",
+    "external_code_file_count",
+    "allowed_input_sets",
+    "notes",
+}
+_TRAINER_CONSUMER_PLAN_METRICS_KEYS = {
+    "check_count",
+    "failed_check_count",
+    "command_arg_count",
+    "trainer_input_count",
+    "trainer_input_ready_count",
+    "external_code_file_count",
+    "external_code_ready_count",
+    "archive_check_error_count",
+    "archive_check_warning_count",
+}
+
+
 def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", TRAINER_CONSUMER_PLAN_SCHEMA_VERSION, target)
+    _validate_allowed_keys(plan, _TRAINER_CONSUMER_PLAN_KEYS, target, "trainer_consumer_plan")
     for field_name in ("plan_path", "archive_check_path", "readiness", "recommendation"):
         if not isinstance(plan.get(field_name), str) or not plan.get(field_name):
             target.errors.append(f"trainer_consumer_plan.{field_name} must be a non-empty string.")
@@ -20243,6 +20350,9 @@ def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarg
     if not _is_string_list(plan.get("blocked_reasons")):
         target.errors.append("trainer_consumer_plan.blocked_reasons must be a list of strings.")
 
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _TRAINER_CONSUMER_PLAN_CHECK_KEYS, target, f"trainer_consumer_plan.checks[{index}]")
     failed_checks = _validate_gate_like_checks(checks, target, "trainer_consumer_plan.checks")
     if plan.get("check_count") != len(checks):
         target.errors.append(f"trainer_consumer_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
@@ -20279,6 +20389,7 @@ def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarg
 
 
 def _validate_trainer_consumer_plan_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_VALIDATION_KEYS, target, "trainer_consumer_plan.validation")
     _validate_trainer_compact_validation_record(
         value,
         target,
@@ -20292,6 +20403,7 @@ def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget,
     if not isinstance(value, dict):
         target.errors.append("trainer_consumer_plan.source_archive_check must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_SOURCE_KEYS, target, "trainer_consumer_plan.source_archive_check")
     for field_name in ("path", "schema_version", "readiness", "recommendation"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"trainer_consumer_plan.source_archive_check.{field_name} must be a non-empty string.")
@@ -20352,6 +20464,7 @@ def _validate_trainer_consumer_plan_execution(value: Any, target: ValidationTarg
     if not isinstance(value, dict):
         target.errors.append("trainer_consumer_plan.execution must be an object.")
         return counts
+    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_EXECUTION_KEYS, target, "trainer_consumer_plan.execution")
     for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"trainer_consumer_plan.execution.{field_name} must be a string.")
@@ -20399,6 +20512,7 @@ def _validate_trainer_consumer_plan_execution(value: Any, target: ValidationTarg
 
 
 def _validate_trainer_consumer_plan_external_code_file(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(item, _TRAINER_CONSUMER_PLAN_EXTERNAL_CODE_FILE_KEYS, target, label)
     for field_name in ("index", "argv_index"):
         if not _is_non_negative_int(item.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -20419,6 +20533,7 @@ def _validate_trainer_consumer_plan_external_code_file(item: dict[str, Any], tar
 
 
 def _validate_trainer_consumer_plan_trainer_input(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(item, _TRAINER_CONSUMER_PLAN_TRAINER_INPUT_KEYS, target, label)
     for field_name in ("index", "artifact_index"):
         if not _is_non_negative_int(item.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -20450,6 +20565,7 @@ def _validate_trainer_consumer_plan_handoff(value: Any, counts: dict[str, int], 
     if not isinstance(value, dict):
         target.errors.append("trainer_consumer_plan.handoff_contract must be an object.")
         return
+    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_HANDOFF_KEYS, target, "trainer_consumer_plan.handoff_contract")
     if value.get("flight_recorder_executed_command") is not False:
         target.errors.append("trainer_consumer_plan.handoff_contract.flight_recorder_executed_command must be false.")
     if value.get("runner_owns_execution") is not True:
@@ -20487,6 +20603,7 @@ def _validate_trainer_consumer_plan_metrics(
     failed_check_count: int,
     target: ValidationTarget,
 ) -> None:
+    _validate_allowed_keys(metrics, _TRAINER_CONSUMER_PLAN_METRICS_KEYS, target, "trainer_consumer_plan.metrics")
     expected = {
         "check_count": check_count,
         "failed_check_count": failed_check_count,

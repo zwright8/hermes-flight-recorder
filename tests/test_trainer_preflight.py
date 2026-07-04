@@ -1008,6 +1008,68 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
             schema = check_schema_contract(plan, name_or_id="trainer_consumer_plan")
             self.assertTrue(schema["passed"], schema["errors"])
+            forged = json.loads(json.dumps(plan))
+            forged["provider_console_url"] = "redacted-provider-console"
+            forged["checks"][0]["provider_call"] = "forged"
+            forged["validation"]["credential_hint"] = "redacted"
+            forged["source_archive_check"]["local_source_path"] = "redacted-source-path"
+            forged["execution"]["trainer_process_pid"] = 123
+            forged["execution"]["external_code_files"][0]["execution_receipt"] = "not-created"
+            forged["execution"]["trainer_inputs"][0]["credential_value"] = "redacted"
+            forged["handoff_contract"]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["metrics"]["cloud_cost_incurred_usd"] = 0
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
+            self.assertFalse(forged_schema["passed"])
+            schema_errors = "\n".join(forged_schema["errors"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "credential_hint",
+                "local_source_path",
+                "trainer_process_pid",
+                "execution_receipt",
+                "credential_value",
+                "cloud_job_url",
+                "cloud_cost_incurred_usd",
+            ):
+                self.assertIn(field_name, schema_errors)
+            forged_unknown_plan = Path(tmp) / "trainer_consumer_plan_forged_side_effect_fields.json"
+            forged_unknown_summary = Path(tmp) / "trainer_consumer_plan_forged_side_effect_fields_summary.json"
+            forged_unknown_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(forged_unknown_plan),
+                    "--strict",
+                    "--out",
+                    str(forged_unknown_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_unknown_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_consumer_plan.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("trainer_consumer_plan.validation contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn(
+                "trainer_consumer_plan.source_archive_check contains unknown field(s): ['local_source_path'].",
+                errors,
+            )
+            self.assertIn("trainer_consumer_plan.execution contains unknown field(s): ['trainer_process_pid'].", errors)
+            self.assertIn(
+                "trainer_consumer_plan.execution.external_code_files[0] contains unknown field(s): ['execution_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_consumer_plan.execution.trainer_inputs[0] contains unknown field(s): ['credential_value'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_consumer_plan.handoff_contract contains unknown field(s): ['cloud_job_url'].",
+                errors,
+            )
+            self.assertIn("trainer_consumer_plan.metrics contains unknown field(s): ['cloud_cost_incurred_usd'].", errors)
             passed_external = next(item for item in plan["execution"]["external_code_files"] if item["passed"])
             self.assertEqual(len(passed_external["sha256"]), 64)
             self.assertIn("size_bytes", passed_external)

@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/trainer_consumer_plan.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Side-effect-free trainer consumer plan derived from a trainer archive readiness check.",
   "properties": {
     "archive_check_path": {
@@ -66,7 +66,7 @@
       "const": "hfr.trainer_consumer_plan.v1"
     },
     "source_archive_check": {
-      "type": "object"
+      "$ref": "#/$defs/sourceArchiveCheck"
     },
     "validation": {
       "$ref": "#/$defs/validation"
@@ -94,7 +94,7 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -128,7 +128,7 @@
       "type": "object"
     },
     "execution": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_root": {
           "type": "string"
@@ -181,7 +181,7 @@
       "type": "object"
     },
     "externalCodeFile": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -281,7 +281,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "allowed_input_sets": {
           "items": {
@@ -329,7 +329,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_check_error_count": {
           "minimum": 0,
@@ -381,8 +381,45 @@
       ],
       "type": "object"
     },
+    "sourceArchiveCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "readiness": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "hfr.trainer_archive_check.v1"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "schema_version",
+        "passed",
+        "readiness",
+        "recommendation"
+      ],
+      "type": "object"
+    },
     "trainerInput": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -533,7 +570,7 @@
       "type": "object"
     },
     "validation": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "available": {
           "type": "boolean"
