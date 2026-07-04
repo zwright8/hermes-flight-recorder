@@ -142,9 +142,7 @@
       "role": "training_export"
     }
   ],
-  "blocked_reasons": [
-    "governance_required_for_promotion: passed=False"
-  ],
+  "blocked_reasons": [],
   "budget": {
     "live_spend_allowed": false,
     "max_cloud_cost_usd": 0,
@@ -581,9 +579,9 @@
     },
     {
       "actual": {
-        "passed": false,
+        "passed": true,
         "promotion_decision_count": 1,
-        "promotion_decision_passed": false,
+        "promotion_decision_passed": true,
         "promotion_decision_present": true,
         "promotion_decision_schema_valid": true,
         "promotion_ledger_count": 1,
@@ -598,8 +596,8 @@
         "promotion_ledger_schema_valid": true
       },
       "id": "governance_required_for_promotion",
-      "passed": false,
-      "summary": "governance_required_for_promotion: passed=False"
+      "passed": true,
+      "summary": "governance_required_for_promotion: passed=True"
     }
   ],
   "cloud_training": {
@@ -864,7 +862,7 @@
     "recommendation": "archive_external_eval_dry_run",
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 1,
+  "failed_check_count": 0,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -896,7 +894,7 @@
     "candidate_policy": "local/mock-candidate",
     "teacher_policy": "local/mock-teacher"
   },
-  "passed": false,
+  "passed": true,
   "phases": [
     {
       "gate": "generated tasks must be versioned, replayable, and privacy reviewed before rollout.",
@@ -1175,8 +1173,8 @@
     "requires_region_allowlist": true,
     "requires_secret_redaction": true
   },
-  "readiness": "planned_fail_closed",
-  "recommendation": "collect_missing_receipts_before_live_execution",
+  "readiness": "ready_for_governance_review",
+  "recommendation": "approve_iteration_execution",
   "schema_version": "hfr.agentic_training_loop_plan.v1",
   "source_artifacts": {
     "action_ledger": [
@@ -1508,13 +1506,13 @@
       {
         "exists": true,
         "kind": "file",
-        "passed": false,
+        "passed": true,
         "path": "promotion_governance/promotion_decision.json",
-        "readiness": "blocked",
+        "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "85aab5b00b81fb7bd61960d76652b5601c6b115b33257c19f2888ccae3deded4",
-        "size_bytes": 34161
+        "sha256": "91fdcbd7952c661dc2e75cbebbf8905e700b94196132c07343274c52ae2b80cb",
+        "size_bytes": 32729
       }
     ],
     "promotion_ledger": [
@@ -1526,8 +1524,8 @@
         "readiness": "",
         "role": "promotion_ledger",
         "schema_version": "hfr.promotion_ledger.v1",
-        "sha256": "cd0a69abaf2309c050e014bf29915f5183197b5f9284af45f574b50a4c142ed8",
-        "size_bytes": 2217
+        "sha256": "85b80d41688e361009bbdbf8313a23a884ab702ebbeba89d6bfa63627188904e",
+        "size_bytes": 2215
       }
     ],
     "rejection_sampling_gate": [

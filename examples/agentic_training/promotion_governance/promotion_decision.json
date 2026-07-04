@@ -15,8 +15,8 @@
         "target": "local/mock-baseline"
       }
     ],
-    "authorized": false,
-    "recommendation": "hold_aliases"
+    "authorized": true,
+    "recommendation": "apply_alias_update"
   },
   "artifacts": {
     "agentic_training_result": {
@@ -29,10 +29,13 @@
       "size_bytes": 11554
     },
     "compare_gate": {
-      "exists": false,
-      "kind": "missing",
-      "path": "",
-      "role": "compare_gate"
+      "exists": true,
+      "kind": "file",
+      "path": "compare_gate.json",
+      "role": "compare_gate",
+      "schema_version": "hfr.compare_gate.v1",
+      "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+      "size_bytes": 16328
     },
     "dataset_card": {
       "exists": true,
@@ -77,10 +80,13 @@
       "size_bytes": 1537
     },
     "promotion_ledger_gate": {
-      "exists": false,
-      "kind": "missing",
-      "path": "",
-      "role": "promotion_ledger_gate"
+      "exists": true,
+      "kind": "file",
+      "path": "promotion_ledger_gate.json",
+      "role": "promotion_ledger_gate",
+      "schema_version": "hfr.promotion_ledger_gate.v1",
+      "sha256": "9e284a5845ae3bc07d9f576f26a75b5d63caa410239efd7040c1077d15efb67c",
+      "size_bytes": 4673
     },
     "redaction_check": {
       "exists": true,
@@ -417,14 +423,14 @@
     },
     {
       "actual": {
-        "exists": false,
-        "path": ""
+        "exists": true,
+        "path": "promotion_ledger_gate.json"
       },
       "expected": {
         "exists": true
       },
       "id": "promotion_ledger_gate_present",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "promotion_ledger_gate"
       },
@@ -432,14 +438,14 @@
     },
     {
       "actual": {
-        "exists": false,
-        "path": ""
+        "exists": true,
+        "path": "compare_gate.json"
       },
       "expected": {
         "exists": true
       },
       "id": "compare_gate_present",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "compare_gate"
       },
@@ -623,24 +629,24 @@
       "summary": "evidence_bundle uses the expected schema version"
     },
     {
-      "actual": null,
+      "actual": "hfr.promotion_ledger_gate.v1",
       "expected": {
         "schema_version": "hfr.promotion_ledger_gate.v1"
       },
       "id": "promotion_ledger_gate_schema",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "promotion_ledger_gate"
       },
       "summary": "promotion_ledger_gate uses the expected schema version"
     },
     {
-      "actual": null,
+      "actual": "hfr.compare_gate.v1",
       "expected": {
         "schema_version": "hfr.compare_gate.v1"
       },
       "id": "compare_gate_schema",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "compare_gate"
       },
@@ -707,24 +713,24 @@
       "summary": "evidence_bundle reports passed=true"
     },
     {
-      "actual": null,
+      "actual": true,
       "expected": {
         "passed": true
       },
       "id": "promotion_ledger_gate_passed",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "promotion_ledger_gate"
       },
       "summary": "promotion_ledger_gate reports passed=true"
     },
     {
-      "actual": null,
+      "actual": true,
       "expected": {
         "passed": true
       },
       "id": "compare_gate_passed",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "compare_gate"
       },
@@ -806,14 +812,7 @@
       "actual": {
         "invalid_counts": [],
         "invalid_maps": [],
-        "missing": [
-          "baseline_win_count",
-          "contract_drift_count",
-          "new_critical_failure_counts",
-          "regressed_rule_counts",
-          "task_completion_regression_count",
-          "unverified_contract_count"
-        ]
+        "missing": []
       },
       "expected": {
         "fields": [
@@ -826,7 +825,7 @@
         ]
       },
       "id": "compare_metrics_complete",
-      "passed": false,
+      "passed": true,
       "scope": {
         "artifact_role": "compare_gate"
       },
@@ -1089,79 +1088,24 @@
     },
     {
       "actual": {
-        "blocking_check_count": 7
+        "blocking_check_count": 0
       },
       "expected": {
         "blocking_check_count": 0
       },
       "id": "alias_update_authorized",
-      "passed": false,
+      "passed": true,
       "summary": "champion/candidate/rollback aliases may move only after every governance check passes"
     }
   ],
   "decision": {
-    "blocking_check_count": 8,
-    "blocking_checks": [
-      {
-        "id": "promotion_ledger_gate_present",
-        "scope": {
-          "artifact_role": "promotion_ledger_gate"
-        },
-        "summary": "promotion_ledger_gate artifact is present and fingerprinted"
-      },
-      {
-        "id": "compare_gate_present",
-        "scope": {
-          "artifact_role": "compare_gate"
-        },
-        "summary": "compare_gate artifact is present and fingerprinted"
-      },
-      {
-        "id": "promotion_ledger_gate_schema",
-        "scope": {
-          "artifact_role": "promotion_ledger_gate"
-        },
-        "summary": "promotion_ledger_gate uses the expected schema version"
-      },
-      {
-        "id": "compare_gate_schema",
-        "scope": {
-          "artifact_role": "compare_gate"
-        },
-        "summary": "compare_gate uses the expected schema version"
-      },
-      {
-        "id": "promotion_ledger_gate_passed",
-        "scope": {
-          "artifact_role": "promotion_ledger_gate"
-        },
-        "summary": "promotion_ledger_gate reports passed=true"
-      },
-      {
-        "id": "compare_gate_passed",
-        "scope": {
-          "artifact_role": "compare_gate"
-        },
-        "summary": "compare_gate reports passed=true"
-      },
-      {
-        "id": "compare_metrics_complete",
-        "scope": {
-          "artifact_role": "compare_gate"
-        },
-        "summary": "compare gate exposes complete promotion movement metrics"
-      },
-      {
-        "id": "alias_update_authorized",
-        "scope": {},
-        "summary": "champion/candidate/rollback aliases may move only after every governance check passes"
-      }
-    ],
+    "blocking_check_count": 0,
+    "blocking_checks": [],
     "key_metrics": {
       "baseline_win_count": 0,
       "check_count": 65,
       "contract_drift_count": 0,
-      "failed_check_count": 8,
+      "failed_check_count": 0,
       "new_critical_failure_count": 0,
       "policy_release_required_artifact_count": 6,
       "policy_required_artifact_count": 14,
@@ -1170,17 +1114,17 @@
       "task_completion_regression_count": 0,
       "unverified_contract_count": 0
     },
-    "readiness": "blocked",
-    "recommendation": "block_promotion",
-    "summary": "Promotion blocked: 8 governance check(s) failed; task_completion_regressions=0; new_critical_failures=0."
+    "readiness": "ready",
+    "recommendation": "apply_alias_update",
+    "summary": "Promotion passed; registry alias update receipt may be applied by a separate guarded step."
   },
   "decision_path": "examples/agentic_training/promotion_governance/promotion_decision.json",
-  "failed_check_count": 8,
+  "failed_check_count": 0,
   "metrics": {
     "baseline_win_count": 0,
     "check_count": 65,
     "contract_drift_count": 0,
-    "failed_check_count": 8,
+    "failed_check_count": 0,
     "new_critical_failure_count": 0,
     "policy_release_required_artifact_count": 6,
     "policy_required_artifact_count": 14,
@@ -1208,7 +1152,7 @@
     "Alias movement is authorized only when every required governance artifact is present, fingerprinted, and passed.",
     "Blocked checks cover missing evidence, unknown license, redaction/safety failures, missing cards, missing rollback, eval mismatch, critical failures, secret exposure, forbidden actions, unsupported claims, and task-completion regressions."
   ],
-  "passed": false,
+  "passed": true,
   "policy": {
     "allowed_candidate_classes": [
       "base",
@@ -1287,7 +1231,7 @@
     "schema_version": "hfr.promotion_policy.v1",
     "source": "file"
   },
-  "readiness": "blocked",
-  "recommendation": "block_promotion",
+  "readiness": "ready",
+  "recommendation": "apply_alias_update",
   "schema_version": "hfr.promotion_decision.v1"
 }

@@ -1,0 +1,134 @@
+{
+  "artifact": "compare_gate.json",
+  "check_count": 3,
+  "checks": [
+    {
+      "actual": {
+        "recommendation": "promote_iteration"
+      },
+      "expected": {
+        "recommendation": "promote_iteration"
+      },
+      "id": "recommendation_matches",
+      "passed": true,
+      "summary": "recommendation_matches: actual='promote_iteration', expected='promote_iteration'"
+    },
+    {
+      "actual": {
+        "readiness": "ready"
+      },
+      "expected": {
+        "readiness": "ready"
+      },
+      "id": "readiness_matches",
+      "passed": true,
+      "summary": "readiness_matches: actual='ready', expected='ready'"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "source_artifact_passed",
+      "passed": true,
+      "summary": "source_artifact_passed: actual=True, expected=True"
+    }
+  ],
+  "expected_readiness": "ready",
+  "expected_recommendation": "promote_iteration",
+  "failed_check_count": 0,
+  "notes": [
+    "Decision gates consume Flight Recorder decision recommendations for CI and orchestration.",
+    "They do not rerun evals, repair failures, train models, or mutate the source artifact."
+  ],
+  "passed": true,
+  "readiness": "ready",
+  "recommendation": "allow_promotion",
+  "require_passed": true,
+  "schema_version": "hfr.decision_gate.v1",
+  "source_artifact": {
+    "exists": true,
+    "kind": "file",
+    "path": "compare_gate.json",
+    "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+    "size_bytes": 16328
+  },
+  "source_decision": {
+    "blocking_check_count": 0,
+    "key_metrics": {
+      "baseline_win_count": 0,
+      "baseline_win_scenarios": [],
+      "candidate_win_count": 1,
+      "candidate_win_scenarios": [
+        "email_reply_completion"
+      ],
+      "contract_drift_count": 0,
+      "dpo_count": 1,
+      "fixed_rule_counts": {
+        "required_action_sequences": 1,
+        "required_actions": 1,
+        "required_event_counts": 1,
+        "required_state": 1,
+        "required_state_transitions": 1
+      },
+      "new_critical_failure_counts": {},
+      "pair_count": 1,
+      "regressed_rule_counts": {},
+      "skipped_pair_count": 0,
+      "task_completion_improvement_count": 1,
+      "task_completion_improvement_scenarios": [
+        "email_reply_completion"
+      ],
+      "task_completion_regression_count": 0,
+      "task_completion_regression_scenarios": [],
+      "task_families": [
+        {
+          "baseline_win_count": 0,
+          "baseline_win_scenarios": [],
+          "candidate_win_count": 1,
+          "candidate_win_scenarios": [
+            "email_reply_completion"
+          ],
+          "contract_drift_count": 0,
+          "fixed_rule_counts": {
+            "required_action_sequences": 1,
+            "required_actions": 1,
+            "required_event_counts": 1,
+            "required_state": 1,
+            "required_state_transitions": 1
+          },
+          "new_critical_failure_counts": {},
+          "pair_count": 1,
+          "regressed_rule_counts": {},
+          "scenarios": [
+            "email_reply_completion"
+          ],
+          "task_completion_improvement_count": 1,
+          "task_completion_improvement_scenarios": [
+            "email_reply_completion"
+          ],
+          "task_completion_regression_count": 0,
+          "task_completion_regression_scenarios": [],
+          "task_family": "email_reply_completion",
+          "unverified_contract_count": 0
+        }
+      ],
+      "unverified_contract_count": 0,
+      "validation": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": true,
+        "target_count": 1,
+        "warning_count": 0
+      }
+    },
+    "passed": true,
+    "readiness": "ready",
+    "recommendation": "promote_iteration",
+    "schema_version": "hfr.compare_gate.v1",
+    "summary": "Gate is ready: all checks passed."
+  }
+}

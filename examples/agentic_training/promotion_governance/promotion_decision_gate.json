@@ -1,56 +1,67 @@
 {
   "artifact": "promotion_decision.json",
-  "check_count": 2,
+  "check_count": 3,
   "checks": [
     {
       "actual": {
-        "recommendation": "block_promotion"
+        "recommendation": "apply_alias_update"
       },
       "expected": {
         "recommendation": "apply_alias_update"
       },
       "id": "recommendation_matches",
-      "passed": false,
-      "summary": "recommendation_matches: actual='block_promotion', expected='apply_alias_update'"
+      "passed": true,
+      "summary": "recommendation_matches: actual='apply_alias_update', expected='apply_alias_update'"
     },
     {
       "actual": {
-        "readiness": "blocked"
+        "readiness": "ready"
       },
       "expected": {
         "readiness": "ready"
       },
       "id": "readiness_matches",
-      "passed": false,
-      "summary": "readiness_matches: actual='blocked', expected='ready'"
+      "passed": true,
+      "summary": "readiness_matches: actual='ready', expected='ready'"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "source_artifact_passed",
+      "passed": true,
+      "summary": "source_artifact_passed: actual=True, expected=True"
     }
   ],
   "expected_readiness": "ready",
   "expected_recommendation": "apply_alias_update",
-  "failed_check_count": 2,
+  "failed_check_count": 0,
   "notes": [
     "Decision gates consume Flight Recorder decision recommendations for CI and orchestration.",
     "They do not rerun evals, repair failures, train models, or mutate the source artifact."
   ],
-  "passed": false,
-  "readiness": "blocked",
-  "recommendation": "block_promotion",
-  "require_passed": false,
+  "passed": true,
+  "readiness": "ready",
+  "recommendation": "allow_promotion",
+  "require_passed": true,
   "schema_version": "hfr.decision_gate.v1",
   "source_artifact": {
     "exists": true,
     "kind": "file",
     "path": "promotion_decision.json",
-    "sha256": "85aab5b00b81fb7bd61960d76652b5601c6b115b33257c19f2888ccae3deded4",
-    "size_bytes": 34161
+    "sha256": "91fdcbd7952c661dc2e75cbebbf8905e700b94196132c07343274c52ae2b80cb",
+    "size_bytes": 32729
   },
   "source_decision": {
-    "blocking_check_count": 8,
+    "blocking_check_count": 0,
     "key_metrics": {
       "baseline_win_count": 0,
       "check_count": 65,
       "contract_drift_count": 0,
-      "failed_check_count": 8,
+      "failed_check_count": 0,
       "new_critical_failure_count": 0,
       "policy_release_required_artifact_count": 6,
       "policy_required_artifact_count": 14,
@@ -59,10 +70,10 @@
       "task_completion_regression_count": 0,
       "unverified_contract_count": 0
     },
-    "passed": false,
-    "readiness": "blocked",
-    "recommendation": "block_promotion",
+    "passed": true,
+    "readiness": "ready",
+    "recommendation": "apply_alias_update",
     "schema_version": "hfr.promotion_decision.v1",
-    "summary": "Promotion blocked: 8 governance check(s) failed; task_completion_regressions=0; new_critical_failures=0."
+    "summary": "Promotion passed; registry alias update receipt may be applied by a separate guarded step."
   }
 }

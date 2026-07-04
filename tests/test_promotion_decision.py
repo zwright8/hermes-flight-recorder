@@ -25,32 +25,41 @@ def without_preserve_paths(args):
 
 
 class PromotionDecisionTests(unittest.TestCase):
-    def test_committed_agentic_training_promotion_governance_blocks_alias_update(self):
+    def test_committed_agentic_training_promotion_governance_authorizes_review_alias_update(self):
         root = ROOT / "examples" / "agentic_training" / "promotion_governance"
+        compare_gate_path = root / "compare_gate.json"
         decision_path = root / "promotion_decision.json"
         gate_path = root / "promotion_decision_gate.json"
         ledger_path = root / "promotion_ledger.json"
+        history_gate_path = root / "promotion_history_decision_gate.json"
+        ledger_gate_path = root / "promotion_ledger_gate.json"
+        compare_gate = json.loads(compare_gate_path.read_text(encoding="utf-8"))
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
         gate = json.loads(gate_path.read_text(encoding="utf-8"))
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        ledger_gate = json.loads(ledger_gate_path.read_text(encoding="utf-8"))
 
+        self.assertTrue(compare_gate["passed"])
+        self.assertEqual(compare_gate["metrics"]["candidate_win_count"], 1)
+        self.assertEqual(compare_gate["metrics"]["baseline_win_count"], 0)
+        self.assertEqual(compare_gate["metrics"]["contract_drift_count"], 0)
+        self.assertEqual(compare_gate["metrics"]["task_completion_regression_count"], 0)
         self.assertEqual(decision["schema_version"], "hfr.promotion_decision.v1")
-        self.assertFalse(decision["passed"])
-        self.assertEqual(decision["recommendation"], "block_promotion")
-        self.assertFalse(decision["alias_update"]["authorized"])
-        self.assertEqual(decision["alias_update"]["recommendation"], "hold_aliases")
+        self.assertTrue(decision["passed"])
+        self.assertEqual(decision["recommendation"], "apply_alias_update")
+        self.assertTrue(decision["alias_update"]["authorized"])
+        self.assertEqual(decision["alias_update"]["recommendation"], "apply_alias_update")
         failed_ids = {check["id"] for check in decision["checks"] if not check["passed"]}
-        self.assertIn("promotion_ledger_gate_present", failed_ids)
-        self.assertIn("compare_gate_present", failed_ids)
-        self.assertIn("alias_update_authorized", failed_ids)
+        self.assertEqual(failed_ids, set())
         self.assertTrue(decision["artifacts"]["evidence_bundle"]["exists"])
         self.assertTrue(decision["artifacts"]["serving_profile"]["exists"])
 
-        self.assertFalse(gate["passed"])
-        self.assertEqual(gate["source_decision"]["recommendation"], "block_promotion")
-        self.assertEqual(ledger["metrics"]["blocked_count"], 1)
-        self.assertEqual(ledger["metrics"]["allowed_count"], 0)
-        self.assertEqual(ledger["metrics"]["latest_recommendation"], "block_promotion")
+        self.assertTrue(gate["passed"])
+        self.assertEqual(gate["source_decision"]["recommendation"], "apply_alias_update")
+        self.assertTrue(ledger_gate["passed"])
+        self.assertEqual(ledger["metrics"]["blocked_count"], 0)
+        self.assertEqual(ledger["metrics"]["allowed_count"], 1)
+        self.assertEqual(ledger["metrics"]["latest_recommendation"], "allow_promotion")
         self.assertEqual(
             run_cli(
                 [
@@ -58,14 +67,19 @@ class PromotionDecisionTests(unittest.TestCase):
                     "--promotion-decision",
                     str(decision_path),
                     "--decision-gate",
+                    str(history_gate_path),
+                    "--decision-gate",
                     str(gate_path),
                     "--promotion-ledger",
                     str(ledger_path),
+                    "--promotion-ledger-gate",
+                    str(ledger_gate_path),
                     "--strict",
                 ]
             ),
             0,
         )
+        self.assertEqual(run_cli(["schemas", "--check", str(compare_gate_path)]), 0)
 
     def test_promotion_cards_generate_valid_model_and_dataset_cards(self):
         with tempfile.TemporaryDirectory() as tmp:

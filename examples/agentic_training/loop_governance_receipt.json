@@ -59,7 +59,7 @@
     },
     {
       "actual": {
-        "action": "request_another_iteration"
+        "action": "approve"
       },
       "expected": {
         "actions": [
@@ -75,7 +75,7 @@
     },
     {
       "actual": {
-        "action": "request_another_iteration",
+        "action": "approve",
         "listed": true
       },
       "expected": {
@@ -87,7 +87,7 @@
     },
     {
       "actual": {
-        "action": "request_another_iteration",
+        "action": "approve",
         "available": true,
         "blocked_reasons": []
       },
@@ -127,16 +127,16 @@
       "summary": "flight_recorder_did_not_apply_governance_side_effects: passed=True"
     }
   ],
-  "created_at": "2026-07-04T17:42:07.831686+00:00",
+  "created_at": "2026-07-03T00:00:00+00:00",
   "decision": {
     "blocking_check_count": 0,
     "blocking_checks": [],
     "latest_iteration_id": "demo-loop-001",
-    "ledger_recommended_governance_action": "request_another_iteration",
+    "ledger_recommended_governance_action": "approve",
     "readiness": "ready",
-    "recommendation": "record_next_iteration_request",
-    "selected_action": "request_another_iteration",
-    "summary": "Governance action request_another_iteration recorded without applying side effects."
+    "recommendation": "record_approval_for_promotion_review",
+    "selected_action": "approve",
+    "summary": "Governance action approve recorded without applying side effects."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -157,15 +157,15 @@
   "passed": true,
   "readiness": "recorded",
   "receipt_path": "examples/agentic_training/loop_governance_receipt.json",
-  "recommendation": "record_next_iteration_request",
+  "recommendation": "record_approval_for_promotion_review",
   "requested_action": {
-    "action": "request_another_iteration",
+    "action": "approve",
     "available": true,
     "blocked_reason_count": 0,
     "blocked_reasons": [],
-    "reason": "Latest loop is side-effect free but promotion governance remains blocked.",
-    "requested_by": "governance-review",
-    "summary": "Governance can request another iteration."
+    "reason": "Demo ledger is ready for governance review; this approval receipt records review readiness without side effects.",
+    "requested_by": "example-governance",
+    "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
   },
   "schema_version": "hfr.agentic_loop_governance_receipt.v1",
   "source_ledger": {
@@ -173,11 +173,9 @@
       "governance_actions": [
         {
           "action": "approve",
-          "available": false,
-          "blocked_reason_count": 1,
-          "blocked_reasons": [
-            "latest_iteration_not_ready_for_governance_review"
-          ],
+          "available": true,
+          "blocked_reason_count": 0,
+          "blocked_reasons": [],
           "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
         },
         {
@@ -206,10 +204,10 @@
       ],
       "latest_iteration_id": "demo-loop-001",
       "latest_iteration_index": 0,
-      "readiness": "blocked",
-      "recommendation": "continue_iteration",
-      "recommended_governance_action": "request_another_iteration",
-      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 0 missing phase input(s)."
+      "readiness": "ready",
+      "recommendation": "ready_for_governance_review",
+      "recommended_governance_action": "approve",
+      "summary": "Latest loop iteration demo-loop-001 has all required phase receipts."
     },
     "execution_boundary": {
       "cloud_jobs_started": false,
@@ -229,17 +227,17 @@
       "latest_iteration_index": 0,
       "promotion_decision_present": true,
       "promotion_ledger_present": true,
-      "readiness": "planned_fail_closed",
-      "ready_for_governance_review": false,
-      "recommendation": "collect_missing_receipts_before_live_execution",
-      "recommended_governance_action": "request_another_iteration",
+      "readiness": "ready_for_governance_review",
+      "ready_for_governance_review": true,
+      "recommendation": "approve_iteration_execution",
+      "recommended_governance_action": "approve",
       "rollback_receipt_present": false,
       "side_effects_started": false,
-      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 0 missing phase input(s) across 0 empty artifact group(s)."
+      "summary": "Latest loop iteration demo-loop-001 is ready for governance review."
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "c10ac223e19f15a5948b6c69057b8678f649ae305917f282f3729e09b52d6179",
-    "size_bytes": 22192
+    "sha256": "8583753940dceca542bee968a1c3e06561650edc6641932e1bacf4d9e2b01357",
+    "size_bytes": 21988
   }
 }

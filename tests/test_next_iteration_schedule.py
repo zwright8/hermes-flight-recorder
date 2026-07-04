@@ -48,6 +48,7 @@ class NextIterationScheduleTests(unittest.TestCase):
         self.assertEqual(schedule["recommendation"], "create_next_loop_plan")
         self.assertEqual(schedule["next_iteration"]["iteration_id"], "demo-loop-002")
         self.assertFalse(schedule["next_iteration"]["scheduled"])
+        self.assertEqual(schedule["pressure"]["latest_loop_readiness"], "ready_for_governance_review")
         self.assertEqual(schedule["pressure"]["latest_missing_phase_input_count"], 0)
         self.assertEqual(schedule["pressure"]["total_open_signal_count"], 4)
         self.assertFalse(schedule["execution_boundary"]["automations_created"])

@@ -1,0 +1,185 @@
+{
+  "check_count": 11,
+  "checks": [
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_decisions",
+      "passed": true,
+      "summary": "min_decisions: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_allowed_count",
+      "passed": true,
+      "summary": "min_allowed_count: actual=1, min=1"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_blocked_count",
+      "passed": true,
+      "summary": "max_blocked_count: actual=0, max=0"
+    },
+    {
+      "actual": 0.0,
+      "expected": {
+        "max": 0.0
+      },
+      "id": "max_blocked_rate",
+      "passed": true,
+      "summary": "max_blocked_rate: actual=0.0, max=0.0"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_consecutive_allowed",
+      "passed": true,
+      "summary": "min_consecutive_allowed: actual=1, min=1"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_consecutive_blocked",
+      "passed": true,
+      "summary": "max_consecutive_blocked: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_failed_decisions",
+      "passed": true,
+      "summary": "max_failed_decisions: actual=0, max=0"
+    },
+    {
+      "actual": "allow_promotion",
+      "expected": {
+        "value": "allow_promotion"
+      },
+      "id": "require_latest_recommendation",
+      "passed": true,
+      "summary": "require_latest_recommendation: actual='allow_promotion', expected='allow_promotion'"
+    },
+    {
+      "actual": true,
+      "expected": {
+        "value": true
+      },
+      "id": "require_latest_passed",
+      "passed": true,
+      "summary": "require_latest_passed: actual=True, expected=True"
+    },
+    {
+      "actual": {
+        "count": 1,
+        "id": "promote_iteration"
+      },
+      "expected": {
+        "min": 1
+      },
+      "id": "require_source_recommendation",
+      "passed": true,
+      "scope": {
+        "recommendation": "promote_iteration"
+      },
+      "summary": "require_source_recommendation: id=promote_iteration, count=1"
+    },
+    {
+      "actual": {
+        "count": 0,
+        "id": "block_iteration"
+      },
+      "expected": {
+        "count": 0
+      },
+      "id": "forbid_source_recommendation",
+      "passed": true,
+      "scope": {
+        "recommendation": "block_iteration"
+      },
+      "summary": "forbid_source_recommendation: id=block_iteration, count=0"
+    }
+  ],
+  "decision": {
+    "blocking_check_count": 0,
+    "blocking_checks": [],
+    "key_metrics": {
+      "allowed_count": 1,
+      "blocked_count": 0,
+      "blocked_rate": 0.0,
+      "consecutive_allowed_count": 1,
+      "consecutive_blocked_count": 0,
+      "decision_count": 1,
+      "failed_decision_count": 0,
+      "latest_passed": true,
+      "latest_recommendation": "allow_promotion",
+      "source_recommendation_counts": [
+        {
+          "count": 1,
+          "id": "promote_iteration"
+        }
+      ]
+    },
+    "readiness": "ready",
+    "recommendation": "promote_iteration",
+    "summary": "Promotion-ledger gate is ready: promotion history is within policy."
+  },
+  "failed_check_count": 0,
+  "metrics": {
+    "allowed_count": 1,
+    "blocked_count": 0,
+    "blocked_rate": 0.0,
+    "consecutive_allowed_count": 1,
+    "consecutive_blocked_count": 0,
+    "decision_count": 1,
+    "failed_decision_count": 0,
+    "latest_passed": true,
+    "latest_readiness": "ready",
+    "latest_recommendation": "allow_promotion",
+    "source_recommendation_counts": [
+      {
+        "count": 1,
+        "id": "promote_iteration"
+      }
+    ],
+    "unique_source_artifact_count": 1
+  },
+  "passed": true,
+  "policy": {
+    "description": "Demo promotion-history policy: require the latest decision to be an allowed, passed promotion with no blocked tail.",
+    "effective": {
+      "forbid_source_recommendations": [
+        "block_iteration"
+      ],
+      "max_blocked_count": 0,
+      "max_blocked_rate": 0.0,
+      "max_consecutive_blocked": 0,
+      "max_failed_decisions": 0,
+      "min_allowed_count": 1,
+      "min_consecutive_allowed": 1,
+      "min_decisions": 1,
+      "require_latest_passed": true,
+      "require_latest_recommendation": "allow_promotion",
+      "require_source_recommendations": [
+        "promote_iteration"
+      ]
+    },
+    "path": "examples/promotion_ledger_gate_policy.demo.json",
+    "schema_version": "hfr.promotion_ledger_gate.policy.v1"
+  },
+  "promotion_ledger": "promotion_ledger.json",
+  "schema_version": "hfr.promotion_ledger_gate.v1"
+}

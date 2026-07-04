@@ -2,34 +2,34 @@
   "decision_count": 1,
   "ledger_path": "examples/agentic_training/promotion_governance/promotion_ledger.json",
   "metrics": {
-    "allowed_count": 0,
-    "blocked_count": 1,
-    "consecutive_allowed_count": 0,
-    "consecutive_blocked_count": 1,
+    "allowed_count": 1,
+    "blocked_count": 0,
+    "consecutive_allowed_count": 1,
+    "consecutive_blocked_count": 0,
     "decision_count": 1,
     "decision_gate_results": [
       {
-        "failed_check_count": 2,
+        "failed_check_count": 0,
         "index": 0,
-        "passed": false,
-        "path": "promotion_decision_gate.json",
-        "recommendation": "block_promotion",
-        "source_recommendation": "block_promotion"
+        "passed": true,
+        "path": "promotion_history_decision_gate.json",
+        "recommendation": "allow_promotion",
+        "source_recommendation": "promote_iteration"
       }
     ],
-    "latest_passed": false,
-    "latest_readiness": "blocked",
-    "latest_recommendation": "block_promotion",
+    "latest_passed": true,
+    "latest_readiness": "ready",
+    "latest_recommendation": "allow_promotion",
     "recommendation_counts": [
       {
         "count": 1,
-        "id": "block_promotion"
+        "id": "allow_promotion"
       }
     ],
     "source_recommendation_counts": [
       {
         "count": 1,
-        "id": "block_promotion"
+        "id": "promote_iteration"
       }
     ],
     "unique_source_artifact_count": 1
@@ -41,29 +41,29 @@
   "passed": true,
   "records": [
     {
-      "check_count": 2,
+      "check_count": 3,
       "exists": true,
       "expected_readiness": "ready",
-      "expected_recommendation": "apply_alias_update",
-      "failed_check_count": 2,
+      "expected_recommendation": "promote_iteration",
+      "failed_check_count": 0,
       "index": 0,
-      "passed": false,
-      "path": "promotion_decision_gate.json",
-      "readiness": "blocked",
-      "recommendation": "block_promotion",
-      "require_passed": false,
+      "passed": true,
+      "path": "promotion_history_decision_gate.json",
+      "readiness": "ready",
+      "recommendation": "allow_promotion",
+      "require_passed": true,
       "schema_version": "hfr.decision_gate.v1",
-      "sha256": "110465b8e5f2054d10c9fd086c180df857e14fb5b6e928e61e73a106d86399f8",
-      "size_bytes": 2104,
+      "sha256": "0a77efb5fa985579bd33ceef5e46a4328745ba85f57830c1e781c6d7a11fcfd2",
+      "size_bytes": 3940,
       "source": {
         "artifact_exists": true,
-        "artifact_path": "promotion_decision.json",
-        "artifact_sha256": "85aab5b00b81fb7bd61960d76652b5601c6b115b33257c19f2888ccae3deded4",
-        "blocking_check_count": 8,
-        "passed": false,
-        "readiness": "blocked",
-        "recommendation": "block_promotion",
-        "schema_version": "hfr.promotion_decision.v1"
+        "artifact_path": "compare_gate.json",
+        "artifact_sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+        "blocking_check_count": 0,
+        "passed": true,
+        "readiness": "ready",
+        "recommendation": "promote_iteration",
+        "schema_version": "hfr.compare_gate.v1"
       }
     }
   ],

@@ -1,0 +1,81 @@
+{
+  "artifact_fingerprints": {
+    "improvement_card": {
+      "exists": true,
+      "path": "examples/agentic_training/promotion_governance/compare_export/IMPROVEMENT_CARD.md",
+      "sha256": "19f68da9354eca8b2ecf839ef9188bbefc2b42c7cd0af08880c04f6a3fa27d1c",
+      "size_bytes": 1337
+    },
+    "improvement_dpo": {
+      "exists": true,
+      "path": "examples/agentic_training/promotion_governance/compare_export/improvement_dpo.jsonl",
+      "sha256": "5f6aeae114ed72ced61e0a40e99fd91e675428eb923885a33df43a865a18efb8",
+      "size_bytes": 4496
+    },
+    "improvement_pairs": {
+      "exists": true,
+      "path": "examples/agentic_training/promotion_governance/compare_export/improvement_pairs.jsonl",
+      "sha256": "257b34bf489d42f9f2da1025cfffeff744aa82d2e2cfdd380363088da270a15e",
+      "size_bytes": 38378
+    }
+  },
+  "baseline_run_count": 1,
+  "baseline_runs_dir": "examples/agentic_training/promotion_governance/compare_runs/baseline",
+  "baseline_win_count": 0,
+  "baseline_win_scenarios": [],
+  "candidate_run_count": 1,
+  "candidate_runs_dir": "examples/agentic_training/promotion_governance/compare_runs/candidate",
+  "candidate_win_count": 1,
+  "candidate_win_scenarios": [
+    "email_reply_completion"
+  ],
+  "contract_drift_count": 0,
+  "contract_scope": "scenario",
+  "dpo_count": 1,
+  "fixed_rule_counts": {
+    "required_action_sequences": 1,
+    "required_actions": 1,
+    "required_event_counts": 1,
+    "required_state": 1,
+    "required_state_transitions": 1
+  },
+  "generated_at": "2026-07-03T00:00:00+00:00",
+  "metadata": {
+    "baseline": "local/mock-baseline",
+    "candidate": "local/mock-candidate",
+    "contract": "shared-email-reply-scenario"
+  },
+  "min_score_gap": 1,
+  "missing_in_candidate": [],
+  "new_critical_failure_counts": {},
+  "new_in_candidate": [],
+  "notes": [
+    "Comparison exports are built from paired baseline/candidate normalized_trace.json and scorecard.json files.",
+    "The chosen side is whichever paired run has the higher deterministic scorecard score.",
+    "Candidate wins describe measurable improvements; baseline wins describe regressions to avoid.",
+    "Manifest movement fields summarize task-completion, scenario, and rule deltas so exports remain comparable without a separate gate artifact.",
+    "Pairs include contract_fingerprint_status so trainer handoffs can reject drifted or unverified comparisons.",
+    "Use these artifacts as preference/eval data, not as a complete trainer."
+  ],
+  "output_dir": "examples/agentic_training/promotion_governance/compare_export",
+  "outputs": {
+    "improvement_card": "examples/agentic_training/promotion_governance/compare_export/IMPROVEMENT_CARD.md",
+    "improvement_dpo": "examples/agentic_training/promotion_governance/compare_export/improvement_dpo.jsonl",
+    "improvement_pairs": "examples/agentic_training/promotion_governance/compare_export/improvement_pairs.jsonl",
+    "manifest": "examples/agentic_training/promotion_governance/compare_export/manifest.json"
+  },
+  "pair_count": 1,
+  "paired_scenario_count": 1,
+  "regressed_rule_counts": {},
+  "reward_scale": "score",
+  "schema_version": "hfr.compare_rl.manifest.v1",
+  "skipped_pair_count": 0,
+  "skipped_pairs": [],
+  "task_completion_improvement_count": 1,
+  "task_completion_improvement_scenarios": [
+    "email_reply_completion"
+  ],
+  "task_completion_regression_count": 0,
+  "task_completion_regression_scenarios": [],
+  "unverified_contract_count": 0
+}

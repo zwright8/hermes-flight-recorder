@@ -273,12 +273,64 @@ The committed evidence handoff uses one deterministic passing scenario to keep
 the public fixture compact. It emits `harness_handoff/harness_result.json` and
 `evidence_bundle.json` without raw sensitive traces or live external calls.
 
+Refresh the offline promotion-governance gates:
+
+```bash
+flightrecorder run \
+  --scenario examples/agentic_training/promotion_governance/compare_scenarios/email_reply_completion.json \
+  --trace fixtures/email_reply_completion_bad.observer.jsonl \
+  --before-state fixtures/email_reply_completion_before.state.json \
+  --state fixtures/email_reply_completion_bad.state.json \
+  --out examples/agentic_training/promotion_governance/compare_runs/baseline/email_reply_completion
+
+flightrecorder run \
+  --scenario examples/agentic_training/promotion_governance/compare_scenarios/email_reply_completion.json \
+  --trace fixtures/email_reply_completion_good.observer.jsonl \
+  --before-state fixtures/email_reply_completion_before.state.json \
+  --state fixtures/email_reply_completion_good.state.json \
+  --out examples/agentic_training/promotion_governance/compare_runs/candidate/email_reply_completion
+
+flightrecorder export-compare-rl \
+  --baseline examples/agentic_training/promotion_governance/compare_runs/baseline \
+  --candidate examples/agentic_training/promotion_governance/compare_runs/candidate \
+  --out examples/agentic_training/promotion_governance/compare_export \
+  --metadata baseline=local/mock-baseline \
+  --metadata candidate=local/mock-candidate \
+  --metadata contract=shared-email-reply-scenario
+
+flightrecorder gate-compare-export \
+  --compare-export examples/agentic_training/promotion_governance/compare_export \
+  --policy examples/compare_gate_policy.demo.json \
+  --out examples/agentic_training/promotion_governance/compare_gate.json
+
+flightrecorder gate-decision \
+  --artifact examples/agentic_training/promotion_governance/compare_gate.json \
+  --expect-recommendation promote_iteration \
+  --expect-readiness ready \
+  --require-passed \
+  --out examples/agentic_training/promotion_governance/promotion_history_decision_gate.json
+
+flightrecorder promotion-ledger \
+  --decision-gate examples/agentic_training/promotion_governance/promotion_history_decision_gate.json \
+  --out examples/agentic_training/promotion_governance/promotion_ledger.json
+
+flightrecorder gate-promotion-ledger \
+  --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json \
+  --out examples/agentic_training/promotion_governance/promotion_ledger_gate.json
+```
+
+The committed promotion decision consumes that compare gate and promotion
+history gate. It authorizes a reviewable alias update, but it does not apply
+aliases, mutate the registry, update weights, or call a provider; alias movement
+requires the separate guarded `promotion-alias-apply` command.
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
 flightrecorder agentic-loop plan \
   --iteration-id demo-loop-001 \
-  --objective "Demonstrate a fail-closed closed-loop agentic training iteration contract." \
+  --objective "Close held-out tool-use regressions with fail-closed external trainers." \
   --baseline local/mock-baseline \
   --candidate local/mock-candidate \
   --teacher local/mock-teacher \
@@ -326,9 +378,9 @@ flightrecorder agentic-loop plan \
   --out examples/agentic_training/loop_plan.json
 ```
 
-The committed plan is intentionally `planned_fail_closed` because this example
-binds a blocked promotion decision and promotion ledger. It does bind a passing
-offline held-out eval receipt through `local_mock`, loop-local rollout plan
+The committed plan is `ready_for_governance_review` because this example binds
+passing offline held-out eval, compare, promotion-history, promotion-decision,
+and promotion-ledger receipts. It also binds a loop-local rollout plan
 and mock receipt, harness/evidence handoff artifacts, a managed mock serving
 lifecycle, nested model-grader review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
@@ -338,10 +390,10 @@ benchmark-launch, or scheduler side effects. The
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
 records the SHA-256 chain from preflight through launch plan, launch receipt,
-and status receipt. Because this demo is intentionally incomplete, the example
-ledger's governance decision recommends `request_another_iteration` while still
-listing `approve`, `reject`, `rollback`, and `request_another_iteration` as
-schema-checkable action rows.
+and status receipt. The example ledger's governance decision recommends
+`approve`, while still listing `approve`, `reject`, `rollback`, and
+`request_another_iteration` as schema-checkable action rows. Approval is a
+receipt-only governance choice; it does not move aliases or update weights.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:
@@ -354,6 +406,7 @@ flightrecorder validate \
 flightrecorder schemas --check examples/agentic_training/loop_plan.json
 flightrecorder schemas --check examples/agentic_training/model_grader/reviewed_gate.json
 flightrecorder schemas --check examples/agentic_training/training_gate.json
+flightrecorder schemas --check examples/agentic_training/promotion_governance/compare_gate.json
 flightrecorder validate \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
@@ -376,8 +429,10 @@ flightrecorder validate \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
   --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
   --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \
+  --decision-gate examples/agentic_training/promotion_governance/promotion_history_decision_gate.json \
   --decision-gate examples/agentic_training/promotion_governance/promotion_decision_gate.json \
   --promotion-ledger examples/agentic_training/promotion_governance/promotion_ledger.json \
+  --promotion-ledger-gate examples/agentic_training/promotion_governance/promotion_ledger_gate.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 
@@ -391,9 +446,9 @@ flightrecorder validate \
 
 flightrecorder agentic-loop governance \
   --ledger examples/agentic_training/loop_ledger.json \
-  --action request_another_iteration \
+  --action approve \
   --requested-by example-governance \
-  --reason "Demo ledger is fail-closed, so governance requests another iteration." \
+  --reason "Demo ledger is ready for governance review; this approval receipt records review readiness without side effects." \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_governance_receipt.json
 
@@ -427,7 +482,7 @@ flightrecorder next-iteration-schedule \
   --action-ledger examples/agentic_training/iteration_ledgers/action_ledger.json \
   --improvement-ledger examples/agentic_training/iteration_ledgers/improvement_ledger.json \
   --next-iteration-id demo-loop-002 \
-  --objective "Collect missing closed-loop receipts and resolve ledgered repair pressure." \
+  --objective "Resolve remaining ledgered repair pressure after governance review." \
   --schedule cadence=\"manual\" \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/next_iteration_schedule.json

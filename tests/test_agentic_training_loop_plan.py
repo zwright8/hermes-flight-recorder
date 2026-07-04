@@ -79,8 +79,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["path"], expected_path)
             self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
-        self.assertFalse(plan["passed"])
-        self.assertEqual(plan["readiness"], "planned_fail_closed")
+        self.assertTrue(plan["passed"])
+        self.assertEqual(plan["readiness"], "ready_for_governance_review")
         self.assertEqual(plan["artifact_count"], 35)
         self.assertEqual(plan["missing_phase_inputs"], [])
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
@@ -102,7 +102,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertNotIn("promotion_ledger", plan["missing_phase_inputs"])
         self.assertEqual(
             {check["id"] for check in plan["checks"] if not check["passed"]},
-            {"governance_required_for_promotion"},
+            set(),
         )
         self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})

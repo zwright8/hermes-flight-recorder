@@ -836,8 +836,10 @@ fixtures until optional dependencies are explicitly enabled. The
 evidence bundle for a deterministic prompt-injection scenario. The
 `serving_lifecycle/managed_mock/` fixture records a normalized mock serving
 preflight with no model download, provider call, or live endpoint exposure. The
-`promotion_governance/` fixture records a blocked promotion decision and ledger
-that hold aliases until compare and promotion-history gates are real.
+`promotion_governance/` fixture records a real offline compare export, compare
+gate, promotion-history ledger gate, and passing promotion decision. That
+decision authorizes a reviewable alias update, but aliases remain held until a
+separate guarded `promotion-alias-apply` receipt is executed.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -887,9 +889,9 @@ flightrecorder validate \
 
 flightrecorder agentic-loop governance \
   --ledger runs/agentic_loop_ledger.json \
-  --action request_another_iteration \
+  --action approve \
   --requested-by governance-review \
-  --reason "Latest loop remains fail-closed; request another evidence iteration." \
+  --reason "Latest loop is ready for governance review; record approval without applying side effects." \
   --out runs/agentic_loop_governance_receipt.json
 
 flightrecorder validate \
@@ -961,7 +963,9 @@ approve, reject, rollback, or request another iteration. These action rows are
 strictly ledger recommendations; approval remains blocked until both promotion
 decision and promotion ledger receipts are present. `hfr.agentic_loop_governance_receipt.v1`
 records the selected governance action and replays the ledger action row during
-validation. The `agentic-loop governance` command also replays the source
+validation. Approval records readiness for promotion review only; it does not
+move aliases, apply rollback, launch cloud jobs, call model graders, or update
+weights. The `agentic-loop governance` command also replays the source
 ledger before writing, so stale source plans or forged ledger action rows are
 recorded as blocked receipts rather than successful approvals. It remains
 receipt-only: actual promotion, rollback, or alias updates must still be

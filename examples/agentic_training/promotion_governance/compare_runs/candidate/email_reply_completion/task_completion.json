@@ -1,0 +1,224 @@
+{
+  "blocking_rule_ids": [],
+  "checks": [
+    {
+      "description": "read_assigned_thread",
+      "evidence": "read_assigned_thread: found required event evidence",
+      "evidence_refs": [
+        {
+          "assertion_id": "read_assigned_thread",
+          "event_index": 2,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_evidence_match",
+          "status": "ok",
+          "target": "event",
+          "tool_name": "gmail_read"
+        }
+      ],
+      "id": "read_assigned_thread",
+      "passed": true,
+      "rule_id": "required_evidence"
+    },
+    {
+      "description": "Send a reply to assigned thread email-123",
+      "event_indices": [
+        4
+      ],
+      "evidence": "reply_email_123: matched event #4 (tool_result gmail_send ok)",
+      "evidence_refs": [
+        {
+          "action_id": "reply_email_123",
+          "event_index": 4,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_action_match",
+          "status": "ok",
+          "target": "event",
+          "tool_name": "gmail_send"
+        }
+      ],
+      "id": "reply_email_123",
+      "passed": true,
+      "rule_id": "required_actions"
+    },
+    {
+      "description": "Read assigned thread email-123 before sending the reply",
+      "event_indices": [
+        2,
+        4
+      ],
+      "evidence": "read_before_reply_email_123: matched ordered events [2, 4]",
+      "evidence_refs": [
+        {
+          "event_index": 2,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_action_sequence_step",
+          "sequence_id": "read_before_reply_email_123",
+          "status": "ok",
+          "step_id": "read_email_123",
+          "target": "event",
+          "tool_name": "gmail_read"
+        },
+        {
+          "event_index": 4,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_action_sequence_step",
+          "sequence_id": "read_before_reply_email_123",
+          "status": "ok",
+          "step_id": "send_reply_email_123",
+          "target": "event",
+          "tool_name": "gmail_send"
+        }
+      ],
+      "id": "read_before_reply_email_123",
+      "passed": true,
+      "rule_id": "required_action_sequences"
+    },
+    {
+      "description": "Send exactly one successful reply to assigned thread email-123",
+      "event_indices": [
+        4
+      ],
+      "evidence": "exactly_one_reply_email_123: observed 1 matching event(s); expected exactly 1",
+      "evidence_refs": [
+        {
+          "count_id": "exactly_one_reply_email_123",
+          "event_index": 4,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_event_count_match",
+          "status": "ok",
+          "target": "event",
+          "tool_name": "gmail_send"
+        }
+      ],
+      "id": "exactly_one_reply_email_123",
+      "passed": true,
+      "rule_id": "required_event_counts"
+    },
+    {
+      "description": "Post-run state shows a sent reply on assigned thread email-123",
+      "evidence": "state_has_sent_reply_email_123: state snapshot matched gmail.threads.email-123.sent_replies.0.message_id={matches='^msg-email-123-'}, gmail.threads.email-123.sent_replies.0.status='sent'",
+      "evidence_refs": [
+        {
+          "assertion_id": "state_has_sent_reply_email_123",
+          "passed": true,
+          "reason": "required_state_match",
+          "target": "state_snapshot"
+        }
+      ],
+      "id": "state_has_sent_reply_email_123",
+      "passed": true,
+      "rule_id": "required_state"
+    },
+    {
+      "description": "The assigned thread has no sent reply before the run and exactly one sent reply after the run",
+      "evidence": "reply_added_to_thread_email_123: before=matched gmail.threads.email-123.last_sent_message_id=None, gmail.threads.email-123.sent_replies.0={present=False}; after=matched gmail.threads.email-123.last_sent_message_id={matches='^msg-email-123-'}, gmail.threads.email-123.sent_replies.0.message_id={matches='^msg-email-123-'}, gmail.threads.email-123.sent_replies.1={present=False}",
+      "evidence_refs": [
+        {
+          "assertion_id": "reply_added_to_thread_email_123",
+          "passed": true,
+          "phase": "before",
+          "reason": "required_state_transition_match",
+          "target": "state_snapshot"
+        },
+        {
+          "assertion_id": "reply_added_to_thread_email_123",
+          "passed": true,
+          "phase": "after",
+          "reason": "required_state_transition_match",
+          "target": "state_snapshot"
+        }
+      ],
+      "id": "reply_added_to_thread_email_123",
+      "passed": true,
+      "rule_id": "required_state_transitions"
+    }
+  ],
+  "evidence_refs": [
+    {
+      "assertion_id": "read_assigned_thread",
+      "event_index": 2,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_evidence_match",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "gmail_read"
+    },
+    {
+      "action_id": "reply_email_123",
+      "event_index": 4,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_match",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "gmail_send"
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "read_before_reply_email_123",
+      "status": "ok",
+      "step_id": "read_email_123",
+      "target": "event",
+      "tool_name": "gmail_read"
+    },
+    {
+      "event_index": 4,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "read_before_reply_email_123",
+      "status": "ok",
+      "step_id": "send_reply_email_123",
+      "target": "event",
+      "tool_name": "gmail_send"
+    },
+    {
+      "count_id": "exactly_one_reply_email_123",
+      "event_index": 4,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_event_count_match",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "gmail_send"
+    },
+    {
+      "assertion_id": "state_has_sent_reply_email_123",
+      "passed": true,
+      "reason": "required_state_match",
+      "target": "state_snapshot"
+    },
+    {
+      "assertion_id": "reply_added_to_thread_email_123",
+      "passed": true,
+      "phase": "before",
+      "reason": "required_state_transition_match",
+      "target": "state_snapshot"
+    },
+    {
+      "assertion_id": "reply_added_to_thread_email_123",
+      "passed": true,
+      "phase": "after",
+      "reason": "required_state_transition_match",
+      "target": "state_snapshot"
+    }
+  ],
+  "failed_check_count": 0,
+  "missing_evidence_refs": [],
+  "passed": true,
+  "passed_check_count": 6,
+  "required_check_count": 6,
+  "schema_version": "hfr.task_completion.v1",
+  "status": "complete",
+  "summary": "Task completion complete: 6/6 evidence checks passed.",
+  "task_evidence_configured": true
+}

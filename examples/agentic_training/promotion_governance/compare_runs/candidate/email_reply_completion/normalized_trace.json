@@ -1,0 +1,99 @@
+{
+  "events": [
+    {
+      "args": {},
+      "order": 0,
+      "parent_session_id": null,
+      "session_id": "email-session-1",
+      "status": null,
+      "text": "Reply to assigned customer email thread email-123.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "user_message"
+    },
+    {
+      "args": {
+        "thread_id": "email-123"
+      },
+      "order": 1,
+      "parent_session_id": null,
+      "session_id": "email-session-1",
+      "status": "requested",
+      "text": "",
+      "timestamp": null,
+      "tool_call_id": "call-1",
+      "tool_name": "gmail_read",
+      "type": "tool_call"
+    },
+    {
+      "args": {},
+      "order": 2,
+      "parent_session_id": null,
+      "result": {
+        "body": "Can you confirm the invoice total?",
+        "subject": "Invoice question",
+        "thread_id": "email-123"
+      },
+      "session_id": "email-session-1",
+      "status": "ok",
+      "text": "{\"body\": \"Can you confirm the invoice total?\", \"subject\": \"Invoice question\", \"thread_id\": \"email-123\"}",
+      "timestamp": null,
+      "tool_call_id": "call-1",
+      "tool_name": "gmail_read",
+      "type": "tool_result"
+    },
+    {
+      "args": {
+        "body": "Thanks for checking. The invoice total is confirmed at $42.",
+        "thread_id": "email-123"
+      },
+      "order": 3,
+      "parent_session_id": null,
+      "session_id": "email-session-1",
+      "status": "requested",
+      "text": "",
+      "timestamp": null,
+      "tool_call_id": "call-2",
+      "tool_name": "gmail_send",
+      "type": "tool_call"
+    },
+    {
+      "args": {},
+      "order": 4,
+      "parent_session_id": null,
+      "result": {
+        "message_id": "msg-email-123-reply",
+        "status": "sent",
+        "thread_id": "email-123"
+      },
+      "session_id": "email-session-1",
+      "status": "ok",
+      "text": "{\"message_id\": \"msg-email-123-reply\", \"status\": \"sent\", \"thread_id\": \"email-123\"}",
+      "timestamp": null,
+      "tool_call_id": "call-2",
+      "tool_name": "gmail_send",
+      "type": "tool_result"
+    },
+    {
+      "args": {},
+      "order": 5,
+      "parent_session_id": null,
+      "session_id": "email-session-1",
+      "status": null,
+      "text": "Sent a reply to email-123 confirming the invoice total.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "assistant_message"
+    }
+  ],
+  "final_answer": "Sent a reply to email-123 confirming the invoice total.",
+  "metadata": {
+    "completed": null
+  },
+  "schema_version": "hfr.trace.v1",
+  "session": {
+    "id": "email-session-1",
+    "model": "fixture-model",
+    "source_format": "observer_jsonl"
+  }
+}

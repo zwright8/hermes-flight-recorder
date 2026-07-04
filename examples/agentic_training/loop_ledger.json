@@ -1,15 +1,13 @@
 {
   "decision": {
-    "blocked_iteration_count": 1,
+    "blocked_iteration_count": 0,
     "governance_action_count": 4,
     "governance_actions": [
       {
         "action": "approve",
-        "available": false,
-        "blocked_reason_count": 1,
-        "blocked_reasons": [
-          "latest_iteration_not_ready_for_governance_review"
-        ],
+        "available": true,
+        "blocked_reason_count": 0,
+        "blocked_reasons": [],
         "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
       },
       {
@@ -38,10 +36,10 @@
     ],
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
-    "readiness": "blocked",
-    "recommendation": "continue_iteration",
-    "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 0 missing phase input(s)."
+    "readiness": "ready",
+    "recommendation": "ready_for_governance_review",
+    "recommended_governance_action": "approve",
+    "summary": "Latest loop iteration demo-loop-001 has all required phase receipts."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -244,7 +242,7 @@
           "role": "training_export"
         }
       ],
-      "blocked_reason_count": 1,
+      "blocked_reason_count": 0,
       "cloud_training": {
         "artifact_count": 6,
         "artifact_manifest_present": true,
@@ -534,7 +532,7 @@
         "schedule": {},
         "scheduled": false
       },
-      "passed": false,
+      "passed": true,
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
@@ -546,8 +544,8 @@
           "id": "ready"
         }
       ],
-      "readiness": "planned_fail_closed",
-      "recommendation": "collect_missing_receipts_before_live_execution",
+      "readiness": "ready_for_governance_review",
+      "recommendation": "approve_iteration_execution",
       "schema_version": "hfr.agentic_training_loop_plan.v1",
       "serving": {
         "artifact_count": 1,
@@ -560,8 +558,8 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "686886ede4694bf656464cca0243eaea615138302ea8dc457c85e42672baf30c",
-      "size_bytes": 53159,
+      "sha256": "db9d57ca116f94ea36bee2d78ced67061ef237e26b9f8bf851ba2e46e52bdd5d",
+      "size_bytes": 53083,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -625,24 +623,24 @@
         "group": "training"
       }
     ],
-    "blocked_iteration_count": 1,
+    "blocked_iteration_count": 0,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
     "latest_missing_phase_input_count": 0,
-    "latest_readiness": "planned_fail_closed",
-    "latest_recommendation": "collect_missing_receipts_before_live_execution",
+    "latest_readiness": "ready_for_governance_review",
+    "latest_recommendation": "approve_iteration_execution",
     "promotion_ready_count": 1,
     "readiness_counts": [
       {
         "count": 1,
-        "id": "planned_fail_closed"
+        "id": "ready_for_governance_review"
       }
     ],
-    "ready_iteration_count": 0,
+    "ready_iteration_count": 1,
     "recommendation_counts": [
       {
         "count": 1,
-        "id": "collect_missing_receipts_before_live_execution"
+        "id": "approve_iteration_execution"
       }
     ],
     "rollback_receipt_count": 0,
@@ -657,7 +655,7 @@
   ],
   "passed": true,
   "readiness_digest": {
-    "blocked_reason_count": 1,
+    "blocked_reason_count": 0,
     "cloud_training_ambiguous_link_count": 0,
     "cloud_training_cost_incurred_usd": 0,
     "cloud_training_duplicate_role_count": 0,
@@ -669,8 +667,8 @@
     "cloud_training_provider_id": "modal",
     "cloud_training_receipts_fail_closed": true,
     "cloud_training_status_provider_status": "not_started",
-    "decision_readiness": "blocked",
-    "decision_recommendation": "continue_iteration",
+    "decision_readiness": "ready",
+    "decision_recommendation": "ready_for_governance_review",
     "external_eval_adapter_count": 1,
     "external_eval_cost_incurred_usd": 0,
     "external_eval_credential_values_recorded": false,
@@ -694,14 +692,14 @@
     "next_action_scheduled": false,
     "promotion_decision_present": true,
     "promotion_ledger_present": true,
-    "readiness": "planned_fail_closed",
-    "ready_for_governance_review": false,
-    "recommendation": "collect_missing_receipts_before_live_execution",
-    "recommended_governance_action": "request_another_iteration",
+    "readiness": "ready_for_governance_review",
+    "ready_for_governance_review": true,
+    "recommendation": "approve_iteration_execution",
+    "recommended_governance_action": "approve",
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 0 missing phase input(s) across 0 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 is ready for governance review."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }
