@@ -14891,6 +14891,9 @@ def _validate_suite_run_artifact_ref(
     path = _resolve_suite_summary_ref_path(run.get(field_name), source_path)
     if path is None:
         return
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label}.{field_name} must resolve to a regular non-symlink file.")
+        return
     if not path.is_file():
         target.errors.append(f"{label}.{field_name} must resolve to an existing file.")
         return
@@ -14906,9 +14909,9 @@ def _resolve_suite_summary_ref_path(value: Any, source_path: Path | None) -> Pat
     path = Path(value)
     if path.is_absolute():
         return path
-    candidates = [path.resolve()]
+    candidates = [path]
     if source_path is not None:
-        candidates.append((source_path.parent / path).resolve())
+        candidates.append(source_path.parent / path)
     return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 
 

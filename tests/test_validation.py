@@ -843,6 +843,37 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("suite_summary.runs[0].report_sha256 does not match the current file", errors)
             self.assertIn("suite_summary.runs[0].scorecard_size_bytes does not match the current file", errors)
 
+    def test_validate_rejects_symlinked_suite_summary_run_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--preserve-paths"])
+            suite_path = runs / "suite_summary.json"
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            run_dir = Path(suite["runs"][0]["run_dir"])
+            linked_runs = runs / "linked_runs"
+            try:
+                linked_runs.symlink_to(runs, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            suite["runs"][0]["report"] = str(Path(linked_runs.name) / run_dir.name / "report.html")
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(suite_path),
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].report must resolve to a regular non-symlink file.", errors)
+
     def test_strict_validate_warns_on_absolute_suite_summary_run_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

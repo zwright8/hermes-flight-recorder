@@ -1401,6 +1401,9 @@ internally consistent. Trainer-facing export artifacts must be regular files;
 symlinked JSONL, JSON, Markdown, or evidence-bundle artifact paths fail
 validation even when their targets match the recorded hash, including paths
 that traverse symlinked parent directories.
+Suite summaries also reject run artifact refs that traverse symlinked parent
+directories before trusting recorded report, scorecard, digest, or lineage
+fingerprints.
 Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
 and `replay.self_contained` so regression and training loops can tell whether a
 run can be reproduced from the published paths. Use `flightrecorder replay`
