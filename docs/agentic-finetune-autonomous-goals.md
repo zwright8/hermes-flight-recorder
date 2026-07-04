@@ -695,6 +695,9 @@ card, and dataset card decisions.
 - Evidence-bundle decision summary text is recomputed from bundle readiness and
   failed checks during validation, blocking hand-edited prose that claims a
   safer or clearer handoff state than the evidence supports.
+- Evidence-bundle next actions are recomputed from blocking checks, failed
+  gates, and metrics during validation, blocking forged remediation plans even
+  when their fingerprints and routing keys have been refreshed.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance

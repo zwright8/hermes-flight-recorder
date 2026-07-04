@@ -58,6 +58,7 @@ from .bundle import (
     HARNESS_RUN_RESULT_SCHEMA_VERSION,
     _decision_key_metrics as _build_evidence_bundle_decision_key_metrics,
     _decision_text as _build_evidence_bundle_decision_text,
+    _next_actions as _build_evidence_bundle_next_actions,
 )
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .cloud_training import (
@@ -20485,6 +20486,7 @@ def _validate_evidence_bundle_decision(
             _warn_absolute_public_path(target, f"{label}.path", gate.get("path"))
         if blocking_gates != blocking_gate_rows:
             target.errors.append("evidence_bundle.decision.blocking_gates must match failed evidence_bundle.metrics.gates.")
+    expected_next_actions = _build_evidence_bundle_next_actions(blocking_check_rows, blocking_gate_rows, metrics)
     next_actions = decision.get("next_actions")
     if not isinstance(next_actions, list):
         target.errors.append("evidence_bundle.decision.next_actions must be a list.")
@@ -20518,9 +20520,11 @@ def _validate_evidence_bundle_decision(
                 target.errors.append(f"{label}.routing_key must be a non-empty string.")
             elif action.get("routing_key") != expected_routing_key:
                 target.errors.append(f"{label}.routing_key expected {expected_routing_key!r}, got {action.get('routing_key')!r}.")
-    if decision.get("next_action_count") != len(next_actions):
+        if next_actions != expected_next_actions:
+            target.errors.append("evidence_bundle.decision.next_actions must match bundle blockers and metrics.")
+    if decision.get("next_action_count") != len(expected_next_actions):
         target.errors.append(
-            f"evidence_bundle.decision.next_action_count expected {len(next_actions)}, got {decision.get('next_action_count')!r}."
+            f"evidence_bundle.decision.next_action_count expected {len(expected_next_actions)}, got {decision.get('next_action_count')!r}."
         )
     evidence_artifacts = decision.get("evidence_artifacts")
     if not isinstance(evidence_artifacts, list) or not all(isinstance(item, str) and item for item in evidence_artifacts):

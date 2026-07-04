@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from flightrecorder.bundle import _next_actions as bundle_next_actions
 from flightrecorder.cli import main
 from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from flightrecorder.schema_registry import check_schema_contract
@@ -1535,6 +1536,34 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact must reference an evidence_bundle.artifacts key, metrics key, or evidence_bundle", errors)
 
+    def test_validate_rejects_forged_bundle_next_actions_with_fresh_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "failed_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            action = bundle["decision"]["next_actions"][0]
+            action["id"] = "defer_blocking_checks"
+            action["summary"] = "Defer blocking checks until a later handoff."
+            action["action_fingerprint"] = bundle_action_fingerprint(action)
+            action["routing_key"] = f"{action['artifact']}:{action['id']}:{action['action_fingerprint'][:12]}"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision.next_actions must match bundle blockers and metrics", errors)
+
     def test_validate_rejects_stale_bundle_decision_blocking_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1708,11 +1737,24 @@ class EvidenceBundleTests(unittest.TestCase):
                 "hermes_root": f"{absolute_root}/hermes-agent",
                 "flight_recorder_root": f"{absolute_root}/hermes-flight-recorder",
             }
-            bundle["metrics"]["gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json", "passed": False}]
+            gate_path_value = f"{absolute_root}/gate.json"
+            blocking_gates = [{"id": "forged_gate", "path": gate_path_value}]
+            bundle["metrics"]["gates"] = [{"id": "forged_gate", "path": gate_path_value, "passed": False}]
             bundle["decision"]["gate_count"] = 1
             bundle["decision"]["passed_gate_count"] = 0
-            bundle["decision"]["blocking_gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json"}]
+            bundle["decision"]["blocking_gates"] = blocking_gates
             bundle["decision"]["key_metrics"]["gates"] = {"total": 1, "passed": 0, "failed": 1}
+            blocking_checks = [
+                {
+                    "id": str(check.get("id") or "unknown"),
+                    "summary": str(check.get("summary") or ""),
+                    "scope": check.get("scope") if isinstance(check.get("scope"), dict) else {},
+                }
+                for check in bundle["checks"]
+                if isinstance(check, dict) and check.get("passed") is False
+            ]
+            bundle["decision"]["next_actions"] = bundle_next_actions(blocking_checks, blocking_gates, bundle["metrics"])
+            bundle["decision"]["next_action_count"] = len(bundle["decision"]["next_actions"])
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
