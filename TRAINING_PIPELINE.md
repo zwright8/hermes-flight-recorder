@@ -374,11 +374,13 @@ or decisions. Use
 `flightrecorder promotion-archive` at the artifact-upload boundary: it copies
 the promotion ledger, promotion-ledger gate, decision gates, and resolvable
 source gate artifacts into a hash-checked directory that remains valid after
-the original workspace paths disappear. Recorded artifact references must be
-safe relative paths before they are copied, and validation rejects archive
-artifacts that are symlinks or resolve through symlinked parent components,
-plus relationships that point at unknown artifacts or invalid role pairs. Keep
-shared promotion archives in the default redacted mode; use
+the original workspace paths disappear. Archive generation rejects source
+inputs and recorded source refs that are symlinks or traverse symlinked parent
+directories before reading, hashing, or copying them. Recorded artifact
+references must be safe relative paths before they are copied, and validation
+rejects archive artifacts that are symlinks or resolve through symlinked parent
+components, plus relationships that point at unknown artifacts or invalid role
+pairs. Keep shared promotion archives in the default redacted mode; use
 `--preserve-paths` only for private local debugging. Strict promotion-archive
 validation warns if preserved archive or original artifact paths would enter a
 public promotion handoff.

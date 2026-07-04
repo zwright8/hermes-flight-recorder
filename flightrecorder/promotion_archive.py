@@ -10,6 +10,7 @@ from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .governance import PROMOTION_RELEASE_RECORD_SCHEMA_VERSION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 
@@ -339,6 +340,8 @@ def _record_integrity_error(record: dict[str, Any], source_path: Path, label: st
 def _copyable_file_error(path: Path) -> str | None:
     if path.is_symlink():
         return f"file is a symlink: {path}"
+    if _path_has_symlink_component(path, include_leaf=False):
+        return f"file path traverses symlinked components: {path}"
     if not path.exists() or not path.is_file():
         return f"file not found: {path}"
     try:

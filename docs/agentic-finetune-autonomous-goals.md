@@ -905,6 +905,8 @@ card, and dataset card decisions.
   promotion-decision, applied-registry, and rollback-registry refs to the same
   SHA-256 and byte-size evidence carried by their fingerprinted artifact
   records.
+- Promotion archives reject symlinked source inputs and recorded source refs
+  before reading, hashing, or copying promotion evidence into portable bundles.
 - Promotion archives reopen ledger-recorded decision gates from the ledger file
   location and decision source artifacts from the decision file location; archive
   builds reject cwd-substituted members instead of copying lookalike evidence.

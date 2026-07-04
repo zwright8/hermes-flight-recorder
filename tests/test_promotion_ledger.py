@@ -1133,6 +1133,37 @@ class PromotionLedgerTests(unittest.TestCase):
             release_record_path.unlink()
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_rejects_parent_symlink_ledger_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            ledger_path = source_dir / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(source_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "promotion-archive",
+                        "--promotion-ledger",
+                        str(linked_parent / ledger_path.name),
+                        "--out",
+                        str(archive_dir),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse((archive_dir / "promotion_archive.json").exists())
+
     def test_promotion_archive_strict_warns_on_preserved_source_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1479,6 +1510,63 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertNotIn("stale-after-ledger", archived_text)
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_rejects_parent_symlink_ledger_decision_gate_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            source = source_dir / "action_ledger_gate.json"
+            decision_gate = source_dir / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            _write_ready_action_ledger_gate(source)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(source_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["records"][0]["path"] = str(Path(linked_parent.name) / decision_gate.name)
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 0)
+            self.assertEqual(archive["missing"][0]["role"], "decision_gate")
+            self.assertIn("file path traverses symlinked components", archive["missing"][0]["reason"])
+            self.assertFalse(any((archive_dir / "artifacts").glob("decision_gate_*.json")))
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
     def test_promotion_archive_rejects_stale_decision_source_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1530,6 +1618,70 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertIn("sha256 does not match decision gate source_artifact record", archive["missing"][0]["reason"])
             archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
             self.assertNotIn("stale-after-decision", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_rejects_parent_symlink_decision_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            source = source_dir / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            _write_ready_action_ledger_gate(source)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(source_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["source_artifact"]["path"] = str(Path(linked_parent.name) / source.name)
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 1)
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 0)
+            missing_by_role = {item["role"]: item["reason"] for item in archive["missing"]}
+            self.assertIn("source_artifact", missing_by_role)
+            self.assertIn("file path traverses symlinked components", missing_by_role["source_artifact"])
+            self.assertFalse(any((archive_dir / "artifacts").glob("source_artifact_*.json")))
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
     def test_promotion_archive_force_refuses_non_archive_directories(self):
