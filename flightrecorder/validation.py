@@ -39,7 +39,11 @@ from .agentic_training_loop_plan import (
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
     CLOUD_TRAINING_LINEAGE_LINKS,
 )
-from .agentic_loop_ledger import AGENTIC_LOOP_LEDGER_SCHEMA_VERSION
+from .agentic_loop_ledger import (
+    AGENTIC_LOOP_LEDGER_SCHEMA_VERSION,
+    _decision as _build_agentic_loop_ledger_decision,
+    _readiness_digest as _build_agentic_loop_ledger_readiness_digest,
+)
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
@@ -3769,7 +3773,10 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         target.errors.append("agentic_loop_ledger.metrics.ready_iteration_count does not match iterations.")
     if metrics.get("blocked_iteration_count") != blocked_count:
         target.errors.append("agentic_loop_ledger.metrics.blocked_iteration_count does not match iterations.")
-    _validate_agentic_loop_ledger_digest(ledger.get("readiness_digest"), iterations, metrics, target)
+    expected_decision = _build_agentic_loop_ledger_decision(iterations, metrics)
+    expected_digest = _build_agentic_loop_ledger_readiness_digest(iterations, expected_decision)
+    _validate_agentic_loop_ledger_decision(ledger.get("decision"), expected_decision, target)
+    _validate_agentic_loop_ledger_digest(ledger.get("readiness_digest"), iterations, metrics, expected_decision, expected_digest, target)
     boundary = ledger.get("execution_boundary")
     if not isinstance(boundary, dict):
         target.errors.append("agentic_loop_ledger.execution_boundary must be an object.")
@@ -3799,6 +3806,8 @@ def _validate_agentic_loop_ledger_digest(
     digest: Any,
     iterations: list[Any],
     metrics: dict[str, Any],
+    decision: dict[str, Any],
+    expected_digest: dict[str, Any],
     target: ValidationTarget,
 ) -> None:
     if not isinstance(digest, dict):
@@ -3839,6 +3848,8 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.readiness must match the latest iteration.")
         if digest.get("recommendation") != latest.get("recommendation"):
             target.errors.append("agentic_loop_ledger.readiness_digest.recommendation must match the latest iteration.")
+        if digest.get("recommended_governance_action") != decision.get("recommended_governance_action"):
+            target.errors.append("agentic_loop_ledger.readiness_digest.recommended_governance_action must match decision.")
         if missing_phase_inputs != latest_missing_phase_inputs:
             target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_inputs must match the latest iteration.")
         if missing_groups != latest_missing_groups:
@@ -3882,8 +3893,35 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_ambiguous_link_count must match the latest iteration.")
         if digest.get("cloud_training_duplicate_role_count") != _safe_non_negative_int(latest_lineage.get("duplicate_role_count")):
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_duplicate_role_count must match the latest iteration.")
+        expected_summary = str(expected_digest.get("summary") or "")
+        if digest.get("summary") != expected_summary:
+            target.errors.append("agentic_loop_ledger.readiness_digest.summary must match latest iteration readiness.")
     if digest.get("latest_iteration_id") != metrics.get("latest_iteration_id"):
         target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match metrics.latest_iteration_id.")
+
+
+def _validate_agentic_loop_ledger_decision(
+    decision: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(decision, dict):
+        target.errors.append("agentic_loop_ledger.decision must be an object.")
+        return
+    for field_name in (
+        "readiness",
+        "recommendation",
+        "recommended_governance_action",
+        "governance_action_count",
+        "latest_iteration_index",
+        "latest_iteration_id",
+        "blocked_iteration_count",
+        "summary",
+    ):
+        if decision.get(field_name) != expected.get(field_name):
+            target.errors.append(f"agentic_loop_ledger.decision.{field_name} must match latest iteration state.")
+    if decision.get("governance_actions") != expected["governance_actions"]:
+        target.errors.append("agentic_loop_ledger.decision.governance_actions must match latest iteration state.")
 
 
 def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any], target: ValidationTarget, label: str) -> None:

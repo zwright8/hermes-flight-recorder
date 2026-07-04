@@ -798,7 +798,11 @@ iteration inputs, rollout/review/training/serving/eval/governance group counts,
 cost ceilings, promotion/rollback posture, and next-action scheduling state.
 It also emits a `readiness_digest` for the latest iteration so operators can see
 the missing phase inputs, empty artifact groups, governance posture, next-action
-recommendation, and side-effect boundary without parsing the full ledger.
+recommendation, and side-effect boundary without parsing the full ledger. The
+top-level `decision.governance_actions` array makes governance choices explicit:
+approve, reject, rollback, or request another iteration. These action rows are
+strictly ledger recommendations; actual promotion, rollback, or alias updates
+must still be archived as their own governed receipts.
 The digest includes cloud-training lineage posture as well: a latest iteration
 is not ready unless the provider id is consistent and every cloud handoff
 receipt points to its required upstream receipt by SHA-256. It also carries

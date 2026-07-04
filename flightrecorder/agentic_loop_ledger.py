@@ -192,7 +192,9 @@ def _metrics(iterations: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _decision(iterations: list[dict[str, Any]], metrics: dict[str, Any]) -> dict[str, Any]:
     latest = iterations[-1] if iterations else {}
-    if latest.get("readiness") == "ready_for_governance_review":
+    ready_for_review = _latest_ready_for_governance_review(latest)
+    governance_actions = _governance_actions(latest, ready_for_review)
+    if ready_for_review:
         recommendation = "ready_for_governance_review"
         summary = f"Latest loop iteration {latest.get('iteration_id')} has all required phase receipts."
     else:
@@ -200,13 +202,91 @@ def _decision(iterations: list[dict[str, Any]], metrics: dict[str, Any]) -> dict
         missing = len(latest.get("missing_phase_inputs", [])) if latest else 0
         summary = f"Latest loop iteration {latest.get('iteration_id')} is fail-closed with {missing} missing phase input(s)."
     return {
-        "readiness": "ready" if latest.get("readiness") == "ready_for_governance_review" else "blocked",
+        "readiness": "ready" if ready_for_review else "blocked",
         "recommendation": recommendation,
+        "recommended_governance_action": _recommended_governance_action(governance_actions),
+        "governance_action_count": len(governance_actions),
+        "governance_actions": governance_actions,
         "summary": summary,
         "latest_iteration_index": latest.get("index"),
         "latest_iteration_id": latest.get("iteration_id"),
         "blocked_iteration_count": metrics.get("blocked_iteration_count"),
     }
+
+
+def _latest_ready_for_governance_review(latest: dict[str, Any]) -> bool:
+    if latest.get("readiness") != "ready_for_governance_review":
+        return False
+    missing_phase_inputs = latest.get("missing_phase_inputs") if isinstance(latest.get("missing_phase_inputs"), list) else []
+    if missing_phase_inputs:
+        return False
+    lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
+    receipt_state = latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
+    governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
+    side_effects_started = any(
+        governance.get(field_name) is True
+        for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
+    )
+    return lineage.get("passed") is True and receipt_state.get("fail_closed") is True and not side_effects_started
+
+
+def _governance_actions(latest: dict[str, Any], ready_for_review: bool) -> list[dict[str, Any]]:
+    governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
+    next_actions = latest.get("next_actions") if isinstance(latest.get("next_actions"), dict) else {}
+    approve_blockers: list[str] = []
+    if not ready_for_review:
+        approve_blockers.append("latest_iteration_not_ready_for_governance_review")
+    if governance.get("promotion_decision_present") is not True:
+        approve_blockers.append("missing_promotion_decision")
+    rollback_blockers = [] if governance.get("rollback_receipt_present") is True else ["missing_rollback_receipt"]
+    request_summary = "Governance can request another iteration."
+    if next_actions.get("scheduled") is True:
+        request_summary = "A next-iteration schedule receipt is already represented by the latest loop plan."
+    return [
+        _governance_action(
+            "approve",
+            not approve_blockers,
+            approve_blockers,
+            "Approve the iteration for promotion review when all readiness and promotion-decision receipts are present.",
+        ),
+        _governance_action(
+            "reject",
+            True,
+            [],
+            "Reject the iteration without moving aliases or weights.",
+        ),
+        _governance_action(
+            "rollback",
+            not rollback_blockers,
+            rollback_blockers,
+            "Rollback is available only when a rollback receipt is present in governance artifacts.",
+        ),
+        _governance_action(
+            "request_another_iteration",
+            True,
+            [],
+            request_summary,
+        ),
+    ]
+
+
+def _governance_action(action: str, available: bool, blocked_reasons: list[str], summary: str) -> dict[str, Any]:
+    return {
+        "action": action,
+        "available": available,
+        "blocked_reason_count": len(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+        "summary": summary,
+    }
+
+
+def _recommended_governance_action(actions: list[dict[str, Any]]) -> str:
+    availability = {str(action.get("action")): action.get("available") is True for action in actions}
+    if availability.get("approve"):
+        return "approve"
+    if availability.get("rollback"):
+        return "rollback"
+    return "request_another_iteration"
 
 
 def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]) -> dict[str, Any]:
@@ -256,6 +336,7 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "recommendation": str(latest.get("recommendation") or ""),
         "decision_readiness": str(decision.get("readiness") or ""),
         "decision_recommendation": str(decision.get("recommendation") or ""),
+        "recommended_governance_action": str(decision.get("recommended_governance_action") or ""),
         "ready_for_governance_review": ready,
         "missing_phase_input_count": len(missing_phase_inputs),
         "missing_phase_inputs": missing_phase_inputs,

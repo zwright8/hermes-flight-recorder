@@ -1,10 +1,47 @@
 {
   "decision": {
     "blocked_iteration_count": 1,
+    "governance_action_count": 4,
+    "governance_actions": [
+      {
+        "action": "approve",
+        "available": false,
+        "blocked_reason_count": 2,
+        "blocked_reasons": [
+          "latest_iteration_not_ready_for_governance_review",
+          "missing_promotion_decision"
+        ],
+        "summary": "Approve the iteration for promotion review when all readiness and promotion-decision receipts are present."
+      },
+      {
+        "action": "reject",
+        "available": true,
+        "blocked_reason_count": 0,
+        "blocked_reasons": [],
+        "summary": "Reject the iteration without moving aliases or weights."
+      },
+      {
+        "action": "rollback",
+        "available": false,
+        "blocked_reason_count": 1,
+        "blocked_reasons": [
+          "missing_rollback_receipt"
+        ],
+        "summary": "Rollback is available only when a rollback receipt is present in governance artifacts."
+      },
+      {
+        "action": "request_another_iteration",
+        "available": true,
+        "blocked_reason_count": 0,
+        "blocked_reasons": [],
+        "summary": "Governance can request another iteration."
+      }
+    ],
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "readiness": "blocked",
     "recommendation": "continue_iteration",
+    "recommended_governance_action": "request_another_iteration",
     "summary": "Latest loop iteration demo-loop-001 is fail-closed with 22 missing phase input(s)."
   },
   "execution_boundary": {
@@ -570,6 +607,7 @@
     "readiness": "planned_fail_closed",
     "ready_for_governance_review": false,
     "recommendation": "collect_missing_receipts_before_live_execution",
+    "recommended_governance_action": "request_another_iteration",
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,

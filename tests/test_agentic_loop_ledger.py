@@ -36,9 +36,17 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(payload["metrics"]["blocked_iteration_count"], 1)
             self.assertEqual(payload["metrics"]["latest_iteration_id"], "loop-002")
             self.assertEqual(payload["decision"]["recommendation"], "ready_for_governance_review")
+            self.assertEqual(payload["decision"]["recommended_governance_action"], "approve")
+            actions = {row["action"]: row for row in payload["decision"]["governance_actions"]}
+            self.assertEqual(set(actions), {"approve", "reject", "rollback", "request_another_iteration"})
+            self.assertTrue(actions["approve"]["available"])
+            self.assertTrue(actions["reject"]["available"])
+            self.assertFalse(actions["rollback"]["available"])
+            self.assertTrue(actions["request_another_iteration"]["available"])
             digest = payload["readiness_digest"]
             self.assertEqual(digest["latest_iteration_id"], "loop-002")
             self.assertTrue(digest["ready_for_governance_review"])
+            self.assertEqual(digest["recommended_governance_action"], "approve")
             self.assertEqual(digest["missing_phase_input_count"], 0)
             self.assertEqual(digest["missing_artifact_group_count"], 0)
             self.assertFalse(digest["side_effects_started"])
@@ -76,6 +84,49 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(digest["cloud_training_duplicate_role_count"], 0)
             self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
+
+    def test_governance_actions_recommend_another_iteration_when_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertEqual(payload["decision"]["readiness"], "blocked")
+            self.assertEqual(payload["decision"]["recommended_governance_action"], "request_another_iteration")
+            actions = {row["action"]: row for row in payload["decision"]["governance_actions"]}
+            self.assertFalse(actions["approve"]["available"])
+            self.assertIn("latest_iteration_not_ready_for_governance_review", actions["approve"]["blocked_reasons"])
+            self.assertIn("missing_promotion_decision", actions["approve"]["blocked_reasons"])
+            self.assertTrue(actions["reject"]["available"])
+            self.assertFalse(actions["rollback"]["available"])
+            self.assertTrue(actions["request_another_iteration"]["available"])
+            self.assertEqual(payload["readiness_digest"]["recommended_governance_action"], "request_another_iteration")
+            self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
+
+    def test_governance_actions_mark_rollback_available_when_receipt_is_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            ready_artifacts["promotion_rollback_receipt"] = [
+                self.write_json(root / "ready" / "promotion_rollback_receipt.json", "hfr.promotion_rollback_receipt.v1")
+            ]
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            actions = {row["action"]: row for row in payload["decision"]["governance_actions"]}
+            self.assertTrue(actions["approve"]["available"])
+            self.assertTrue(actions["rollback"]["available"])
+            self.assertEqual(actions["rollback"]["blocked_reasons"], [])
+            self.assertEqual(payload["decision"]["recommended_governance_action"], "approve")
+            self.assertTrue(payload["readiness_digest"]["rollback_receipt_present"])
+            self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
 
     def test_validate_rejects_stale_agentic_loop_ledger_source_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -246,6 +297,31 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("cloud_training_receipt_state.fail_closed must match source loop plan cloud training receipt artifacts", errors)
             self.assertIn("cloud_training_receipt_state.live_launch_requested must match source loop plan cloud training receipt artifacts", errors)
+
+    def test_validate_rejects_tampered_governance_actions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["decision"]["recommended_governance_action"] = "approve"
+            payload["decision"]["summary"] = "forged ready summary"
+            payload["decision"]["governance_actions"][0]["available"] = True
+            payload["decision"]["governance_actions"][0]["blocked_reasons"] = []
+            payload["decision"]["governance_actions"][0]["blocked_reason_count"] = 0
+            payload["readiness_digest"]["summary"] = "forged digest summary"
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("agentic_loop_ledger.decision.recommended_governance_action must match latest iteration state.", errors)
+            self.assertIn("agentic_loop_ledger.decision.governance_actions must match latest iteration state.", errors)
+            self.assertIn("agentic_loop_ledger.decision.summary must match latest iteration state.", errors)
+            self.assertIn("agentic_loop_ledger.readiness_digest.summary must match latest iteration readiness.", errors)
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

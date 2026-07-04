@@ -95,7 +95,10 @@ summarizes them in `cloud_training` without provider side effects. The
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
 records the SHA-256 chain from preflight through launch plan, launch receipt,
-and status receipt.
+and status receipt. Because this demo is intentionally incomplete, the example
+ledger's governance decision recommends `request_another_iteration` while still
+listing `approve`, `reject`, `rollback`, and `request_another_iteration` as
+schema-checkable action rows.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:

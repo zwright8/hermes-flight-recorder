@@ -4,7 +4,38 @@
   "additionalProperties": true,
   "description": "Longitudinal ledger over closed-loop agentic training iteration plans.",
   "properties": {
-    "decision": { "type": "object" },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked_iteration_count": { "minimum": 0, "type": "integer" },
+        "governance_action_count": { "minimum": 0, "type": "integer" },
+        "governance_actions": {
+          "items": { "$ref": "#/$defs/governance_action" },
+          "type": "array"
+        },
+        "latest_iteration_id": { "minLength": 1, "type": "string" },
+        "latest_iteration_index": { "minimum": 0, "type": "integer" },
+        "readiness": { "enum": ["ready", "blocked"], "type": "string" },
+        "recommendation": { "enum": ["ready_for_governance_review", "continue_iteration"], "type": "string" },
+        "recommended_governance_action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"],
+          "type": "string"
+        },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "recommended_governance_action",
+        "governance_action_count",
+        "governance_actions",
+        "summary",
+        "latest_iteration_index",
+        "latest_iteration_id",
+        "blocked_iteration_count"
+      ],
+      "type": "object"
+    },
     "execution_boundary": {
       "additionalProperties": true,
       "properties": {
@@ -122,6 +153,10 @@
         "cloud_training_provider_id": { "type": "string" },
         "decision_readiness": { "minLength": 1, "type": "string" },
         "decision_recommendation": { "minLength": 1, "type": "string" },
+        "recommended_governance_action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"],
+          "type": "string"
+        },
         "latest_iteration_id": { "minLength": 1, "type": "string" },
         "latest_iteration_index": { "minimum": 0, "type": "integer" },
         "live_spend_allowed": { "type": "boolean" },
@@ -153,6 +188,7 @@
         "recommendation",
         "decision_readiness",
         "decision_recommendation",
+        "recommended_governance_action",
         "ready_for_governance_review",
         "missing_phase_input_count",
         "missing_phase_inputs",
@@ -368,6 +404,24 @@
         "group": { "minLength": 1, "type": "string" }
       },
       "required": ["group", "count"],
+      "type": "object"
+    },
+    "governance_action": {
+      "additionalProperties": true,
+      "properties": {
+        "action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"],
+          "type": "string"
+        },
+        "available": { "type": "boolean" },
+        "blocked_reason_count": { "minimum": 0, "type": "integer" },
+        "blocked_reasons": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["action", "available", "blocked_reason_count", "blocked_reasons", "summary"],
       "type": "object"
     },
     "group_summary": {

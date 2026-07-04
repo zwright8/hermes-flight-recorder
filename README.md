@@ -354,7 +354,11 @@ weight updates. Missing phase receipts produce a schema-checkable
 `planned_fail_closed` contract rather than a live launch.
 Loop ledgers add a `readiness_digest` over the latest iteration so review can
 spot missing phase inputs, empty artifact groups, next-action posture, and
-side-effect status without walking every receipt.
+side-effect status without walking every receipt. The ledger `decision` also
+lists the explicit governance actions available from the latest iteration:
+`approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
+are advisory and ledger-only; promotion, rollback, and alias movement remain
+separate governed receipts.
 The plan and ledger also include `cloud_training`,
 `cloud_training_receipt_state`, and `cloud_training_lineage` summaries. Presence
 alone is not enough: the preflight must link the trainer
