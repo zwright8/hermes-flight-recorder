@@ -132,49 +132,53 @@ def write_agentic_plan_fixture(root: Path) -> Path:
 
 
 def write_improvement_ledger_gate(path: Path) -> None:
-    metrics = {
-        "plan_count": 2,
-        "unique_work_item_count": 1,
-        "open_work_item_count": 1,
-        "new_work_item_count": 0,
-        "recurring_work_item_count": 1,
-        "resolved_work_item_count": 0,
-        "critical_open_work_item_count": 0,
-        "high_open_work_item_count": 1,
-        "open_priority_counts": [{"id": "high", "count": 1}],
-        "open_category_counts": [{"id": "repair", "count": 1}],
-    }
-    gate = {
-        "schema_version": "hfr.improvement_ledger_gate.v1",
-        "improvement_ledger": "runs/improvement_ledger.json",
+    source_dir = path.parent / "runs"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    plan_1 = source_dir / "improvement_plan_1.json"
+    plan_2 = source_dir / "improvement_plan_2.json"
+    ledger = source_dir / "improvement_ledger.json"
+    plan = {
+        "schema_version": "hfr.improvement_plan.v1",
         "passed": True,
+        "readiness": "ready",
+        "work_item_count": 1,
         "decision": {
-            "readiness": "ready",
-            "recommendation": "promote_iteration",
-            "summary": "Improvement-ledger gate is ready.",
-            "blocking_check_count": 0,
-            "blocking_checks": [],
-            "key_metrics": metrics,
+            "recommendation": "run_improvement_iteration",
+            "critical_or_high_count": 1,
         },
-        "check_count": 1,
-        "failed_check_count": 0,
-        "checks": [
+        "work_items": [
             {
-                "id": "max_recurring_work_items",
-                "passed": True,
-                "actual": 1,
-                "expected": {"max": 1},
-                "summary": "max_recurring_work_items: actual=1, max=1",
+                "category": "repair",
+                "priority": "high",
+                "summary": "Repair prompt-injection evidence coverage.",
+                "suggested_action": "Add targeted repair evidence before promotion.",
+                "scenario_id": "prompt_injection_bad",
+                "task_family": "prompt_injection",
+                "rule_id": "forbidden_actions",
+                "rule_name": "Forbidden actions",
+                "score": 0,
+                "task_completion_status": "failed",
+                "evidence_refs": [],
             }
         ],
-        "metrics": metrics,
-        "policy": {
-            "schema_version": "hfr.improvement_ledger_gate.policy.v1",
-            "path": "examples/improvement_ledger_gate_policy.demo.json",
-            "effective": {"max_recurring_work_items": 1},
-        },
     }
-    path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    plan_1.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    plan_2.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    assert run_cli(["improvement-ledger", "--plan", str(plan_1), "--plan", str(plan_2), "--out", str(ledger)]) == 0
+    assert (
+        run_cli(
+            [
+                "gate-improvement-ledger",
+                "--improvement-ledger",
+                str(ledger),
+                "--max-recurring-work-items",
+                "1",
+                "--out",
+                str(path),
+            ]
+        )
+        == 0
+    )
 
 
 class TrainerPreflightTests(unittest.TestCase):

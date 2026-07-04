@@ -121,6 +121,150 @@ class ImprovementLedgerGateTests(unittest.TestCase):
             self.assertGreater(gate["metrics"]["resolved_work_item_count"], 0)
             self.assertEqual(run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict"]), 0)
 
+    def test_gate_improvement_ledger_writes_output_relative_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            runs = source_dir / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = source_dir / "improvement_ledger.json"
+            gate_path = output_dir / "improvement_ledger_gate.json"
+            summary_path = output_dir / "validation.json"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+
+            self.assertEqual(run_cli(["gate-improvement-ledger", "--improvement-ledger", str(ledger), "--out", str(gate_path)]), 0)
+
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertEqual(gate["improvement_ledger"], "../src/improvement_ledger.json")
+            self.assertEqual(run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)]), 0)
+
+    def test_strict_validate_rejects_absolute_improvement_ledger_gate_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = runs / "improvement_ledger.json"
+            gate_path = runs / "improvement_ledger_gate.json"
+            summary_path = runs / "validation.json"
+            strict_summary_path = runs / "strict_validation.json"
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["gate-improvement-ledger", "--improvement-ledger", str(ledger), "--out", str(gate_path)]), 0)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            gate["improvement_ledger"] = str(ledger)
+            gate["policy"] = {
+                "schema_version": "hfr.improvement_ledger_gate.policy.v1",
+                "path": str(ROOT / "examples" / "improvement_ledger_gate_policy.demo.json"),
+                "effective": {},
+            }
+            gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("improvement_ledger_gate.improvement_ledger is absolute", warnings)
+            self.assertIn("improvement_ledger_gate.policy.path is absolute", warnings)
+            strict_summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
+            self.assertIn("improvement_ledger_gate.improvement_ledger is absolute", strict_warnings)
+
+    def test_validate_rejects_improvement_ledger_gate_stale_source_ledger_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = runs / "improvement_ledger.json"
+            gate_path = runs / "improvement_ledger_gate.json"
+            summary_path = runs / "validation.json"
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["gate-improvement-ledger", "--improvement-ledger", str(ledger), "--out", str(gate_path)]), 0)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            open_count = gate["metrics"]["open_work_item_count"]
+            gate["metrics"]["new_work_item_count"] = 0
+            gate["metrics"]["recurring_work_item_count"] = open_count
+            gate["decision"]["key_metrics"] = gate["metrics"]
+            gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger_gate.metrics must match replayed source ledger metrics", errors)
+
+    def test_validate_rejects_improvement_ledger_gate_forged_check_actuals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = runs / "improvement_ledger.json"
+            gate_path = runs / "improvement_ledger_gate.json"
+            summary_path = runs / "validation.json"
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-improvement-ledger",
+                        "--improvement-ledger",
+                        str(ledger),
+                        "--max-open-work-items",
+                        "0",
+                        "--out",
+                        str(gate_path),
+                    ]
+                ),
+                1,
+            )
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            gate["checks"][0]["actual"] = 0
+            gate["checks"][0]["passed"] = True
+            gate["checks"][0]["summary"] = "max_open_work_items: actual=0, max=0"
+            gate["failed_check_count"] = 0
+            gate["passed"] = True
+            gate["decision"]["readiness"] = "ready"
+            gate["decision"]["recommendation"] = "promote_iteration"
+            gate["decision"]["summary"] = "Improvement-ledger gate is ready: concrete repair pressure is within policy."
+            gate["decision"]["blocking_check_count"] = 0
+            gate["decision"]["blocking_checks"] = []
+            gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger_gate.checks must match replayed source ledger checks", errors)
+
+    def test_validate_rejects_improvement_ledger_gate_missing_source_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = runs / "improvement_ledger.json"
+            gate_path = runs / "improvement_ledger_gate.json"
+            summary_path = runs / "validation.json"
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["gate-improvement-ledger", "--improvement-ledger", str(ledger), "--out", str(gate_path)]), 0)
+            ledger.unlink()
+
+            code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger_gate.improvement_ledger must resolve to an existing improvement ledger", errors)
+
     def test_gate_improvement_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             not_ledger = Path(tmp) / "not_ledger.json"

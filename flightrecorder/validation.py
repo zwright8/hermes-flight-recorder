@@ -88,7 +88,11 @@ from .external_eval import (
 )
 from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
-from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
+from .improvement_gate import (
+    IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+    IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION,
+    evaluate_improvement_ledger_gate,
+)
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
@@ -1130,7 +1134,7 @@ def validate_improvement_ledger_gate(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("improvement_ledger_gate", str(gate_path))
     gate = _read_object(gate_path, target, "improvement_ledger_gate.json")
     if gate is not None:
-        _validate_improvement_ledger_gate(gate, target)
+        _validate_improvement_ledger_gate(gate, target, gate_path)
     return target
 
 
@@ -15952,10 +15956,12 @@ def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTa
             )
 
 
-def _validate_improvement_ledger_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_improvement_ledger_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(gate, "schema_version", IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION, target)
     if not isinstance(gate.get("improvement_ledger"), str) or not gate.get("improvement_ledger"):
         target.errors.append("improvement_ledger_gate.improvement_ledger must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "improvement_ledger_gate.improvement_ledger", gate.get("improvement_ledger"))
     if not isinstance(gate.get("passed"), bool):
         target.errors.append("improvement_ledger_gate.passed must be a boolean.")
     checks = gate.get("checks")
@@ -15980,6 +15986,7 @@ def _validate_improvement_ledger_gate(gate: dict[str, Any], target: ValidationTa
     if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
         target.errors.append("improvement_ledger_gate.passed must match failed_check_count.")
     _validate_improvement_ledger_gate_metrics(metrics, target)
+    _validate_improvement_ledger_gate_source_linkage(gate, checks, metrics, target, source_path)
     _validate_improvement_ledger_gate_decision(gate.get("decision"), expected_passed, failed_checks, metrics, target)
     target.details.update(
         {
@@ -15990,6 +15997,128 @@ def _validate_improvement_ledger_gate(gate: dict[str, Any], target: ValidationTa
             "recurring_work_item_count": metrics.get("recurring_work_item_count"),
         }
     )
+
+
+def _validate_improvement_ledger_gate_source_linkage(
+    gate: dict[str, Any],
+    checks: list[Any],
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    ledger_path = _resolve_gate_source_path(gate.get("improvement_ledger"), source_path)
+    if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
+        target.errors.append("improvement_ledger_gate.improvement_ledger must resolve to an existing improvement ledger.")
+        return
+    try:
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"improvement_ledger_gate.improvement_ledger is not valid UTF-8: {exc}")
+        return
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"improvement_ledger_gate.improvement_ledger contains invalid JSON: {exc}")
+        return
+    if not isinstance(ledger, dict):
+        target.errors.append("improvement_ledger_gate.improvement_ledger must contain a JSON object.")
+        return
+    _validate_improvement_ledger(ledger, target, ledger_path)
+    try:
+        expected = evaluate_improvement_ledger_gate(
+            ledger,
+            improvement_ledger_path=gate.get("improvement_ledger"),
+            **_improvement_ledger_gate_replay_options(gate, checks),
+        )
+    except ValueError as exc:
+        target.errors.append(f"improvement_ledger_gate.improvement_ledger could not be replayed: {exc}")
+        return
+    if metrics != expected.get("metrics"):
+        target.errors.append("improvement_ledger_gate.metrics must match replayed source ledger metrics.")
+    if checks != expected.get("checks"):
+        target.errors.append("improvement_ledger_gate.checks must match replayed source ledger checks.")
+    if gate.get("decision") != expected.get("decision"):
+        target.errors.append("improvement_ledger_gate.decision must match replayed source ledger decision.")
+
+
+def _improvement_ledger_gate_replay_options(gate: dict[str, Any], checks: list[Any]) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "min_plans": None,
+        "max_open_work_items": None,
+        "max_new_work_items": None,
+        "max_recurring_work_items": None,
+        "min_resolved_work_items": None,
+        "max_critical_open_work_items": None,
+        "max_high_open_work_items": None,
+        "forbid_open_priorities": [],
+        "forbid_open_categories": [],
+        "forbid_open_work_keys": [],
+        "require_open_work_keys": [],
+        "require_resolved_work_keys": [],
+    }
+    policy = gate.get("policy") if isinstance(gate.get("policy"), dict) else {}
+    effective = policy.get("effective") if isinstance(policy.get("effective"), dict) else None
+    if effective is not None:
+        for field_name in (
+            "min_plans",
+            "max_open_work_items",
+            "max_new_work_items",
+            "max_recurring_work_items",
+            "min_resolved_work_items",
+            "max_critical_open_work_items",
+            "max_high_open_work_items",
+        ):
+            if _is_non_negative_int(effective.get(field_name)):
+                options[field_name] = effective[field_name]
+        for field_name in (
+            "forbid_open_priorities",
+            "forbid_open_categories",
+            "forbid_open_work_keys",
+            "require_open_work_keys",
+            "require_resolved_work_keys",
+        ):
+            if _is_string_list(effective.get(field_name)):
+                options[field_name] = effective[field_name]
+        return options
+
+    for check in checks:
+        if isinstance(check, dict):
+            _merge_improvement_ledger_gate_check_option(options, check)
+    return options
+
+
+def _merge_improvement_ledger_gate_check_option(options: dict[str, Any], check: dict[str, Any]) -> None:
+    expected = check.get("expected") if isinstance(check.get("expected"), dict) else {}
+    check_id = check.get("id")
+    if check_id in {"min_plans", "min_resolved_work_items"} and _is_non_negative_int(expected.get("min")):
+        options[check_id] = expected["min"]
+    elif (
+        check_id
+        in {
+            "max_open_work_items",
+            "max_new_work_items",
+            "max_recurring_work_items",
+            "max_critical_open_work_items",
+            "max_high_open_work_items",
+        }
+        and _is_non_negative_int(expected.get("max"))
+    ):
+        options[check_id] = expected["max"]
+    elif check_id == "forbid_open_priority":
+        _append_scope_value(options, "forbid_open_priorities", check, "priority")
+    elif check_id == "forbid_open_category":
+        _append_scope_value(options, "forbid_open_categories", check, "category")
+    elif check_id == "forbid_open_work_key":
+        _append_scope_value(options, "forbid_open_work_keys", check, "work_key")
+    elif check_id == "require_open_work_key":
+        _append_scope_value(options, "require_open_work_keys", check, "work_key")
+    elif check_id == "require_resolved_work_key":
+        _append_scope_value(options, "require_resolved_work_keys", check, "work_key")
+
+
+def _append_scope_value(options: dict[str, Any], option_name: str, check: dict[str, Any], scope_name: str) -> None:
+    scope = check.get("scope") if isinstance(check.get("scope"), dict) else {}
+    value = scope.get(scope_name)
+    if isinstance(value, str) and value:
+        options[option_name].append(value)
 
 
 def _validate_improvement_ledger_gate_decision(
@@ -16130,6 +16259,8 @@ def _validate_improvement_ledger_gate_policy_summary(value: Any, target: Validat
     )
     if not isinstance(value.get("path"), str) or not value.get("path"):
         target.errors.append("improvement_ledger_gate.policy.path must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "improvement_ledger_gate.policy.path", value.get("path"))
     if "description" in value and not isinstance(value.get("description"), str):
         target.errors.append("improvement_ledger_gate.policy.description must be a string when present.")
     effective = value.get("effective")

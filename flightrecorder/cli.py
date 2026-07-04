@@ -2553,9 +2553,14 @@ def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
 def cmd_gate_improvement_ledger(args: argparse.Namespace) -> int:
     ledger = _read_json(Path(args.improvement_ledger))
     options = _improvement_ledger_gate_options(args)
+    output_path = Path(args.out) if args.out else None
     result = evaluate_improvement_ledger_gate(
         ledger,
-        improvement_ledger_path=_display_path(Path(args.improvement_ledger), args.preserve_paths),
+        improvement_ledger_path=_display_path_for_output_source(
+            Path(args.improvement_ledger),
+            output_path,
+            args.preserve_paths,
+        ),
         min_plans=options["min_plans"],
         max_open_work_items=options["max_open_work_items"],
         max_new_work_items=options["max_new_work_items"],

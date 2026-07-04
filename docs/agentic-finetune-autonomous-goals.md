@@ -710,6 +710,9 @@ card, and dataset card decisions.
 - Improvement-ledger strict validation now warns on absolute ledger, plan,
   metric, and occurrence paths, catching preserved local improvement-plan
   coordinates before public iteration-review packets are accepted.
+- Improvement-ledger gate validation reopens and replays the referenced source
+  ledger, rejecting stale or forged metrics, checks, decisions, missing source
+  ledgers, and absolute public source/policy paths.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
