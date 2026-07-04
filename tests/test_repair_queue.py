@@ -150,11 +150,12 @@ class RepairQueueTests(unittest.TestCase):
             self.assertTrue(scorecard_ref["path"].startswith("../runs/"), scorecard_ref)
             self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
 
-    def test_repair_queue_preserve_paths_keeps_fingerprints_queue_relative(self):
+    def test_repair_queue_preserve_paths_warns_on_absolute_sources_and_keeps_fingerprints_queue_relative(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runs = root / "runs"
             queue_path = root / "nested" / "repair_queue.json"
+            summary_path = root / "validation.json"
             self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
             self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path), "--preserve-paths"]), 0)
 
@@ -162,7 +163,14 @@ class RepairQueueTests(unittest.TestCase):
             item = queue["items"][0]
             self.assertTrue(Path(item["source_artifacts"]["scorecard"]).is_absolute())
             self.assertFalse(Path(item["source_artifact_fingerprints"]["scorecard"]["path"]).is_absolute())
-            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--out", str(summary_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict", "--out", str(summary_path)]), 1)
+            warnings = "\n".join(
+                warning for target in json.loads(summary_path.read_text(encoding="utf-8"))["targets"] for warning in target["warnings"]
+            )
+            self.assertIn("repair_queue.runs_dir is absolute", warnings)
+            self.assertIn("repair_queue.items[0].source_artifacts.run_dir is absolute", warnings)
+            self.assertIn("repair_queue.items[0].source_artifacts.scorecard is absolute", warnings)
 
 
 if __name__ == "__main__":

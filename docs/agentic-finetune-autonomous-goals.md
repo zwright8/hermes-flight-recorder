@@ -103,6 +103,9 @@ evidence.
   failed checks, and next actions.
 - Later layers can consume artifact paths, hashes, and byte sizes without
   guessing.
+- Repair queues keep replayed source fingerprints relative to the queue
+  location and warn before public handoffs include absolute source artifact
+  display paths.
 - Evidence bundles and improvement plans reject existing file artifacts that
   omit SHA-256 or byte-size evidence at the schema boundary.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte

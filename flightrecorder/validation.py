@@ -22997,6 +22997,7 @@ def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget, sour
     _require_equal(queue, "schema_version", REPAIR_QUEUE_SCHEMA_VERSION, target)
     if not isinstance(queue.get("runs_dir"), str) or not queue.get("runs_dir"):
         target.errors.append("repair_queue.runs_dir must be a non-empty string.")
+    _warn_absolute_public_path(target, "repair_queue.runs_dir", queue.get("runs_dir"))
     if not isinstance(queue.get("passed"), bool):
         target.errors.append("repair_queue.passed must be a boolean.")
     if not isinstance(queue.get("only_critical"), bool):
@@ -23136,6 +23137,8 @@ def _validate_repair_source_artifacts(value: Any, target: ValidationTarget, labe
             target.errors.append(f"{label} keys must be non-empty strings.")
         if not isinstance(artifact_path, str) or not artifact_path:
             target.errors.append(f"{label}.{artifact_name} must be a non-empty string.")
+        else:
+            _warn_absolute_public_path(target, f"{label}.{artifact_name}", artifact_path)
 
 
 def _validate_repair_source_artifact_fingerprints(value: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
