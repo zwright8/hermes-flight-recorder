@@ -723,6 +723,8 @@ card, and dataset card decisions.
 - Eval-summary strict validation now warns on absolute suite, compare-manifest,
   compare-gate, external-adapter, and serving-preflight refs before public
   governance summaries are accepted.
+- Suite-summary strict validation now warns on absolute scenario, trace, run,
+  and run-artifact paths before public eval summaries are accepted.
 - External-eval strict validation now warns on absolute heldout-manifest and
   source-plan refs before adapter plans or dry-run receipts become public
   governance evidence.

@@ -742,6 +742,47 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("suite_summary.runs[0].report_sha256 does not match the current file", errors)
             self.assertIn("suite_summary.runs[0].scorecard_size_bytes does not match the current file", errors)
 
+    def test_strict_validate_warns_on_absolute_suite_summary_run_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            strict_summary = Path(tmp) / "strict_validation.json"
+            permissive_summary = Path(tmp) / "permissive_validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--preserve-paths"])
+
+            permissive_code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--out",
+                    str(permissive_summary),
+                ]
+            )
+            strict_code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--out",
+                    str(strict_summary),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(permissive_code, 0)
+            self.assertEqual(strict_code, 1)
+            permissive = json.loads(permissive_summary.read_text(encoding="utf-8"))
+            strict = json.loads(strict_summary.read_text(encoding="utf-8"))
+            self.assertTrue(permissive["passed"], permissive)
+            self.assertGreater(permissive["warning_count"], 0, permissive)
+            self.assertFalse(strict["passed"], strict)
+            self.assertEqual(strict["error_count"], 0, strict)
+            warnings = "\n".join(warning for target in strict["targets"] for warning in target["warnings"])
+            self.assertIn("suite_summary.runs[0].scenario_path is absolute", warnings)
+            self.assertIn("suite_summary.runs[0].trace_path is absolute", warnings)
+            self.assertIn("suite_summary.runs[0].run_dir is absolute", warnings)
+            self.assertIn("suite_summary.runs[0].report is absolute", warnings)
+
     def test_validate_warns_on_legacy_family_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

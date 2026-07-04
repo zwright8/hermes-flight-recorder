@@ -12863,6 +12863,8 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget, s
         ):
             if not isinstance(run.get(field_name), str) or not run.get(field_name):
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
+        for field_name in ("scenario_path", "trace_path", "run_dir", "report", "scorecard", "run_digest", "lineage"):
+            _warn_absolute_public_path(target, f"suite_summary.runs[{index}].{field_name}", run.get(field_name))
         for field_name in ("report", "scorecard", "run_digest", "lineage"):
             _validate_suite_run_artifact_ref(run, field_name, target, f"suite_summary.runs[{index}]", source_path)
         if not isinstance(run.get("passed"), bool):
