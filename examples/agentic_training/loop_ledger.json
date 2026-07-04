@@ -209,28 +209,28 @@
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "launch_plan",
-            "source_ref_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
+            "source_ref_sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31",
             "source_role": "cloud_training_launch_receipt",
             "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_launch_plan",
             "target_schema_version": "hfr.cloud_training_launch_plan.v1",
-            "target_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020"
+            "target_sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31"
           },
           {
             "id": "status_receipt_links_launch_receipt",
             "passed": true,
             "source_artifact_count": 1,
             "source_ref": "launch_receipt",
-            "source_ref_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
+            "source_ref_sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937",
             "source_role": "cloud_training_status_receipt",
             "source_schema_version": "hfr.cloud_training_status_receipt.v1",
             "status": "matched",
             "target_artifact_count": 1,
             "target_role": "cloud_training_launch_receipt",
             "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
-            "target_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c"
+            "target_sha256": "aae9c04e5fe2f17aef047962dbdeac2c8ac4c8bfcb3844403553b4f9cda66937"
           }
         ],
         "matched_link_count": 5,
@@ -390,7 +390,7 @@
         ],
         "roles_present": []
       },
-      "sha256": "77a3c457d33cf486d815bb2322405ee1133293817762d9c22d47d49813a971fd",
+      "sha256": "f044acc52ebbddc8eaccb5da4c6f0305883584fc30622b5b784ff2e8ef92661d",
       "size_bytes": 36498,
       "training_outputs": {
         "artifact_count": 3,

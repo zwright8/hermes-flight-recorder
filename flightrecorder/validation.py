@@ -53,6 +53,7 @@ from .cloud_training import (
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
     PROVIDER_ADAPTER_RECEIPT_TYPES,
 )
+from .schema_registry import SchemaRegistryError, check_schema_file
 from .compare_gate import compare_movement_summary
 from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
@@ -4012,6 +4013,31 @@ def _validate_cloud_training_contract(
             source_path,
             _cloud_training_required_source_artifacts(expected_schema_version),
         )
+    if expected_schema_version == CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION:
+        expected_provider_chain = _expected_cloud_training_launch_plan_provider_chain(
+            payload.get("source_artifacts"),
+            source_path,
+        )
+        _validate_cloud_training_launch_plan_source_refs(
+            payload,
+            checks if isinstance(checks, list) else [],
+            payload.get("source_artifacts"),
+            target,
+            "cloud_training_launch_plan.source_artifacts",
+        )
+        _validate_cloud_training_launch_plan_provider_chain(
+            payload.get("provider_chain"),
+            expected_provider_chain,
+            target,
+        )
+        _validate_cloud_training_launch_plan_provider_matches_chain(payload.get("provider"), expected_provider_chain, target)
+        _validate_cloud_training_launch_plan_readiness(
+            payload,
+            checks if isinstance(checks, list) else [],
+            expected_provider_chain,
+            target,
+            source_path,
+        )
     if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:
         upload_artifacts = payload.get("upload_artifacts")
         expected_download_artifacts = payload.get("expected_download_artifacts")
@@ -4126,6 +4152,42 @@ def _validate_cloud_training_source_artifacts(
         _validate_cloud_training_artifact_ref(record, target, f"{label}.{name}", source_path)
 
 
+def _validate_cloud_training_launch_plan_source_refs(
+    payload: dict[str, Any],
+    checks: list[Any],
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        return
+    preflight_ref = value.get("preflight")
+    if isinstance(preflight_ref, dict) and preflight_ref.get("exists") is not True:
+        target.errors.append(f"{label}.preflight.exists must be true.")
+    artifact_manifest_ref = value.get("artifact_manifest")
+    if not isinstance(artifact_manifest_ref, dict) or artifact_manifest_ref.get("exists") is True:
+        return
+    if artifact_manifest_ref.get("path") != "":
+        target.errors.append(
+            "cloud_training_launch_plan.source_artifacts.artifact_manifest.path must be empty when artifact_manifest is missing."
+        )
+    failed_check_ids = {check.get("id") for check in checks if isinstance(check, dict) and check.get("passed") is False}
+    for check_id in ("artifact_manifest_ready", "provider_chain_consistent"):
+        if check_id not in failed_check_ids:
+            target.errors.append(f"cloud_training_launch_plan.checks must include failed {check_id} when artifact_manifest is missing.")
+    provider_chain = payload.get("provider_chain") if isinstance(payload.get("provider_chain"), dict) else {}
+    if provider_chain.get("artifact_manifest_required") is not True:
+        target.errors.append("cloud_training_launch_plan.provider_chain.artifact_manifest_required must be true.")
+    if provider_chain.get("provider_consistent") is not False:
+        target.errors.append(
+            "cloud_training_launch_plan.provider_chain.provider_consistent must be false when artifact_manifest is missing."
+        )
+    if payload.get("readiness") != "blocked":
+        target.errors.append("cloud_training_launch_plan.readiness must be blocked when artifact_manifest is missing.")
+    if payload.get("recommendation") != "block_launch_receipt":
+        target.errors.append("cloud_training_launch_plan.recommendation must be block_launch_receipt when artifact_manifest is missing.")
+
+
 def _validate_cloud_training_artifact_refs(
     value: Any,
     target: ValidationTarget,
@@ -4182,6 +4244,168 @@ def _validate_cloud_training_transfer_plan(
     ):
         if value.get(field_name) is not False:
             target.errors.append(f"{label}.{field_name} must be false.")
+
+
+def _validate_cloud_training_launch_plan_provider_chain(
+    value: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    label = "cloud_training_launch_plan.provider_chain"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match launch-plan source providers.")
+
+
+def _validate_cloud_training_launch_plan_provider_matches_chain(
+    value: Any,
+    expected_chain: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    expected_provider_id = expected_chain.get("preflight_provider_id")
+    if not expected_provider_id:
+        return
+    provider_id = value.get("id") if isinstance(value, dict) else None
+    if provider_id != expected_provider_id:
+        target.errors.append("cloud_training_launch_plan.provider.id must match provider_chain.preflight_provider_id.")
+
+
+def _validate_cloud_training_launch_plan_readiness(
+    payload: dict[str, Any],
+    checks: list[Any],
+    expected_chain: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path | None,
+) -> None:
+    sources = payload.get("source_artifacts") if isinstance(payload.get("source_artifacts"), dict) else {}
+    preflight_state = _cloud_training_launch_plan_source_state(
+        sources.get("preflight"),
+        source_path,
+        "cloud_training_preflight",
+    )
+    artifact_manifest_state = _cloud_training_launch_plan_source_state(
+        sources.get("artifact_manifest"),
+        source_path,
+        "cloud_training_artifact_manifest",
+    )
+    for role, state in (("preflight", preflight_state), ("artifact_manifest", artifact_manifest_state)):
+        _validate_cloud_training_launch_plan_source_state(role, state, target)
+    expected_checks = {
+        "preflight_ready": preflight_state["ready"],
+        "artifact_manifest_ready": artifact_manifest_state["ready"],
+        "provider_chain_consistent": expected_chain["provider_consistent"],
+        "dry_run_launch_only": True,
+    }
+    for check_id, expected_passed in expected_checks.items():
+        check = _cloud_training_check_by_id(checks, check_id, target)
+        if check is None:
+            continue
+        if check.get("passed") != expected_passed:
+            target.errors.append(f"cloud_training_launch_plan.checks.{check_id}.passed must match source readiness.")
+    expected_failed_count = sum(1 for passed in expected_checks.values() if not passed)
+    expected_passed = expected_failed_count == 0
+    if payload.get("failed_check_count") != expected_failed_count:
+        target.errors.append(f"cloud_training_launch_plan.failed_check_count expected {expected_failed_count}.")
+    if payload.get("passed") != expected_passed:
+        target.errors.append("cloud_training_launch_plan.passed must match source readiness.")
+    expected_readiness = "ready_for_dry_run_launch" if expected_passed else "blocked"
+    expected_recommendation = "emit_dry_run_launch_receipt" if expected_passed else "block_launch_receipt"
+    if payload.get("readiness") != expected_readiness:
+        target.errors.append(f"cloud_training_launch_plan.readiness must be {expected_readiness}.")
+    if payload.get("recommendation") != expected_recommendation:
+        target.errors.append(f"cloud_training_launch_plan.recommendation must be {expected_recommendation}.")
+
+
+def _validate_cloud_training_launch_plan_source_state(role: str, state: dict[str, Any], target: ValidationTarget) -> None:
+    ref = state["ref"]
+    label = f"cloud_training_launch_plan.source_artifacts.{role}"
+    if not isinstance(ref, dict):
+        return
+    for field_name in ("schema_name", "schema_passed", "source_passed", "source_recommendation"):
+        expected_value = state[field_name]
+        if ref.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match the referenced source artifact.")
+
+
+def _cloud_training_launch_plan_source_state(record: Any, source_path: Path | None, schema_name: str) -> dict[str, Any]:
+    state = {
+        "ref": record,
+        "schema_name": schema_name,
+        "schema_passed": False,
+        "source_passed": None,
+        "source_recommendation": "",
+        "ready": False,
+    }
+    if not isinstance(record, dict) or record.get("exists") is not True:
+        return state
+    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    payload = _read_json_object_silent(artifact_path)
+    schema_passed = _cloud_training_schema_check_passed(artifact_path, schema_name)
+    source_passed = payload.get("passed") if isinstance(payload.get("passed"), bool) else None
+    state.update(
+        {
+            "schema_passed": schema_passed,
+            "source_passed": source_passed,
+            "source_recommendation": str(payload.get("recommendation") or ""),
+            "ready": schema_passed and source_passed is True,
+        }
+    )
+    return state
+
+
+def _cloud_training_schema_check_passed(path: Path | None, schema_name: str) -> bool:
+    if path is None:
+        return False
+    try:
+        return check_schema_file(path, schema_name).get("passed") is True
+    except (OSError, json.JSONDecodeError, SchemaRegistryError):
+        return False
+
+
+def _cloud_training_check_by_id(checks: list[Any], check_id: str, target: ValidationTarget) -> dict[str, Any] | None:
+    matches = [check for check in checks if isinstance(check, dict) and check.get("id") == check_id]
+    if len(matches) != 1:
+        target.errors.append(f"cloud_training_launch_plan.checks must include exactly one {check_id} check.")
+        return None
+    return matches[0]
+
+
+def _expected_cloud_training_launch_plan_provider_chain(source_artifacts: Any, source_path: Path | None) -> dict[str, Any]:
+    sources = source_artifacts if isinstance(source_artifacts, dict) else {}
+    preflight_provider_id = _cloud_training_provider_id_from_source_ref(sources.get("preflight"), source_path)
+    artifact_manifest_ref = sources.get("artifact_manifest") if isinstance(sources.get("artifact_manifest"), dict) else {}
+    artifact_manifest_required = True
+    artifact_manifest_provider_id = _cloud_training_provider_id_from_source_ref(artifact_manifest_ref, source_path)
+    provider_consistent = (
+        bool(preflight_provider_id)
+        and (
+            not artifact_manifest_required
+            or (bool(artifact_manifest_provider_id) and preflight_provider_id == artifact_manifest_provider_id)
+        )
+    )
+    return {
+        "preflight_provider_id": preflight_provider_id,
+        "artifact_manifest_provider_id": artifact_manifest_provider_id,
+        "artifact_manifest_required": artifact_manifest_required,
+        "provider_consistent": provider_consistent,
+        "mismatched_provider_ids": (
+            []
+            if provider_consistent
+            else [provider_id for provider_id in (preflight_provider_id, artifact_manifest_provider_id) if provider_id]
+        ),
+    }
+
+
+def _cloud_training_provider_id_from_source_ref(record: Any, source_path: Path | None) -> str:
+    if not isinstance(record, dict) or record.get("exists") is not True:
+        return ""
+    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    payload = _read_json_object_silent(artifact_path)
+    provider = payload.get("provider") if isinstance(payload.get("provider"), dict) else {}
+    return str(provider.get("id") or "") if isinstance(provider, dict) else ""
 
 
 def _cloud_training_required_source_artifacts(schema_version: str) -> tuple[str, ...]:

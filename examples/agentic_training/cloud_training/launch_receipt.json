@@ -14,8 +14,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_launch_plan",
           "schema_passed": true,
-          "sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
-          "size_bytes": 5951,
+          "sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31",
+          "size_bytes": 6654,
           "source_passed": false,
           "source_recommendation": "block_launch_receipt"
         }
@@ -86,8 +86,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_launch_plan",
       "schema_passed": true,
-      "sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
-      "size_bytes": 5951,
+      "sha256": "9b965fe9b327624d377c4095ea469f56b36d4bdb5d8aa4b6522b017e1599ce31",
+      "size_bytes": 6654,
       "source_passed": false,
       "source_recommendation": "block_launch_receipt"
     }

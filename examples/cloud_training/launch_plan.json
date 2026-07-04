@@ -2,7 +2,7 @@
   "blocked_reasons": [
     "preflight_ready: passed=False"
   ],
-  "check_count": 3,
+  "check_count": 4,
   "checks": [
     {
       "actual": {
@@ -51,6 +51,23 @@
       "id": "artifact_manifest_ready",
       "passed": true,
       "summary": "artifact_manifest_ready: passed=True"
+    },
+    {
+      "actual": {
+        "provider_chain": {
+          "artifact_manifest_provider_id": "modal",
+          "artifact_manifest_required": true,
+          "mismatched_provider_ids": [],
+          "preflight_provider_id": "modal",
+          "provider_consistent": true
+        }
+      },
+      "expected": {
+        "provider_consistent": true
+      },
+      "id": "provider_chain_consistent",
+      "passed": true,
+      "summary": "provider_chain_consistent: passed=True"
     },
     {
       "actual": {
@@ -164,6 +181,13 @@
     "regions": [
       "provider_default"
     ]
+  },
+  "provider_chain": {
+    "artifact_manifest_provider_id": "modal",
+    "artifact_manifest_required": true,
+    "mismatched_provider_ids": [],
+    "preflight_provider_id": "modal",
+    "provider_consistent": true
   },
   "readiness": "blocked",
   "recommendation": "block_launch_receipt",

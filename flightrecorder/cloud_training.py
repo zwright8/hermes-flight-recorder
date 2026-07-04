@@ -416,7 +416,22 @@ def build_cloud_training_launch_plan(
 ) -> dict[str, Any]:
     """Build a dry-run launch plan from a cloud-training preflight."""
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
-    preflight_ref = _json_artifact_ref("cloud_training_preflight", Path(preflight_path), "cloud_training_preflight", preserve_paths, display_base_dir)
+    preflight = _read_json(Path(preflight_path))
+    artifact_manifest = _read_json(Path(artifact_manifest_path)) if artifact_manifest_path else {}
+    preflight_provider_id = _payload_provider_id(preflight)
+    artifact_manifest_provider_id = _payload_provider_id(artifact_manifest)
+    provider_chain = _launch_plan_provider_chain(
+        preflight_provider_id,
+        artifact_manifest_provider_id,
+        artifact_manifest_required=True,
+    )
+    preflight_ref = _json_artifact_ref(
+        "cloud_training_preflight",
+        Path(preflight_path),
+        "cloud_training_preflight",
+        preserve_paths,
+        display_base_dir,
+    )
     artifact_ref = (
         _json_artifact_ref(
             "cloud_training_artifact_manifest",
@@ -433,14 +448,20 @@ def build_cloud_training_launch_plan(
     _add_check(
         checks,
         "artifact_manifest_ready",
-        artifact_manifest_path is None or _artifact_ready(artifact_ref),
+        _artifact_ready(artifact_ref),
         {"artifact": artifact_ref},
         {"schema": "cloud_training_artifact_manifest", "passed": True},
     )
+    _add_check(
+        checks,
+        "provider_chain_consistent",
+        provider_chain["provider_consistent"],
+        {"provider_chain": provider_chain},
+        {"provider_consistent": True},
+    )
     _add_check(checks, "dry_run_launch_only", True, {"dry_run": True, "cloud_job_started": False}, {"dry_run": True})
     failed = [check for check in checks if not check["passed"]]
-    preflight = _read_json(Path(preflight_path))
-    provider_id = str(((preflight.get("provider") if isinstance(preflight, dict) else {}) or {}).get("id") or "")
+    provider_id = preflight_provider_id
     provider = _provider_record(provider_id) if provider_id in PROVIDERS else {"id": provider_id, "display_name": provider_id}
     return {
         "schema_version": CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
@@ -454,6 +475,7 @@ def build_cloud_training_launch_plan(
         "checks": checks,
         "blocked_reasons": [check["summary"] for check in failed],
         "source_artifacts": {"preflight": preflight_ref, "artifact_manifest": artifact_ref},
+        "provider_chain": provider_chain,
         "launch": {
             "mode": "dry_run",
             "live_launch_supported": False,
@@ -668,6 +690,36 @@ def _artifact_transfer_plan(provider: dict[str, Any], uploads: list[dict[str, An
         "provider_api_called": False,
         "credential_values_recorded": False,
     }
+
+
+def _launch_plan_provider_chain(
+    preflight_provider_id: str,
+    artifact_manifest_provider_id: str,
+    artifact_manifest_required: bool,
+) -> dict[str, Any]:
+    provider_consistent = (
+        bool(preflight_provider_id)
+        and (
+            not artifact_manifest_required
+            or (bool(artifact_manifest_provider_id) and preflight_provider_id == artifact_manifest_provider_id)
+        )
+    )
+    return {
+        "preflight_provider_id": preflight_provider_id,
+        "artifact_manifest_provider_id": artifact_manifest_provider_id,
+        "artifact_manifest_required": artifact_manifest_required,
+        "provider_consistent": provider_consistent,
+        "mismatched_provider_ids": (
+            []
+            if provider_consistent
+            else [provider_id for provider_id in (preflight_provider_id, artifact_manifest_provider_id) if provider_id]
+        ),
+    }
+
+
+def _payload_provider_id(payload: dict[str, Any]) -> str:
+    provider = payload.get("provider") if isinstance(payload, dict) else {}
+    return str(provider.get("id") or "") if isinstance(provider, dict) else ""
 
 
 def _module_available(module: str) -> bool:

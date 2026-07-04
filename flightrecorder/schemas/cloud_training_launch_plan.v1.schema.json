@@ -57,6 +57,37 @@
     "provider": {
       "type": "object"
     },
+    "provider_chain": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_manifest_provider_id": {
+          "type": "string"
+        },
+        "artifact_manifest_required": {
+          "type": "boolean"
+        },
+        "mismatched_provider_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preflight_provider_id": {
+          "type": "string"
+        },
+        "provider_consistent": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preflight_provider_id",
+        "artifact_manifest_provider_id",
+        "artifact_manifest_required",
+        "provider_consistent",
+        "mismatched_provider_ids"
+      ],
+      "type": "object"
+    },
     "readiness": {
       "enum": [
         "ready_for_dry_run_launch",
@@ -95,6 +126,7 @@
     "checks",
     "blocked_reasons",
     "source_artifacts",
+    "provider_chain",
     "launch",
     "execution_boundary",
     "handoff_contract"

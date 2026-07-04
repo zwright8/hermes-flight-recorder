@@ -188,6 +188,44 @@ class CloudTrainingTests(unittest.TestCase):
                 1,
             )
             self.assert_schema_and_validate(launch_plan, "cloud_training_launch_plan")
+            launch_plan_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            self.assertEqual(launch_plan_payload["provider_chain"]["preflight_provider_id"], "modal")
+            self.assertEqual(
+                launch_plan_payload["provider_chain"]["artifact_manifest_provider_id"],
+                "modal",
+            )
+            self.assertTrue(launch_plan_payload["provider_chain"]["provider_consistent"])
+            provider_drift_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            provider_drift_payload["provider"] = build_cloud_training_provider_registry(["huggingface_jobs"])["providers"][0]
+            launch_plan.write_text(json.dumps(provider_drift_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_plan.provider.id must match provider_chain.preflight_provider_id.", errors)
+            launch_plan.write_text(json.dumps(launch_plan_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            forged_ready_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            forged_ready_payload["source_artifacts"]["preflight"]["source_passed"] = True
+            for check in forged_ready_payload["checks"]:
+                if check["id"] == "preflight_ready":
+                    check["passed"] = True
+                    check["summary"] = "preflight_ready: passed=True"
+                    check["actual"]["artifact"]["source_passed"] = True
+            forged_ready_payload["blocked_reasons"] = []
+            forged_ready_payload["failed_check_count"] = 0
+            forged_ready_payload["passed"] = True
+            forged_ready_payload["readiness"] = "ready_for_dry_run_launch"
+            forged_ready_payload["recommendation"] = "emit_dry_run_launch_receipt"
+            launch_plan.write_text(json.dumps(forged_ready_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.preflight.source_passed must match the referenced source artifact.",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_plan.checks.preflight_ready.passed must match source readiness.", errors)
+            self.assertIn("cloud_training_launch_plan.failed_check_count expected 1.", errors)
+            launch_plan.write_text(json.dumps(launch_plan_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             self.assertEqual(
                 run_cli(
@@ -457,6 +495,18 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
             self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
             self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            launch_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            self.assertTrue(launch_payload["provider_chain"]["artifact_manifest_required"])
+            self.assertFalse(launch_payload["provider_chain"]["provider_consistent"])
+            self.assertIn(
+                "artifact_manifest_ready",
+                {check["id"] for check in launch_payload["checks"] if not check["passed"]},
+            )
+            self.assertIn(
+                "provider_chain_consistent",
+                {check["id"] for check in launch_payload["checks"] if not check["passed"]},
+            )
+            self.assert_schema_and_validate(launch_plan, "cloud_training_launch_plan")
             for path in (preflight, launch_plan, launch_receipt, status_receipt):
                 payload = json.loads(path.read_text(encoding="utf-8"))
                 payload.pop("source_artifacts")
@@ -628,6 +678,117 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_artifact_manifest.transfer_plan.flight_recorder_uploaded_artifacts must be false.", errors)
             self.assertIn("cloud_training_artifact_manifest.transfer_plan.flight_recorder_downloaded_artifacts must be false.", errors)
             self.assertIn("cloud_training_artifact_manifest.transfer_plan.provider_api_called must be false.", errors)
+
+    def test_launch_plan_blocks_mismatched_preflight_and_artifact_manifest_providers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_manifest = root / "artifacts.json"
+            preflight = root / "preflight.json"
+            launch_plan = root / "launch_plan.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "artifacts",
+                        "--provider",
+                        "huggingface_jobs",
+                        "--upload",
+                        str(EXAMPLE_PLAN),
+                        "--out",
+                        str(artifact_manifest),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(EXAMPLE_PLAN),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "plan",
+                        "--preflight",
+                        str(preflight),
+                        "--artifact-manifest",
+                        str(artifact_manifest),
+                        "--out",
+                        str(launch_plan),
+                    ]
+                ),
+                1,
+            )
+            payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            self.assertFalse(payload["provider_chain"]["provider_consistent"])
+            self.assertEqual(payload["provider_chain"]["mismatched_provider_ids"], ["modal", "huggingface_jobs"])
+            self.assertIn(
+                "provider_chain_consistent",
+                {check["id"] for check in payload["checks"] if not check["passed"]},
+            )
+            self.assert_schema_and_validate(launch_plan, "cloud_training_launch_plan")
+
+            payload["provider_chain"]["provider_consistent"] = True
+            payload["provider_chain"]["mismatched_provider_ids"] = []
+            launch_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_plan.provider_chain.provider_consistent must match launch-plan source providers.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.provider_chain.mismatched_provider_ids must match launch-plan source providers.",
+                errors,
+            )
+
+            payload["source_artifacts"]["artifact_manifest"]["exists"] = False
+            payload["source_artifacts"]["artifact_manifest"]["path"] = "internal/private_artifacts.json"
+            payload["source_artifacts"]["artifact_manifest"]["sha256"] = None
+            payload["source_artifacts"]["artifact_manifest"]["size_bytes"] = None
+            payload["provider_chain"] = {
+                "artifact_manifest_provider_id": "",
+                "artifact_manifest_required": False,
+                "mismatched_provider_ids": [],
+                "preflight_provider_id": "modal",
+                "provider_consistent": True,
+            }
+            launch_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.artifact_manifest.path must be empty when artifact_manifest is missing.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.checks must include failed artifact_manifest_ready when artifact_manifest is missing.",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_plan.provider_chain.artifact_manifest_required must be true.", errors)
+            self.assertIn(
+                "cloud_training_launch_plan.provider_chain.provider_consistent must be false when artifact_manifest is missing.",
+                errors,
+            )
 
     def test_schema_names_are_registered(self):
         names = {record["name"] for record in list_schema_records()}
