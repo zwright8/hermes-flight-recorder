@@ -1,11 +1,75 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/rejection_sampling_gate.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["file", "directory"] },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "readiness": { "type": "string" },
+        "role": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["role", "path", "kind", "exists", "sha256", "size_bytes", "schema_version", "passed", "readiness"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "rolloutRef": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_rows_written": { "type": "boolean" },
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["file", "directory"] },
+        "live_rollouts_started": { "type": "boolean" },
+        "mock_receipt_only": { "type": "boolean" },
+        "mock_rollout_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "readiness": { "type": "string" },
+        "role": { "const": "agentic_rollout_receipt" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": [
+        "role",
+        "path",
+        "kind",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_version",
+        "passed",
+        "readiness",
+        "mock_rollout_count",
+        "mock_receipt_only",
+        "live_rollouts_started",
+        "dataset_rows_written"
+      ],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
   "description": "Fail-closed admission gate for rejection sampling before dataset curation.",
   "properties": {
     "admission_policy": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "accepted_dataset_roles": { "items": { "type": "string" }, "type": "array" },
         "accepts_uncalibrated_labels": { "const": false },
@@ -26,10 +90,10 @@
     },
     "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
     "check_count": { "minimum": 0, "type": "integer" },
-    "checks": { "items": { "type": "object" }, "type": "array" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
     "created_at": { "type": "string" },
     "execution_boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "dataset_rows_written": { "const": false },
         "gate_only": { "const": true },
@@ -49,25 +113,14 @@
     "failed_check_count": { "minimum": 0, "type": "integer" },
     "gate_path": { "type": "string" },
     "input_artifacts": {
-      "additionalProperties": {
-        "items": {
-          "additionalProperties": true,
-          "properties": {
-            "exists": { "type": "boolean" },
-            "kind": { "enum": ["file", "directory"] },
-            "passed": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
-            "path": { "minLength": 1, "type": "string" },
-            "readiness": { "type": "string" },
-            "role": { "minLength": 1, "type": "string" },
-            "schema_version": { "type": "string" },
-            "sha256": { "anyOf": [{ "pattern": "^[0-9a-f]{64}$", "type": "string" }, { "type": "null" }] },
-            "size_bytes": { "anyOf": [{ "minimum": 0, "type": "integer" }, { "type": "null" }] }
-          },
-          "required": ["role", "path", "kind", "exists", "sha256", "size_bytes", "schema_version", "passed", "readiness"],
-          "type": "object"
-        },
-        "type": "array"
+      "additionalProperties": false,
+      "properties": {
+        "agentic_rollout_receipt": { "items": { "$ref": "#/$defs/rolloutRef" }, "type": "array" },
+        "model_grader_gate": { "items": { "$ref": "#/$defs/artifactRef" }, "type": "array" },
+        "review_calibration": { "items": { "$ref": "#/$defs/artifactRef" }, "type": "array" },
+        "reviewed_gate": { "items": { "$ref": "#/$defs/artifactRef" }, "type": "array" }
       },
+      "required": ["agentic_rollout_receipt", "model_grader_gate", "review_calibration", "reviewed_gate"],
       "type": "object"
     },
     "notes": { "items": { "type": "string" }, "type": "array" },
@@ -75,7 +128,7 @@
     "readiness": { "enum": ["ready_for_dataset_curation", "blocked"] },
     "recommendation": { "enum": ["curate_accepted_training_rows", "collect_calibrated_reviews_before_sampling"] },
     "rollout_summary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "dataset_rows_created": { "const": false },
         "live_rollouts_started": { "const": false },

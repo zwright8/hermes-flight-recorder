@@ -1,15 +1,75 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/dataset_curation_receipt.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["file", "directory"] },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "readiness": { "type": "string" },
+        "role": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["role", "path", "kind", "exists", "sha256", "size_bytes", "schema_version", "passed", "readiness"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "trainingExportRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["file", "directory"] },
+        "manifest_exists": { "type": "boolean" },
+        "manifest_path": { "minLength": 1, "type": "string" },
+        "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "manifest_size_bytes": { "minimum": 0, "type": ["integer", "null"] },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "readiness": { "type": "string" },
+        "role": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": [
+        "role",
+        "path",
+        "kind",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_version",
+        "passed",
+        "readiness"
+      ],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
   "description": "Side-effect-free dataset curation readiness receipt for trainer handoff.",
   "properties": {
     "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
     "check_count": { "minimum": 0, "type": "integer" },
-    "checks": { "items": { "type": "object" }, "type": "array" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
     "created_at": { "type": "string" },
     "curation_summary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "accepted_rows_written": { "const": 0 },
         "curated_rows_written": { "const": 0 },
@@ -29,7 +89,7 @@
       "type": "object"
     },
     "execution_boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": { "const": false },
         "dataset_registry_updated": { "const": false },
@@ -47,7 +107,18 @@
       "type": "object"
     },
     "failed_check_count": { "minimum": 0, "type": "integer" },
-    "input_artifacts": { "type": "object" },
+    "input_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "rejection_sampling_gate": { "items": { "$ref": "#/$defs/artifactRef" }, "type": "array" },
+        "training_export": {
+          "items": { "$ref": "#/$defs/trainingExportRef" },
+          "type": "array"
+        }
+      },
+      "required": ["rejection_sampling_gate", "training_export"],
+      "type": "object"
+    },
     "notes": { "items": { "type": "string" }, "type": "array" },
     "passed": { "type": "boolean" },
     "readiness": { "enum": ["ready_for_external_trainer_handoff", "blocked"] },
@@ -55,7 +126,7 @@
     "recommendation": { "enum": ["run_training_gate_and_trainer_preflight", "fix_rejection_sampling_or_training_exports"] },
     "schema_version": { "const": "hfr.dataset_curation_receipt.v1" },
     "trainer_handoff": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "allowed_dataset_roles": { "items": { "type": "string" }, "type": "array" },
         "dataset_rows_source": { "const": "existing_training_exports" },

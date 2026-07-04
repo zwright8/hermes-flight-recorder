@@ -109,6 +109,37 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("execution_boundary.dataset_rows_written must be false", errors)
 
+    def test_validation_rejects_forged_trainer_handoff_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
+            export_dir = self.write_training_export(root / "training_export")
+            out = root / "receipt.json"
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["provider_job_id"] = "job_live"
+            receipt["checks"][0]["provider_trace_id"] = "trace_live"
+            receipt["input_artifacts"]["cloud_training_launch_receipt"] = []
+            receipt["input_artifacts"]["training_export"][0]["signed_url"] = "https://example.invalid/training-export"
+            receipt["curation_summary"]["provider_dataset_rows_written"] = 12
+            receipt["trainer_handoff"]["provider_dataset_uri"] = "s3://example-bucket/training.jsonl"
+            receipt["execution_boundary"]["cloud_job_id"] = "job_live"
+            write_dataset_curation_receipt(out, receipt)
+
+            schema = check_schema_file(out)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(dataset_curation_receipt_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("dataset_curation_receipt contains unknown field", errors)
+            self.assertIn("dataset_curation_receipt.checks[0] contains unknown field", errors)
+            self.assertIn("dataset_curation_receipt.input_artifacts contains unknown field", errors)
+            self.assertIn("dataset_curation_receipt.trainer_handoff contains unknown field", errors)
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("dataset_curation_receipt", names)

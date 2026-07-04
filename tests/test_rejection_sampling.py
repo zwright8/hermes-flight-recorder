@@ -134,6 +134,41 @@ class RejectionSamplingGateTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("execution_boundary.dataset_rows_written must be false", errors)
 
+    def test_validation_rejects_forged_provider_and_trainer_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            model_grader_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            out = root / "gate.json"
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[model_grader_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            gate["provider_job_id"] = "job_live"
+            gate["checks"][0]["provider_trace_id"] = "trace_live"
+            gate["input_artifacts"]["model_grader_gate"][0]["signed_url"] = "https://example.invalid/model-grader-gate.json"
+            gate["input_artifacts"]["agentic_rollout_receipt"][0]["provider_rollout_id"] = "rollout_live"
+            gate["rollout_summary"]["provider_rollout_count"] = 1
+            gate["admission_policy"]["accepts_provider_labels"] = True
+            gate["execution_boundary"]["trainer_dataset_written"] = True
+            write_rejection_sampling_gate(out, gate)
+
+            schema = check_schema_file(out)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("rejection_sampling_gate contains unknown field", errors)
+            self.assertIn("rejection_sampling_gate.checks[0] contains unknown field", errors)
+            self.assertIn("rejection_sampling_gate.input_artifacts.model_grader_gate[0] contains unknown field", errors)
+            self.assertIn("rejection_sampling_gate.admission_policy contains unknown field", errors)
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("rejection_sampling_gate", names)

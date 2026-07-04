@@ -6028,13 +6028,138 @@ def _validate_agentic_mock_rollout(row: Any, index: int, target: ValidationTarge
             target.errors.append(f"{label}.{field_name} must be false.")
 
 
+_REJECTION_DATASET_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_REJECTION_SAMPLING_GATE_KEYS = {
+    "schema_version",
+    "created_at",
+    "gate_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_artifacts",
+    "rollout_summary",
+    "admission_policy",
+    "execution_boundary",
+    "notes",
+}
+_REJECTION_SAMPLING_GATE_INPUT_KEYS = {
+    "agentic_rollout_receipt",
+    "model_grader_gate",
+    "review_calibration",
+    "reviewed_gate",
+}
+_REJECTION_SAMPLING_GATE_REF_KEYS = {
+    "role",
+    "path",
+    "kind",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "readiness",
+}
+_REJECTION_SAMPLING_GATE_ROLLOUT_REF_KEYS = _REJECTION_SAMPLING_GATE_REF_KEYS | {
+    "mock_rollout_count",
+    "mock_receipt_only",
+    "live_rollouts_started",
+    "dataset_rows_written",
+}
+_REJECTION_SAMPLING_GATE_SUMMARY_KEYS = {
+    "receipt_count",
+    "mock_rollout_count",
+    "live_rollouts_started",
+    "dataset_rows_created",
+}
+_REJECTION_SAMPLING_GATE_POLICY_KEYS = {
+    "requires_mock_rollout_receipt",
+    "requires_calibrated_review",
+    "requires_model_grader_gate",
+    "requires_reviewed_gate",
+    "accepts_uncalibrated_labels",
+    "accepted_dataset_roles",
+}
+_REJECTION_SAMPLING_GATE_BOUNDARY_KEYS = {
+    "gate_only",
+    "dataset_rows_written",
+    "model_provider_calls_started",
+    "paid_model_grader_calls_started",
+    "weights_updated_by_flight_recorder",
+}
+_DATASET_CURATION_RECEIPT_KEYS = {
+    "schema_version",
+    "created_at",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_artifacts",
+    "curation_summary",
+    "trainer_handoff",
+    "execution_boundary",
+    "notes",
+}
+_DATASET_CURATION_INPUT_KEYS = {"rejection_sampling_gate", "training_export"}
+_DATASET_CURATION_REF_KEYS = {
+    "role",
+    "path",
+    "kind",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "readiness",
+}
+_DATASET_CURATION_DIRECTORY_REF_KEYS = _DATASET_CURATION_REF_KEYS | {
+    "manifest_path",
+    "manifest_exists",
+    "manifest_sha256",
+    "manifest_size_bytes",
+}
+_DATASET_CURATION_SUMMARY_KEYS = {
+    "rejection_sampling_gate_count",
+    "training_export_count",
+    "curated_rows_written",
+    "accepted_rows_written",
+    "rejected_rows_written",
+    "dataset_registry_updated",
+}
+_DATASET_CURATION_TRAINER_HANDOFF_KEYS = {
+    "dataset_rows_source",
+    "allowed_dataset_roles",
+    "requires_rejection_sampling_gate",
+    "requires_training_gate_before_live_training",
+    "requires_trainer_preflight",
+}
+_DATASET_CURATION_BOUNDARY_KEYS = {
+    "receipt_only",
+    "dataset_rows_written",
+    "dataset_registry_updated",
+    "cloud_jobs_started",
+    "weights_updated_by_flight_recorder",
+}
+
+
 def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(gate, _REJECTION_SAMPLING_GATE_KEYS, target, "rejection_sampling_gate")
     _require_equal(gate, "schema_version", REJECTION_SAMPLING_GATE_SCHEMA_VERSION, target, prefix="rejection_sampling_gate.")
     checks = gate.get("checks")
     if not isinstance(checks, list):
         target.errors.append("rejection_sampling_gate.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "rejection_sampling_gate.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _REJECTION_DATASET_CHECK_KEYS, target, f"rejection_sampling_gate.checks[{index}]")
     if gate.get("check_count") != len(checks):
         target.errors.append(f"rejection_sampling_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
     if gate.get("failed_check_count") != failed_checks:
@@ -6056,6 +6181,8 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
     if not isinstance(artifacts, dict):
         target.errors.append("rejection_sampling_gate.input_artifacts must be an object.")
         artifacts = {}
+    else:
+        _validate_allowed_keys(artifacts, _REJECTION_SAMPLING_GATE_INPUT_KEYS, target, "rejection_sampling_gate.input_artifacts")
     required_roles = {
         "agentic_rollout_receipt": "hfr.agentic_rollout_receipt.v1",
         "model_grader_gate": "hfr.model_grader_gate.v1",
@@ -6068,12 +6195,13 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
             target.errors.append(f"rejection_sampling_gate.input_artifacts.{role} must contain at least one artifact ref.")
             continue
         for index, row in enumerate(rows):
-            _validate_rejection_sampling_gate_ref(row, target, f"rejection_sampling_gate.input_artifacts.{role}[{index}]", schema_version)
+            _validate_rejection_sampling_gate_ref(row, target, f"rejection_sampling_gate.input_artifacts.{role}[{index}]", role, schema_version)
 
     summary = gate.get("rollout_summary")
     if not isinstance(summary, dict):
         target.errors.append("rejection_sampling_gate.rollout_summary must be an object.")
     else:
+        _validate_allowed_keys(summary, _REJECTION_SAMPLING_GATE_SUMMARY_KEYS, target, "rejection_sampling_gate.rollout_summary")
         if not _is_non_negative_int(summary.get("receipt_count")):
             target.errors.append("rejection_sampling_gate.rollout_summary.receipt_count must be a non-negative integer.")
         if not _is_non_negative_int(summary.get("mock_rollout_count")):
@@ -6087,6 +6215,7 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
     if not isinstance(policy, dict):
         target.errors.append("rejection_sampling_gate.admission_policy must be an object.")
     else:
+        _validate_allowed_keys(policy, _REJECTION_SAMPLING_GATE_POLICY_KEYS, target, "rejection_sampling_gate.admission_policy")
         for field_name in ("requires_mock_rollout_receipt", "requires_calibrated_review", "requires_model_grader_gate", "requires_reviewed_gate"):
             if policy.get(field_name) is not True:
                 target.errors.append(f"rejection_sampling_gate.admission_policy.{field_name} must be true.")
@@ -6099,6 +6228,7 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
     if not isinstance(boundary, dict):
         target.errors.append("rejection_sampling_gate.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _REJECTION_SAMPLING_GATE_BOUNDARY_KEYS, target, "rejection_sampling_gate.execution_boundary")
         if boundary.get("gate_only") is not True:
             target.errors.append("rejection_sampling_gate.execution_boundary.gate_only must be true.")
         for field_name in (
@@ -6109,6 +6239,8 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
         ):
             if boundary.get(field_name) is not False:
                 target.errors.append(f"rejection_sampling_gate.execution_boundary.{field_name} must be false.")
+    if not _is_string_list(gate.get("notes")):
+        target.errors.append("rejection_sampling_gate.notes must be a list of strings.")
 
     target.details.update(
         {
@@ -6119,13 +6251,17 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
     )
 
 
-def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, label: str, schema_version: str) -> None:
+def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, label: str, role: str, schema_version: str) -> None:
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    allowed = _REJECTION_SAMPLING_GATE_ROLLOUT_REF_KEYS if role == "agentic_rollout_receipt" else _REJECTION_SAMPLING_GATE_REF_KEYS
+    _validate_allowed_keys(row, allowed, target, label)
     for field_name in ("role", "path", "kind", "schema_version", "readiness"):
         if not isinstance(row.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if row.get("role") != role:
+        target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
         target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
     if row.get("exists") is not True:
@@ -6153,12 +6289,16 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
 
 
 def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(receipt, _DATASET_CURATION_RECEIPT_KEYS, target, "dataset_curation_receipt")
     _require_equal(receipt, "schema_version", DATASET_CURATION_RECEIPT_SCHEMA_VERSION, target, prefix="dataset_curation_receipt.")
     checks = receipt.get("checks")
     if not isinstance(checks, list):
         target.errors.append("dataset_curation_receipt.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "dataset_curation_receipt.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _REJECTION_DATASET_CHECK_KEYS, target, f"dataset_curation_receipt.checks[{index}]")
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"dataset_curation_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -6180,6 +6320,8 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     if not isinstance(artifacts, dict):
         target.errors.append("dataset_curation_receipt.input_artifacts must be an object.")
         artifacts = {}
+    else:
+        _validate_allowed_keys(artifacts, _DATASET_CURATION_INPUT_KEYS, target, "dataset_curation_receipt.input_artifacts")
     gate_rows = artifacts.get("rejection_sampling_gate")
     if not isinstance(gate_rows, list) or not gate_rows:
         target.errors.append("dataset_curation_receipt.input_artifacts.rejection_sampling_gate must contain at least one ref.")
@@ -6189,6 +6331,7 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
                 row,
                 target,
                 f"dataset_curation_receipt.input_artifacts.rejection_sampling_gate[{index}]",
+                "rejection_sampling_gate",
                 "hfr.rejection_sampling_gate.v1",
                 "ready_for_dataset_curation",
             )
@@ -6197,12 +6340,13 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
         target.errors.append("dataset_curation_receipt.input_artifacts.training_export must contain at least one ref.")
     else:
         for index, row in enumerate(export_rows):
-            _validate_dataset_curation_ref(row, target, f"dataset_curation_receipt.input_artifacts.training_export[{index}]", "", "")
+            _validate_dataset_curation_ref(row, target, f"dataset_curation_receipt.input_artifacts.training_export[{index}]", "training_export", "", "")
 
     summary = receipt.get("curation_summary")
     if not isinstance(summary, dict):
         target.errors.append("dataset_curation_receipt.curation_summary must be an object.")
     else:
+        _validate_allowed_keys(summary, _DATASET_CURATION_SUMMARY_KEYS, target, "dataset_curation_receipt.curation_summary")
         for field_name in ("rejection_sampling_gate_count", "training_export_count"):
             if not _is_non_negative_int(summary.get(field_name)):
                 target.errors.append(f"dataset_curation_receipt.curation_summary.{field_name} must be a non-negative integer.")
@@ -6216,6 +6360,7 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     if not isinstance(handoff, dict):
         target.errors.append("dataset_curation_receipt.trainer_handoff must be an object.")
     else:
+        _validate_allowed_keys(handoff, _DATASET_CURATION_TRAINER_HANDOFF_KEYS, target, "dataset_curation_receipt.trainer_handoff")
         if handoff.get("dataset_rows_source") != "existing_training_exports":
             target.errors.append("dataset_curation_receipt.trainer_handoff.dataset_rows_source must be existing_training_exports.")
         if not _is_string_list(handoff.get("allowed_dataset_roles")):
@@ -6228,11 +6373,14 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     if not isinstance(boundary, dict):
         target.errors.append("dataset_curation_receipt.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _DATASET_CURATION_BOUNDARY_KEYS, target, "dataset_curation_receipt.execution_boundary")
         if boundary.get("receipt_only") is not True:
             target.errors.append("dataset_curation_receipt.execution_boundary.receipt_only must be true.")
         for field_name in ("dataset_rows_written", "dataset_registry_updated", "cloud_jobs_started", "weights_updated_by_flight_recorder"):
             if boundary.get(field_name) is not False:
                 target.errors.append(f"dataset_curation_receipt.execution_boundary.{field_name} must be false.")
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("dataset_curation_receipt.notes must be a list of strings.")
 
     target.details.update(
         {
@@ -6243,13 +6391,17 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     )
 
 
-def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: str, schema_version: str, readiness: str) -> None:
+def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: str, role: str, schema_version: str, readiness: str) -> None:
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    allowed = _DATASET_CURATION_DIRECTORY_REF_KEYS if row.get("kind") == "directory" else _DATASET_CURATION_REF_KEYS
+    _validate_allowed_keys(row, allowed, target, label)
     for field_name in ("role", "path", "kind"):
         if not isinstance(row.get(field_name), str) or not row.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if row.get("role") != role:
+        target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
         target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
     if row.get("exists") is not True:
