@@ -6432,7 +6432,12 @@ def _validate_agentic_loop_ledger_cloud_training_receipt_state(
         target.errors.append(f"{label} must be an object.")
         return
     source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
-    if source_path is None or not source_path.exists() or not source_path.is_file():
+    if (
+        source_path is None
+        or not source_path.exists()
+        or _path_has_symlink_component(source_path, include_leaf=True)
+        or not source_path.is_file()
+    ):
         return
     source_plan = _read_json_object_silent(source_path)
     source_artifacts = source_plan.get("source_artifacts") if isinstance(source_plan.get("source_artifacts"), dict) else {}
@@ -6454,7 +6459,12 @@ def _validate_agentic_loop_ledger_external_eval_receipt_state(
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_EXTERNAL_EVAL_RECEIPT_STATE_KEYS, target, label)
     source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
-    if source_path is None or not source_path.exists() or not source_path.is_file():
+    if (
+        source_path is None
+        or not source_path.exists()
+        or _path_has_symlink_component(source_path, include_leaf=True)
+        or not source_path.is_file()
+    ):
         return
     source_plan = _read_json_object_silent(source_path)
     source_artifacts = source_plan.get("source_artifacts") if isinstance(source_plan.get("source_artifacts"), dict) else {}
@@ -6477,7 +6487,12 @@ def _validate_agentic_loop_ledger_cloud_training_lineage(
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_KEYS, target, label)
     source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
-    if source_path is None or not source_path.exists() or not source_path.is_file():
+    if (
+        source_path is None
+        or not source_path.exists()
+        or _path_has_symlink_component(source_path, include_leaf=True)
+        or not source_path.is_file()
+    ):
         return
     source_plan = _read_json_object_silent(source_path)
     expected = source_plan.get("cloud_training_lineage") if isinstance(source_plan.get("cloud_training_lineage"), dict) else {}
@@ -6533,8 +6548,11 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
     if source_path is None:
         target.errors.append(f"{label}.path must be a safe relative path without traversal.")
         return
-    if not source_path.exists() or not source_path.is_file():
+    if not source_path.exists():
         target.errors.append(f"{label}.path must resolve to an existing source loop plan.")
+        return
+    if _path_has_symlink_component(source_path, include_leaf=True) or not source_path.is_file():
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink source loop plan.")
         return
     if row.get("exists") is not True:
         target.errors.append(f"{label}.exists must be true.")
@@ -6559,7 +6577,7 @@ def _resolve_agentic_loop_ledger_source_path(row: dict[str, Any], ledger_path: P
     path_value = row.get("path")
     if not isinstance(path_value, str) or not path_value or not _is_safe_agentic_training_result_path(path_value):
         return None
-    return (ledger_path.parent / path_value).resolve()
+    return ledger_path.parent / path_value
 
 
 def _validate_next_iteration_schedule(schedule: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

@@ -202,6 +202,29 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("sha256 does not match the current file", errors)
 
+    def test_validate_rejects_parent_symlink_agentic_loop_ledger_source_plan(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            plan = self.write_loop_plan(source / "plans" / "loop.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            linked_source = root / "linked_source"
+            linked_source.symlink_to(source, target_is_directory=True)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["iterations"][0]["path"] = str(Path("linked_source") / "plans" / "loop.json")
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_loop_ledger.iterations[0].path must resolve to a regular non-symlink source loop plan.",
+                errors,
+            )
+
     def test_agentic_loop_ledger_blocks_unreplayable_source_plan_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -219,6 +242,23 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             error_text = stderr.getvalue()
             self.assertIn("Loop plan source must be replayable from the ledger output directory", error_text)
             self.assertNotIn(str(root), error_text)
+
+    def test_agentic_loop_ledger_blocks_parent_symlink_source_plan(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            plan = self.write_loop_plan(source / "plans" / "loop.json", "loop-001", {})
+            linked_source = root / "linked_source"
+            linked_source.symlink_to(source, target_is_directory=True)
+            ledger = root / "ledger.json"
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as exc:
+                run_cli(["agentic-loop", "ledger", "--plan", str(linked_source / plan.relative_to(source)), "--out", str(ledger)])
+
+            self.assertEqual(exc.exception.code, 2)
+            self.assertFalse(ledger.exists())
+            self.assertIn("Loop plan must resolve to a regular non-symlink file", stderr.getvalue())
 
     def test_validate_replays_source_plan_eval_summary_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:

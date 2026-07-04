@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 
 AGENTIC_LOOP_LEDGER_SCHEMA_VERSION = "hfr.agentic_loop_ledger.v1"
 
@@ -110,8 +111,8 @@ def write_agentic_loop_ledger(path: str | Path, ledger: dict[str, Any]) -> None:
 
 
 def _read_loop_plan(path: Path) -> dict[str, Any]:
-    if path.is_symlink():
-        raise AgenticLoopLedgerError(f"Loop plan must not be a symlink: {path}")
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise AgenticLoopLedgerError(f"Loop plan must resolve to a regular non-symlink file: {path}")
     if not path.exists() or not path.is_file():
         raise AgenticLoopLedgerError(f"Loop plan not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
