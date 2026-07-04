@@ -297,6 +297,55 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
         ):
             self.assertIn(field_name, errors)
 
+    def test_schema_rejects_forged_mode_contract_side_effects(self):
+        preflight = build_agentic_training_runtime_preflight(
+            plan_path=EXAMPLE_PLAN,
+            require_modules=["json"],
+            skip_default_modules=True,
+            created_at="2026-07-02T00:00:00+00:00",
+        )
+        reward_contract = preflight["mode_contract_check"]["reward_contract"]
+        reward_contract["flight_recorder_supplies_callable"] = True
+        reward_contract["may_call_paid_services_by_default"] = True
+        reward_contract["may_require_secrets_by_default"] = True
+        reward_contract["must_not_use_unredacted_traces"] = False
+        side_effect_boundary = preflight["mode_contract_check"]["side_effect_boundary"]
+        side_effect_boundary["dry_run_only"] = False
+        side_effect_boundary["training_started"] = True
+        side_effect_boundary["cloud_jobs_started"] = True
+        side_effect_boundary["model_downloads_started"] = True
+        side_effect_boundary["paid_model_grader_calls_started"] = True
+        side_effect_boundary["weights_updated"] = True
+        side_effect_boundary["provider_credentials_required_by_flight_recorder"] = True
+        runner_contract = preflight["mode_contract_check"]["external_runner_contract"]
+        runner_contract["runner_owns_execution"] = False
+        runner_contract["runner_must_revalidate_inputs"] = False
+        runner_contract["runner_must_require_recommendation"] = "launch_anyway"
+        runner_contract["runner_must_block_unredacted_traces"] = False
+
+        schema = check_schema_contract(preflight)
+
+        self.assertFalse(schema["passed"])
+        errors = "\n".join(schema["errors"])
+        for field_name in (
+            "flight_recorder_supplies_callable",
+            "may_call_paid_services_by_default",
+            "may_require_secrets_by_default",
+            "must_not_use_unredacted_traces",
+            "dry_run_only",
+            "training_started",
+            "cloud_jobs_started",
+            "model_downloads_started",
+            "paid_model_grader_calls_started",
+            "weights_updated",
+            "provider_credentials_required_by_flight_recorder",
+            "runner_owns_execution",
+            "runner_must_revalidate_inputs",
+            "runner_must_require_recommendation",
+            "runner_must_block_unredacted_traces",
+        ):
+            self.assertIn(field_name, errors)
+
     def test_schema_rejects_passed_view_without_size(self):
         preflight = build_agentic_training_runtime_preflight(
             plan_path=EXAMPLE_PLAN,

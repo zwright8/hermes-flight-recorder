@@ -638,7 +638,10 @@ views, checks the plan `mode_contract`, probes required Python modules with
 `trainer_modules_imported: false`. Treat
 `recommendation: ready_for_tiny_smoke_launch` as the next handoff condition;
 blocked runtime-preflight artifacts are still schema-checkable failure
-evidence.
+evidence. The embedded `mode_contract_check` schema pins invariant reward and
+side-effect fields so paid/secret reward defaults, provider credentials, paid
+graders, cloud jobs, downloads, training starts, and weight updates cannot be
+forged into a runtime preflight.
 After a trainer consumer plan exists, use `flightrecorder agentic-training-flow`
 to bind the ready plan, runtime preflight, and consumer command into
 `hfr.agentic_training_flow.v1`. It delegates only SFT, action-SFT, DPO, and

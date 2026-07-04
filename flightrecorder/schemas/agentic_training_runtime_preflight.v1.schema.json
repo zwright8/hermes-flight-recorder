@@ -389,19 +389,19 @@
           "type": "boolean"
         },
         "flight_recorder_supplies_callable": {
-          "type": "boolean"
+          "const": false
         },
         "kind": {
           "type": "string"
         },
         "may_call_paid_services_by_default": {
-          "type": "boolean"
+          "const": false
         },
         "may_require_secrets_by_default": {
-          "type": "boolean"
+          "const": false
         },
         "must_not_use_unredacted_traces": {
-          "type": "boolean"
+          "const": true
         },
         "required": {
           "type": "boolean"
@@ -424,25 +424,25 @@
       "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": {
-          "type": "boolean"
+          "const": false
         },
         "dry_run_only": {
-          "type": "boolean"
+          "const": true
         },
         "model_downloads_started": {
-          "type": "boolean"
+          "const": false
         },
         "paid_model_grader_calls_started": {
-          "type": "boolean"
+          "const": false
         },
         "provider_credentials_required_by_flight_recorder": {
-          "type": "boolean"
+          "const": false
         },
         "training_started": {
-          "type": "boolean"
+          "const": false
         },
         "weights_updated": {
-          "type": "boolean"
+          "const": false
         }
       },
       "required": [
@@ -460,19 +460,19 @@
       "additionalProperties": false,
       "properties": {
         "runner_must_block_unredacted_traces": {
-          "type": "boolean"
+          "const": true
         },
         "runner_must_require_recommendation": {
-          "type": "string"
+          "const": "ready_for_external_trainer_plan"
         },
         "runner_must_revalidate_inputs": {
-          "type": "boolean"
+          "const": true
         },
         "runner_must_validate_reward_contract": {
           "type": "boolean"
         },
         "runner_owns_execution": {
-          "type": "boolean"
+          "const": true
         }
       },
       "required": [

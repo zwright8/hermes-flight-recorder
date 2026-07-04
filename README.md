@@ -315,6 +315,8 @@ at the flow boundary even when plan/runtime opt-in flags are passed. The emitted
 plan includes a `mode_contract` with the required trainer views, reward-signal
 or reward-function contract, and hard-false side-effect flags for training,
 cloud jobs, paid grader calls, downloads, and weight updates.
+Runtime preflight preserves those invariants by schema-pinning embedded
+`mode_contract_check` reward and side-effect fields before a tiny-smoke handoff.
 Flow validation preserves that boundary in the mirrored `mode_contract_check`:
 paid/secret reward defaults, provider credentials, paid graders, cloud jobs,
 downloads, training starts, and weight updates must all remain fail-closed.

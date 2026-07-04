@@ -124,6 +124,8 @@ Runtime preflight emits `hfr.agentic_training_runtime_preflight.v1` and checks:
 - the plan `mode_contract` is present, matches the mode, has an open planning
   gate, satisfies its data requirements, keeps the reward contract external,
   and preserves fail-closed side-effect claims
+- embedded mode-contract reward and side-effect invariants remain schema-pinned
+  before any tiny-smoke handoff
 - selected trainer-view JSONL files exist, pass their bundled row schemas, and
   match the manifest row counts
 - required Python modules are discoverable with `importlib.util.find_spec`
