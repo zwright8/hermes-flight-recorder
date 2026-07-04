@@ -18579,6 +18579,9 @@ def _validate_improvement_ledger_plan(
         if plan_path is None or not plan_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing source improvement plan.")
             return
+        if plan_path.is_symlink() or _path_has_symlink_component(plan_path, include_leaf=False):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink source improvement plan.")
+            return
         if not plan_path.is_file():
             target.errors.append(f"{label}.path must resolve to a file.")
             return

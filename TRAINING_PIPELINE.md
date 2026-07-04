@@ -256,6 +256,9 @@ The improvement ledger marks concrete scenario/rule work as `new`,
 `recurring`, `open`, or `resolved` relative to the latest plan. It is a useful
 convergence signal before trainer handoff because it can show whether the
 evidence-backed repair queue is shrinking across eval iterations.
+Ledger generation rejects source improvement-plan inputs that are symlinks or
+traverse symlinked parent directories before reading them or emitting
+source-plan fingerprints.
 
 Use `flightrecorder gate-improvement-ledger` to turn that convergence signal
 into a CI decision before promotion or trainer launch:

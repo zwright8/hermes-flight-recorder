@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -74,6 +74,28 @@ class ImprovementLedgerTests(unittest.TestCase):
 
             payload = json.loads(ledger.read_text(encoding="utf-8"))
             self.assertEqual(payload["plans"][0]["size_bytes"], plan.stat().st_size)
+
+    def test_improvement_ledger_rejects_symlinked_plan_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            plan = source / "improvement_plan.json"
+            linked_parent = root / "linked_source"
+            ledger = root / "improvement_ledger.json"
+            write_minimal_improvement_plan(plan)
+            try:
+                linked_parent.symlink_to(source, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stderr(stderr):
+                run_cli(["improvement-ledger", "--plan", str(linked_parent / plan.name), "--out", str(ledger)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("improvement_ledger.plan_path must not traverse symlinked components", stderr.getvalue())
+            self.assertFalse(ledger.exists())
 
     def test_strict_validate_rejects_absolute_improvement_ledger_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -167,6 +189,33 @@ class ImprovementLedgerTests(unittest.TestCase):
             validation = json.loads(summary.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("improvement_ledger.plans[0].size_bytes does not match the current file", errors)
+
+    def test_validate_rejects_symlinked_improvement_plan_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            plan = source / "improvement_plan.json"
+            ledger = root / "improvement_ledger.json"
+            summary = root / "validation.json"
+            linked_parent = root / "linked_source"
+            write_minimal_improvement_plan(plan)
+            try:
+                linked_parent.symlink_to(source, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["plans"][0]["path"] = str(Path(linked_parent.name) / plan.name)
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)]), 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "improvement_ledger.plans[0].path must resolve to a regular non-symlink source improvement plan",
+                errors,
+            )
 
     def test_improvement_ledger_tracks_recurring_concrete_work(self):
         with tempfile.TemporaryDirectory() as tmp:

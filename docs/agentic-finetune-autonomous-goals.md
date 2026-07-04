@@ -156,7 +156,8 @@ evidence.
 - Agentic loop ledgers reject symlinked source loop plan paths before trusting
   plan size, hash, artifact lineage, or receipt-state snapshots.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte
-  size evidence before downstream gates trust recurring-work metrics.
+  size evidence before downstream gates trust recurring-work metrics, and
+  reject symlinked source plan parents before reading or validating those refs.
 - Action, improvement, and promotion ledger gates reject symlinked source
   ledger paths before replaying metrics, checks, or decisions.
 - Next-iteration schedules reject symlinked source ledger paths before trusting

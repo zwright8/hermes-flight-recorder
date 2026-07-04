@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITY_RANK
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 
 IMPROVEMENT_LEDGER_SCHEMA_VERSION = "hfr.improvement_ledger.v1"
 
@@ -32,6 +33,7 @@ def build_improvement_ledger(
     output_root = Path(out_path).parent if out_path is not None else None
     for index, raw_path in enumerate(plan_paths):
         path = Path(raw_path)
+        _reject_symlinked_plan_input(path)
         plan = _read_plan(path)
         record = _plan_record(path, plan, index, preserve_paths, output_root)
         plan_records.append(record)
@@ -106,10 +108,15 @@ def _plan_record(path: Path, plan: dict[str, Any], index: int, preserve_paths: b
         "work_item_count": _non_negative_int(plan.get("work_item_count")),
         "critical_or_high_count": _non_negative_int(decision.get("critical_or_high_count")),
     }
-    if path.exists() and path.is_file():
+    if path.exists() and path.is_file() and not path.is_symlink() and not _path_has_symlink_component(path, include_leaf=False):
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
+
+
+def _reject_symlinked_plan_input(path: Path) -> None:
+    if path.is_symlink() or _path_has_symlink_component(path, include_leaf=False):
+        raise ImprovementLedgerError(f"improvement_ledger.plan_path must not traverse symlinked components: {path}")
 
 
 def _plan_work_items(plan: dict[str, Any], plan_index: int, plan_path: str) -> list[dict[str, Any]]:
