@@ -825,6 +825,40 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(launch["approved_command"]["approved"])
             launch_schema = check_schema_contract(launch, name_or_id="trainer_launch_check")
             self.assertTrue(launch_schema["passed"], launch_schema["errors"])
+            absolute_launch_check = Path(tmp) / "trainer_launch_check_absolute_command.json"
+            absolute_launch_summary = Path(tmp) / "trainer_launch_check_absolute_command_summary.json"
+            forged_launch = json.loads(json.dumps(launch))
+            approved = forged_launch["approved_command"]
+            approved["argv"] = [
+                "python",
+                "/opt/hermes/trainer-code/train.py",
+                "--dataset=/opt/hermes/archive/training_export",
+                "--dry-run",
+            ]
+            approved["raw"] = shlex.join(approved["argv"])
+            approved["shell"] = shlex.join(approved["argv"])
+            absolute_launch_check.write_text(json.dumps(forged_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(absolute_launch_check)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-launch-check",
+                    str(absolute_launch_check),
+                    "--strict",
+                    "--out",
+                    str(absolute_launch_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(absolute_launch_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_launch_check.approved_command.argv[1] is absolute", warnings)
+            self.assertIn("trainer_launch_check.approved_command.argv[2] contains absolute path", warnings)
+            self.assertIn("trainer_launch_check.approved_command.raw[1] is absolute", warnings)
+            self.assertIn("trainer_launch_check.approved_command.raw[2] contains absolute path", warnings)
+            self.assertIn("trainer_launch_check.approved_command.shell[1] is absolute", warnings)
+            self.assertIn("trainer_launch_check.approved_command.shell[2] contains absolute path", warnings)
+
             forged_launch = json.loads(json.dumps(launch))
             forged_launch["provider_console_url"] = "redacted-provider-console"
             forged_launch["checks"][0]["provider_call"] = "forged"
@@ -875,7 +909,7 @@ class TrainerPreflightTests(unittest.TestCase):
                 errors,
             )
             self.assertIn("trainer_launch_check.approved_command contains unknown field(s): ['trainer_process_pid'].", errors)
-            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check)]), 0)
 
             archive = Path(tmp) / "trainer_archive"
             self.assertEqual(

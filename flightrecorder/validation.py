@@ -24226,20 +24226,29 @@ def _validate_approved_command(command: Any, target: ValidationTarget, expected_
     if not isinstance(command, dict):
         target.errors.append("trainer_launch_check.approved_command must be an object.")
         return
-    _validate_allowed_keys(command, _TRAINER_LAUNCH_CHECK_APPROVED_COMMAND_KEYS, target, "trainer_launch_check.approved_command")
+    label = "trainer_launch_check.approved_command"
+    _validate_allowed_keys(command, _TRAINER_LAUNCH_CHECK_APPROVED_COMMAND_KEYS, target, label)
     for field_name in ("approved", "provided", "parseable"):
         if not isinstance(command.get(field_name), bool):
-            target.errors.append(f"trainer_launch_check.approved_command.{field_name} must be a boolean.")
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
     if isinstance(command.get("approved"), bool) and command.get("approved") != expected_approved:
-        target.errors.append("trainer_launch_check.approved_command.approved must match launch check passed.")
+        target.errors.append(f"{label}.approved must match launch check passed.")
     if not isinstance(command.get("raw"), str):
-        target.errors.append("trainer_launch_check.approved_command.raw must be a string.")
+        target.errors.append(f"{label}.raw must be a string.")
     if not isinstance(command.get("shell"), str):
-        target.errors.append("trainer_launch_check.approved_command.shell must be a string.")
-    if not isinstance(command.get("argv"), list) or not all(isinstance(item, str) for item in command.get("argv", [])):
-        target.errors.append("trainer_launch_check.approved_command.argv must be a list of strings.")
+        target.errors.append(f"{label}.shell must be a string.")
+    argv = command.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in command.get("argv", [])):
+        target.errors.append(f"{label}.argv must be a list of strings.")
+        argv = []
+    for index, item in enumerate(item for item in argv if isinstance(item, str)):
+        _warn_command_token_public_path(target, f"{label}.argv[{index}]", item)
+    for field_name in ("raw", "shell"):
+        value = command.get(field_name)
+        if isinstance(value, str) and value:
+            _warn_shell_tokens_public_paths(value, target, f"{label}.{field_name}")
     if expected_approved and not command.get("shell"):
-        target.errors.append("trainer_launch_check.approved_command.shell must be non-empty when approved.")
+        target.errors.append(f"{label}.shell must be non-empty when approved.")
 
 
 def _validate_handoff_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
