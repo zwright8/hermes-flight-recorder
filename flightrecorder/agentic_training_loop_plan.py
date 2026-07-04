@@ -240,7 +240,8 @@ def build_agentic_training_loop_plan(
     output_path = Path(out_path)
     normalized_artifact_paths = _normalized_artifact_paths(artifact_paths or {})
     refs = _artifact_refs(normalized_artifact_paths, preserve_paths, output_path)
-    cloud_training = _cloud_training_summary(refs)
+    cloud_training_receipt_state = _cloud_training_receipt_state(normalized_artifact_paths)
+    cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
     phases = [_phase_row(spec, refs) for spec in PHASES]
     checks: list[dict[str, Any]] = []
@@ -340,6 +341,20 @@ def build_agentic_training_loop_plan(
     )
     _add_check(
         checks,
+        "cloud_training_receipts_are_side_effect_free",
+        cloud_training_receipt_state["fail_closed"],
+        {"cloud_training_receipt_state": cloud_training_receipt_state},
+        {
+            "provider_api_calls_started": False,
+            "cloud_jobs_started": False,
+            "provider_cancel_called": False,
+            "credential_values_recorded": False,
+            "live_launch_requested": False,
+            "cost_incurred_usd": 0,
+        },
+    )
+    _add_check(
+        checks,
         "cloud_training_lineage_bound_for_provider_handoff",
         cloud_training_lineage["passed"],
         {"cloud_training_lineage": cloud_training_lineage},
@@ -401,6 +416,7 @@ def build_agentic_training_loop_plan(
         "budget": _budget(budget or {}),
         "provider_constraints": _provider_constraints(provider_constraints or {}),
         "cloud_training": cloud_training,
+        "cloud_training_receipt_state": cloud_training_receipt_state,
         "cloud_training_lineage": cloud_training_lineage,
         "execution_boundary": {
             "dry_run_plan_only": True,
@@ -536,7 +552,7 @@ def _role_counts(refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
     return [{"role": role, "count": counter[role]} for role in sorted(counter)]
 
 
-def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state: dict[str, Any]) -> dict[str, Any]:
     required = [
         "cloud_training_provider_registry",
         "cloud_training_preflight",
@@ -558,10 +574,79 @@ def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]]) -> dict[str, 
         "launch_plan_present": "cloud_training_launch_plan" in present,
         "launch_receipt_present": "cloud_training_launch_receipt" in present,
         "status_receipt_present": "cloud_training_status_receipt" in present,
-        "provider_api_calls_started": False,
-        "cloud_jobs_started": False,
-        "credential_values_recorded": False,
+        "provider_api_calls_started": receipt_state["provider_api_calls_started"],
+        "cloud_jobs_started": receipt_state["cloud_jobs_started"],
+        "credential_values_recorded": receipt_state["credential_values_recorded"],
         "live_spend_allowed": False,
+    }
+
+
+def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    launch_payloads = _payloads(artifact_paths, "cloud_training_launch_receipt")
+    status_payloads = _payloads(artifact_paths, "cloud_training_status_receipt")
+    all_payloads = [*launch_payloads, *status_payloads]
+    first_launch_payload = launch_payloads[0] if launch_payloads else {}
+    first_status_payload = status_payloads[0] if status_payloads else {}
+    first_launch = first_launch_payload.get("launch") if isinstance(first_launch_payload.get("launch"), dict) else {}
+    first_status = first_status_payload.get("status") if isinstance(first_status_payload.get("status"), dict) else {}
+    provider_api_calls_started = any(
+        _cloud_training_launch(payload).get("provider_api_called") is True for payload in launch_payloads
+    ) or any(_cloud_training_status(payload).get("provider_api_called") is True for payload in status_payloads) or any(
+        _cloud_training_boundary(payload).get("provider_api_called") is True for payload in all_payloads
+    )
+    cloud_jobs_started = any(
+        _cloud_training_launch(payload).get("cloud_job_started") is True for payload in launch_payloads
+    ) or any(_cloud_training_boundary(payload).get("cloud_job_started") is True for payload in all_payloads)
+    provider_cancel_called = any(_cloud_training_status(payload).get("provider_cancel_called") is True for payload in status_payloads)
+    credential_values_recorded = any(
+        _cloud_training_boundary(payload).get("credential_values_recorded") is True for payload in all_payloads
+    )
+    cost_incurred_usd = sum(
+        _non_negative_number_or_zero(_cloud_training_launch(payload).get("cost_incurred_usd")) for payload in launch_payloads
+    ) + sum(_non_negative_number_or_zero(_cloud_training_status(payload).get("cost_incurred_usd")) for payload in status_payloads) + sum(
+        _non_negative_number_or_zero(_cloud_training_boundary(payload).get("cloud_cost_incurred_usd"))
+        for payload in all_payloads
+    )
+    launch_mode = str(first_launch.get("mode") or "")
+    status_provider_status = str(first_status.get("provider_status") or "")
+    live_launch_requested = any(
+        _cloud_training_launch(payload).get("mode") == "live"
+        or _cloud_training_boundary(payload).get("live_requested") is True
+        for payload in launch_payloads
+    ) or any(
+        _cloud_training_boundary(payload).get("live_requested") is True for payload in status_payloads
+    )
+    fail_closed = (
+        provider_api_calls_started is False
+        and cloud_jobs_started is False
+        and provider_cancel_called is False
+        and credential_values_recorded is False
+        and live_launch_requested is False
+        and cost_incurred_usd == 0
+    )
+    return {
+        "launch_receipt_count": len(launch_payloads),
+        "status_receipt_count": len(status_payloads),
+        "launch_receipt_passed": bool(launch_payloads) and all(payload.get("passed") is True for payload in launch_payloads),
+        "status_receipt_passed": bool(status_payloads) and all(payload.get("passed") is True for payload in status_payloads),
+        "receipts_passed": bool(launch_payloads)
+        and bool(status_payloads)
+        and all(payload.get("passed") is True for payload in all_payloads),
+        "launch_mode": launch_mode,
+        "launch_readiness": str(first_launch_payload.get("readiness") or ""),
+        "launch_recommendation": str(first_launch_payload.get("recommendation") or ""),
+        "live_launch_requested": live_launch_requested,
+        "status_provider_status": status_provider_status,
+        "status_terminal": bool(status_payloads) and all(_cloud_training_status(payload).get("terminal") is True for payload in status_payloads),
+        "status_not_started": status_provider_status == "not_started",
+        "status_readiness": str(first_status_payload.get("readiness") or ""),
+        "status_recommendation": str(first_status_payload.get("recommendation") or ""),
+        "provider_api_calls_started": provider_api_calls_started,
+        "cloud_jobs_started": cloud_jobs_started,
+        "provider_cancel_called": provider_cancel_called,
+        "credential_values_recorded": credential_values_recorded,
+        "cost_incurred_usd": cost_incurred_usd,
+        "fail_closed": fail_closed,
     }
 
 
@@ -695,6 +780,25 @@ def _first_payload(artifact_paths: dict[str, list[Path]], role: str) -> dict[str
     return _read_json(paths[0]) if paths else {}
 
 
+def _payloads(artifact_paths: dict[str, list[Path]], role: str) -> list[dict[str, Any]]:
+    return [_read_json(path) for path in artifact_paths.get(role, [])]
+
+
+def _cloud_training_launch(payload: dict[str, Any]) -> dict[str, Any]:
+    launch = payload.get("launch")
+    return launch if isinstance(launch, dict) else {}
+
+
+def _cloud_training_status(payload: dict[str, Any]) -> dict[str, Any]:
+    status = payload.get("status")
+    return status if isinstance(status, dict) else {}
+
+
+def _cloud_training_boundary(payload: dict[str, Any]) -> dict[str, Any]:
+    boundary = payload.get("execution_boundary")
+    return boundary if isinstance(boundary, dict) else {}
+
+
 def _registry_provider_ids(payload: dict[str, Any]) -> list[str]:
     providers = payload.get("providers")
     if not isinstance(providers, list):
@@ -707,6 +811,10 @@ def _provider_id_from_payload(payload: dict[str, Any]) -> str:
     if not isinstance(provider, dict):
         return ""
     return str(provider.get("id") or "")
+
+
+def _non_negative_number_or_zero(value: Any) -> int | float:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else 0
 
 
 def _refs_are_safe(refs: dict[str, list[dict[str, Any]]]) -> bool:

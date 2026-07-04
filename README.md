@@ -355,13 +355,17 @@ weight updates. Missing phase receipts produce a schema-checkable
 Loop ledgers add a `readiness_digest` over the latest iteration so review can
 spot missing phase inputs, empty artifact groups, next-action posture, and
 side-effect status without walking every receipt.
-The plan and ledger also include `cloud_training` and
-`cloud_training_lineage` summaries. Presence alone is not enough: the preflight
-must link the trainer plan/preflight/launch check, the launch plan must link the
-preflight and artifact manifest, the launch receipt must link the launch plan,
-and the status receipt must link the launch receipt by SHA-256 before the loop
-can be ready for governance review. Repeated artifacts for a lineage role are
-recorded but treated as ambiguous, so they keep the loop fail-closed.
+The plan and ledger also include `cloud_training`,
+`cloud_training_receipt_state`, and `cloud_training_lineage` summaries. Presence
+alone is not enough: the preflight must link the trainer
+plan/preflight/launch check, the launch plan must link the preflight and
+artifact manifest, the launch receipt must link the launch plan, and the status
+receipt must link the launch receipt by SHA-256 before the loop can be ready for
+governance review. Receipt state is recomputed from the referenced launch/status
+receipts, so provider API calls, cloud jobs, cancellation calls, credential
+recording, or non-zero cost keep the loop fail-closed. Repeated artifacts for a
+lineage role are recorded but treated as ambiguous, so they keep the loop
+fail-closed.
 
 ## Cloud Training Contracts
 

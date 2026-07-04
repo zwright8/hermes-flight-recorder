@@ -54,7 +54,7 @@
     "max_rollouts": null,
     "max_training_examples": null
   },
-  "check_count": 12,
+  "check_count": 13,
   "checks": [
     {
       "actual": {
@@ -211,6 +211,43 @@
       "id": "cloud_training_receipts_bound_for_provider_handoff",
       "passed": true,
       "summary": "cloud_training_receipts_bound_for_provider_handoff: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_training_receipt_state": {
+          "cloud_jobs_started": false,
+          "cost_incurred_usd": 0,
+          "credential_values_recorded": false,
+          "fail_closed": true,
+          "launch_mode": "dry_run",
+          "launch_readiness": "blocked",
+          "launch_receipt_count": 1,
+          "launch_receipt_passed": false,
+          "launch_recommendation": "block_live_cloud_launch",
+          "live_launch_requested": false,
+          "provider_api_calls_started": false,
+          "provider_cancel_called": false,
+          "receipts_passed": false,
+          "status_not_started": true,
+          "status_provider_status": "not_started",
+          "status_readiness": "status_recorded",
+          "status_receipt_count": 1,
+          "status_receipt_passed": true,
+          "status_recommendation": "archive_status_receipt",
+          "status_terminal": true
+        }
+      },
+      "expected": {
+        "cloud_jobs_started": false,
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "live_launch_requested": false,
+        "provider_api_calls_started": false,
+        "provider_cancel_called": false
+      },
+      "id": "cloud_training_receipts_are_side_effect_free",
+      "passed": true,
+      "summary": "cloud_training_receipts_are_side_effect_free: passed=True"
     },
     {
       "actual": {
@@ -628,6 +665,28 @@
       }
     ]
   },
+  "cloud_training_receipt_state": {
+    "cloud_jobs_started": false,
+    "cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "fail_closed": true,
+    "launch_mode": "dry_run",
+    "launch_readiness": "blocked",
+    "launch_receipt_count": 1,
+    "launch_receipt_passed": false,
+    "launch_recommendation": "block_live_cloud_launch",
+    "live_launch_requested": false,
+    "provider_api_calls_started": false,
+    "provider_cancel_called": false,
+    "receipts_passed": false,
+    "status_not_started": true,
+    "status_provider_status": "not_started",
+    "status_readiness": "status_recorded",
+    "status_receipt_count": 1,
+    "status_receipt_passed": true,
+    "status_recommendation": "archive_status_receipt",
+    "status_terminal": true
+  },
   "created_at": "2026-07-03T00:00:00+00:00",
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -688,7 +747,7 @@
     "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
     "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived."
   ],
-  "objective": "Demonstrate a fail-closed closed-loop agentic training iteration contract.",
+  "objective": "Demonstrate a fail-closed external trainer handoff loop.",
   "participants": {
     "baseline_policy": "local/mock-baseline",
     "candidate_policy": "local/mock-candidate",

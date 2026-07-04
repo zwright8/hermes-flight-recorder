@@ -44,6 +44,9 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(plan["cloud_training_lineage"]["matched_link_count"], plan["cloud_training_lineage"]["required_link_count"])
             self.assertEqual(plan["cloud_training_lineage"]["provider"]["pipeline_provider_id"], "modal")
             self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])
+            self.assertEqual(plan["cloud_training_receipt_state"]["launch_mode"], "dry_run")
+            self.assertEqual(plan["cloud_training_receipt_state"]["status_provider_status"], "not_started")
             self.assertEqual(plan["missing_phase_inputs"], [])
             self.assertTrue(all(phase["status"] != "blocked" for phase in plan["phases"]))
             self.assertEqual(plan["artifact_count"], sum(len(paths) for paths in artifacts.values()))
@@ -300,6 +303,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
             plan["cloud_training"]["artifact_count"] = 0
             plan["cloud_training"]["provider_api_calls_started"] = True
+            plan["cloud_training_receipt_state"]["fail_closed"] = False
             plan["cloud_training_lineage"]["matched_link_count"] = 0
             loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -309,7 +313,38 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_loop_plan.cloud_training.artifact_count must match cloud training source artifacts.", errors)
             self.assertIn("agentic_training_loop_plan.cloud_training.provider_api_calls_started must match cloud training source artifacts.", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training_receipt_state.fail_closed must match cloud training receipt artifacts.", errors)
             self.assertIn("agentic_training_loop_plan.cloud_training_lineage.matched_link_count must match cloud training source lineage.", errors)
+
+    def test_launch_receipt_side_effects_keep_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            receipt = artifacts["cloud_training_launch_receipt"][0]
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["launch"]["cloud_job_started"] = True
+            payload["launch"]["provider_api_called"] = True
+            payload["launch"]["cost_incurred_usd"] = 2
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="loop-cloud-side-effects",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertFalse(plan["cloud_training_receipt_state"]["fail_closed"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["cloud_jobs_started"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["provider_api_calls_started"])
+            self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 2)
+            self.assertIn(
+                "cloud_training_receipts_are_side_effect_free",
+                {check["id"] for check in plan["checks"] if not check["passed"]},
+            )
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
 
     def test_unlinked_cloud_training_receipts_keep_loop_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -375,6 +410,123 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in tampered["targets"] for error in target["errors"])
             self.assertIn("cloud_training_lineage.duplicate_role_count must match cloud training source lineage", errors)
             self.assertIn("cloud_training_lineage.ambiguous_link_count must match cloud training source lineage", errors)
+
+    def test_duplicate_cloud_receipt_side_effects_are_not_hidden_by_first_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            duplicate_receipt = root / "cloud_training_launch_receipt_duplicate.json"
+            duplicate_payload = json.loads(artifacts["cloud_training_launch_receipt"][0].read_text(encoding="utf-8"))
+            duplicate_payload["execution_boundary"]["provider_api_called"] = True
+            duplicate_payload["execution_boundary"]["cloud_job_started"] = True
+            duplicate_payload["execution_boundary"]["live_requested"] = True
+            duplicate_payload["execution_boundary"]["cloud_cost_incurred_usd"] = 3
+            duplicate_receipt.write_text(json.dumps(duplicate_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            artifacts["cloud_training_launch_receipt"].append(duplicate_receipt)
+
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-cloud-duplicate-side-effects",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["cloud_training_receipt_state"]["fail_closed"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["provider_api_calls_started"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["cloud_jobs_started"])
+            self.assertEqual(plan["cloud_training_receipt_state"]["launch_receipt_count"], 2)
+            self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 3)
+            self.assertTrue(plan["cloud_training_receipt_state"]["live_launch_requested"])
+            for check in plan["checks"]:
+                if check["id"] == "cloud_training_receipts_are_side_effect_free":
+                    check["passed"] = True
+            plan["cloud_training"]["provider_api_calls_started"] = False
+            plan["cloud_training"]["cloud_jobs_started"] = False
+            plan["cloud_training_receipt_state"]["provider_api_calls_started"] = False
+            plan["cloud_training_receipt_state"]["cloud_jobs_started"] = False
+            plan["cloud_training_receipt_state"]["cost_incurred_usd"] = 0
+            plan["cloud_training_receipt_state"]["live_launch_requested"] = False
+            plan["cloud_training_receipt_state"]["fail_closed"] = True
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.cloud_training.provider_api_calls_started must match cloud training source artifacts.", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training.cloud_jobs_started must match cloud training source artifacts.", errors)
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_receipt_state.provider_api_calls_started must match cloud training receipt artifacts.",
+                errors,
+            )
+            self.assertIn("agentic_training_loop_plan.cloud_training_receipt_state.cost_incurred_usd must match cloud training receipt artifacts.", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training_receipt_state.fail_closed must match cloud training receipt artifacts.", errors)
+            self.assertIn(
+                "agentic_training_loop_plan.checks.cloud_training_receipts_are_side_effect_free.passed must match receipt state.",
+                errors,
+            )
+
+    def test_live_launch_request_alone_keeps_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            launch_receipt = artifacts["cloud_training_launch_receipt"][0]
+            launch_payload = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            launch_payload["launch"]["mode"] = "live"
+            launch_receipt.write_text(json.dumps(launch_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-cloud-live-only",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertTrue(plan["cloud_training_receipt_state"]["live_launch_requested"])
+            self.assertFalse(plan["cloud_training_receipt_state"]["provider_api_calls_started"])
+            self.assertFalse(plan["cloud_training_receipt_state"]["cloud_jobs_started"])
+            self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 0)
+            self.assertFalse(plan["cloud_training_receipt_state"]["fail_closed"])
+            forged_readiness = json.loads(json.dumps(plan))
+            forged_readiness["readiness"] = "ready_for_governance_review"
+            forged_readiness["recommendation"] = "approve_iteration_execution"
+            loop_plan.write_text(json.dumps(forged_readiness, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.readiness expected 'planned_fail_closed'", errors)
+            self.assertIn(
+                "agentic_training_loop_plan.recommendation expected 'collect_missing_receipts_before_live_execution'",
+                errors,
+            )
+            for check in plan["checks"]:
+                if check["id"] == "cloud_training_receipts_are_side_effect_free":
+                    check["passed"] = True
+            plan["cloud_training_receipt_state"]["live_launch_requested"] = False
+            plan["cloud_training_receipt_state"]["fail_closed"] = True
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_receipt_state.live_launch_requested must match cloud training receipt artifacts.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_receipt_state.fail_closed must match cloud training receipt artifacts.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.checks.cloud_training_receipts_are_side_effect_free.passed must match receipt state.",
+                errors,
+            )
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
@@ -458,20 +610,48 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         }
 
     def write_json(self, path: Path, schema_version: str, source_artifacts: dict[str, dict[str, object]] | None = None) -> Path:
-        path.write_text(
-            json.dumps(
+        payload = {
+            "schema_version": schema_version,
+            "passed": True,
+            "readiness": "ready",
+            "source_artifacts": source_artifacts or {},
+        }
+        if schema_version == "hfr.cloud_training_launch_receipt.v1":
+            payload.update(
                 {
-                    "schema_version": schema_version,
-                    "passed": True,
-                    "readiness": "ready",
-                    "source_artifacts": source_artifacts or {},
-                },
-                indent=2,
-                sort_keys=True,
+                    "readiness": "dry_run_recorded",
+                    "recommendation": "safe_to_archive_dry_run_receipt",
+                    "launch": {
+                        "mode": "dry_run",
+                        "cloud_job_started": False,
+                        "provider_job_id": None,
+                        "provider_api_called": False,
+                        "cost_incurred_usd": 0,
+                    },
+                    "execution_boundary": {
+                        "live_requested": False,
+                        "allow_live": False,
+                        "credential_values_recorded": False,
+                    },
+                }
             )
-            + "\n",
-            encoding="utf-8",
-        )
+        if schema_version == "hfr.cloud_training_status_receipt.v1":
+            payload.update(
+                {
+                    "readiness": "status_recorded",
+                    "recommendation": "archive_status_receipt",
+                    "status": {
+                        "provider_status": "not_started",
+                        "terminal": True,
+                        "cancel_requested": False,
+                        "provider_cancel_called": False,
+                        "provider_api_called": False,
+                        "cost_incurred_usd": 0,
+                    },
+                    "execution_boundary": {"credential_values_recorded": False},
+                }
+            )
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
     def write_provider_registry(self, path: Path) -> Path:

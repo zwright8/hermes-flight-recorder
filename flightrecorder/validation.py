@@ -3128,17 +3128,6 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         )
     if plan.get("passed") != (failed_checks == 0):
         target.errors.append("agentic_training_loop_plan.passed must match failed_check_count.")
-    if plan.get("readiness") not in {"planned_fail_closed", "ready_for_governance_review"}:
-        target.errors.append("agentic_training_loop_plan.readiness has an unsupported value.")
-    expected_recommendation = (
-        "approve_iteration_execution"
-        if plan.get("readiness") == "ready_for_governance_review"
-        else "collect_missing_receipts_before_live_execution"
-    )
-    if plan.get("recommendation") != expected_recommendation:
-        target.errors.append(
-            f"agentic_training_loop_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}."
-        )
     if not isinstance(plan.get("iteration_id"), str) or not plan.get("iteration_id"):
         target.errors.append("agentic_training_loop_plan.iteration_id must be a non-empty string.")
     plan_path = plan.get("plan_path")
@@ -3169,11 +3158,22 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
                 )
     if plan.get("artifact_count") != artifact_count:
         target.errors.append(f"agentic_training_loop_plan.artifact_count expected {artifact_count}, got {plan.get('artifact_count')!r}.")
+    cloud_training_receipt_state = _expected_agentic_training_loop_cloud_training_receipt_state(
+        source_artifacts,
+        source_path,
+    )
     _validate_agentic_training_loop_cloud_training(
         plan.get("cloud_training"),
         source_artifacts,
+        cloud_training_receipt_state,
         target,
         "agentic_training_loop_plan.cloud_training",
+    )
+    _validate_agentic_training_loop_cloud_training_receipt_state(
+        plan.get("cloud_training_receipt_state"),
+        cloud_training_receipt_state,
+        target,
+        "agentic_training_loop_plan.cloud_training_receipt_state",
     )
     _validate_agentic_training_loop_cloud_training_lineage(
         plan.get("cloud_training_lineage"),
@@ -3182,13 +3182,47 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         "agentic_training_loop_plan.cloud_training_lineage",
         source_path,
     )
+    check = _cloud_training_check_by_id(
+        checks,
+        "cloud_training_receipts_are_side_effect_free",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    if check is not None and check.get("passed") != cloud_training_receipt_state["fail_closed"]:
+        target.errors.append(
+            "agentic_training_loop_plan.checks.cloud_training_receipts_are_side_effect_free.passed must match receipt state."
+        )
 
     phases = plan.get("phases")
     if not isinstance(phases, list) or not phases:
         target.errors.append("agentic_training_loop_plan.phases must be a non-empty list.")
+        phase_missing_inputs: list[str] = []
     else:
         for index, phase in enumerate(phases):
             _validate_agentic_training_loop_plan_phase(phase, target, f"agentic_training_loop_plan.phases[{index}]")
+        phase_missing_inputs = sorted(
+            {
+                item
+                for phase in phases
+                if isinstance(phase, dict) and isinstance(phase.get("missing_required_artifacts"), list)
+                for item in phase["missing_required_artifacts"]
+                if isinstance(item, str)
+            }
+        )
+    if plan.get("missing_phase_inputs") != phase_missing_inputs:
+        target.errors.append("agentic_training_loop_plan.missing_phase_inputs must match phase missing_required_artifacts.")
+    expected_readiness = "ready_for_governance_review" if failed_checks == 0 and not phase_missing_inputs else "planned_fail_closed"
+    if plan.get("readiness") != expected_readiness:
+        target.errors.append(f"agentic_training_loop_plan.readiness expected {expected_readiness!r}, got {plan.get('readiness')!r}.")
+    expected_recommendation = (
+        "approve_iteration_execution"
+        if expected_readiness == "ready_for_governance_review"
+        else "collect_missing_receipts_before_live_execution"
+    )
+    if plan.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_training_loop_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}."
+        )
 
     boundary = plan.get("execution_boundary")
     if not isinstance(boundary, dict):
@@ -3311,6 +3345,7 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
 def _validate_agentic_training_loop_cloud_training(
     value: Any,
     source_artifacts: dict[str, Any],
+    receipt_state: dict[str, Any],
     target: ValidationTarget,
     label: str,
 ) -> None:
@@ -3330,14 +3365,28 @@ def _validate_agentic_training_loop_cloud_training(
         "launch_plan_present": "cloud_training_launch_plan" in present,
         "launch_receipt_present": "cloud_training_launch_receipt" in present,
         "status_receipt_present": "cloud_training_status_receipt" in present,
-        "provider_api_calls_started": False,
-        "cloud_jobs_started": False,
-        "credential_values_recorded": False,
+        "provider_api_calls_started": receipt_state["provider_api_calls_started"],
+        "cloud_jobs_started": receipt_state["cloud_jobs_started"],
+        "credential_values_recorded": receipt_state["credential_values_recorded"],
         "live_spend_allowed": False,
     }
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match cloud training source artifacts.")
+
+
+def _validate_agentic_training_loop_cloud_training_receipt_state(
+    value: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match cloud training receipt artifacts.")
 
 
 def _validate_agentic_training_loop_cloud_training_lineage(
@@ -3423,6 +3472,107 @@ def _expected_agentic_training_loop_cloud_training_lineage(
         "provider": provider,
         "links": links,
     }
+
+
+def _expected_agentic_training_loop_cloud_training_receipt_state(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+) -> dict[str, Any]:
+    launch_payloads = _agentic_training_loop_payloads(source_artifacts, "cloud_training_launch_receipt", source_path)
+    status_payloads = _agentic_training_loop_payloads(source_artifacts, "cloud_training_status_receipt", source_path)
+    all_payloads = [*launch_payloads, *status_payloads]
+    first_launch_payload = launch_payloads[0] if launch_payloads else {}
+    first_status_payload = status_payloads[0] if status_payloads else {}
+    first_launch = _agentic_training_loop_cloud_training_launch(first_launch_payload)
+    first_status = _agentic_training_loop_cloud_training_status(first_status_payload)
+    provider_api_calls_started = any(
+        _agentic_training_loop_cloud_training_launch(payload).get("provider_api_called") is True for payload in launch_payloads
+    ) or any(
+        _agentic_training_loop_cloud_training_status(payload).get("provider_api_called") is True for payload in status_payloads
+    ) or any(
+        _agentic_training_loop_cloud_training_boundary(payload).get("provider_api_called") is True
+        for payload in all_payloads
+    )
+    cloud_jobs_started = any(
+        _agentic_training_loop_cloud_training_launch(payload).get("cloud_job_started") is True for payload in launch_payloads
+    ) or any(
+        _agentic_training_loop_cloud_training_boundary(payload).get("cloud_job_started") is True
+        for payload in all_payloads
+    )
+    provider_cancel_called = any(
+        _agentic_training_loop_cloud_training_status(payload).get("provider_cancel_called") is True for payload in status_payloads
+    )
+    credential_values_recorded = any(
+        _agentic_training_loop_cloud_training_boundary(payload).get("credential_values_recorded") is True
+        for payload in all_payloads
+    )
+    cost_incurred_usd = sum(
+        _safe_non_negative_number(_agentic_training_loop_cloud_training_launch(payload).get("cost_incurred_usd"))
+        for payload in launch_payloads
+    ) + sum(
+        _safe_non_negative_number(_agentic_training_loop_cloud_training_status(payload).get("cost_incurred_usd"))
+        for payload in status_payloads
+    ) + sum(
+        _safe_non_negative_number(_agentic_training_loop_cloud_training_boundary(payload).get("cloud_cost_incurred_usd"))
+        for payload in all_payloads
+    )
+    launch_mode = str(first_launch.get("mode") or "")
+    status_provider_status = str(first_status.get("provider_status") or "")
+    live_launch_requested = any(
+        _agentic_training_loop_cloud_training_launch(payload).get("mode") == "live"
+        or _agentic_training_loop_cloud_training_boundary(payload).get("live_requested") is True
+        for payload in launch_payloads
+    ) or any(
+        _agentic_training_loop_cloud_training_boundary(payload).get("live_requested") is True for payload in status_payloads
+    )
+    fail_closed = (
+        provider_api_calls_started is False
+        and cloud_jobs_started is False
+        and provider_cancel_called is False
+        and credential_values_recorded is False
+        and live_launch_requested is False
+        and cost_incurred_usd == 0
+    )
+    return {
+        "launch_receipt_count": len(launch_payloads),
+        "status_receipt_count": len(status_payloads),
+        "launch_receipt_passed": bool(launch_payloads) and all(payload.get("passed") is True for payload in launch_payloads),
+        "status_receipt_passed": bool(status_payloads) and all(payload.get("passed") is True for payload in status_payloads),
+        "receipts_passed": bool(launch_payloads)
+        and bool(status_payloads)
+        and all(payload.get("passed") is True for payload in all_payloads),
+        "launch_mode": launch_mode,
+        "launch_readiness": str(first_launch_payload.get("readiness") or ""),
+        "launch_recommendation": str(first_launch_payload.get("recommendation") or ""),
+        "live_launch_requested": live_launch_requested,
+        "status_provider_status": status_provider_status,
+        "status_terminal": bool(status_payloads)
+        and all(_agentic_training_loop_cloud_training_status(payload).get("terminal") is True for payload in status_payloads),
+        "status_not_started": status_provider_status == "not_started",
+        "status_readiness": str(first_status_payload.get("readiness") or ""),
+        "status_recommendation": str(first_status_payload.get("recommendation") or ""),
+        "provider_api_calls_started": provider_api_calls_started,
+        "cloud_jobs_started": cloud_jobs_started,
+        "provider_cancel_called": provider_cancel_called,
+        "credential_values_recorded": credential_values_recorded,
+        "cost_incurred_usd": cost_incurred_usd,
+        "fail_closed": fail_closed,
+    }
+
+
+def _agentic_training_loop_cloud_training_launch(payload: dict[str, Any]) -> dict[str, Any]:
+    launch = payload.get("launch")
+    return launch if isinstance(launch, dict) else {}
+
+
+def _agentic_training_loop_cloud_training_status(payload: dict[str, Any]) -> dict[str, Any]:
+    status = payload.get("status")
+    return status if isinstance(status, dict) else {}
+
+
+def _agentic_training_loop_cloud_training_boundary(payload: dict[str, Any]) -> dict[str, Any]:
+    boundary = payload.get("execution_boundary")
+    return boundary if isinstance(boundary, dict) else {}
 
 
 def _expected_agentic_training_loop_cloud_training_provider_lineage(
@@ -3601,6 +3751,13 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             if governance.get(field_name) is not False:
                 target.errors.append(f"{label}.governance.{field_name} must be false.")
         _validate_agentic_loop_ledger_cloud_training(row.get("cloud_training"), row, target, f"{label}.cloud_training")
+        _validate_agentic_loop_ledger_cloud_training_receipt_state(
+            row.get("cloud_training_receipt_state"),
+            row,
+            target,
+            ledger_path,
+            f"{label}.cloud_training_receipt_state",
+        )
         _validate_agentic_loop_ledger_cloud_training_lineage(row.get("cloud_training_lineage"), row, target, ledger_path, label)
     metrics = ledger.get("metrics")
     if not isinstance(metrics, dict):
@@ -3686,14 +3843,35 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_inputs must match the latest iteration.")
         if missing_groups != latest_missing_groups:
             target.errors.append("agentic_loop_ledger.readiness_digest.missing_artifact_groups must match the latest iteration.")
-        expected_ready = latest.get("readiness") == "ready_for_governance_review" and not latest_missing_phase_inputs
         latest_lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
         latest_lineage_provider = latest_lineage.get("provider") if isinstance(latest_lineage.get("provider"), dict) else {}
-        expected_ready = expected_ready and latest_lineage.get("passed") is True
+        latest_receipt_state = (
+            latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
+        )
+        expected_ready = (
+            latest.get("readiness") == "ready_for_governance_review"
+            and not latest_missing_phase_inputs
+            and latest_lineage.get("passed") is True
+            and latest_receipt_state.get("fail_closed") is True
+        )
         if digest.get("ready_for_governance_review") != expected_ready:
             target.errors.append("agentic_loop_ledger.readiness_digest.ready_for_governance_review must match latest iteration readiness.")
         if digest.get("cloud_training_lineage_bound") != (latest_lineage.get("passed") is True):
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_lineage_bound must match the latest iteration.")
+        if digest.get("cloud_training_receipts_fail_closed") != (latest_receipt_state.get("fail_closed") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_receipts_fail_closed must match the latest iteration.")
+        if digest.get("cloud_training_live_launch_requested") != (latest_receipt_state.get("live_launch_requested") is True):
+            target.errors.append(
+                "agentic_loop_ledger.readiness_digest.cloud_training_live_launch_requested must match the latest iteration."
+            )
+        if digest.get("cloud_training_cost_incurred_usd") != _safe_non_negative_number(latest_receipt_state.get("cost_incurred_usd")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_cost_incurred_usd must match the latest iteration.")
+        if digest.get("cloud_training_launch_mode") != str(latest_receipt_state.get("launch_mode") or ""):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_launch_mode must match the latest iteration.")
+        if digest.get("cloud_training_status_provider_status") != str(latest_receipt_state.get("status_provider_status") or ""):
+            target.errors.append(
+                "agentic_loop_ledger.readiness_digest.cloud_training_status_provider_status must match the latest iteration."
+            )
         if digest.get("cloud_training_provider_id") != str(latest_lineage_provider.get("pipeline_provider_id") or ""):
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_provider_id must match the latest iteration.")
         if digest.get("cloud_training_missing_link_count") != _safe_non_negative_int(latest_lineage.get("missing_link_count")):
@@ -3734,6 +3912,27 @@ def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any]
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match ledger cloud training role counts.")
+
+
+def _validate_agentic_loop_ledger_cloud_training_receipt_state(
+    value: Any,
+    row: dict[str, Any],
+    target: ValidationTarget,
+    ledger_path: Path,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
+    if source_path is None or not source_path.exists() or not source_path.is_file():
+        return
+    source_plan = _read_json_object_silent(source_path)
+    source_artifacts = source_plan.get("source_artifacts") if isinstance(source_plan.get("source_artifacts"), dict) else {}
+    expected = _expected_agentic_training_loop_cloud_training_receipt_state(source_artifacts, source_path)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match source loop plan cloud training receipt artifacts.")
 
 
 def _validate_agentic_loop_ledger_cloud_training_lineage(
@@ -3959,6 +4158,10 @@ def _validate_next_iteration_schedule_ref(
 
 def _safe_non_negative_int(value: Any) -> int:
     return value if _is_non_negative_int(value) else 0
+
+
+def _safe_non_negative_number(value: Any) -> int | float:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else 0
 
 
 def _validate_cloud_training_contract(

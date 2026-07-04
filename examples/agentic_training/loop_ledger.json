@@ -299,6 +299,28 @@
           }
         ]
       },
+      "cloud_training_receipt_state": {
+        "cloud_jobs_started": false,
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "fail_closed": true,
+        "launch_mode": "dry_run",
+        "launch_readiness": "blocked",
+        "launch_receipt_count": 1,
+        "launch_receipt_passed": false,
+        "launch_recommendation": "block_live_cloud_launch",
+        "live_launch_requested": false,
+        "provider_api_calls_started": false,
+        "provider_cancel_called": false,
+        "receipts_passed": false,
+        "status_not_started": true,
+        "status_provider_status": "not_started",
+        "status_readiness": "status_recorded",
+        "status_receipt_count": 1,
+        "status_receipt_passed": true,
+        "status_recommendation": "archive_status_receipt",
+        "status_terminal": true
+      },
       "cost_estimate": {
         "live_spend_allowed": false,
         "max_cloud_cost_usd": 0,
@@ -390,8 +412,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "f044acc52ebbddc8eaccb5da4c6f0305883584fc30622b5b784ff2e8ef92661d",
-      "size_bytes": 36498,
+      "sha256": "ad94b01935a7e704b8115438018d996173f5d2bc7791ba22e4abb3b1874cbb3d",
+      "size_bytes": 38616,
       "training_outputs": {
         "artifact_count": 3,
         "group": "training",
@@ -490,11 +512,16 @@
   "readiness_digest": {
     "blocked_reason_count": 7,
     "cloud_training_ambiguous_link_count": 0,
+    "cloud_training_cost_incurred_usd": 0,
     "cloud_training_duplicate_role_count": 0,
+    "cloud_training_launch_mode": "dry_run",
     "cloud_training_lineage_bound": false,
+    "cloud_training_live_launch_requested": false,
     "cloud_training_mismatched_link_count": 0,
     "cloud_training_missing_link_count": 2,
     "cloud_training_provider_id": "modal",
+    "cloud_training_receipts_fail_closed": true,
+    "cloud_training_status_provider_status": "not_started",
     "decision_readiness": "blocked",
     "decision_recommendation": "continue_iteration",
     "latest_iteration_id": "demo-loop-001",

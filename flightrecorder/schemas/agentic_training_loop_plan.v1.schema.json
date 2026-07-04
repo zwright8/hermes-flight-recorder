@@ -36,6 +36,9 @@
     "cloud_training": {
       "$ref": "#/$defs/cloudTraining"
     },
+    "cloud_training_receipt_state": {
+      "$ref": "#/$defs/cloudTrainingReceiptState"
+    },
     "cloud_training_lineage": {
       "$ref": "#/$defs/cloudTrainingLineage"
     },
@@ -141,6 +144,7 @@
     "budget",
     "provider_constraints",
     "cloud_training",
+    "cloud_training_receipt_state",
     "cloud_training_lineage",
     "execution_boundary",
     "handoff_contract",
@@ -289,10 +293,10 @@
           "type": "boolean"
         },
         "cloud_jobs_started": {
-          "const": false
+          "type": "boolean"
         },
         "credential_values_recorded": {
-          "const": false
+          "type": "boolean"
         },
         "launch_plan_present": {
           "type": "boolean"
@@ -319,7 +323,7 @@
           "type": "array"
         },
         "provider_api_calls_started": {
-          "const": false
+          "type": "boolean"
         },
         "provider_registry_present": {
           "type": "boolean"
@@ -437,6 +441,97 @@
         "role_counts",
         "provider",
         "links"
+      ],
+      "type": "object"
+    },
+    "cloudTrainingReceiptState": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": {
+          "type": "boolean"
+        },
+        "cost_incurred_usd": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "credential_values_recorded": {
+          "type": "boolean"
+        },
+        "fail_closed": {
+          "type": "boolean"
+        },
+        "launch_mode": {
+          "type": "string"
+        },
+        "launch_readiness": {
+          "type": "string"
+        },
+        "launch_receipt_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "launch_receipt_passed": {
+          "type": "boolean"
+        },
+        "launch_recommendation": {
+          "type": "string"
+        },
+        "live_launch_requested": {
+          "type": "boolean"
+        },
+        "provider_api_calls_started": {
+          "type": "boolean"
+        },
+        "provider_cancel_called": {
+          "type": "boolean"
+        },
+        "receipts_passed": {
+          "type": "boolean"
+        },
+        "status_not_started": {
+          "type": "boolean"
+        },
+        "status_provider_status": {
+          "type": "string"
+        },
+        "status_readiness": {
+          "type": "string"
+        },
+        "status_receipt_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status_receipt_passed": {
+          "type": "boolean"
+        },
+        "status_recommendation": {
+          "type": "string"
+        },
+        "status_terminal": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "launch_receipt_count",
+        "status_receipt_count",
+        "launch_receipt_passed",
+        "status_receipt_passed",
+        "receipts_passed",
+        "launch_mode",
+        "launch_readiness",
+        "launch_recommendation",
+        "live_launch_requested",
+        "status_provider_status",
+        "status_terminal",
+        "status_not_started",
+        "status_readiness",
+        "status_recommendation",
+        "provider_api_calls_started",
+        "cloud_jobs_started",
+        "provider_cancel_called",
+        "credential_values_recorded",
+        "cost_incurred_usd",
+        "fail_closed"
       ],
       "type": "object"
     },

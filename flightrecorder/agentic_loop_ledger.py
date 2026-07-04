@@ -148,6 +148,7 @@ def _iteration_record(
         "serving": _group_summary(source_artifacts, "serving"),
         "evals": _group_summary(source_artifacts, "eval"),
         "cloud_training": _cloud_training_summary(source_artifacts, plan),
+        "cloud_training_receipt_state": _cloud_training_receipt_state(plan),
         "cloud_training_lineage": _cloud_training_lineage(plan),
         "training_outputs": _group_summary(source_artifacts, "training"),
         "governance": _governance_summary(source_artifacts, plan),
@@ -225,12 +226,22 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     cloud_training_provider = (
         cloud_training_lineage.get("provider") if isinstance(cloud_training_lineage.get("provider"), dict) else {}
     )
+    cloud_training_receipt_state = (
+        latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
+    )
     side_effects_started = any(
         governance.get(field_name) is True
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
     )
     lineage_bound = cloud_training_lineage.get("passed") is True
-    ready = latest.get("readiness") == "ready_for_governance_review" and not missing_phase_inputs and not side_effects_started and lineage_bound
+    receipt_state_fail_closed = cloud_training_receipt_state.get("fail_closed") is True
+    ready = (
+        latest.get("readiness") == "ready_for_governance_review"
+        and not missing_phase_inputs
+        and not side_effects_started
+        and lineage_bound
+        and receipt_state_fail_closed
+    )
     if ready:
         summary = f"Latest loop iteration {latest.get('iteration_id')} is ready for governance review."
     else:
@@ -259,6 +270,11 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "live_spend_allowed": cost_estimate.get("live_spend_allowed") is True,
         "side_effects_started": side_effects_started,
         "cloud_training_lineage_bound": lineage_bound,
+        "cloud_training_receipts_fail_closed": receipt_state_fail_closed,
+        "cloud_training_live_launch_requested": cloud_training_receipt_state.get("live_launch_requested") is True,
+        "cloud_training_cost_incurred_usd": _number_or_zero(cloud_training_receipt_state.get("cost_incurred_usd")),
+        "cloud_training_launch_mode": str(cloud_training_receipt_state.get("launch_mode") or ""),
+        "cloud_training_status_provider_status": str(cloud_training_receipt_state.get("status_provider_status") or ""),
         "cloud_training_provider_id": str(cloud_training_provider.get("pipeline_provider_id") or ""),
         "cloud_training_missing_link_count": _non_negative_int(cloud_training_lineage.get("missing_link_count")),
         "cloud_training_mismatched_link_count": _non_negative_int(cloud_training_lineage.get("mismatched_link_count")),
@@ -305,6 +321,11 @@ def _cloud_training_summary(source_artifacts: dict[str, Any], plan: dict[str, An
 def _cloud_training_lineage(plan: dict[str, Any]) -> dict[str, Any]:
     lineage = plan.get("cloud_training_lineage")
     return lineage if isinstance(lineage, dict) else {}
+
+
+def _cloud_training_receipt_state(plan: dict[str, Any]) -> dict[str, Any]:
+    state = plan.get("cloud_training_receipt_state")
+    return state if isinstance(state, dict) else {}
 
 
 def _governance_summary(source_artifacts: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
