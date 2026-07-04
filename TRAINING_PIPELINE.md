@@ -547,6 +547,8 @@ runs. It re-validates the preflight hashes and prints the approved command only
 when the launch contract still passes. Before public handoff, strict trainer
 consumer-plan validation warns if the archived command still carries absolute
 archive roots, external code roots, argv paths, or shell tokens.
+Strict trainer-wrapper dry-run validation repeats that warning for the
+`would_run` command it would hand to a real launcher.
 Trainer-facing export files must be regular files at preflight time; symlinked
 JSONL, JSON, Markdown artifacts, or
 split artifacts block launch even if their targets contain matching bytes.

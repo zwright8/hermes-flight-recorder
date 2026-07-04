@@ -23248,22 +23248,30 @@ def _validate_trainer_compact_validation_record(
 
 
 def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: ValidationTarget) -> int:
-    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_WOULD_RUN_KEYS, target, "trainer_wrapper_dry_run.would_run")
+    label = "trainer_wrapper_dry_run.would_run"
+    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_WOULD_RUN_KEYS, target, label)
     for field_name in ("mode", "execution_cwd", "archive_root", "external_code_root", "shell"):
         if not isinstance(value.get(field_name), str):
-            target.errors.append(f"trainer_wrapper_dry_run.would_run.{field_name} must be a string.")
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("archive_root", "external_code_root"):
+        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
     if value.get("mode") != "dry_run":
-        target.errors.append("trainer_wrapper_dry_run.would_run.mode must be dry_run.")
+        target.errors.append(f"{label}.mode must be dry_run.")
     if value.get("execution_cwd") not in {"", "archive_root"}:
-        target.errors.append("trainer_wrapper_dry_run.would_run.execution_cwd must be archive_root for ready receipts.")
+        target.errors.append(f"{label}.execution_cwd must be archive_root for ready receipts.")
     argv = value.get("argv")
     if not _is_string_list(argv):
-        target.errors.append("trainer_wrapper_dry_run.would_run.argv must be a list of strings.")
+        target.errors.append(f"{label}.argv must be a list of strings.")
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
+    for index, item in enumerate(clean_argv):
+        _warn_command_token_public_path(target, f"{label}.argv[{index}]", item)
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("shell") != expected_shell:
-        target.errors.append("trainer_wrapper_dry_run.would_run.shell must match argv.")
+        target.errors.append(f"{label}.shell must match argv.")
+    shell = value.get("shell")
+    if isinstance(shell, str) and shell:
+        _warn_shell_tokens_public_paths(shell, target, f"{label}.shell")
     return len(clean_argv)
 
 

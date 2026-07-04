@@ -521,6 +521,8 @@ absolute output paths, replay args, commands, or input fingerprint paths.
 Strict trainer-consumer-plan validation warns before archive roots, external
 code roots, argv paths, or shell tokens carry absolute machine coordinates into
 public handoffs.
+Strict trainer-wrapper dry-run validation repeats that warning for would-run
+command roots, argv paths, or shell tokens.
 Strict agentic-training-flow validation warns before delegated command roots,
 argv paths, or shell tokens carry absolute machine coordinates into public
 handoffs.
