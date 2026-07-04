@@ -428,6 +428,8 @@ provider `live_status` to `preflight_only`; any future live-launch adapter must
 change that contract deliberately alongside schema and validator updates.
 Adapter `receipt_types` are exact allowlists, so unsupported provider/live
 receipt names fail validation instead of silently expanding the contract.
+Embedded provider records in preflight and launch-plan artifacts use the same
+schema allowlist rather than accepting arbitrary provider metadata.
 Artifact manifests include a `transfer_plan` that counts upload inputs and
 expected downloads, records provider artifact protocols, and keeps actual
 upload/download/API side effects false for the external runner to perform.

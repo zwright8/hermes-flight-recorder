@@ -90,6 +90,66 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("adapter_contract.live_launch_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
+    def test_preflight_and_launch_plan_schemas_reject_forged_provider_contracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_source = root / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            preflight = root / "preflight.json"
+            launch_plan = root / "launch_plan.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            self.assert_schema_and_validate(preflight, "cloud_training_preflight")
+            preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
+            forged_preflight = json.loads(json.dumps(preflight_payload))
+            forged_preflight["provider"]["provider_signed_url"] = "redacted-provider-url"
+            forged_preflight["provider"]["adapter_contract"]["receipt_types"].append("hfr.cloud_training_live_provider_receipt.v1")
+            preflight.write_text(json.dumps(forged_preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(preflight)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_preflight_paths=[preflight], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_preflight.provider contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn("cloud_training_preflight.provider.adapter_contract.receipt_types contains unsupported receipt types", errors)
+            preflight.write_text(json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
+            self.assert_schema_and_validate(launch_plan, "cloud_training_launch_plan")
+            launch_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            launch_payload["provider"]["provider_signed_url"] = "redacted-provider-url"
+            launch_payload["provider"]["adapter_contract"]["receipt_types"].append("hfr.cloud_training_live_provider_receipt.v1")
+            launch_plan.write_text(json.dumps(launch_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(launch_plan)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_plan.provider contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn("cloud_training_launch_plan.provider.adapter_contract.receipt_types contains unsupported receipt types", errors)
+
     def test_provider_registry_rejects_unknown_side_effect_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

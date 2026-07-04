@@ -997,6 +997,9 @@ Each provider record is also schema- and validator-pinned to
 intentional contract migration rather than a data-only registry edit.
 Adapter `receipt_types` are exact schema and validator allowlists, which blocks
 forged provider/live receipt names from becoming accepted handoff metadata.
+Embedded provider records in preflight and launch-plan artifacts are also
+schema allowlisted, while redacted missing-source launch plans remain valid with
+their minimal placeholder provider record.
 Artifact manifests also carry a derived `transfer_plan` that must match the
 upload/download rows and provider protocols while proving Flight Recorder did
 not upload artifacts, download outputs, record credentials, or call provider

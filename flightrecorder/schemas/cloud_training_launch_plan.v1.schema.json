@@ -62,7 +62,7 @@
       "type": "boolean"
     },
     "provider": {
-      "type": "object"
+      "$ref": "#/$defs/provider"
     },
     "provider_chain": {
       "additionalProperties": false,
@@ -266,6 +266,166 @@
         "requires_status_and_cancel_receipts",
         "flight_recorder_controls_preflight_only",
         "external_provider_owns_execution"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_contract": {
+          "$ref": "#/$defs/adapterContract"
+        },
+        "artifact_protocols": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "client_import_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "credential_env_vars": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "gpu_classes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "job_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "live_status": {
+          "const": "preflight_only"
+        },
+        "regions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "display_name"
+      ],
+      "type": "object"
+    },
+    "adapterContract": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "client_modules_imported_by_flight_recorder": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_transport": {
+          "const": "mock_receipts"
+        },
+        "live_launch_supported": {
+          "const": false
+        },
+        "live_preflight_supported": {
+          "const": true
+        },
+        "live_preflight_transport": {
+          "const": "metadata_only"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called_by_flight_recorder": {
+          "const": false
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "receipt_types": {
+          "items": {
+            "enum": [
+              "hfr.cloud_training_artifact_manifest.v1",
+              "hfr.cloud_training_launch_plan.v1",
+              "hfr.cloud_training_launch_receipt.v1",
+              "hfr.cloud_training_preflight.v1",
+              "hfr.cloud_training_provider_registry.v1",
+              "hfr.cloud_training_status_receipt.v1"
+            ],
+            "type": "string"
+          },
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "type": "array"
+        },
+        "requires_cost_limit": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_explicit_live_opt_in": {
+          "const": true
+        },
+        "requires_region_and_gpu_constraints": {
+          "const": true
+        },
+        "schema_version": {
+          "const": "hfr.cloud_training_provider_adapter.v1"
+        },
+        "status_cancel_receipts_supported": {
+          "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "adapter_id",
+        "provider_id",
+        "receipt_types",
+        "dry_run_transport",
+        "live_preflight_transport",
+        "live_preflight_supported",
+        "live_launch_supported",
+        "status_cancel_receipts_supported",
+        "provider_api_called_by_flight_recorder",
+        "client_modules_imported_by_flight_recorder",
+        "credential_values_recorded",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints"
       ],
       "type": "object"
     },
