@@ -562,10 +562,10 @@ tokens still carry absolute paths, and strict
 trainer-launch-check validation warns if the approved-command raw string, argv,
 or shell tokens still carry absolute paths. Strict trainer-archive validation
 repeats that warning for the preserved approved command and archive source paths
-while keeping the rewritten portable command auditable. Strict trainer
-consumer-plan validation warns if the archived command still carries absolute
-archive roots, external code roots, argv paths, or shell tokens.
-Strict trainer-wrapper dry-run validation repeats that warning for the
+while keeping the rewritten portable command auditable. Trainer consumer-plan
+validation rejects archived commands that still carry local absolute archive
+roots, external code roots, or argv paths. Strict trainer-wrapper dry-run
+validation repeats that warning for the
 `would_run` command it would hand to a real launcher.
 Trainer-facing export files must be regular files at preflight time; symlinked
 JSONL, JSON, Markdown artifacts, or

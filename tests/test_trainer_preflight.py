@@ -343,6 +343,8 @@ class TrainerPreflightTests(unittest.TestCase):
             plan = json.loads(consumer_plan.read_text(encoding="utf-8"))
             self.assertTrue(plan["passed"])
             self.assertIn("agentic_training_plan", {item["artifact_name"] for item in plan["execution"]["trainer_inputs"]})
+            self.assertFalse(Path(plan["execution"]["archive_root"]).is_absolute())
+            self.assertFalse(Path(plan["execution"]["external_code_root"]).is_absolute())
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan)]), 0)
 
     def test_trainer_archive_validation_rejects_symlinked_artifact_parent(self):
@@ -1461,32 +1463,40 @@ class TrainerPreflightTests(unittest.TestCase):
             ]
             execution["command_shell"] = shlex.join(execution["command_argv"])
             absolute_command_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(absolute_command_plan)]), 0)
             code = run_cli(
                 [
                     "validate",
                     "--trainer-consumer-plan",
                     str(absolute_command_plan),
-                    "--strict",
                     "--out",
                     str(absolute_command_summary),
                 ]
             )
             self.assertEqual(code, 1)
             validation = json.loads(absolute_command_summary.read_text(encoding="utf-8"))
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("trainer_consumer_plan.execution.archive_root is absolute", warnings)
-            self.assertIn("trainer_consumer_plan.execution.external_code_root is absolute", warnings)
-            self.assertIn("trainer_consumer_plan.execution.command_argv[1] is absolute", warnings)
-            self.assertIn("trainer_consumer_plan.execution.command_argv[2] contains absolute path", warnings)
-            self.assertIn("trainer_consumer_plan.execution.command_shell[1] is absolute", warnings)
-            self.assertIn("trainer_consumer_plan.execution.command_shell[2] contains absolute path", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.execution.archive_root must be a safe relative path", errors)
+            self.assertIn("trainer_consumer_plan.execution.external_code_root must be a safe relative path", errors)
+            self.assertIn(
+                "trainer_consumer_plan.execution.command_argv[1] must use a relative command token",
+                errors,
+            )
+            self.assertIn(
+                "trainer_consumer_plan.execution.command_argv[2] must use a relative command token",
+                errors,
+            )
 
             plan["execution"]["archive_root"] = "trainer_archive"
             plan["execution"]["external_code_root"] = "trainer-code"
-            plan["execution"]["command_argv"] = ["python", "train.py", "--dataset", "artifacts/training_export"]
+            plan["execution"]["command_argv"] = [
+                "python",
+                "train.py",
+                "--plan=archive/agentic_training_plan.json",
+                "--dry-run",
+            ]
             plan["execution"]["command_shell"] = shlex.join(plan["execution"]["command_argv"])
             consumer_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
 
             forged = json.loads(json.dumps(plan))
             forged["provider_console_url"] = "redacted-provider-console"

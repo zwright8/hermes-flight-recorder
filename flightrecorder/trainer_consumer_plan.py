@@ -102,8 +102,8 @@ def build_trainer_consumer_plan(
         "source_archive_check": source,
         "execution": {
             "execution_cwd": "archive_root",
-            "archive_root": str(archive.get("path") or ""),
-            "external_code_root": str(external_root.get("path") or ""),
+            "archive_root": _public_root_path(archive.get("path")),
+            "external_code_root": _public_root_path(external_root.get("path")),
             "command_approved": portable_command.get("approved") is True,
             "command_available": portable_command.get("available") is True,
             "command_argv": argv,
@@ -277,6 +277,20 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _public_root_path(value: Any) -> str:
+    raw = str(value or "")
+    if not raw:
+        return ""
+    if raw.startswith("<redacted:") and raw.endswith(">"):
+        return raw
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    path = Path(raw)
+    if path.is_absolute():
+        return f"<redacted:{path.name or 'path'}>"
+    return raw
 
 
 def _is_windows_absolute(value: str) -> bool:
