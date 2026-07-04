@@ -17,6 +17,7 @@ from flightrecorder.external_eval import (
 )
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 from flightrecorder.validation import validate_artifacts
+from tests.agentic_loop_fixtures import write_eval_summary, write_valid_promotion_decision, write_valid_promotion_ledger
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,9 +212,145 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 errors,
             )
             self.assertIn(
-                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt state.",
+                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state.",
                 errors,
             )
+
+    def test_invalid_eval_summary_cannot_unlock_loop_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            eval_summary_path = artifacts["eval_summary"][0]
+            eval_summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+            del eval_summary["arms"]
+            eval_summary_path.write_text(json.dumps(eval_summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            loop_plan = root / "loop.json"
+
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-invalid-eval-summary",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(plan["passed"])
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state.",
+                errors,
+            )
+
+    def test_invalid_promotion_ledger_cannot_unlock_loop_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            ledger_path = artifacts["promotion_ledger"][0]
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            del ledger["records"]
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            loop_plan = root / "loop.json"
+
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-invalid-promotion-ledger",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(plan["passed"])
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state.",
+                errors,
+            )
+
+    def test_invalid_promotion_decision_cannot_unlock_loop_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            decision_path = artifacts["promotion_decision"][0]
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            del decision["checks"]
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            loop_plan = root / "loop.json"
+
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-invalid-promotion-decision",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(plan["passed"])
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state.",
+                errors,
+            )
+
+    def test_public_unsafe_promotion_decision_path_cannot_unlock_loop_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            decision_path = artifacts["promotion_decision"][0]
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            source_path = root / "promotion_decision_sources" / "evidence_bundle.json"
+            decision["artifacts"]["evidence_bundle"]["path"] = str(source_path.resolve())
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            loop_plan = root / "loop.json"
+
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-public-unsafe-promotion-decision",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(plan["passed"])
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state.",
+                errors,
+            )
+
+    def test_public_path_like_promotion_decision_prose_does_not_block_loop_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            decision_path = artifacts["promotion_decision"][0]
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["notes"].append("Operator note: expected drift is ~5%; /tmp is mentioned as prose, not an artifact path.")
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            loop_plan = root / "loop.json"
+
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-path-like-prose",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(plan["passed"], plan["blocked_reasons"])
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertTrue(validation["passed"], validation)
 
     def test_forged_external_eval_receipt_keeps_loop_state_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -880,10 +1017,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "heldout_manifest": [heldout_manifest],
             "external_eval_plan": [external_eval_plan],
             "external_eval_receipt": [external_eval_receipt],
-            "eval_summary": [self.write_json(root / "eval_summary.json", "hfr.eval_summary.v1")],
+            "eval_summary": [write_eval_summary(root)],
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
-            "promotion_decision": [self.write_json(root / "promotion_decision.json", "hfr.promotion_decision.v1")],
-            "promotion_ledger": [self.write_json(root / "promotion_ledger.json", "hfr.promotion_ledger.v1")],
+            "promotion_decision": [write_valid_promotion_decision(root)],
+            "promotion_ledger": [write_valid_promotion_ledger(root)],
             "next_iteration_schedule": [self.write_json(root / "next_iteration_schedule.json", "hfr.next_iteration_schedule.v1")],
             "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
         }

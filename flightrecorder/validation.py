@@ -4598,6 +4598,26 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target,
         "agentic_training_loop_plan.external_eval_receipt_state",
     )
+    eval_summary_state = _agentic_training_loop_source_validation_state(
+        source_artifacts,
+        "eval_summary",
+        source_path,
+        validate_eval_summary,
+        require_passed=True,
+    )
+    promotion_decision_state = _agentic_training_loop_source_validation_state(
+        source_artifacts,
+        "promotion_decision",
+        source_path,
+        validate_promotion_decision,
+        require_passed=True,
+    )
+    promotion_ledger_state = _agentic_training_loop_source_validation_state(
+        source_artifacts,
+        "promotion_ledger",
+        source_path,
+        validate_promotion_ledger,
+    )
     check = _cloud_training_check_by_id(
         checks,
         "cloud_training_receipts_are_side_effect_free",
@@ -4619,11 +4639,32 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         and "external_eval_plan" in source_artifacts
         and "external_eval_receipt" in source_artifacts
         and "eval_summary" in source_artifacts
+        and eval_summary_state["valid"]
+        and eval_summary_state["passed"]
         and external_eval_receipt_state["receipts_passed"]
         and external_eval_receipt_state["fail_closed"]
     )
     if heldout_eval_check is not None and heldout_eval_check.get("passed") != expected_heldout_eval_passed:
-        target.errors.append("agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt state.")
+        target.errors.append(
+            "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state."
+        )
+    governance_check = _cloud_training_check_by_id(
+        checks,
+        "governance_required_for_promotion",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    expected_governance_passed = (
+        "promotion_decision" in source_artifacts
+        and promotion_decision_state["valid"]
+        and promotion_decision_state["passed"]
+        and "promotion_ledger" in source_artifacts
+        and promotion_ledger_state["valid"]
+    )
+    if governance_check is not None and governance_check.get("passed") != expected_governance_passed:
+        target.errors.append(
+            "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state."
+        )
 
     phases = plan.get("phases")
     if not isinstance(phases, list) or not phases:
@@ -4737,6 +4778,71 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
             target.errors.append(f"{label}.size_bytes does not match the current file.")
         if isinstance(ref.get("sha256"), str) and len(ref.get("sha256", "")) == 64 and _sha256(file_path) != ref.get("sha256"):
             target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _agentic_training_loop_source_validation_state(
+    source_artifacts: dict[str, Any],
+    role: str,
+    source_path: Path,
+    validator: Any,
+    *,
+    require_passed: bool = False,
+) -> dict[str, bool]:
+    refs = source_artifacts.get(role)
+    if not isinstance(refs, list) or not refs:
+        return {"present": False, "valid": False, "passed": False}
+    valid = True
+    passed = True
+    for ref in refs:
+        if not isinstance(ref, dict):
+            valid = False
+            passed = False
+            continue
+        ref_path = _resolve_agentic_training_loop_plan_ref_path(ref.get("path"), source_path)
+        if ref_path is None or not ref_path.exists() or not ref_path.is_file():
+            valid = False
+            passed = False
+            continue
+        source_target = validator(ref_path)
+        source_payload = _read_json_object_silent(ref_path)
+        if source_target.errors or source_target.warnings or _agentic_training_loop_payload_has_public_unsafe_path(source_payload):
+            valid = False
+        if require_passed and source_target.details.get("passed") is not True:
+            passed = False
+    return {"present": True, "valid": valid, "passed": passed}
+
+
+def _agentic_training_loop_payload_has_public_unsafe_path(value: Any, field_name: str = "") -> bool:
+    if isinstance(value, str):
+        if not _agentic_training_loop_public_path_field(field_name):
+            return False
+        raw_path = Path(value)
+        windows_path = PureWindowsPath(value)
+        return raw_path.is_absolute() or windows_path.is_absolute() or "~" in raw_path.parts or "~" in windows_path.parts
+    if isinstance(value, dict):
+        return any(
+            _agentic_training_loop_payload_has_public_unsafe_path(item, str(key))
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_agentic_training_loop_payload_has_public_unsafe_path(item, field_name) for item in value)
+    return False
+
+
+def _agentic_training_loop_public_path_field(field_name: str) -> bool:
+    normalized = field_name.lower()
+    return normalized in {"path", "paths", "file", "files", "dir", "dirs"} or normalized.endswith(
+        (
+            "_path",
+            "_paths",
+            "_file",
+            "_files",
+            "_dir",
+            "_dirs",
+            "_url",
+            "_urls",
+        )
+    )
 
 
 def _resolve_agentic_training_loop_plan_ref_path(value: Any, source_path: Path) -> Path | None:
@@ -6392,6 +6498,11 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
         target.errors.append(f"{label}.sha256 must be a sha256 hex digest.")
     elif _sha256(source_path) != sha:
         target.errors.append(f"{label}.sha256 does not match the current file.")
+    source_plan = _read_json_object_silent(source_path)
+    if not source_plan:
+        target.errors.append(f"{label}.path must resolve to a JSON object source loop plan.")
+        return
+    _validate_agentic_training_loop_plan(source_plan, target, source_path)
 
 
 def _resolve_agentic_loop_ledger_source_path(row: dict[str, Any], ledger_path: Path) -> Path | None:

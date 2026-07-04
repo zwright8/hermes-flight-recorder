@@ -16,6 +16,7 @@ from flightrecorder.external_eval import (
     write_external_eval_receipt,
 )
 from flightrecorder.schema_registry import list_schema_records
+from tests.agentic_loop_fixtures import write_eval_summary, write_valid_promotion_decision, write_valid_promotion_ledger
 
 
 def run_cli(args):
@@ -199,6 +200,50 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("sha256 does not match the current file", errors)
+
+    def test_validate_replays_source_plan_eval_summary_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_ready_artifacts(root / "ready")
+            eval_summary_path = artifacts["eval_summary"][0]
+            eval_summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+            del eval_summary["arms"]
+            eval_summary_path.write_text(json.dumps(eval_summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state.",
+                errors,
+            )
+
+    def test_validate_replays_source_plan_promotion_decision_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_ready_artifacts(root / "ready")
+            decision_path = artifacts["promotion_decision"][0]
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            del decision["checks"]
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state.",
+                errors,
+            )
 
     def test_validate_rejects_tampered_readiness_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1192,10 +1237,10 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "heldout_manifest": [heldout_manifest],
             "external_eval_plan": [external_eval_plan],
             "external_eval_receipt": [external_eval_receipt],
-            "eval_summary": [self.write_json(root / "eval_summary.json", "hfr.eval_summary.v1")],
+            "eval_summary": [write_eval_summary(root)],
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
-            "promotion_decision": [self.write_json(root / "promotion_decision.json", "hfr.promotion_decision.v1")],
-            "promotion_ledger": [self.write_json(root / "promotion_ledger.json", "hfr.promotion_ledger.v1")],
+            "promotion_decision": [write_valid_promotion_decision(root)],
+            "promotion_ledger": [write_valid_promotion_ledger(root)],
             "next_iteration_schedule": [self.write_json(root / "next_iteration_schedule.json", "hfr.next_iteration_schedule.v1")],
             "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
         }

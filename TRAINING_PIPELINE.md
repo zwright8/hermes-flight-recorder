@@ -860,9 +860,12 @@ provider API / model download / credential flags are replayed from the archived
 receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
-Governance readiness requires those receipts to have passed and remain
-fail-closed; a present but blocked or side-effecting external-eval receipt keeps
-the loop in `planned_fail_closed`.
+Validation also reopens the referenced `eval_summary`, `promotion_decision`,
+and `promotion_ledger` artifacts before trusting held-out eval or governance
+readiness, and readiness-bearing sources with public-unsafe absolute paths do
+not count as ready. Governance readiness requires those receipts to have passed
+and remain fail-closed; a present but blocked, malformed, path-leaky, or
+side-effecting external-eval receipt keeps the loop in `planned_fail_closed`.
 The loop ledger is ledger-only: it does not launch trainers, graders, cloud
 jobs, live benchmarks, downloads, promotion writes, or weight updates. The
 `hfr.next_iteration_schedule.v1` receipt proposes a next loop iteration from
