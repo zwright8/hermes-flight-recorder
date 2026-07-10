@@ -329,6 +329,9 @@ or reward-function contract, and hard-false side-effect flags for training,
 cloud jobs, paid grader calls, downloads, and weight updates.
 Runtime preflight preserves those invariants by schema-pinning embedded
 `mode_contract_check` reward and side-effect fields before a tiny-smoke handoff.
+It also records a normalized `dependency_policy`; ready receipts require a
+non-empty effective module set, and strict validation reconstructs the policy
+and reruns every dependency probe instead of trusting recorded availability.
 Flow validation preserves that boundary in the mirrored `mode_contract_check`:
 paid/secret reward defaults, provider credentials, paid graders, cloud jobs,
 downloads, training starts, and weight updates must all remain fail-closed.
@@ -441,6 +444,9 @@ discoverability; they still record `provider_api_called: false`.
 Cloud-training source refs and upload refs are public-safe by default: unsafe
 absolute or traversal paths are redacted and treated as missing, so those
 receipts block instead of publishing local filesystem details.
+Cloud builders and strict validation replay the full semantic validator for
+each source; shape-valid files with forged counts, checks, lineage, or success
+flags cannot unlock a launch chain.
 Every provider registry record includes an `adapter_contract` attesting that the
 implemented transport is mock receipts plus metadata-only live preflight, with
 live launch support disabled by default. Registry validation also pins every

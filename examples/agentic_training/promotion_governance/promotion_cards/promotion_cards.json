@@ -23,7 +23,7 @@
       "path": "../../evidence_handoff/evidence_bundle.json",
       "role": "evidence_bundle",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "2f14ec69f4b74105f78938aa98871deb757194ebefdaf61a1c5a35a876b63296",
+      "sha256": "e5273af298b386aee506b262d81d7f11cc8d27d051ec0f137e37400d6a9fcc08",
       "size_bytes": 16431
     },
     "model_card": {

@@ -195,10 +195,57 @@ def _snapshot_has_incomplete_capture(value: Any) -> bool:
     directories = filesystem.get("directories")
     if not isinstance(directories, dict):
         return False
+    return any(_directory_capture_is_incomplete(record) for record in directories.values())
+
+
+def _directory_capture_is_incomplete(record: Any) -> bool:
+    if not isinstance(record, dict):
+        return False
+    # ``scan_incomplete`` is the current explicit marker. Older snapshots only
+    # exposed a truncated entry list or a lower-bound count; both mean unseen
+    # directory entries may exist and therefore an unchanged comparison cannot
+    # be proven.
     return any(
-        isinstance(record, dict) and record.get("scan_incomplete") is True
-        for record in directories.values()
+        record.get(field_name) is True
+        for field_name in ("scan_incomplete", "entries_truncated", "entry_count_is_lower_bound")
     )
+
+
+def resolve_state_diff_semantics(state_diff: dict[str, Any]) -> tuple[bool, str]:
+    """Return fail-closed comparison completeness and change status.
+
+    Modern diffs carry ``comparison_complete`` and ``change_status`` directly.
+    The fallback markers keep reports and digests safe when they consume older
+    diffs or an artifact that has not yet been validated.
+    """
+    change_count = state_diff.get("change_count")
+    proven_change = state_diff.get("changed") is True or (
+        isinstance(change_count, int) and not isinstance(change_count, bool) and change_count > 0
+    )
+    explicit_complete = state_diff.get("comparison_complete")
+    comparison_complete = explicit_complete is True
+    if not isinstance(explicit_complete, bool):
+        comparison_complete = not any(
+            (
+                state_diff.get("comparison_truncated") is True,
+                state_diff.get("change_count_exact") is False,
+                state_diff.get("truncated") is True,
+            )
+        )
+    elif any(
+        (
+            state_diff.get("comparison_truncated") is True,
+            state_diff.get("change_count_exact") is False,
+        )
+    ):
+        comparison_complete = False
+
+    explicit_status = state_diff.get("change_status")
+    if proven_change or explicit_status == "changed":
+        return comparison_complete, "changed"
+    if explicit_status == "unknown" or not comparison_complete:
+        return False, "unknown"
+    return True, "unchanged"
 
 
 def _require_limit(name: str, value: int, *, minimum: int) -> None:
@@ -309,6 +356,8 @@ def _summary(
     reason: str | None,
 ) -> str:
     if not exact:
+        if change_count == 0:
+            return f"No state change was proven; comparison stopped at {reason}, so the result is unknown."
         return f"At least {change_count} state change(s) detected; comparison stopped at {reason}."
     suffix = " shown with truncation" if truncated else " detected"
     summary = f"{change_count} state change(s){suffix}."

@@ -76,6 +76,53 @@
     },
     "directory_record": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "required": ["entry_selection"]
+          },
+          "then": {
+            "properties": {
+              "kind": { "const": "directory" }
+            },
+            "required": [
+              "entry_count",
+              "entry_count_is_lower_bound",
+              "scanned_entry_count",
+              "scan_limit",
+              "scan_incomplete",
+              "entries_truncated",
+              "entries"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "scan_incomplete": { "const": true }
+            },
+            "required": ["scan_incomplete", "entry_count_is_lower_bound"]
+          },
+          "then": {
+            "properties": {
+              "entry_count_is_lower_bound": { "const": true }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "scan_incomplete": { "const": false }
+            },
+            "required": ["scan_incomplete", "entry_count_is_lower_bound"]
+          },
+          "then": {
+            "properties": {
+              "entry_count_is_lower_bound": { "const": false }
+            }
+          }
+        }
+      ],
       "properties": {
         "entries": {
           "items": { "$ref": "#/$defs/directory_entry" },
@@ -83,9 +130,16 @@
         },
         "entries_truncated": { "type": "boolean" },
         "entry_count": { "minimum": 0, "type": "integer" },
+        "entry_count_is_lower_bound": { "type": "boolean" },
+        "entry_selection": {
+          "const": "lexicographic_within_scanned_prefix"
+        },
         "exists": { "type": "boolean" },
         "kind": { "enum": ["missing", "not_directory", "directory"], "type": "string" },
-        "path": { "minLength": 1, "type": "string" }
+        "path": { "minLength": 1, "type": "string" },
+        "scan_incomplete": { "type": "boolean" },
+        "scan_limit": { "minimum": 1, "type": "integer" },
+        "scanned_entry_count": { "minimum": 0, "type": "integer" }
       },
       "required": ["path", "exists", "kind"],
       "type": "object"

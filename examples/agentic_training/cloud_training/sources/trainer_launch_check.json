@@ -4,61 +4,22 @@
     "argv": [
       "python",
       "train.py",
-      "--dataset",
-      "training_export",
+      "--agentic-plan",
+      "plans/sft_then_dpo_plan.json",
       "--dry-run"
     ],
     "parseable": true,
     "provided": true,
-    "raw": "python train.py --dataset training_export --dry-run",
-    "shell": "python train.py --dataset training_export --dry-run"
+    "raw": "python train.py --agentic-plan plans/sft_then_dpo_plan.json --dry-run",
+    "shell": "python train.py --agentic-plan plans/sft_then_dpo_plan.json --dry-run"
   },
   "artifacts": {
-    "count": 40,
+    "count": 1,
     "names": [
-      "agentic_training_plan",
-      "training_export",
-      "training_export_curriculum_json",
-      "training_export_dataset_card_md",
-      "training_export_dataset_metrics_json",
-      "training_export_dataset_registry_json",
-      "training_export_dataset_splits_json",
-      "training_export_dpo_jsonl",
-      "training_export_episodes_jsonl",
-      "training_export_failure_modes_jsonl",
-      "training_export_manifest_json",
-      "training_export_preferences_jsonl",
-      "training_export_reward_model_jsonl",
-      "training_export_rewards_jsonl",
-      "training_export_sft_jsonl",
-      "training_export_splits_test_dpo_jsonl",
-      "training_export_splits_test_episodes_jsonl",
-      "training_export_splits_test_failure_modes_jsonl",
-      "training_export_splits_test_preferences_jsonl",
-      "training_export_splits_test_reward_model_jsonl",
-      "training_export_splits_test_rewards_jsonl",
-      "training_export_splits_test_sft_jsonl",
-      "training_export_splits_test_step_rewards_jsonl",
-      "training_export_splits_train_dpo_jsonl",
-      "training_export_splits_train_episodes_jsonl",
-      "training_export_splits_train_failure_modes_jsonl",
-      "training_export_splits_train_preferences_jsonl",
-      "training_export_splits_train_reward_model_jsonl",
-      "training_export_splits_train_rewards_jsonl",
-      "training_export_splits_train_sft_jsonl",
-      "training_export_splits_train_step_rewards_jsonl",
-      "training_export_splits_validation_dpo_jsonl",
-      "training_export_splits_validation_episodes_jsonl",
-      "training_export_splits_validation_failure_modes_jsonl",
-      "training_export_splits_validation_preferences_jsonl",
-      "training_export_splits_validation_reward_model_jsonl",
-      "training_export_splits_validation_rewards_jsonl",
-      "training_export_splits_validation_sft_jsonl",
-      "training_export_splits_validation_step_rewards_jsonl",
-      "training_export_step_rewards_jsonl"
+      "agentic_training_plan"
     ]
   },
-  "check_count": 9,
+  "check_count": 8,
   "checks": [
     {
       "actual": {
@@ -70,7 +31,7 @@
       "id": "preflight_validation_passed",
       "passed": true,
       "scope": {
-        "preflight": "examples/agentic_training/trainer_preflight.json"
+        "preflight": "examples/agentic_training/cloud_training/sources/trainer_preflight.json"
       },
       "summary": "preflight_validation_passed: passed=True"
     },
@@ -98,7 +59,7 @@
       "id": "preflight_passed",
       "passed": true,
       "scope": {
-        "preflight": "examples/agentic_training/trainer_preflight.json"
+        "preflight": "examples/agentic_training/cloud_training/sources/trainer_preflight.json"
       },
       "summary": "preflight_passed: passed=True"
     },
@@ -141,7 +102,7 @@
       "id": "required_gate_present",
       "passed": true,
       "scope": {
-        "gate": "training_gate"
+        "gate": "agentic_training_plan"
       },
       "summary": "required_gate_present: passed=True"
     },
@@ -155,7 +116,7 @@
       "id": "required_gate_passed",
       "passed": true,
       "scope": {
-        "gate": "training_gate"
+        "gate": "agentic_training_plan"
       },
       "summary": "required_gate_passed: passed=True"
     },
@@ -169,261 +130,22 @@
       "id": "required_metadata_matches",
       "passed": true,
       "scope": {
-        "actual": "dry-run",
-        "expected": "dry-run",
+        "actual": "cloud-dry-run",
+        "expected": "cloud-dry-run",
         "key": "launcher"
       },
       "summary": "required_metadata_matches: passed=True"
-    },
-    {
-      "actual": {
-        "passed": true
-      },
-      "expected": {
-        "passed": true
-      },
-      "id": "required_dataset_version_selected",
-      "passed": true,
-      "scope": {
-        "dataset_version": "hfrds-1c35263a4f5fcd7e"
-      },
-      "summary": "required_dataset_version_selected: passed=True"
     }
   ],
-  "dataset_selection": [
-    {
-      "artifact": "training_export",
-      "dataset_version": "hfrds-1c35263a4f5fcd7e",
-      "heldout_scenario_exclusive": true,
-      "heldout_scenario_ids": [
-        "prompt_injection_bad",
-        "prompt_injection_good",
-        "subagent_claim_bad"
-      ],
-      "manifest_path": "training_export/manifest.json",
-      "manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
-      "matches_required": true,
-      "redaction_passed": true,
-      "registry_dataset_version": "hfrds-1c35263a4f5fcd7e",
-      "registry_manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
-      "registry_path": "training_export/dataset_registry.json",
-      "registry_selection_key": "hfrds-1c35263a4f5fcd7e",
-      "registry_sha256": "729b2d212c110d45b7a62932727caaec2772576dda211f3be25db289dc448b7d",
-      "required_dataset_versions": [
-        "hfrds-1c35263a4f5fcd7e"
-      ],
-      "root": "training_export",
-      "trainer_modes": [
-        "action_sft",
-        "curriculum",
-        "dpo",
-        "process_reward",
-        "reward_model",
-        "sft",
-        "step_reward"
-      ],
-      "trainer_views": {
-        "contract_version": "hfr.rl.trainer_views.v1",
-        "mode_to_view": {
-          "action_sft": "action_sft",
-          "curriculum": "curriculum",
-          "dpo": "dpo",
-          "process_reward": "process_reward",
-          "reward_model": "reward_model",
-          "sft": "sft",
-          "step_reward": "step_reward"
-        },
-        "notes": [
-          "Trainer views are selectors over canonical export artifacts.",
-          "Alias modes such as action_sft and process_reward do not duplicate rows.",
-          "Use split_paths when training requires train/validation/test isolation."
-        ],
-        "root_views": [
-          "sft.jsonl",
-          "dpo.jsonl",
-          "reward_model.jsonl",
-          "step_rewards.jsonl",
-          "curriculum.json"
-        ],
-        "views": [
-          {
-            "artifact": "sft",
-            "artifact_format": "jsonl",
-            "artifact_path": "sft.jsonl",
-            "available": true,
-            "label_policy": "scorecard_pass_plus_configured_task_completion",
-            "notes": [
-              "Positive rows require configured task-completion evidence."
-            ],
-            "row_count": 2,
-            "schema_version": "hfr.rl.sft.v1",
-            "source_artifacts": [
-              "episodes.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/sft.jsonl",
-              "train": "splits/train/sft.jsonl",
-              "validation": "splits/validation/sft.jsonl"
-            },
-            "training_modes": [
-              "sft"
-            ],
-            "view_id": "sft"
-          },
-          {
-            "artifact": "sft",
-            "artifact_format": "jsonl",
-            "artifact_path": "sft.jsonl",
-            "available": true,
-            "label_policy": "scorecard_pass_plus_configured_task_completion",
-            "notes": [
-              "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
-            ],
-            "row_count": 2,
-            "schema_version": "hfr.rl.sft.v1",
-            "source_artifacts": [
-              "episodes.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/sft.jsonl",
-              "train": "splits/train/sft.jsonl",
-              "validation": "splits/validation/sft.jsonl"
-            },
-            "training_modes": [
-              "action_sft"
-            ],
-            "view_id": "action_sft"
-          },
-          {
-            "artifact": "dpo",
-            "artifact_format": "jsonl",
-            "artifact_path": "dpo.jsonl",
-            "available": true,
-            "label_policy": "within_family_score_gap_preference",
-            "notes": [
-              "Chosen rows inherit the same positive-label eligibility policy as SFT."
-            ],
-            "row_count": 2,
-            "schema_version": "hfr.rl.dpo.v1",
-            "source_artifacts": [
-              "preferences.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/dpo.jsonl",
-              "train": "splits/train/dpo.jsonl",
-              "validation": "splits/validation/dpo.jsonl"
-            },
-            "training_modes": [
-              "dpo"
-            ],
-            "view_id": "dpo"
-          },
-          {
-            "artifact": "reward_model",
-            "artifact_format": "jsonl",
-            "artifact_path": "reward_model.jsonl",
-            "available": true,
-            "label_policy": "failing_episodes_plus_verified_positive_episodes",
-            "notes": [
-              "Positive reward rows exclude final-answer-only successes."
-            ],
-            "row_count": 7,
-            "schema_version": "hfr.rl.reward_model.v1",
-            "source_artifacts": [
-              "episodes.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/reward_model.jsonl",
-              "train": "splits/train/reward_model.jsonl",
-              "validation": "splits/validation/reward_model.jsonl"
-            },
-            "training_modes": [
-              "reward_model"
-            ],
-            "view_id": "reward_model"
-          },
-          {
-            "artifact": "step_rewards",
-            "artifact_format": "jsonl",
-            "artifact_path": "step_rewards.jsonl",
-            "available": true,
-            "label_policy": "failed_rule_attribution",
-            "notes": [
-              "Rows allocate failed-rule reward deltas across event, final-answer, or episode targets."
-            ],
-            "row_count": 21,
-            "schema_version": "hfr.rl.step_reward.v1",
-            "source_artifacts": [
-              "rewards.jsonl",
-              "failure_modes.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/step_rewards.jsonl",
-              "train": "splits/train/step_rewards.jsonl",
-              "validation": "splits/validation/step_rewards.jsonl"
-            },
-            "training_modes": [
-              "step_reward"
-            ],
-            "view_id": "step_reward"
-          },
-          {
-            "artifact": "step_rewards",
-            "artifact_format": "jsonl",
-            "artifact_path": "step_rewards.jsonl",
-            "available": true,
-            "label_policy": "failed_rule_attribution",
-            "notes": [
-              "Process reward is an alias over step_rewards.jsonl; no separate row copy is emitted."
-            ],
-            "row_count": 21,
-            "schema_version": "hfr.rl.step_reward.v1",
-            "source_artifacts": [
-              "rewards.jsonl",
-              "failure_modes.jsonl"
-            ],
-            "split_paths": {
-              "test": "splits/test/step_rewards.jsonl",
-              "train": "splits/train/step_rewards.jsonl",
-              "validation": "splits/validation/step_rewards.jsonl"
-            },
-            "training_modes": [
-              "process_reward"
-            ],
-            "view_id": "process_reward"
-          },
-          {
-            "artifact": "curriculum",
-            "artifact_format": "json",
-            "artifact_path": "curriculum.json",
-            "available": true,
-            "label_policy": "failure_mode_priority_metadata",
-            "notes": [
-              "Curriculum is prioritization metadata for repair/data-generation loops, not optimizer settings."
-            ],
-            "row_count": 14,
-            "schema_version": "hfr.rl.curriculum.v1",
-            "source_artifacts": [
-              "failure_modes.jsonl"
-            ],
-            "split_paths": {},
-            "training_modes": [
-              "curriculum"
-            ],
-            "view_id": "curriculum"
-          }
-        ]
-      }
-    }
-  ],
+  "dataset_selection": [],
   "failed_check_count": 0,
   "gate_count": 1,
   "gates": [
     {
-      "id": "training_gate",
+      "id": "agentic_training_plan",
       "passed": true,
-      "path": "training_gate.json",
-      "schema_version": "hfr.training_gate.v1"
+      "path": "plans/sft_then_dpo_plan.json",
+      "schema_version": "hfr.agentic_training_plan.v1"
     }
   ],
   "notes": [
@@ -433,17 +155,15 @@
   ],
   "passed": true,
   "passed_gate_count": 1,
-  "preflight_path": "examples/agentic_training/trainer_preflight.json",
+  "preflight_path": "examples/agentic_training/cloud_training/sources/trainer_preflight.json",
   "readiness": "ready",
   "recommendation": "launch_allowed",
-  "required_dataset_versions": [
-    "hfrds-1c35263a4f5fcd7e"
-  ],
+  "required_dataset_versions": [],
   "required_gates": [
-    "training_gate"
+    "agentic_training_plan"
   ],
   "required_metadata": {
-    "launcher": "dry-run"
+    "launcher": "cloud-dry-run"
   },
   "schema_version": "hfr.trainer_launch_check.v1",
   "validation": {

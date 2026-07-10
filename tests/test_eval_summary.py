@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -39,6 +40,55 @@ class EvalSummaryTests(unittest.TestCase):
             summary = _read_json(out)
             self.assertFalse(summary["governance_ready"])
             self.assertIn("suite_summary_semantic_validation_failed", summary["arms"][0]["blocking_reasons"])
+
+    def test_eval_summary_blocks_semantically_forged_readiness_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            gate = _compare_gate(root / "compare_gate.json")
+            gate_payload = _read_json(gate)
+            gate_payload["failed_check_count"] = 1
+            gate.write_text(json.dumps(gate_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            adapter = _external_adapter_plan(root / "external_eval_plan.json")
+            adapter_payload = _read_json(adapter)
+            adapter_payload["ready_adapter_count"] = 0
+            adapter.write_text(json.dumps(adapter_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            serving = _serving_check(root / "serving_check.json", passed=True)
+            serving_payload = _read_json(serving)
+            serving_payload["checks"][0]["passed"] = False
+            serving.write_text(json.dumps(serving_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(check_schema_file(gate)["passed"])
+            self.assertTrue(check_schema_file(adapter)["passed"])
+            self.assertTrue(check_schema_file(serving)["passed"])
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--compare-gate",
+                    f"candidate={gate}",
+                    "--external-adapter-plan",
+                    f"external={adapter}",
+                    "--serving-check",
+                    f"candidate={serving}",
+                    "--out",
+                    str(out),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertIn("compare_gate_semantic_validation_failed", summary["compare_gates"][0]["blocking_reasons"])
+            self.assertIn(
+                "external_adapter_plan_semantic_validation_failed",
+                summary["external_adapter_plans"][0]["blocking_reasons"],
+            )
+            self.assertIn(
+                "serving_preflight_semantic_validation_failed",
+                summary["arms"][0]["serving_preflight"]["blocking_reasons"],
+            )
 
     def test_validate_eval_summary_rejects_arm_metrics_forged_against_source(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1027,26 +1077,14 @@ def _serving_check(path: Path, *, passed: bool) -> Path:
 
 
 def _compare_gate(path: Path) -> Path:
-    payload = {
-        "schema_version": "hfr.compare_gate.v1",
-        "passed": True,
-        "check_count": 1,
-        "failed_check_count": 0,
-        "checks": [{"id": "promotion_ready", "passed": True, "summary": "ready"}],
-    }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    shutil.copyfile(ROOT / "examples" / "agentic_training" / "promotion_governance" / "compare_gate.json", path)
     return path
 
 
 def _external_adapter_plan(path: Path) -> Path:
-    payload = {
-        "schema_version": "hfr.external_eval_plan.v1",
-        "ready": True,
-        "adapter_count": 1,
-        "ready_adapter_count": 1,
-        "blocking_reasons": [],
-    }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    example_dir = ROOT / "examples" / "agentic_training" / "heldout_eval"
+    shutil.copyfile(example_dir / "heldout_manifest.json", path.parent / "heldout_manifest.json")
+    shutil.copyfile(example_dir / "external_eval_plan.json", path)
     return path
 
 

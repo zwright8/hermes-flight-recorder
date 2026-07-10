@@ -38,7 +38,9 @@
   "state_changes": {
     "available": false,
     "change_count": 0,
+    "change_status": "unknown",
     "changed": false,
+    "comparison_complete": false,
     "summary": "No state diff artifact was available for this run.",
     "top_changes": [],
     "truncated": false

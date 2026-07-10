@@ -25,7 +25,7 @@
       "path": "../completed_result.json",
       "role": "agentic_training_result",
       "schema_version": "hfr.agentic_training_result.v1",
-      "sha256": "7f766c0ffdd14e066177e38344e5111f060464a5bdf24c2ce7473e3c424e289a",
+      "sha256": "4a77bea1176b4df76458cb71e6ade458d117639009ebc420b1c71745f8602c95",
       "size_bytes": 11554
     },
     "compare_gate": {
@@ -51,7 +51,7 @@
       "path": "../evidence_handoff/evidence_bundle.json",
       "role": "evidence_bundle",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "2f14ec69f4b74105f78938aa98871deb757194ebefdaf61a1c5a35a876b63296",
+      "sha256": "e5273af298b386aee506b262d81d7f11cc8d27d051ec0f137e37400d6a9fcc08",
       "size_bytes": 16431
     },
     "license_review": {
@@ -76,8 +76,8 @@
       "path": "model_registry_entry.json",
       "role": "model_registry_entry",
       "schema_version": "hfr.model_registry_entry.v1",
-      "sha256": "bfa5d371a51dd5c8a3741d08f0457c17b5a46bbedff8c23dc0613a2cd9a4b8e4",
-      "size_bytes": 1537
+      "sha256": "b8aa693b4f34c0ad89c76e36e9b9c0c1f3336a12d664f623f5b4db76ad3df7ad",
+      "size_bytes": 4153
     },
     "promotion_ledger_gate": {
       "exists": true,

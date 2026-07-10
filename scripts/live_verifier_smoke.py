@@ -25,9 +25,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from flightrecorder.path_safety import (  # noqa: E402 - repo bootstrap precedes local import
-    assert_safe_output_directory,
-    json_marker_has_schema_version,
-    replace_owned_output_directory,
+    json_marker_matches_schema,
+    locked_owned_output_directory,
 )
 from flightrecorder.redaction import redact_text  # noqa: E402 - repo bootstrap precedes local import
 from flightrecorder.schema_registry import check_schema_contract  # noqa: E402 - repo bootstrap precedes local import
@@ -86,7 +85,32 @@ def main(argv: list[str] | None = None) -> int:
     env = dict(os.environ)
     selected = _select_specs(specs, args.provider, configured_only=args.configured_only, env=env)
     out_dir = Path(args.out)
-    _prepare_smoke_output(out_dir, force=bool(args.force), keep_existing=bool(args.keep_existing))
+    if args.force and args.keep_existing:
+        raise SystemExit("--force and --keep-existing are mutually exclusive")
+    try:
+        with locked_owned_output_directory(
+            out_dir,
+            repo_root=ROOT,
+            force=bool(args.force),
+            label="verifier smoke output",
+            is_owned=lambda path: json_marker_matches_schema(
+                path,
+                "live_verifier_smoke_summary.json",
+                "live_verifier_smoke_summary",
+            ),
+            keep_existing=bool(args.keep_existing),
+        ):
+            return _run_locked_smoke(args, selected, env, out_dir)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _run_locked_smoke(
+    args: argparse.Namespace,
+    selected: list[ProviderSpec],
+    env: dict[str, str],
+    out_dir: Path,
+) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     runtime_secret_patterns = _runtime_secret_patterns(selected, env, args.secret_pattern)
@@ -125,32 +149,6 @@ def main(argv: list[str] | None = None) -> int:
         f"skipped={summary['skipped_provider_count']}"
     )
     return 0 if summary["passed"] and schema_check["passed"] else 1
-
-
-def _prepare_smoke_output(out_dir: Path, *, force: bool, keep_existing: bool) -> None:
-    if force and keep_existing:
-        raise SystemExit("--force and --keep-existing are mutually exclusive")
-    def owned(path: Path) -> bool:
-        return json_marker_has_schema_version(
-            path,
-            "live_verifier_smoke_summary.json",
-            LIVE_VERIFIER_SMOKE_SUMMARY_SCHEMA_VERSION,
-        )
-    try:
-        if keep_existing:
-            assert_safe_output_directory(out_dir, repo_root=ROOT)
-            if out_dir.exists() and any(out_dir.iterdir()) and not owned(out_dir):
-                raise ValueError(f"refusing to reuse unrecognized verifier smoke output: {out_dir}")
-            return
-        replace_owned_output_directory(
-            out_dir,
-            repo_root=ROOT,
-            force=force,
-            label="verifier smoke output",
-            is_owned=owned,
-        )
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
 
 
 def _run_provider(

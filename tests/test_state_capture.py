@@ -99,6 +99,19 @@ class StateCaptureTests(unittest.TestCase):
                 [entry["name"] for entry in record["entries"]], ["a.txt", "b.txt"]
             )
             self.assertEqual(hashed_names, ["a.txt", "b.txt"])
+            schema = check_schema_contract(snapshot)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+            inconsistent = json.loads(json.dumps(snapshot))
+            inconsistent_record = inconsistent["filesystem"]["directories"]["workspace"]
+            inconsistent_record["entry_count_is_lower_bound"] = False
+            inconsistent_schema = check_schema_contract(inconsistent)
+            self.assertFalse(inconsistent_schema["passed"])
+
+            incomplete_metadata = json.loads(json.dumps(snapshot))
+            del incomplete_metadata["filesystem"]["directories"]["workspace"]["scanned_entry_count"]
+            incomplete_schema = check_schema_contract(incomplete_metadata)
+            self.assertFalse(incomplete_schema["passed"])
 
     def test_capture_directory_sorts_only_the_bounded_scanned_prefix(self):
         class ScandirEntry:

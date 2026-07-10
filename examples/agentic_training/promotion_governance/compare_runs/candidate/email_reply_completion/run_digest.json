@@ -43,7 +43,9 @@
   "state_changes": {
     "available": true,
     "change_count": 2,
+    "change_status": "changed",
     "changed": true,
+    "comparison_complete": true,
     "summary": "2 state change(s) detected.",
     "top_changes": [
       {

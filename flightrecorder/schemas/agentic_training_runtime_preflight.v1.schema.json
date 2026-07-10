@@ -36,6 +36,9 @@
       },
       "type": "array"
     },
+    "dependency_policy": {
+      "$ref": "#/$defs/dependencyPolicy"
+    },
     "execution_boundary": {
       "$ref": "#/$defs/executionBoundary"
     },
@@ -112,6 +115,7 @@
     "checks",
     "blocked_reasons",
     "plan_check",
+    "dependency_policy",
     "dependency_checks",
     "mode_contract_check",
     "view_checks",
@@ -186,6 +190,35 @@
         "available",
         "passed",
         "summary"
+      ],
+      "type": "object"
+    },
+    "dependencyPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "backend_default_modules": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        },
+        "dependency_resolution_delegated": { "type": "boolean" },
+        "effective_required_modules": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        },
+        "normalized_backend": { "minLength": 1, "type": "string" },
+        "override_modules": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        },
+        "skip_default_modules": { "type": "boolean" }
+      },
+      "required": [
+        "normalized_backend",
+        "skip_default_modules",
+        "backend_default_modules",
+        "override_modules",
+        "effective_required_modules",
+        "dependency_resolution_delegated"
       ],
       "type": "object"
     },

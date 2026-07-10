@@ -141,7 +141,13 @@ By default the checker uses backend-specific dependency probes for common
 external runners such as `axolotl`, `llama_factory`, `unsloth`, and process
 reward wrappers. Use `--skip-default-modules` plus one or more
 `--require-module` flags when CI needs a deterministic fixture or when an
-external runner owns dependency resolution.
+external runner owns dependency resolution. Every receipt exposes a
+`dependency_policy` containing the normalized backend, its default modules,
+explicit overrides, delegation choice, and effective required modules. A ready
+receipt must have a non-empty effective set and a passing fresh probe for every
+module. Strict validation reconstructs that policy and probes the current
+runtime again; changing recorded `available` flags or supplying an empty check
+list therefore blocks rather than passing open.
 
 The command exits `0` for `ready_for_tiny_smoke_launch` and `1` for
 `block_tiny_smoke_launch`; blocked artifacts are still schema-checkable so they

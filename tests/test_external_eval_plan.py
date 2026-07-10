@@ -16,6 +16,7 @@ from flightrecorder.external_eval import (
     write_external_eval_plan,
 )
 from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,65 @@ class ExternalEvalPlanTests(unittest.TestCase):
 
         self.assertTrue(schema_result["passed"], schema_result["errors"])
         self.assertEqual(validate_code, 0)
+
+    def test_committed_example_heldout_chain_is_self_contained(self):
+        eval_root = ROOT / "examples" / "external_eval"
+        suite_path = eval_root / "heldout_suite_summary.json"
+        heldout_path = eval_root / "heldout_scenarios.json"
+        plan_path = eval_root / "external_eval_plan.json"
+        receipt_path = eval_root / "external_eval_receipt.json"
+        suite = _read_json(suite_path)
+
+        validation = validate_artifacts(
+            runs_dir=eval_root / "heldout_runs",
+            suite_summary_paths=[suite_path],
+            heldout_manifest_paths=[heldout_path],
+            external_eval_plan_paths=[plan_path],
+            external_eval_receipt_paths=[receipt_path],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+        self.assertEqual(suite["total"], 1)
+        self.assertEqual(suite["passed"], 1)
+        self.assertEqual(suite["error_count"], 0)
+
+        run = suite["runs"][0]
+        for field_name in (
+            "scenario_path",
+            "trace_path",
+            "before_state_path",
+            "state_path",
+            "run_dir",
+            "report",
+            "scorecard",
+            "run_digest",
+            "lineage",
+        ):
+            relative_path = Path(run[field_name])
+            self.assertFalse(relative_path.is_absolute(), field_name)
+            self.assertNotIn("..", relative_path.parts, field_name)
+            resolved = (eval_root / relative_path).resolve()
+            self.assertTrue(resolved.is_relative_to(eval_root.resolve()), field_name)
+            self.assertTrue(resolved.exists(), field_name)
+
+        for field_name in ("scenario", "trace", "before_state", "state"):
+            source_path = eval_root / run[f"{field_name}_path"]
+            self.assertEqual(run[f"{field_name}_sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
+
+        lineage = _read_json(eval_root / run["lineage"])
+        self.assertTrue(lineage["replay"]["self_contained"])
+        for record in lineage["inputs"]:
+            source_path = eval_root / record["path"]
+            self.assertTrue(source_path.is_file(), record["name"])
+            self.assertEqual(record["size_bytes"], source_path.stat().st_size, record["name"])
+            self.assertEqual(record["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest(), record["name"])
+
+        heldout = _read_json(heldout_path)
+        plan = _read_json(plan_path)
+        receipt = _read_json(receipt_path)
+        self.assertEqual(heldout["sources"][0]["path"], suite_path.name)
+        self.assertEqual(plan["inputs"]["scenario_manifest"]["path"], heldout_path.name)
+        self.assertEqual(receipt["source_plan"]["path"], plan_path.name)
 
     def test_external_eval_plan_cli_fails_closed_but_validates(self):
         with tempfile.TemporaryDirectory() as tmp:

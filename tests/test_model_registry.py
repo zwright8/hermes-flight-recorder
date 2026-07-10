@@ -25,6 +25,7 @@ from flightrecorder.model_registry import (
     model_adapter_manifest_errors,
     model_candidate_errors,
     model_registry_entry_errors,
+    model_registry_errors,
     model_serving_probe_receipt_errors,
     move_model_alias,
     new_model_registry,
@@ -115,6 +116,24 @@ def unknown_license_candidate() -> dict:
 
 
 class ModelRegistryTests(unittest.TestCase):
+    def test_registry_error_paths_do_not_rewrite_schema_version_values(self):
+        registry = register_model_candidate(new_model_registry(), approved_candidate())
+        entry = registry["entries"]["local-mock-tiny-chat"]
+        entry["schema_version"] = "hfr.model_registry_entry.invalid"
+        entry["candidate"]["schema_version"] = "hfr.model_candidate.invalid"
+
+        errors = model_registry_errors(registry)
+
+        self.assertIn(
+            "model_registry.entries.local-mock-tiny-chat.schema_version must be 'hfr.model_registry_entry.v1'.",
+            errors,
+        )
+        self.assertIn(
+            "model_registry.entries.local-mock-tiny-chat.candidate.schema_version must be 'hfr.model_candidate.v1'.",
+            errors,
+        )
+        self.assertNotIn("hfr.model_registry.entries", "\n".join(errors))
+
     def test_registry_alias_and_dry_run_plan_accept_approved_license(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

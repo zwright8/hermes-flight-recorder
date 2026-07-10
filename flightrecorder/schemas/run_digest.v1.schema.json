@@ -306,6 +306,16 @@
         "changed": {
           "type": "boolean"
         },
+        "change_status": {
+          "enum": [
+            "changed",
+            "unchanged",
+            "unknown"
+          ]
+        },
+        "comparison_complete": {
+          "type": "boolean"
+        },
         "summary": {
           "type": "string"
         },
@@ -324,6 +334,8 @@
         "changed",
         "change_count",
         "truncated",
+        "comparison_complete",
+        "change_status",
         "summary",
         "top_changes"
       ],

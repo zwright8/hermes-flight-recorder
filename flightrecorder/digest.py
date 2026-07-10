@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from .redaction import redact_text
+from .state_diff import resolve_state_diff_semantics
 
 RUN_DIGEST_SCHEMA_VERSION = "hfr.run_digest.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
@@ -66,6 +67,9 @@ def render_run_digest_markdown(digest: dict[str, Any]) -> str:
     state_changes = digest.get("state_changes") if isinstance(digest.get("state_changes"), dict) else {}
     rules = digest.get("rules") if isinstance(digest.get("rules"), dict) else {}
     training = digest.get("training_signals") if isinstance(digest.get("training_signals"), dict) else {}
+    change_status = str(state_changes.get("change_status") or "unknown")
+    comparison_complete = state_changes.get("comparison_complete") is True
+    changed_label = "unknown" if change_status == "unknown" else str(change_status == "changed").lower()
     lines = [
         f"# {_md(str(scenario.get('title') or scenario.get('id') or 'Run Digest'))}",
         "",
@@ -86,7 +90,9 @@ def render_run_digest_markdown(digest: dict[str, Any]) -> str:
         "## State Changes",
         "",
         f"- Available: `{str(bool(state_changes.get('available'))).lower()}`",
-        f"- Changed: `{str(bool(state_changes.get('changed'))).lower()}`",
+        f"- Status: `{_md(change_status.upper())}`",
+        f"- Comparison complete: `{str(comparison_complete).lower()}`",
+        f"- Changed: `{changed_label}`",
         f"- Change count: `{state_changes.get('change_count')}`",
     ]
     top_changes = state_changes.get("top_changes") if isinstance(state_changes.get("top_changes"), list) else []
@@ -169,9 +175,12 @@ def _state_changes(state_diff: dict[str, Any] | None) -> dict[str, Any]:
             "changed": False,
             "change_count": 0,
             "truncated": False,
+            "comparison_complete": False,
+            "change_status": "unknown",
             "summary": "No state diff artifact was available for this run.",
             "top_changes": [],
         }
+    comparison_complete, change_status = resolve_state_diff_semantics(state_diff)
     changes = state_diff.get("changes") if isinstance(state_diff.get("changes"), list) else []
     top_changes: list[dict[str, str]] = []
     for change in changes[:10]:
@@ -182,6 +191,8 @@ def _state_changes(state_diff: dict[str, Any] | None) -> dict[str, Any]:
         "changed": bool(state_diff.get("changed")),
         "change_count": _non_negative_int(state_diff.get("change_count")),
         "truncated": bool(state_diff.get("truncated")),
+        "comparison_complete": comparison_complete,
+        "change_status": change_status,
         "summary": str(state_diff.get("summary") or ""),
         "top_changes": top_changes,
     }

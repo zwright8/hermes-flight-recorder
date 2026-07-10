@@ -135,10 +135,11 @@ def build_agentic_rollout_receipt(
     path = Path(plan_path)
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else (Path(out_path).parent if out_path else None)
     source_path, source_replayable = _source_display_path(path, preserve_paths, display_base_dir)
-    source = inspect_artifact_source(path, "agentic_rollout_plan") if source_replayable else {"payload": {}, "schema_valid": False}
+    source = inspect_artifact_source(path, "agentic_rollout_plan") if source_replayable else {"payload": {}, "ready": False}
     plan = source["payload"] if isinstance(source.get("payload"), dict) else {}
-    source_contract_valid = source_replayable and source.get("schema_valid") is True
-    batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
+    source_contract_valid = source_replayable and source.get("ready") is True
+    trusted_plan = plan if source_contract_valid else {}
+    batches = trusted_plan.get("harness_batches") if isinstance(trusted_plan.get("harness_batches"), list) else []
     checks: list[dict[str, Any]] = []
     _add_check(
         checks,
@@ -188,11 +189,11 @@ def build_agentic_rollout_receipt(
             "sha256": _sha256(path) if source_contract_valid else None,
             "size_bytes": path.stat().st_size if source_contract_valid else None,
             "schema_version": plan.get("schema_version") if plan else AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
-            "passed": plan.get("passed") if isinstance(plan.get("passed"), bool) else None,
-            "readiness": plan.get("readiness") if isinstance(plan.get("readiness"), str) else "",
+            "passed": plan.get("passed") if source_contract_valid and isinstance(plan.get("passed"), bool) else None,
+            "readiness": plan.get("readiness") if source_contract_valid and isinstance(plan.get("readiness"), str) else "",
         },
-        "iteration_id": str(plan.get("iteration_id") or ""),
-        "environment": plan.get("environment") if isinstance(plan.get("environment"), dict) else _default_environment(),
+        "iteration_id": str(trusted_plan.get("iteration_id") or ""),
+        "environment": trusted_plan.get("environment") if isinstance(trusted_plan.get("environment"), dict) else _default_environment(),
         "mock_rollout_count": len(records),
         "mock_rollouts": records,
         "lineage": {

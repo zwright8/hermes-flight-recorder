@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import ast
+import os
 import unittest
 from contextlib import chdir
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
+import flightrecorder.path_safety as path_safety_module
 from flightrecorder.path_safety import (
     assert_safe_output_directory,
+    json_marker_matches_schema,
+    locked_owned_output_directory,
     path_has_symlink_component,
     replace_owned_output_directory,
 )
@@ -88,6 +93,198 @@ class SafeOutputDirectoryTests(unittest.TestCase):
             )
             self.assertFalse(target.exists())
 
+    def test_schema_version_only_marker_cannot_claim_output_ownership(self) -> None:
+        with TemporaryDirectory() as tmp:
+            target = Path(tmp) / "output"
+            target.mkdir()
+            (target / "harness_result.json").write_text(
+                '{"schema_version":"hfr.harness_run_result.v1"}\n',
+                encoding="utf-8",
+            )
+
+            self.assertFalse(
+                json_marker_matches_schema(
+                    target,
+                    "harness_result.json",
+                    "harness_run_result",
+                )
+            )
+
+    def test_lock_is_held_through_complete_writer_context(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "output"
+
+            with locked_owned_output_directory(
+                target,
+                repo_root=root / "repo",
+                force=False,
+                label="test output",
+                is_owned=lambda _path: False,
+            ):
+                target.mkdir()
+                with self.assertRaisesRegex(ValueError, "locked for publication"):
+                    with locked_owned_output_directory(
+                        target,
+                        repo_root=root / "repo",
+                        force=True,
+                        label="test output",
+                        is_owned=lambda _path: True,
+                    ):
+                        pass
+
+    def test_mutation_during_ownership_check_is_not_deleted(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "output"
+            target.mkdir()
+            protected = target / "protected.txt"
+            protected.write_text("keep\n", encoding="utf-8")
+
+            def mutate_and_claim(path: Path) -> bool:
+                (path / "concurrent.txt").write_text("also keep\n", encoding="utf-8")
+                return True
+
+            with self.assertRaisesRegex(ValueError, "unrecognized"):
+                with locked_owned_output_directory(
+                    target,
+                    repo_root=root / "repo",
+                    force=True,
+                    label="test output",
+                    is_owned=mutate_and_claim,
+                ):
+                    pass
+
+            self.assertEqual(protected.read_text(encoding="utf-8"), "keep\n")
+            self.assertTrue((target / "concurrent.txt").is_file())
+
+    def test_target_swap_during_ownership_check_is_not_deleted(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "output"
+            target.mkdir()
+            (target / "owned.txt").write_text("old\n", encoding="utf-8")
+            displaced = root / "displaced"
+
+            def swap_and_claim(path: Path) -> bool:
+                path.rename(displaced)
+                path.mkdir()
+                (path / "unowned.txt").write_text("new\n", encoding="utf-8")
+                return True
+
+            with self.assertRaisesRegex(ValueError, "unrecognized"):
+                with locked_owned_output_directory(
+                    target,
+                    repo_root=root / "repo",
+                    force=True,
+                    label="test output",
+                    is_owned=swap_and_claim,
+                ):
+                    pass
+
+            self.assertTrue((target / "unowned.txt").is_file())
+            self.assertTrue((displaced / "owned.txt").is_file())
+
+    def test_target_swap_after_ownership_check_is_restored_without_deletion(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "output"
+            target.mkdir()
+            (target / "owned.txt").write_text("old\n", encoding="utf-8")
+            displaced = root / "displaced"
+            alien = root / "alien"
+            alien.mkdir()
+            (alien / "unowned.txt").write_text("new\n", encoding="utf-8")
+            original_rename = Path.rename
+            swapped = False
+
+            def swap_at_quarantine(source: Path, destination: Path):
+                nonlocal swapped
+                if source == target and not swapped:
+                    swapped = True
+                    os.rename(source, displaced)
+                    os.rename(alien, source)
+                return original_rename(source, destination)
+
+            with (
+                patch.object(Path, "rename", autospec=True, side_effect=swap_at_quarantine),
+                self.assertRaisesRegex(ValueError, "contents changed during replacement"),
+            ):
+                with locked_owned_output_directory(
+                    target,
+                    repo_root=root / "repo",
+                    force=True,
+                    label="test output",
+                    is_owned=lambda _path: True,
+                ):
+                    pass
+
+            self.assertTrue(swapped)
+            self.assertTrue((target / "unowned.txt").is_file())
+            self.assertTrue((displaced / "owned.txt").is_file())
+
+    def test_quarantine_swap_after_descriptor_open_does_not_delete_replacement(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "output"
+            target.mkdir()
+            (target / "owned.txt").write_text("old\n", encoding="utf-8")
+            displaced = root / "displaced-quarantine"
+            alien = root / "alien"
+            alien.mkdir()
+            (alien / "unowned.txt").write_text("keep\n", encoding="utf-8")
+            quarantine: Path | None = None
+            original_rename = Path.rename
+            original_remove = path_safety_module._remove_directory_contents_fd
+
+            def capture_quarantine(source: Path, destination: Path):
+                nonlocal quarantine
+                result = original_rename(source, destination)
+                if source == target:
+                    quarantine = Path(destination)
+                return result
+
+            def swap_after_descriptor_open(
+                directory_descriptor: int, directory_flags: int
+            ) -> bool:
+                assert quarantine is not None
+                original_rename(quarantine, displaced)
+                original_rename(alien, quarantine)
+                return original_remove(directory_descriptor, directory_flags)
+
+            with (
+                patch.object(
+                    Path,
+                    "rename",
+                    autospec=True,
+                    side_effect=capture_quarantine,
+                ),
+                patch.object(
+                    path_safety_module,
+                    "_remove_directory_contents_fd",
+                    side_effect=swap_after_descriptor_open,
+                ),
+                self.assertRaisesRegex(ValueError, "quarantine changed"),
+            ):
+                with locked_owned_output_directory(
+                    target,
+                    repo_root=root / "repo",
+                    force=True,
+                    label="test output",
+                    is_owned=lambda _path: True,
+                ):
+                    pass
+
+            assert quarantine is not None
+            self.assertEqual(
+                (quarantine / "unowned.txt").read_text(encoding="utf-8"),
+                "keep\n",
+            )
+            self.assertTrue(displaced.is_dir())
+            self.assertEqual(list(displaced.iterdir()), [])
+
     def test_allows_nested_relative_output_directory(self) -> None:
         with TemporaryDirectory() as tmp:
             repo_root = Path(tmp) / "repo"
@@ -150,7 +347,11 @@ class SmokeScriptGuardTests(unittest.TestCase):
                 for node in ast.walk(tree)
                 if isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "replace_owned_output_directory"
+                and node.func.id
+                in {
+                    "replace_owned_output_directory",
+                    "locked_owned_output_directory",
+                }
             )
             for node in ast.walk(tree):
                 for field_name in ("body", "orelse", "finalbody"):

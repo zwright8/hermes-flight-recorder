@@ -68,7 +68,8 @@ def build_agentic_training_runtime_preflight(
         and plan_payload.get("passed") is True
         and plan_payload.get("recommendation") == PLAN_READY_RECOMMENDATION
     )
-    dependency_checks = _dependency_checks(backend, require_modules or (), skip_default_modules)
+    dependency_policy = _dependency_policy(backend, require_modules or (), skip_default_modules)
+    dependency_checks = _dependency_checks(dependency_policy)
     view_checks = _view_checks(plan_payload, plan_file)
     mode_contract_check = _mode_contract_check(plan_payload, mode)
 
@@ -128,7 +129,7 @@ def build_agentic_training_runtime_preflight(
     _add_check(
         checks,
         "runtime_dependencies_available",
-        all(check["passed"] for check in dependency_checks),
+        bool(dependency_checks) and all(check["passed"] for check in dependency_checks),
         {
             "backend": backend,
             "missing_modules": [check["module"] for check in dependency_checks if not check["passed"]],
@@ -179,6 +180,7 @@ def build_agentic_training_runtime_preflight(
             "observed_recommendation": plan_payload.get("recommendation"),
             "observed_passed": plan_payload.get("passed"),
         },
+        "dependency_policy": dependency_policy,
         "dependency_checks": dependency_checks,
         "mode_contract_check": mode_contract_check,
         "view_checks": view_checks,
@@ -294,19 +296,34 @@ def _jsonl_schema_record(path: Path, schema_name: str) -> dict[str, Any]:
     return record
 
 
-def _dependency_checks(
+def _dependency_policy(
     backend: str,
     require_modules: list[str] | tuple[str, ...],
     skip_default_modules: bool,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
+    normalized_backend = _normalize_backend(backend)
+    backend_defaults = sorted(BACKEND_MODULE_REQUIREMENTS.get(normalized_backend, ()))
+    overrides = sorted({str(module).strip() for module in require_modules if str(module).strip()})
+    effective = sorted(set(overrides) | (set() if skip_default_modules else set(backend_defaults)))
+    return {
+        "normalized_backend": normalized_backend,
+        "skip_default_modules": bool(skip_default_modules),
+        "backend_default_modules": backend_defaults,
+        "override_modules": overrides,
+        "effective_required_modules": effective,
+        "dependency_resolution_delegated": bool(skip_default_modules),
+    }
+
+
+def _dependency_checks(policy: dict[str, Any]) -> list[dict[str, Any]]:
     modules: dict[str, set[str]] = {}
-    if not skip_default_modules:
-        for module in BACKEND_MODULE_REQUIREMENTS.get(_normalize_backend(backend), ()):
+    backend_defaults = set(policy.get("backend_default_modules") or [])
+    overrides = set(policy.get("override_modules") or [])
+    for module in policy.get("effective_required_modules") or []:
+        if module in backend_defaults and policy.get("skip_default_modules") is not True:
             modules.setdefault(module, set()).add("backend_default")
-    for module in require_modules:
-        cleaned = str(module).strip()
-        if cleaned:
-            modules.setdefault(cleaned, set()).add("override")
+        if module in overrides:
+            modules.setdefault(module, set()).add("override")
 
     checks: list[dict[str, Any]] = []
     for module in sorted(modules):

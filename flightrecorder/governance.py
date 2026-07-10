@@ -1940,6 +1940,9 @@ def _registry_aliases(registry: dict[str, Any]) -> dict[str, str]:
 
 
 def _registry_model_ids(registry: dict[str, Any]) -> set[str]:
+    entries = registry.get("entries")
+    if isinstance(entries, dict):
+        return {str(entry_id) for entry_id in entries if isinstance(entry_id, str) and entry_id}
     models = registry.get("models")
     if isinstance(models, dict):
         return {str(model_id) for model_id in models if isinstance(model_id, str) and model_id}

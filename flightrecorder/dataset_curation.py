@@ -125,10 +125,7 @@ def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, outpu
     displayed_path = _display_path(path, preserve_paths, output_dir)
     public_path = _is_public_dataset_curation_ref_path(displayed_path)
     source = inspect_artifact_source(path, role) if public_path else {"payload": {}, "ready": False, "schema_valid": False}
-    if role == "training_export":
-        exists = public_path and source.get("ready") is True
-    else:
-        exists = public_path and source.get("regular_file") is True and source.get("schema_valid") is True
+    exists = public_path and source.get("ready") is True
     manifest_displayed_path = _display_path(manifest_path, preserve_paths, output_dir)
     manifest_source = source.get("manifest") if isinstance(source.get("manifest"), dict) else source
     manifest_exists = (
@@ -137,7 +134,7 @@ def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, outpu
         and manifest_source.get("schema_valid") is True
         and (role != "training_export" or manifest_source.get("semantic_valid") is True)
     )
-    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+    payload = source["payload"] if exists and isinstance(source.get("payload"), dict) else {}
     ref = {
         "role": role,
         "path": displayed_path,

@@ -36,8 +36,8 @@
           "schema_errors": [],
           "schema_name": "trainer_preflight",
           "schema_passed": true,
-          "sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
-          "size_bytes": 88398,
+          "sha256": "94129c1b92f3743bc818a8e6e5703c30c6d615993f02e19c07fd1fc2785d15a6",
+          "size_bytes": 3863,
           "source_passed": true,
           "source_recommendation": "launch_allowed"
         }
@@ -60,8 +60,8 @@
           "schema_errors": [],
           "schema_name": "trainer_launch_check",
           "schema_passed": true,
-          "sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
-          "size_bytes": 14354,
+          "sha256": "5a697e598d66d04e4ce1c2788d84e77432baf5ae21ccb0377657a2faeb0d558c",
+          "size_bytes": 4325,
           "source_passed": true,
           "source_recommendation": "launch_allowed"
         }
@@ -368,8 +368,8 @@
       "schema_errors": [],
       "schema_name": "trainer_launch_check",
       "schema_passed": true,
-      "sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
-      "size_bytes": 14354,
+      "sha256": "5a697e598d66d04e4ce1c2788d84e77432baf5ae21ccb0377657a2faeb0d558c",
+      "size_bytes": 4325,
       "source_passed": true,
       "source_recommendation": "launch_allowed"
     },
@@ -381,8 +381,8 @@
       "schema_errors": [],
       "schema_name": "trainer_preflight",
       "schema_passed": true,
-      "sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
-      "size_bytes": 88398,
+      "sha256": "94129c1b92f3743bc818a8e6e5703c30c6d615993f02e19c07fd1fc2785d15a6",
+      "size_bytes": 3863,
       "source_passed": true,
       "source_recommendation": "launch_allowed"
     }

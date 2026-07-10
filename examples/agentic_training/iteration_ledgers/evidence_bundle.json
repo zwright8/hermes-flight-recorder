@@ -10,7 +10,7 @@
       "size_bytes": 62
     },
     "runs_dir": {
-      "entry_count": 0,
+      "entry_count": 1,
       "exists": true,
       "kind": "directory",
       "path": "runs"

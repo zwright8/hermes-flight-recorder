@@ -1699,6 +1699,8 @@ class SchemaRegistryTests(unittest.TestCase):
                 "changed": True,
                 "change_count": 1,
                 "truncated": False,
+                "comparison_complete": True,
+                "change_status": "changed",
                 "max_changes": 200,
                 "changes": [
                     {
@@ -1714,6 +1716,21 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "state_diff")
+
+        inconsistent = check_schema_contract(
+            {
+                "schema_version": "hfr.state_diff.v1",
+                "changed": False,
+                "change_count": 0,
+                "truncated": True,
+                "comparison_complete": False,
+                "change_status": "unchanged",
+                "max_changes": 200,
+                "changes": [],
+                "summary": "Comparison is incomplete.",
+            }
+        )
+        self.assertFalse(inconsistent["passed"])
 
     def test_state_snapshot_schema_accepts_minimal_snapshot(self):
         result = check_schema_contract(
@@ -1780,6 +1797,8 @@ class SchemaRegistryTests(unittest.TestCase):
                     "changed": True,
                     "change_count": 1,
                     "truncated": False,
+                    "comparison_complete": True,
+                    "change_status": "changed",
                     "summary": "1 state change(s) detected.",
                     "top_changes": [{"path": "gmail.threads.email-123.sent_replies.0", "kind": "added"}],
                 },

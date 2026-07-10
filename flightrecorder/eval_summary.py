@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .schema_registry import check_schema_contract
+from .source_contract import inspect_artifact_source
 
 EVAL_SUMMARY_SCHEMA_VERSION = "hfr.eval_summary.v1"
 COMPARE_EXPORT_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
@@ -223,10 +224,13 @@ def _serving_preflight(
     required: bool,
 ) -> dict[str, Any]:
     check = _read_object(spec.path, "serving endpoint check")
+    source = inspect_artifact_source(spec.path, "serving_endpoint_check")
     failed_checks = _string_list(check.get("failed_checks"))
     blocking_reasons = []
-    if check.get("schema_version") != SERVING_ENDPOINT_CHECK_SCHEMA_VERSION:
+    if check.get("schema_version") != SERVING_ENDPOINT_CHECK_SCHEMA_VERSION or source.get("schema_valid") is not True:
         blocking_reasons.append("invalid_serving_endpoint_check_schema")
+    elif source.get("semantic_valid") is not True:
+        blocking_reasons.append("serving_preflight_semantic_validation_failed")
     if check.get("passed") is not True or check.get("readiness") != "ready" or failed_checks:
         blocking_reasons.append("serving_preflight_blocked")
     return {
@@ -413,15 +417,18 @@ def _compare_export(
 
 def _compare_gate(spec: LabeledPath, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
     gate = _read_object(spec.path, "compare gate")
+    source = inspect_artifact_source(spec.path, "compare_gate")
     failed_checks = [
         check
         for check in gate.get("checks", [])
         if isinstance(check, dict) and check.get("passed") is not True
     ]
     blocking_reasons: list[str] = []
-    if gate.get("schema_version") != COMPARE_GATE_SCHEMA_VERSION:
+    if gate.get("schema_version") != COMPARE_GATE_SCHEMA_VERSION or source.get("schema_valid") is not True:
         blocking_reasons.append("invalid_compare_gate_schema")
-    if gate.get("passed") is not True:
+    elif source.get("semantic_valid") is not True:
+        blocking_reasons.append("compare_gate_semantic_validation_failed")
+    if source.get("ready") is not True:
         blocking_reasons.append("compare_gate_failed")
     return {
         "label": spec.label,
@@ -445,7 +452,11 @@ def _compare_gate(spec: LabeledPath, preserve_paths: bool, display_base_dir: Pat
 
 def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
     plan = _read_object(spec.path, "external adapter plan")
-    ready = plan.get("ready") is True
+    source = inspect_artifact_source(spec.path, "external_eval_plan")
+    ready = source.get("ready") is True
+    blocking_reasons = _string_list(plan.get("blocking_reasons"))
+    if plan.get("ready") is True and not ready:
+        blocking_reasons.append("external_adapter_plan_semantic_validation_failed")
     return {
         "label": spec.label,
         "path": _display_path(spec.path, preserve_paths, display_base_dir),
@@ -454,7 +465,7 @@ def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool, display_base
         "ready": ready,
         "adapter_count": _int_value(plan.get("adapter_count")),
         "ready_adapter_count": _int_value(plan.get("ready_adapter_count")),
-        "blocking_reasons": [] if ready else _string_list(plan.get("blocking_reasons")) or ["external_adapter_plan_not_ready"],
+        "blocking_reasons": [] if ready else blocking_reasons or ["external_adapter_plan_not_ready"],
     }
 
 

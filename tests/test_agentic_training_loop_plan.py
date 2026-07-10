@@ -36,6 +36,29 @@ def directory_tree_fingerprint(path: Path) -> dict[str, int | str]:
 
 
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
+    def test_validator_rejects_refreshed_hash_for_semantically_invalid_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = copy_valid_loop_artifacts(root)
+            fixture_root = root / "loop_fixture" / "examples" / "agentic_training"
+            loop_plan = fixture_root / "loop_plan.json"
+            heldout_manifest = artifacts["heldout_manifest"][0]
+            heldout_manifest.write_text("{}\n", encoding="utf-8")
+            plan = json.loads(loop_plan.read_text(encoding="utf-8"))
+            ref = plan["source_artifacts"]["heldout_manifest"][0]
+            ref["size_bytes"] = heldout_manifest.stat().st_size
+            ref["sha256"] = hashlib.sha256(heldout_manifest.read_bytes()).hexdigest()
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "referenced heldout_manifest artifact is not semantically ready",
+                errors,
+            )
+
     def test_phase_readiness_rejects_invalid_required_source_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -88,8 +111,22 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         reviewed_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "reviewed_gate.json"
         rejection_sampling_gate_path = ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json"
         dataset_curation_receipt_path = ROOT / "examples" / "agentic_training" / "dataset_curation_receipt.json"
-        trainer_preflight_path = ROOT / "examples" / "agentic_training" / "trainer_preflight.json"
-        trainer_launch_check_path = ROOT / "examples" / "agentic_training" / "trainer_launch_check.json"
+        trainer_preflight_path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "sources"
+            / "trainer_preflight.json"
+        )
+        trainer_launch_check_path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "sources"
+            / "trainer_launch_check.json"
+        )
         provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
         cloud_preflight_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "preflight.json"
         cloud_launch_receipt_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "launch_receipt.json"
@@ -122,8 +159,14 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "reviewed_gate": ("model_grader/reviewed_gate.json", reviewed_gate_path),
             "rejection_sampling_gate": ("rejection_sampling_gate.json", rejection_sampling_gate_path),
             "dataset_curation_receipt": ("dataset_curation_receipt.json", dataset_curation_receipt_path),
-            "trainer_preflight": ("trainer_preflight.json", trainer_preflight_path),
-            "trainer_launch_check": ("trainer_launch_check.json", trainer_launch_check_path),
+            "trainer_preflight": (
+                "cloud_training/sources/trainer_preflight.json",
+                trainer_preflight_path,
+            ),
+            "trainer_launch_check": (
+                "cloud_training/sources/trainer_launch_check.json",
+                trainer_launch_check_path,
+            ),
             "cloud_training_provider_registry": ("cloud_training/provider_registry.json", provider_registry_path),
             "cloud_training_preflight": ("cloud_training/preflight.json", cloud_preflight_path),
             "cloud_training_launch_receipt": ("cloud_training/launch_receipt.json", cloud_launch_receipt_path),

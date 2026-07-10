@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .path_safety import json_marker_has_schema_version, replace_owned_output_directory
+from .path_safety import json_marker_matches_schema, locked_owned_output_directory
 from .schema import load_scenario
 
 HARNESS_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
@@ -64,8 +64,40 @@ def run_mock_harness(
 
     scenario_path = Path(scenario_path)
     out_path = Path(out_dir)
-    _prepare_output_dir(out_path, force=force)
+    try:
+        with locked_owned_output_directory(
+            out_path,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=force,
+            label="harness output",
+            is_owned=lambda target: json_marker_matches_schema(
+                target,
+                "harness_result.json",
+                "harness_run_result",
+            ),
+        ):
+            out_path.mkdir(parents=True, exist_ok=True)
+            return _run_mock_harness_into(
+                scenario_path,
+                out_path,
+                mock_response=mock_response,
+                provider=provider,
+                model=model,
+                preserve_paths=preserve_paths,
+            )
+    except ValueError as exc:
+        raise HarnessError(str(exc)) from exc
 
+
+def _run_mock_harness_into(
+    scenario_path: Path,
+    out_path: Path,
+    *,
+    mock_response: str,
+    provider: str,
+    model: str,
+    preserve_paths: bool,
+) -> dict[str, Any]:
     scenario = load_scenario(scenario_path)
     scenario_run_path = _publish_scenario_input(scenario_path, out_path, preserve_paths=preserve_paths)
     source_trace_path = out_path / "source_trace.observer.jsonl"
@@ -144,24 +176,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if result["passed"] else 1
     return 2
-
-
-def _prepare_output_dir(path: Path, *, force: bool) -> None:
-    try:
-        replace_owned_output_directory(
-            path,
-            repo_root=Path(__file__).resolve().parents[1],
-            force=force,
-            label="harness output",
-            is_owned=lambda target: json_marker_has_schema_version(
-                target,
-                "harness_result.json",
-                HARNESS_RESULT_SCHEMA_VERSION,
-            ),
-        )
-    except ValueError as exc:
-        raise HarnessError(str(exc)) from exc
-    path.mkdir(parents=True, exist_ok=True)
 
 
 def _publish_scenario_input(scenario_path: Path, out_dir: Path, *, preserve_paths: bool) -> Path:

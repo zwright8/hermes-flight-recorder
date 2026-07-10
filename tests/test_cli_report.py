@@ -1,11 +1,16 @@
+import hashlib
 import json
 import shutil
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
+import flightrecorder.cli as cli_module
+from flightrecorder.artifacts import ArtifactError
 from flightrecorder.cli import main
 from flightrecorder.report import render_report
 from flightrecorder.schema_registry import check_schema_file
@@ -34,6 +39,8 @@ class CliReportTests(unittest.TestCase):
             task_completion = json.loads((out / "task_completion.json").read_text(encoding="utf-8"))
             self.assertTrue(scorecard["passed"])
             self.assertEqual(scorecard["task_completion"], task_completion)
+            report_lines = (out / "report.html").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(all(line == line.rstrip() for line in report_lines))
 
     def test_run_command_writes_ci_outputs_and_task_checklist(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -630,6 +637,333 @@ class CliReportTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
             self.assertEqual(stale.read_text(encoding="utf-8"), "do not delete\n")
+
+    def test_rerun_migrates_fingerprinted_run_with_stale_digest_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_bad.json"),
+                        "--out",
+                        str(out),
+                    ]
+                ),
+                0,
+            )
+            digest_path = out / "run_digest.json"
+            digest = json.loads(digest_path.read_text(encoding="utf-8"))
+            digest["schema_version"] = "hfr.run_digest.v0"
+            digest_path.write_text(json.dumps(digest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            lineage_path = out / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            digest_record = next(record for record in lineage["outputs"] if record["name"] == "run_digest")
+            digest_record["size_bytes"] = digest_path.stat().st_size
+            digest_record["sha256"] = hashlib.sha256(digest_path.read_bytes()).hexdigest()
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(out),
+                    ]
+                ),
+                0,
+            )
+            self.assertFalse((out / "regression_scenario.json").exists())
+            refreshed = json.loads(digest_path.read_text(encoding="utf-8"))
+            self.assertEqual(refreshed["schema_version"], "hfr.run_digest.v1")
+
+    def test_rerun_removes_only_fingerprinted_internal_report_sidecars(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            junit = out / "old-scorecard.xml"
+            markdown = out / "old-scorecard.md"
+            external = Path(tmp) / "external.xml"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_bad.json"),
+                        "--out",
+                        str(out),
+                        "--junit-out",
+                        str(junit),
+                        "--markdown-out",
+                        str(markdown),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(out),
+                    ]
+                ),
+                0,
+            )
+            self.assertFalse(junit.exists())
+            self.assertFalse(markdown.exists())
+
+            external_run = Path(tmp) / "external-run"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_bad.json"),
+                        "--out",
+                        str(external_run),
+                        "--junit-out",
+                        str(external),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            external_before = external.read_text(encoding="utf-8")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(external_run),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(external.read_text(encoding="utf-8"), external_before)
+
+    def test_interrupted_staged_run_preserves_prior_output_and_is_retryable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "run"
+            cli_module._run_scenario_artifacts(
+                ROOT / "scenarios" / "prompt_injection_bad.json",
+                out,
+            )
+            prior_lineage = (out / "artifact_lineage.json").read_bytes()
+            original_write = cli_module.write_run_lineage
+
+            def interrupt_after_lineage(**kwargs):
+                original_write(**kwargs)
+                raise ArtifactError("injected staged-write interruption")
+
+            with (
+                patch.object(cli_module, "write_run_lineage", side_effect=interrupt_after_lineage),
+                self.assertRaisesRegex(ArtifactError, "injected staged-write interruption"),
+            ):
+                cli_module._run_scenario_artifacts(
+                    ROOT / "scenarios" / "prompt_injection_good.json",
+                    out,
+                )
+
+            self.assertEqual((out / "artifact_lineage.json").read_bytes(), prior_lineage)
+            self.assertTrue((out / "regression_scenario.json").is_file())
+            self.assertEqual(list(root.glob(".run.hfr-stage-*")), [])
+
+            cli_module._run_scenario_artifacts(
+                ROOT / "scenarios" / "prompt_injection_good.json",
+                out,
+            )
+            self.assertFalse((out / "regression_scenario.json").exists())
+
+    def test_post_admission_target_swap_is_rolled_back_without_modifying_alien_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "run"
+            displaced = root / "displaced"
+            alien = root / "alien"
+            cli_module._run_scenario_artifacts(
+                ROOT / "scenarios" / "prompt_injection_bad.json",
+                out,
+            )
+            alien.mkdir()
+            (alien / "unowned.txt").write_text("keep\n", encoding="utf-8")
+            real_exchange = cli_module._atomic_exchange_run_directories
+            exchange_count = 0
+
+            def swap_target_then_exchange(staging: Path, target: Path):
+                nonlocal exchange_count
+                exchange_count += 1
+                if exchange_count == 1:
+                    target.rename(displaced)
+                    alien.rename(target)
+                real_exchange(staging, target)
+
+            with (
+                patch.object(
+                    cli_module,
+                    "_atomic_exchange_run_directories",
+                    side_effect=swap_target_then_exchange,
+                ),
+                self.assertRaisesRegex(ArtifactError, "run publication attestation failed"),
+            ):
+                cli_module._run_scenario_artifacts(
+                    ROOT / "scenarios" / "prompt_injection_good.json",
+                    out,
+                )
+
+            self.assertEqual(exchange_count, 2)
+            self.assertEqual((out / "unowned.txt").read_text(encoding="utf-8"), "keep\n")
+            self.assertTrue((displaced / "artifact_lineage.json").is_file())
+            self.assertEqual(list(root.glob(".run.hfr-stage-*")), [])
+
+    def test_interruption_after_atomic_exchange_rolls_back_and_retry_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "run"
+            cli_module._run_scenario_artifacts(
+                ROOT / "scenarios" / "prompt_injection_bad.json",
+                out,
+            )
+            prior_lineage = (out / "artifact_lineage.json").read_bytes()
+            real_exchange = cli_module._atomic_exchange_run_directories
+            exchange_count = 0
+
+            def exchange_then_interrupt(first: Path, second: Path):
+                nonlocal exchange_count
+                exchange_count += 1
+                real_exchange(first, second)
+                if exchange_count == 1:
+                    raise KeyboardInterrupt("injected post-exchange interruption")
+
+            with (
+                patch.object(
+                    cli_module,
+                    "_atomic_exchange_run_directories",
+                    side_effect=exchange_then_interrupt,
+                ),
+                self.assertRaisesRegex(KeyboardInterrupt, "post-exchange interruption"),
+            ):
+                cli_module._run_scenario_artifacts(
+                    ROOT / "scenarios" / "prompt_injection_good.json",
+                    out,
+                )
+
+            self.assertEqual(exchange_count, 2)
+            self.assertEqual((out / "artifact_lineage.json").read_bytes(), prior_lineage)
+            self.assertEqual(list(root.glob(".run.hfr-stage-*")), [])
+
+            cli_module._run_scenario_artifacts(
+                ROOT / "scenarios" / "prompt_injection_good.json",
+                out,
+            )
+            self.assertFalse((out / "regression_scenario.json").exists())
+
+    def test_nonempty_alien_run_target_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            out.mkdir()
+            alien = out / "notes.txt"
+            alien.write_text("keep\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ArtifactError, "unrecognized run output"):
+                cli_module._run_scenario_artifacts(
+                    ROOT / "scenarios" / "prompt_injection_good.json",
+                    out,
+                )
+
+            self.assertEqual(alien.read_text(encoding="utf-8"), "keep\n")
+
+    def test_new_target_appearing_at_publication_is_not_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "run"
+            real_publish = cli_module._atomic_rename_new_run_directory
+
+            def create_alien_then_publish(staging: Path, target: Path):
+                target.mkdir()
+                (target / "unowned.txt").write_text("keep\n", encoding="utf-8")
+                real_publish(staging, target)
+
+            with (
+                patch.object(
+                    cli_module,
+                    "_atomic_rename_new_run_directory",
+                    side_effect=create_alien_then_publish,
+                ),
+                self.assertRaisesRegex(ArtifactError, "atomic run publication failed"),
+            ):
+                cli_module._run_scenario_artifacts(
+                    ROOT / "scenarios" / "prompt_injection_good.json",
+                    out,
+                )
+
+            self.assertEqual((out / "unowned.txt").read_text(encoding="utf-8"), "keep\n")
+            self.assertEqual(list(root.glob(".run.hfr-stage-*")), [])
+
+    def test_run_publication_lock_remains_held_through_lineage_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            scenario = ROOT / "scenarios" / "prompt_injection_good.json"
+            entered = threading.Event()
+            release = threading.Event()
+            failures: list[BaseException] = []
+            original_write = cli_module.write_run_lineage
+
+            def blocking_write(**kwargs):
+                result = original_write(**kwargs)
+                entered.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError("test did not release lineage writer")
+                return result
+
+            def publish() -> None:
+                try:
+                    cli_module._run_scenario_artifacts(scenario, out)
+                except BaseException as exc:  # pragma: no cover - asserted below
+                    failures.append(exc)
+
+            with patch.object(cli_module, "write_run_lineage", side_effect=blocking_write):
+                thread = threading.Thread(target=publish)
+                thread.start()
+                self.assertTrue(entered.wait(timeout=5))
+                with self.assertRaisesRegex(ArtifactError, "locked for publication"):
+                    cli_module._run_scenario_artifacts(scenario, out)
+                release.set()
+                thread.join(timeout=5)
+
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(failures, [])
+
+    def test_target_swap_during_run_ownership_check_is_not_modified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "run"
+            displaced = root / "displaced"
+            cli_module._run_scenario_artifacts(ROOT / "scenarios" / "prompt_injection_bad.json", out)
+
+            def swap_and_claim(path: Path) -> bool:
+                path.rename(displaced)
+                path.mkdir()
+                (path / "regression_scenario.json").write_text("alien\n", encoding="utf-8")
+                return True
+
+            with (
+                patch.object(cli_module, "_is_owned_run_directory", side_effect=swap_and_claim),
+                self.assertRaisesRegex(ArtifactError, "unrecognized run output"),
+            ):
+                cli_module._run_scenario_artifacts(ROOT / "scenarios" / "prompt_injection_good.json", out)
+
+            self.assertEqual((out / "regression_scenario.json").read_text(encoding="utf-8"), "alien\n")
+            self.assertTrue((displaced / "artifact_lineage.json").is_file())
 
     def test_run_can_fail_nonzero_for_ci(self):
         with tempfile.TemporaryDirectory() as tmp:

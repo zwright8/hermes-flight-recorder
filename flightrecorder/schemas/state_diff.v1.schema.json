@@ -2,6 +2,68 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/state_diff.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "comparison_complete": { "const": false }
+        },
+        "required": ["comparison_complete"]
+      },
+      "then": {
+        "properties": {
+          "change_count_exact": { "const": false },
+          "comparison_truncated": { "const": true },
+          "truncated": { "const": true }
+        },
+        "required": ["change_count_exact", "comparison_truncated", "truncation_reason"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_status": { "const": "changed" }
+        },
+        "required": ["change_status"]
+      },
+      "then": {
+        "properties": {
+          "changed": { "const": true },
+          "change_count": { "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_status": { "const": "unchanged" }
+        },
+        "required": ["change_status"]
+      },
+      "then": {
+        "properties": {
+          "changed": { "const": false },
+          "change_count": { "const": 0 },
+          "comparison_complete": { "const": true }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_status": { "const": "unknown" }
+        },
+        "required": ["change_status"]
+      },
+      "then": {
+        "properties": {
+          "changed": { "const": false },
+          "change_count": { "const": 0 },
+          "comparison_complete": { "const": false }
+        }
+      }
+    }
+  ],
   "description": "Deterministic before/after state diff emitted as state_diff.json when a run has both pre-run and post-run state snapshots.",
   "properties": {
     "changed": {
@@ -60,6 +122,8 @@
     "changed",
     "change_count",
     "truncated",
+    "comparison_complete",
+    "change_status",
     "max_changes",
     "changes",
     "summary"

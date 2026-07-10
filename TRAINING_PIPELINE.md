@@ -4,9 +4,11 @@ Flight Recorder can now export completed run directories into training-ready
 JSONL artifacts. This is a bridge from deterministic eval evidence to future
 SFT, preference-tuning, reward-modeling, or RL loops.
 
-It is not a trainer. It does not generate rollouts, update model weights, or
-guarantee that the reward function is impossible to game. It gives a future
-trainer a clean, deterministic data contract grounded in observed traces.
+It is not a weight-updating trainer or live provider runner. It can build
+deterministic mock rollout receipts and delegated trainer flows, but it does not
+launch paid rollouts, update model weights, or guarantee that a reward function
+is impossible to game. It gives external runners a clean, deterministic control
+plane grounded in observed traces.
 
 Public artifact schemas are bundled with the package for downstream systems
 that need stable contracts before wiring Flight Recorder into review or
@@ -665,9 +667,15 @@ blocked runtime-preflight artifacts are still schema-checkable failure
 evidence. The embedded `mode_contract_check` schema pins invariant reward and
 side-effect fields so paid/secret reward defaults, provider credentials, paid
 graders, cloud jobs, downloads, training starts, and weight updates cannot be
-forged into a runtime preflight. Runtime preflight rejects plan inputs that are
-symlinks or traverse symlinked parent directories, and selected views resolved
-through symlinks are blocked without SHA-256 or byte-size fingerprints.
+forged into a runtime preflight. Its `dependency_policy` records the normalized
+backend, backend defaults, explicit overrides, whether default resolution was
+delegated, and the resulting effective module set. Ready receipts require at
+least one effective dependency and a fresh successful probe for every module;
+strict validation recomputes the policy and reruns those probes, so an empty or
+self-declared availability list cannot forge readiness. Runtime preflight
+rejects plan inputs that are symlinks or traverse symlinked parent directories,
+and selected views resolved through symlinks are blocked without SHA-256 or
+byte-size fingerprints.
 After a trainer consumer plan exists, use `flightrecorder agentic-training-flow`
 to bind the ready plan, runtime preflight, and consumer command into
 `hfr.agentic_training_flow.v1`. It delegates only SFT, action-SFT, DPO, and
@@ -1071,6 +1079,9 @@ absolute or traversal paths are redacted and treated as missing, which keeps
 the cloud receipt blocked rather than publishing local filesystem details.
 Validation requires those refs to resolve to regular non-symlink files before
 using referenced payloads to derive source readiness or provider-chain state.
+Builders and strict validation both replay each referenced artifact's full
+semantic validator; a schema-valid file with self-declared `passed: true` is
+still blocked when its counts, checks, lineage, or readiness do not recompute.
 For nested public examples, stage trainer handoff inputs below the receipt
 directory, such as `cloud_training/sources/`, so receipts can store replayable
 paths like `sources/trainer_preflight.json` without permitting `..` traversal.

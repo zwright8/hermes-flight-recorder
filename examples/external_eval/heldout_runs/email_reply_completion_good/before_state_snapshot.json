@@ -1,0 +1,10 @@
+{
+  "gmail": {
+    "threads": {
+      "email-123": {
+        "last_sent_message_id": null,
+        "sent_replies": []
+      }
+    }
+  }
+}

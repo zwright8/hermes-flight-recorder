@@ -177,10 +177,23 @@ Refresh the dry-run cloud-training handoff from replayable source snapshots:
 mkdir -p examples/agentic_training/cloud_training/sources/plans
 cp examples/agentic_training/plans/sft_then_dpo_plan.json \
   examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json
-cp examples/agentic_training/trainer_preflight.json \
-  examples/agentic_training/cloud_training/sources/trainer_preflight.json
-cp examples/agentic_training/trainer_launch_check.json \
-  examples/agentic_training/cloud_training/sources/trainer_launch_check.json
+
+# Build a cloud-local, self-contained trainer guard. Copying the repository-root
+# preflight would strand its relative training-export references after nesting.
+flightrecorder trainer-preflight \
+  --gate examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json \
+  --agentic-training-plan examples/agentic_training/cloud_training/sources/plans/sft_then_dpo_plan.json \
+  --require-gate agentic_training_plan \
+  --trainer-command "python train.py --agentic-plan plans/sft_then_dpo_plan.json --dry-run" \
+  --metadata launcher=cloud-dry-run \
+  --out examples/agentic_training/cloud_training/sources/trainer_preflight.json
+
+flightrecorder trainer-launch-check \
+  --preflight examples/agentic_training/cloud_training/sources/trainer_preflight.json \
+  --require-gate agentic_training_plan \
+  --require-metadata launcher=cloud-dry-run \
+  --out examples/agentic_training/cloud_training/sources/trainer_launch_check.json \
+  --strict
 
 flightrecorder cloud-training preflight \
   --provider modal \
@@ -426,8 +439,8 @@ flightrecorder agentic-loop plan \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
   --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
   --training-export examples/agentic_training/training_export \
-  --trainer-preflight examples/agentic_training/trainer_preflight.json \
-  --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
+  --trainer-preflight examples/agentic_training/cloud_training/sources/trainer_preflight.json \
+  --trainer-launch-check examples/agentic_training/cloud_training/sources/trainer_launch_check.json \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-flow examples/agentic_training/agentic_training_flow.json \

@@ -175,7 +175,7 @@
       "readiness": "blocked",
       "recommendation": "fix_handoff",
       "schema_version": "hfr.improvement_plan.v1",
-      "sha256": "ebe4afc592c097e77cffd66eb9fe9478314401371cfc8e24959ee7a21886a5ff",
+      "sha256": "6ecce40707c82fda490c319234d019ad244718701da8b55fd26bc125c3e4ce6b",
       "size_bytes": 5355,
       "work_item_count": 2
     }

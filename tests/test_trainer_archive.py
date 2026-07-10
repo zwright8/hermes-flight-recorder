@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import flightrecorder.path_safety as path_safety_module
 import flightrecorder.trainer_archive as trainer_archive_module
 from flightrecorder.preflight import build_trainer_launch_check, build_trainer_preflight
 from flightrecorder.trainer_archive import TrainerArchiveError, build_trainer_archive
@@ -507,20 +508,10 @@ class TrainerArchiveHardeningTests(unittest.TestCase):
             )
             self.assertTrue(first["passed"])
             before = _tree_snapshot(archive_root)
-            original_replace = os.replace
-
-            def fail_stage_publication(source, destination, *args, **kwargs):
-                if (
-                    Path(source).name.startswith(".archive.hfr-stage-")
-                    and Path(destination) == archive_root
-                ):
-                    raise OSError("injected publication failure")
-                return original_replace(source, destination, *args, **kwargs)
-
             with (
                 patch(
-                    "flightrecorder.trainer_archive.os.replace",
-                    side_effect=fail_stage_publication,
+                    "flightrecorder.trainer_archive._atomic_exchange_directories",
+                    side_effect=TrainerArchiveError("injected publication failure"),
                 ),
                 self.assertRaisesRegex(
                     TrainerArchiveError, "injected publication failure"
@@ -539,6 +530,265 @@ class TrainerArchiveHardeningTests(unittest.TestCase):
             self.assertEqual(list(root.glob(".archive.hfr-backup-*")), [])
             validation = validate_artifacts(trainer_archive_paths=[archive_root])
             self.assertTrue(validation["passed"], validation)
+
+    def test_force_exchange_never_makes_existing_archive_path_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            build_trainer_archive(
+                out_dir=archive_root,
+                preflight_path=preflight,
+                launch_check_path=launch,
+                require_self_contained=True,
+            )
+            real_exchange = trainer_archive_module._atomic_exchange_directories
+
+            def assert_reader_presence(staging, target):
+                self.assertTrue(Path(target).is_dir())
+                real_exchange(staging, target)
+                self.assertTrue(Path(target).is_dir())
+
+            with patch(
+                "flightrecorder.trainer_archive._atomic_exchange_directories",
+                side_effect=assert_reader_presence,
+            ):
+                result = build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                    force=True,
+                )
+
+            self.assertTrue(result["passed"])
+
+    def test_target_content_mutation_during_exchange_is_rolled_back_without_deletion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            build_trainer_archive(
+                out_dir=archive_root,
+                preflight_path=preflight,
+                launch_check_path=launch,
+                require_self_contained=True,
+            )
+            real_exchange = trainer_archive_module._atomic_exchange_directories
+            exchange_count = 0
+
+            def mutate_then_exchange(staging, target):
+                nonlocal exchange_count
+                exchange_count += 1
+                if exchange_count == 1:
+                    (Path(target) / "concurrent-writer.txt").write_text(
+                        "do not delete\n", encoding="utf-8"
+                    )
+                real_exchange(staging, target)
+
+            with (
+                patch(
+                    "flightrecorder.trainer_archive._atomic_exchange_directories",
+                    side_effect=mutate_then_exchange,
+                ),
+                self.assertRaisesRegex(
+                    TrainerArchiveError, "publication attestation failed"
+                ),
+            ):
+                build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                    force=True,
+                )
+
+            self.assertEqual(exchange_count, 2)
+            self.assertEqual(
+                (archive_root / "concurrent-writer.txt").read_text(encoding="utf-8"),
+                "do not delete\n",
+            )
+            self.assertEqual(list(root.glob(".archive.hfr-stage-*")), [])
+
+    def test_empty_directory_added_during_exchange_is_attested_and_rolled_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            build_trainer_archive(
+                out_dir=archive_root,
+                preflight_path=preflight,
+                launch_check_path=launch,
+                require_self_contained=True,
+            )
+            real_exchange = trainer_archive_module._atomic_exchange_directories
+            exchange_count = 0
+
+            def add_directory_then_exchange(staging, target):
+                nonlocal exchange_count
+                exchange_count += 1
+                if exchange_count == 1:
+                    (Path(target) / "concurrent-empty-directory").mkdir()
+                real_exchange(staging, target)
+
+            with (
+                patch(
+                    "flightrecorder.trainer_archive._atomic_exchange_directories",
+                    side_effect=add_directory_then_exchange,
+                ),
+                self.assertRaisesRegex(
+                    TrainerArchiveError, "publication attestation failed"
+                ),
+            ):
+                build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                    force=True,
+                )
+
+            self.assertEqual(exchange_count, 2)
+            self.assertTrue((archive_root / "concurrent-empty-directory").is_dir())
+
+    def test_target_identity_swap_is_retained_and_never_recursively_deleted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            build_trainer_archive(
+                out_dir=archive_root,
+                preflight_path=preflight,
+                launch_check_path=launch,
+                require_self_contained=True,
+            )
+            displaced = root / "original-moved-by-writer"
+            alien = root / "alien"
+            alien.mkdir()
+            (alien / "unowned.txt").write_text("keep\n", encoding="utf-8")
+            real_exchange = trainer_archive_module._atomic_exchange_directories
+
+            def swap_target_then_exchange(staging, target):
+                Path(target).rename(displaced)
+                alien.rename(target)
+                real_exchange(staging, target)
+
+            with (
+                patch(
+                    "flightrecorder.trainer_archive._atomic_exchange_directories",
+                    side_effect=swap_target_then_exchange,
+                ),
+                self.assertRaisesRegex(
+                    TrainerArchiveError, "publication attestation failed"
+                ),
+            ):
+                build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                    force=True,
+                )
+
+            retained = list(root.glob(".archive.hfr-stage-*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(
+                (retained[0] / "unowned.txt").read_text(encoding="utf-8"),
+                "keep\n",
+            )
+            self.assertTrue((displaced / "trainer_archive.json").is_file())
+
+    def test_displaced_archive_swap_after_descriptor_open_retains_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            build_trainer_archive(
+                out_dir=archive_root,
+                preflight_path=preflight,
+                launch_check_path=launch,
+                require_self_contained=True,
+            )
+            displaced = root / "displaced-owned-archive"
+            alien = root / "alien"
+            alien.mkdir()
+            (alien / "unowned.txt").write_text("keep\n", encoding="utf-8")
+            original_remove = path_safety_module._remove_directory_contents_fd
+            swapped = False
+
+            def swap_after_descriptor_open(
+                directory_descriptor: int, directory_flags: int
+            ) -> bool:
+                nonlocal swapped
+                if not swapped:
+                    swapped = True
+                    staging = next(root.glob(".archive.hfr-stage-*"))
+                    staging.rename(displaced)
+                    alien.rename(staging)
+                return original_remove(directory_descriptor, directory_flags)
+
+            with (
+                patch(
+                    "flightrecorder.path_safety._remove_directory_contents_fd",
+                    side_effect=swap_after_descriptor_open,
+                ),
+                self.assertRaisesRegex(
+                    TrainerArchiveError, "displaced archive changed and was retained"
+                ),
+            ):
+                build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                    force=True,
+                )
+
+            self.assertTrue(swapped)
+            retained = list(root.glob(".archive.hfr-stage-*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(
+                (retained[0] / "unowned.txt").read_text(encoding="utf-8"),
+                "keep\n",
+            )
+            self.assertTrue(displaced.is_dir())
+            self.assertEqual(list(displaced.iterdir()), [])
+
+    def test_new_target_appearing_at_publication_is_never_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, preflight, launch = self._ready_sources(root)
+            archive_root = root / "archive"
+            real_publish_new = trainer_archive_module._atomic_rename_new_directory
+
+            def create_unowned_target_then_publish(staging, target):
+                Path(target).mkdir()
+                (Path(target) / "unowned.txt").write_text(
+                    "keep\n", encoding="utf-8"
+                )
+                real_publish_new(staging, target)
+
+            with (
+                patch(
+                    "flightrecorder.trainer_archive._atomic_rename_new_directory",
+                    side_effect=create_unowned_target_then_publish,
+                ),
+                self.assertRaisesRegex(
+                    TrainerArchiveError, "atomic directory publication failed"
+                ),
+            ):
+                build_trainer_archive(
+                    out_dir=archive_root,
+                    preflight_path=preflight,
+                    launch_check_path=launch,
+                    require_self_contained=True,
+                )
+
+            self.assertEqual(
+                (archive_root / "unowned.txt").read_text(encoding="utf-8"),
+                "keep\n",
+            )
+            self.assertEqual(list(root.glob(".archive.hfr-stage-*")), [])
 
     def test_invalid_staged_content_is_rejected_before_replacing_previous_archive(self):
         with tempfile.TemporaryDirectory() as tmp:

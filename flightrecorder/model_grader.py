@@ -12,6 +12,7 @@ from typing import Any
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .review import REVIEW_LABELS, review_item_sha256
 from .schema_registry import SchemaRegistryError, check_schema_file
+from .source_contract import inspect_artifact_source
 
 RUBRIC_SPEC_SCHEMA_VERSION = "hfr.rubric_spec.v1"
 MODEL_GRADER_DRY_RUN_SCHEMA_VERSION = "hfr.model_grader_dry_run.v1"
@@ -86,7 +87,13 @@ def build_model_grader_dry_run(
     disagreement_queue = [_disagreement_candidate(item, label) for item, label in zip(items, labels) if label["requires_human_review"]]
     checks: list[dict[str, Any]] = []
     rubric_ref = _json_artifact_ref("rubric_spec", rubric_file, "rubric_spec", preserve_paths, output_path)
-    _add_check(checks, "rubric_spec_valid", _artifact_ready(rubric_ref), {"artifact": rubric_ref}, {"schema": "rubric_spec", "passed": True})
+    _add_check(
+        checks,
+        "rubric_spec_valid",
+        _artifact_ready(rubric_ref, rubric_file, "rubric_spec"),
+        {"artifact": rubric_ref},
+        {"schema": "rubric_spec", "passed": True},
+    )
     _add_check(checks, "review_export_non_empty", bool(items), {"review_item_count": len(items)}, {"review_item_count_min": 1})
     _add_check(checks, "paid_model_grader_not_called", True, {"paid_model_grader_calls_started": False}, {"paid_model_grader_calls_started": False})
     _add_check(checks, "labels_not_admitted_to_training", True, {"training_labels_admitted": 0}, {"training_labels_admitted": 0})
@@ -153,7 +160,13 @@ def build_model_grader_disagreement_queue(
     queue = [dict(item) for item in dry_run.get("disagreement_queue", []) if isinstance(item, dict)] if isinstance(dry_run, dict) else []
     labels_requiring_review = _labels_requiring_human_review_count(dry_run)
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
+    _add_check(
+        checks,
+        "dry_run_receipt_valid",
+        _artifact_ready(dry_ref, dry_file, "model_grader_dry_run"),
+        {"artifact": dry_ref},
+        {"schema": "model_grader_dry_run", "passed": True},
+    )
     _add_check(
         checks,
         "queue_matches_dry_run_human_review_labels",
@@ -279,7 +292,11 @@ def build_model_grader_gate(
     labels_requiring_human_review = _labels_requiring_human_review_count(dry_run)
     dry_run_disagreement_queue_count = _dry_run_disagreement_queue_count(dry_run)
     overrides_required = labels_requiring_human_review > 0 or dry_run_disagreement_queue_count > 0
-    override_ready = (not overrides_required) or (_artifact_ready(override_ref) and override_receipt.get("passed") is True)
+    override_ready = (not overrides_required) or (
+        override_receipt_file is not None
+        and _artifact_ready(override_ref, override_receipt_file, "model_grader_override_receipt")
+        and override_receipt.get("passed") is True
+    )
     override_resolved_count = _override_resolved_queue_count(override_receipt)
     override_unresolved_count = _override_unresolved_queue_count(override_receipt)
     human_review_queue_resolved = (not overrides_required) or (
@@ -288,8 +305,20 @@ def build_model_grader_gate(
         and override_resolved_count >= max(labels_requiring_human_review, dry_run_disagreement_queue_count)
     )
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
-    _add_check(checks, "rubric_spec_valid", _artifact_ready(rubric_ref), {"artifact": rubric_ref}, {"schema": "rubric_spec", "passed": True})
+    _add_check(
+        checks,
+        "dry_run_receipt_valid",
+        _artifact_ready(dry_ref, dry_file, "model_grader_dry_run"),
+        {"artifact": dry_ref},
+        {"schema": "model_grader_dry_run", "passed": True},
+    )
+    _add_check(
+        checks,
+        "rubric_spec_valid",
+        _artifact_ready(rubric_ref, rubric_file, "rubric_spec"),
+        {"artifact": rubric_ref},
+        {"schema": "rubric_spec", "passed": True},
+    )
     _add_check(
         checks,
         "review_calibration_present",
@@ -300,7 +329,9 @@ def build_model_grader_gate(
     _add_check(
         checks,
         "review_calibration_passed",
-        _artifact_ready(calibration_ref) and calibration.get("passed") is True,
+        calibration_file is not None
+        and _artifact_ready(calibration_ref, calibration_file, "review_calibration")
+        and calibration.get("passed") is True,
         {"artifact": calibration_ref, "source_passed": calibration_ref.get("source_passed")},
         {"schema": "review_calibration", "passed": True, "source_passed": True},
     )
@@ -418,7 +449,13 @@ def build_model_grader_override_receipt(
     unmatched_count = sum(1 for row in overrides if not row.get("resolves_queue_item"))
     invalid_count = sum(1 for row in overrides if not row.get("accepted"))
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
+    _add_check(
+        checks,
+        "dry_run_receipt_valid",
+        _artifact_ready(dry_ref, dry_file, "model_grader_dry_run"),
+        {"artifact": dry_ref},
+        {"schema": "model_grader_dry_run", "passed": True},
+    )
     _add_check(checks, "override_rows_readable", not row_errors, {"errors": row_errors}, {"errors": []})
     _add_check(
         checks,
@@ -705,8 +742,10 @@ def _schema_check(path: Path, schema_name: str) -> dict[str, Any]:
         return {"passed": False, "error_count": 1, "errors": [str(exc)]}
 
 
-def _artifact_ready(ref: dict[str, Any]) -> bool:
-    return bool(ref.get("exists") and ref.get("schema_passed") and ref.get("source_passed") is not False)
+def _artifact_ready(ref: dict[str, Any], path: Path, role: str) -> bool:
+    if ref.get("exists") is not True or ref.get("schema_passed") is not True:
+        return False
+    return inspect_artifact_source(path, role).get("ready") is True
 
 
 def _add_check(

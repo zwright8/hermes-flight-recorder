@@ -8,12 +8,18 @@ import os
 import shlex
 import shutil
 import stat
+import sys
 import tempfile
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
-from .path_safety import assert_safe_output_directory, path_has_symlink_component
+from .path_safety import (
+    assert_safe_output_directory,
+    path_has_symlink_component,
+    remove_directory_tree_if_identity,
+)
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
@@ -31,6 +37,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 class TrainerArchiveError(ValueError):
     """Raised when a trainer handoff archive cannot be produced."""
+
+
+@dataclass(frozen=True)
+class _DirectoryAttestation:
+    identity: tuple[int, int]
+    sha256: str
+    file_count: int
+    size_bytes: int
 
 
 def build_trainer_archive(
@@ -89,8 +103,9 @@ def build_trainer_archive(
     )
 
     with _archive_lock(target):
-        _prepare_archive_dir(target, force)
+        target_attestation = _prepare_archive_dir(target, force)
         staging_dir, staging_identity = _create_private_work_directory(target, "stage")
+        staging_attestation: _DirectoryAttestation | None = None
         published = False
         try:
             archive = _build_archive_contents(
@@ -112,12 +127,23 @@ def build_trainer_archive(
             )
             _validate_complete_archive(staging_dir, "staged trainer archive")
             _fsync_archive_tree(staging_dir)
-            _publish_staged_archive(staging_dir, target, staging_identity)
+            staging_attestation = _attest_directory(
+                staging_dir, expected_identity=staging_identity
+            )
+            _publish_staged_archive(
+                staging_dir,
+                target,
+                staging_attestation=staging_attestation,
+                target_attestation=target_attestation,
+            )
             published = True
             return archive
         finally:
             if not published:
-                _remove_owned_directory(staging_dir, staging_identity)
+                if staging_attestation is None:
+                    _remove_owned_directory(staging_dir, staging_identity)
+                else:
+                    _remove_attested_directory(staging_dir, staging_attestation)
 
 
 def _build_archive_contents(
@@ -785,8 +811,10 @@ def _copy_directory_artifact(
             f"archive path must not be inside source directory: {archive_path}"
         )
     archive_path.parent.mkdir(parents=True, exist_ok=True)
-    if archive_path.exists():
-        shutil.rmtree(archive_path)
+    if archive_path.exists() or archive_path.is_symlink():
+        raise TrainerArchiveError(
+            f"{role} archive destination unexpectedly already exists: {archive_path}"
+        )
     _copy_regular_tree(source_path, archive_path)
     tree = _tree_fingerprint(archive_path)
     entry_count = sum(1 for _ in archive_path.iterdir())
@@ -796,7 +824,6 @@ def _copy_directory_artifact(
         or tree["size_bytes"] != expected.get("size_bytes")
         or tree["sha256"] != expected.get("sha256")
     ):
-        shutil.rmtree(archive_path)
         raise TrainerArchiveError(f"{role} source changed while being copied")
     return {
         "index": 0,
@@ -815,7 +842,9 @@ def _copy_directory_artifact(
     }
 
 
-def _prepare_archive_dir(target: Path, force: bool) -> None:
+def _prepare_archive_dir(
+    target: Path, force: bool
+) -> _DirectoryAttestation | None:
     if path_has_symlink_component(target, include_leaf=True):
         raise TrainerArchiveError(
             f"trainer archive output must not traverse a symlink component: {target}"
@@ -824,8 +853,10 @@ def _prepare_archive_dir(target: Path, force: bool) -> None:
         raise TrainerArchiveError(
             f"trainer archive output is not a directory: {target}"
         )
-    if not target.exists() or not any(target.iterdir()):
-        return
+    if not target.exists():
+        return None
+    if not any(target.iterdir()):
+        return _attest_directory(target)
     if not force:
         raise TrainerArchiveError(
             f"trainer archive output is not empty: {target}; pass --force to replace it"
@@ -843,6 +874,7 @@ def _prepare_archive_dir(target: Path, force: bool) -> None:
         raise TrainerArchiveError(
             f"refusing to replace non-archive directory: {target}; choose an empty output directory or an existing trainer archive"
         )
+    return _attest_directory(target)
 
 
 def _is_existing_trainer_archive(target: Path) -> bool:
@@ -953,6 +985,14 @@ def _archive_lock(target: Path) -> Iterator[None]:
                 raise TrainerArchiveError(
                     f"trainer archive publication is locked for target: {target}"
                 ) from exc
+            locked_path_stat = lock_path.stat(follow_symlinks=False)
+            if (locked_path_stat.st_dev, locked_path_stat.st_ino) != (
+                lock_stat.st_dev,
+                lock_stat.st_ino,
+            ):
+                raise TrainerArchiveError(
+                    f"trainer archive publication lock changed while being acquired: {lock_path}"
+                )
         yield
     finally:
         if flock_module is not None:
@@ -1038,54 +1078,232 @@ def _fsync_directory(path: Path) -> None:
 
 
 def _publish_staged_archive(
-    staging_dir: Path, target: Path, staging_identity: tuple[int, int]
+    staging_dir: Path,
+    target: Path,
+    *,
+    staging_attestation: _DirectoryAttestation,
+    target_attestation: _DirectoryAttestation | None,
 ) -> None:
-    backup_dir: Path | None = None
-    backup_identity: tuple[int, int] | None = None
-    if target.exists():
-        backup_dir, placeholder_identity = _create_private_work_directory(
-            target, "backup"
-        )
-        if not _remove_owned_directory(backup_dir, placeholder_identity):
+    """Publish a validated directory without making an existing target disappear."""
+    _require_attestation(staging_dir, staging_attestation, "staged trainer archive")
+    if target_attestation is None:
+        if _path_identity(target) is not None:
             raise TrainerArchiveError(
-                f"could not reserve private trainer archive backup path: {backup_dir}"
+                "trainer archive output appeared after the publication lock was acquired"
             )
-        previous_stat = target.stat(follow_symlinks=False)
+        _atomic_rename_new_directory(staging_dir, target)
         try:
-            os.replace(target, backup_dir)
-        except OSError as exc:
-            raise TrainerArchiveError(
-                f"could not preserve previous trainer archive before publication: {exc}"
-            ) from exc
-        backup_identity = (previous_stat.st_dev, previous_stat.st_ino)
+            _require_attestation(target, staging_attestation, "published trainer archive")
+        except TrainerArchiveError:
+            # The exclusive rename guarantees that no pre-existing target was removed.
+            # Leave an unexpected publication in place for inspection rather than
+            # recursively deleting a path whose contents no longer attest.
+            raise
         _fsync_directory(target.parent)
+        return
 
+    _require_attestation(target, target_attestation, "existing trainer archive")
+    _atomic_exchange_directories(staging_dir, target)
+    swapped = True
     try:
-        os.replace(staging_dir, target)
-        published_identity = _path_identity(target)
-        if published_identity != staging_identity:
-            raise TrainerArchiveError(
-                "published trainer archive identity does not match the validated staging directory"
-            )
-        _fsync_directory(target.parent)
-    except (OSError, TrainerArchiveError) as exc:
-        restore_error: OSError | None = None
-        if backup_dir is not None and backup_identity is not None:
+        _require_attestation(target, staging_attestation, "published trainer archive")
+        _require_attestation(
+            staging_dir, target_attestation, "displaced trainer archive"
+        )
+    except TrainerArchiveError as exc:
+        rollback_error: TrainerArchiveError | None = None
+        if (
+            _path_identity(target) == staging_attestation.identity
+            and _path_identity(staging_dir) == target_attestation.identity
+        ):
             try:
-                if target.exists() and _path_identity(target) == staging_identity:
-                    os.replace(target, staging_dir)
-                os.replace(backup_dir, target)
+                _atomic_exchange_directories(staging_dir, target)
+                swapped = False
                 _fsync_directory(target.parent)
-            except OSError as restore_exc:
-                restore_error = restore_exc
-        detail = f"trainer archive publication failed: {exc}"
-        if restore_error is not None:
-            detail += f"; previous archive remains at {backup_dir} because restoration failed: {restore_error}"
+            except TrainerArchiveError as rollback_exc:
+                rollback_error = rollback_exc
+        detail = f"trainer archive publication attestation failed: {exc}"
+        if rollback_error is not None:
+            detail += f"; atomic rollback failed: {rollback_error}"
         raise TrainerArchiveError(detail) from exc
 
-    if backup_dir is not None and backup_identity is not None:
-        _remove_owned_directory(backup_dir, backup_identity)
-        _fsync_directory(target.parent)
+    _fsync_directory(target.parent)
+    if swapped and not _remove_attested_directory(staging_dir, target_attestation):
+        # Publication is already complete and reader-visible. A changed displaced
+        # tree is deliberately retained instead of risking deletion of new data.
+        raise TrainerArchiveError(
+            f"trainer archive published, but the displaced archive changed and was retained at {staging_dir}"
+        )
+    _fsync_directory(target.parent)
+
+
+def _attest_directory(
+    path: Path, *, expected_identity: tuple[int, int] | None = None
+) -> _DirectoryAttestation:
+    path_error = _copyable_directory_error(path)
+    if path_error is not None:
+        raise TrainerArchiveError(path_error)
+    path_stat = path.stat(follow_symlinks=False)
+    identity = (path_stat.st_dev, path_stat.st_ino)
+    if not stat.S_ISDIR(path_stat.st_mode):
+        raise TrainerArchiveError(f"trainer archive path is not a directory: {path}")
+    if expected_identity is not None and identity != expected_identity:
+        raise TrainerArchiveError(
+            f"trainer archive directory identity changed while being attested: {path}"
+        )
+    tree = _publication_tree_fingerprint(path)
+    if _path_identity(path) != identity:
+        raise TrainerArchiveError(
+            f"trainer archive directory identity changed while being attested: {path}"
+        )
+    return _DirectoryAttestation(
+        identity=identity,
+        sha256=str(tree["sha256"]),
+        file_count=int(tree["file_count"]),
+        size_bytes=int(tree["size_bytes"]),
+    )
+
+
+def _publication_tree_fingerprint(root: Path) -> dict[str, Any]:
+    """Fingerprint every path and type, including otherwise invisible empty dirs."""
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        before = path.stat(follow_symlinks=False)
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if stat.S_ISDIR(before.st_mode):
+            digest.update(b"directory\0")
+            continue
+        if not stat.S_ISREG(before.st_mode):
+            raise TrainerArchiveError(
+                f"trainer archive contains a non-regular path: {path}"
+            )
+        file_hash = _sha256(path)
+        after = path.stat(follow_symlinks=False)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ):
+            raise TrainerArchiveError(
+                f"trainer archive file changed while being attested: {path}"
+            )
+        digest.update(b"file\0")
+        digest.update(str(after.st_size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += after.st_size
+    return {
+        "sha256": digest.hexdigest(),
+        "file_count": file_count,
+        "size_bytes": size_bytes,
+    }
+
+
+def _require_attestation(
+    path: Path, expected: _DirectoryAttestation, label: str
+) -> None:
+    try:
+        actual = _attest_directory(path, expected_identity=expected.identity)
+    except (OSError, TrainerArchiveError) as exc:
+        raise TrainerArchiveError(f"{label} changed before publication: {exc}") from exc
+    if actual != expected:
+        raise TrainerArchiveError(f"{label} contents changed before publication")
+
+
+def _remove_attested_directory(
+    path: Path, expected: _DirectoryAttestation
+) -> bool:
+    try:
+        _require_attestation(path, expected, "displaced trainer archive")
+    except TrainerArchiveError:
+        return False
+    return _remove_owned_directory(path, expected.identity)
+
+
+def _atomic_rename_new_directory(source: Path, destination: Path) -> None:
+    if sys.platform == "darwin":
+        _darwin_renamex_np(source, destination, 0x00000004)  # RENAME_EXCL
+        return
+    if sys.platform.startswith("linux"):
+        _linux_renameat2(source, destination, 0x00000001)  # RENAME_NOREPLACE
+        return
+    raise TrainerArchiveError(
+        "atomic exclusive directory publication is unavailable on this platform"
+    )
+
+
+def _atomic_exchange_directories(first: Path, second: Path) -> None:
+    if sys.platform == "darwin":
+        _darwin_renamex_np(first, second, 0x00000002)  # RENAME_SWAP
+        return
+    if sys.platform.startswith("linux"):
+        _linux_renameat2(first, second, 0x00000002)  # RENAME_EXCHANGE
+        return
+    raise TrainerArchiveError(
+        "atomic directory exchange is unavailable on this platform; refusing to replace an existing archive"
+    )
+
+
+def _darwin_renamex_np(source: Path, destination: Path, flags: int) -> None:
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    renamex_np = getattr(libc, "renamex_np", None)
+    if renamex_np is None:
+        raise TrainerArchiveError(
+            "atomic directory publication is unavailable: renamex_np is missing"
+        )
+    renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+    renamex_np.restype = ctypes.c_int
+    result = renamex_np(os.fsencode(source), os.fsencode(destination), flags)
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise TrainerArchiveError(
+            f"atomic directory publication failed: {os.strerror(error_number)}"
+        )
+
+
+def _linux_renameat2(source: Path, destination: Path, flags: int) -> None:
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        raise TrainerArchiveError(
+            "atomic directory publication is unavailable: renameat2 is missing"
+        )
+    renameat2.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        -100,
+        os.fsencode(source),
+        -100,
+        os.fsencode(destination),
+        flags,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise TrainerArchiveError(
+            f"atomic directory publication failed: {os.strerror(error_number)}"
+        )
 
 
 def _path_identity(path: Path) -> tuple[int, int] | None:
@@ -1098,21 +1316,12 @@ def _path_identity(path: Path) -> tuple[int, int] | None:
 
 def _remove_owned_directory(path: Path, identity: tuple[int, int]) -> bool:
     try:
-        path_stat = path.stat(follow_symlinks=False)
+        path.stat(follow_symlinks=False)
     except FileNotFoundError:
         return True
     except OSError:
         return False
-    if (
-        not stat.S_ISDIR(path_stat.st_mode)
-        or (path_stat.st_dev, path_stat.st_ino) != identity
-    ):
-        return False
-    try:
-        shutil.rmtree(path)
-    except OSError:
-        return False
-    return True
+    return remove_directory_tree_if_identity(path, identity)
 
 
 def _remove_owned_file(path: Path, identity: tuple[int, int]) -> bool:

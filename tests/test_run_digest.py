@@ -6,6 +6,9 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.digest import build_run_digest, render_run_digest_markdown
+from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.state_diff import build_state_diff
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +87,50 @@ class RunDigestTests(unittest.TestCase):
             self.assertEqual(digest["training_signals"]["state_change_count"], 2)
             self.assertEqual(digest["training_signals"]["task_completion_status"], "complete")
             self.assertIn("stateful_success_reward", {action["id"] for action in digest["recommended_actions"]})
+
+    def test_digest_preserves_unknown_state_comparison(self):
+        state_diff = build_state_diff(
+            {"outer": {"items": [{"value": "before"}] * 20}},
+            {"outer": {"items": [{"value": "after"}] * 20}},
+            max_depth=1,
+        )
+        digest = build_run_digest(
+            {"id": "uncertain_state"},
+            {"events": []},
+            {
+                "passed": False,
+                "score": 0,
+                "pass_threshold": 90,
+                "summary": "State comparison is incomplete.",
+                "rules": [],
+            },
+            state_diff=state_diff,
+        )
+
+        self.assertFalse(digest["state_changes"]["comparison_complete"])
+        self.assertEqual(digest["state_changes"]["change_status"], "unknown")
+        self.assertTrue(check_schema_contract(digest)["passed"])
+        markdown = render_run_digest_markdown(digest)
+        self.assertIn("- Status: `UNKNOWN`", markdown)
+        self.assertIn("- Changed: `unknown`", markdown)
+        self.assertNotIn("- Changed: `false`", markdown)
+
+    def test_digest_without_state_diff_is_unknown_not_unchanged(self):
+        digest = build_run_digest(
+            {"id": "missing_state"},
+            {"events": []},
+            {
+                "passed": False,
+                "score": 0,
+                "pass_threshold": 90,
+                "summary": "No state evidence.",
+                "rules": [],
+            },
+        )
+
+        self.assertFalse(digest["state_changes"]["available"])
+        self.assertFalse(digest["state_changes"]["comparison_complete"])
+        self.assertEqual(digest["state_changes"]["change_status"], "unknown")
 
     def test_validate_rejects_stale_digest(self):
         with tempfile.TemporaryDirectory() as tmp:

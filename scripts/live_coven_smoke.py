@@ -25,8 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from flightrecorder.cli import _run_scenario_artifacts
 from flightrecorder.path_safety import (
     assert_safe_output_directory,
-    json_marker_has_schema_version,
-    replace_owned_output_directory,
+    json_marker_matches_schema,
+    locked_owned_output_directory,
 )
 from scripts.hermes_harness import (
     _add_path_mode_arguments,
@@ -55,7 +55,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     out_dir = Path(args.out).expanduser()
-    _prepare_smoke_output(out_dir, force=bool(args.force))
+    try:
+        with locked_owned_output_directory(
+            out_dir,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=bool(args.force),
+            label="Coven smoke output",
+            is_owned=lambda path: json_marker_matches_schema(
+                path,
+                "live_coven_smoke_summary.json",
+                "live_coven_smoke_summary",
+            ),
+        ):
+            return _run_locked_smoke(args, out_dir)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _run_locked_smoke(args: argparse.Namespace, out_dir: Path) -> int:
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True)
 
@@ -125,23 +142,6 @@ def _resolve_coven_binary(args: argparse.Namespace, temp_root: Path, out_dir: Pa
     if not binary.exists():
         raise SystemExit(f"installed package did not provide {binary}; see {out_dir}")
     return binary
-
-
-def _prepare_smoke_output(out_dir: Path, *, force: bool) -> None:
-    try:
-        replace_owned_output_directory(
-            out_dir,
-            repo_root=Path(__file__).resolve().parents[1],
-            force=force,
-            label="Coven smoke output",
-            is_owned=lambda path: json_marker_has_schema_version(
-                path,
-                "live_coven_smoke_summary.json",
-                SUMMARY_SCHEMA_VERSION,
-            ),
-        )
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
 
 
 def _run_live_session(

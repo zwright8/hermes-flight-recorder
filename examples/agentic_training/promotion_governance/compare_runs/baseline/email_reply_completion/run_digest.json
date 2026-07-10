@@ -167,7 +167,9 @@
   "state_changes": {
     "available": true,
     "change_count": 0,
+    "change_status": "unchanged",
     "changed": false,
+    "comparison_complete": true,
     "summary": "0 state change(s) detected.",
     "top_changes": [],
     "truncated": false

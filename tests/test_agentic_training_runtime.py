@@ -21,6 +21,44 @@ EXAMPLE_PLAN = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_
 
 
 class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
+    def test_full_validator_reprobes_declared_dependency_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime_preflight.json"
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=EXAMPLE_PLAN,
+                out_path=path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            preflight["dependency_policy"]["override_modules"] = ["definitely_missing_hfr_module_xyz"]
+            preflight["dependency_policy"]["effective_required_modules"] = ["definitely_missing_hfr_module_xyz"]
+            preflight["dependency_checks"][0]["module"] = "definitely_missing_hfr_module_xyz"
+            path.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            errors = validate_agentic_training_runtime_preflight(path).errors
+
+            self.assertTrue(any("fresh dependency probes" in error for error in errors), errors)
+
+    def test_full_validator_rejects_ready_receipt_with_empty_dependency_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime_preflight.json"
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=EXAMPLE_PLAN,
+                out_path=path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            preflight["dependency_policy"]["override_modules"] = []
+            preflight["dependency_policy"]["effective_required_modules"] = []
+            preflight["dependency_checks"] = []
+            path.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            errors = validate_agentic_training_runtime_preflight(path).errors
+
+            self.assertTrue(any("passed must match recomputed runtime readiness" in error for error in errors), errors)
+
     def test_full_validator_rejects_schema_valid_forged_check_aggregates(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "runtime_preflight.json"

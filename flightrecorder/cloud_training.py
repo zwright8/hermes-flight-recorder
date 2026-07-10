@@ -11,6 +11,7 @@ from typing import Any
 
 from .dependency_probe import module_available_without_import as _module_available
 from .schema_registry import SchemaRegistryError, check_schema_file
+from .source_contract import inspect_artifact_source
 
 CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION = "hfr.cloud_training_provider_registry.v1"
 CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION = "hfr.cloud_training_preflight.v1"
@@ -240,18 +241,28 @@ def build_cloud_training_preflight(
         else _missing_ref("trainer_launch_check")
     )
 
-    _add_check(checks, "agentic_training_plan_ready", _artifact_ready(plan_ref), {"artifact": plan_ref}, {"schema": "agentic_training_plan", "passed": True})
+    _add_check(
+        checks,
+        "agentic_training_plan_ready",
+        _artifact_ready(plan_ref, Path(agentic_training_plan_path), "agentic_training_plan"),
+        {"artifact": plan_ref},
+        {"schema": "agentic_training_plan", "passed": True},
+    )
     _add_check(
         checks,
         "trainer_preflight_ready",
-        _artifact_ready(trainer_preflight_ref),
+        _artifact_ready(trainer_preflight_ref, Path(trainer_preflight_path), "trainer_preflight")
+        if trainer_preflight_path
+        else False,
         {"artifact": trainer_preflight_ref},
         {"schema": "trainer_preflight", "passed": True},
     )
     _add_check(
         checks,
         "trainer_launch_check_ready",
-        _artifact_ready(trainer_launch_ref),
+        _artifact_ready(trainer_launch_ref, Path(trainer_launch_check_path), "trainer_launch_check")
+        if trainer_launch_check_path
+        else False,
         {"artifact": trainer_launch_ref},
         {"schema": "trainer_launch_check", "passed": True},
     )
@@ -446,11 +457,19 @@ def build_cloud_training_launch_plan(
         artifact_manifest_required=True,
     )
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "preflight_ready", _artifact_ready(preflight_ref), {"artifact": preflight_ref}, {"schema": "cloud_training_preflight", "passed": True})
+    _add_check(
+        checks,
+        "preflight_ready",
+        _artifact_ready(preflight_ref, preflight_source_path, "cloud_training_preflight"),
+        {"artifact": preflight_ref},
+        {"schema": "cloud_training_preflight", "passed": True},
+    )
     _add_check(
         checks,
         "artifact_manifest_ready",
-        _artifact_ready(artifact_ref),
+        _artifact_ready(artifact_ref, artifact_manifest_source_path, "cloud_training_artifact_manifest")
+        if artifact_manifest_source_path
+        else False,
         {"artifact": artifact_ref},
         {"schema": "cloud_training_artifact_manifest", "passed": True},
     )
@@ -501,7 +520,13 @@ def build_cloud_training_launch_receipt(
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
     plan_ref = _json_artifact_ref("cloud_training_launch_plan", Path(launch_plan_path), "cloud_training_launch_plan", preserve_paths, display_base_dir)
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "launch_plan_ready", _artifact_ready(plan_ref), {"artifact": plan_ref}, {"schema": "cloud_training_launch_plan", "passed": True})
+    _add_check(
+        checks,
+        "launch_plan_ready",
+        _artifact_ready(plan_ref, Path(launch_plan_path), "cloud_training_launch_plan"),
+        {"artifact": plan_ref},
+        {"schema": "cloud_training_launch_plan", "passed": True},
+    )
     _add_check(checks, "live_launch_not_implemented", not live, {"live": live}, {"live": False})
     _add_check(checks, "cloud_job_not_started", True, {"cloud_job_started": False, "provider_api_called": False}, {"cloud_job_started": False})
     failed = [check for check in checks if not check["passed"]]
@@ -545,7 +570,13 @@ def build_cloud_training_status_receipt(
         display_base_dir,
     )
     checks: list[dict[str, Any]] = []
-    _add_check(checks, "launch_receipt_readable", launch_ref["exists"], {"artifact": launch_ref}, {"exists": True})
+    _add_check(
+        checks,
+        "launch_receipt_readable",
+        _artifact_ready(launch_ref, Path(launch_receipt_path), "cloud_training_launch_receipt"),
+        {"artifact": launch_ref},
+        {"exists": True},
+    )
     _add_check(checks, "status_check_did_not_call_provider", True, {"provider_api_called": False}, {"provider_api_called": False})
     _add_check(checks, "cancel_is_dry_run", True, {"cancel_requested": cancel_requested, "provider_cancel_called": False}, {"provider_cancel_called": False})
     failed = [check for check in checks if not check["passed"]]
@@ -776,8 +807,10 @@ def _missing_ref(role: str) -> dict[str, Any]:
     }
 
 
-def _artifact_ready(ref: dict[str, Any]) -> bool:
-    return ref.get("exists") is True and ref.get("schema_passed") is True and ref.get("source_passed") is True
+def _artifact_ready(ref: dict[str, Any], path: Path, role: str) -> bool:
+    if ref.get("exists") is not True or ref.get("schema_passed") is not True:
+        return False
+    return inspect_artifact_source(path, role).get("ready") is True
 
 
 def _schema_check(path: Path, schema_name: str) -> dict[str, Any]:

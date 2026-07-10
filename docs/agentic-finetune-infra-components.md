@@ -24,11 +24,13 @@ safety, cost, latency, and generalization across held-out tasks.
   reward-model rows, dataset metrics, and family-exclusive splits
 - experiment bundle generation for trace-only versus Flight-Recorder-gated
   fine-tuning arms
-- local LoRA training script covering trace SFT, curated SFT, DPO, and
-  SFT-then-DPO
-- held-out evaluation and promotion comparison scripts
-- a small OpenAI-compatible local Transformers serving shim for baseline and
-  adapter comparison
+- delegated training plans and fail-closed handoff receipts covering trace
+  SFT, curated SFT, DPO, and SFT-then-DPO; Flight Recorder does not execute
+  model-weight training
+- held-out evaluation planning, local deterministic replay, and promotion
+  comparison contracts
+- OpenAI-compatible serving lifecycle and capability-check contracts; serving
+  engines remain external to Flight Recorder
 
 Treat Flight Recorder as the deterministic evidence layer, not as the entire
 trainer, registry, scheduler, or serving platform.

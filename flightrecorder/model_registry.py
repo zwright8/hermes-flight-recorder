@@ -283,14 +283,17 @@ def model_registry_entry_errors(entry: Any) -> list[str]:
     for field_name in ("entry_id", "candidate_id", "registered_at", "updated_at", "status"):
         _require_non_empty_string(entry, field_name, errors, "model_registry_entry.")
     candidate = entry.get("candidate")
-    errors.extend(model_candidate_errors(candidate))
+    errors.extend(
+        _replace_error_prefix(error, "model_candidate", "model_registry_entry.candidate")
+        for error in model_candidate_errors(candidate)
+    )
     if isinstance(candidate, dict) and entry.get("candidate_id") != candidate.get("candidate_id"):
         errors.append("model_registry_entry.candidate_id must match candidate.candidate_id.")
     if not isinstance(entry.get("training_eligible"), bool):
         errors.append("model_registry_entry.training_eligible must be a boolean.")
     if entry.get("training_eligible") is True and isinstance(candidate, dict):
         errors.extend(
-            error.replace("model_candidate.", "model_registry_entry.candidate.")
+            _replace_error_prefix(error, "model_candidate", "model_registry_entry.candidate")
             for error in model_candidate_errors(candidate, require_training_eligible=True)
         )
     if not _is_string_list(entry.get("notes", [])):
@@ -314,7 +317,10 @@ def model_registry_errors(registry: Any) -> list[str]:
         if not isinstance(entry_id, str) or not entry_id:
             errors.append("model_registry.entries keys must be non-empty strings.")
             continue
-        errors.extend(error.replace("model_registry_entry.", f"model_registry.entries.{entry_id}.") for error in model_registry_entry_errors(entry))
+        errors.extend(
+            _replace_error_prefix(error, "model_registry_entry", f"model_registry.entries.{entry_id}")
+            for error in model_registry_entry_errors(entry)
+        )
         if isinstance(entry, dict) and entry.get("entry_id") != entry_id:
             errors.append(f"model_registry.entries.{entry_id}.entry_id must match its registry key.")
     aliases = registry.get("aliases")
@@ -1067,7 +1073,10 @@ def training_plan_errors(plan: Any) -> list[str]:
     else:
         for field_name in ("model_ref", "entry_id", "candidate_id", "model_id"):
             _require_non_empty_string(model, field_name, errors, "training_plan.model.")
-        errors.extend(error.replace("model_candidate.", "training_plan.model.candidate.") for error in model_candidate_errors(model.get("candidate"), require_training_eligible=True))
+        errors.extend(
+            _replace_error_prefix(error, "model_candidate", "training_plan.model.candidate")
+            for error in model_candidate_errors(model.get("candidate"), require_training_eligible=True)
+        )
     report = plan.get("compatibility_report")
     if isinstance(report, dict) and isinstance(model, dict):
         _training_plan_compatibility_report_errors(report, model, errors)
@@ -1505,6 +1514,12 @@ def _training_license_errors(license_review: dict[str, Any], errors: list[str], 
 def _require_equal(value: dict[str, Any], field_name: str, expected: Any, errors: list[str], prefix: str) -> None:
     if value.get(field_name) != expected:
         errors.append(f"{prefix}{field_name} must be {expected!r}.")
+
+
+def _replace_error_prefix(error: str, old_prefix: str, new_prefix: str) -> str:
+    if error == old_prefix or error.startswith(f"{old_prefix}.") or error.startswith(f"{old_prefix} "):
+        return f"{new_prefix}{error[len(old_prefix):]}"
+    return error
 
 
 def _require_non_empty_string(value: dict[str, Any], field_name: str, errors: list[str], prefix: str) -> None:

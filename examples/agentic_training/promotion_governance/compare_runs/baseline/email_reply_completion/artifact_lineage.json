@@ -225,8 +225,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/baseline/email_reply_completion/state_diff.json",
       "role": "output",
       "sensitive": false,
-      "sha256": "7f3a0530251ba0bc2f2e1c183041c95a639f57b27f3700c3e6a295bf0a8f30a3",
-      "size_bytes": 190
+      "sha256": "1beeb1a752745f94e65eccfec9910afb5903efe20537a0a502cd70ee0a2f8f4e",
+      "size_bytes": 253
     },
     {
       "exists": true,
@@ -252,8 +252,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/baseline/email_reply_completion/run_digest.json",
       "role": "output",
       "sensitive": false,
-      "sha256": "cf90ad10fdc00cf149d1d0492169d56fb7cca4b3560a3799b742b5903211c926",
-      "size_bytes": 7107
+      "sha256": "48e4fbad7f3560a2daf53c59f1c7177ae81f3c46021611e43615f4e2fe743af7",
+      "size_bytes": 7174
     },
     {
       "exists": true,
@@ -261,8 +261,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/baseline/email_reply_completion/report.html",
       "role": "output",
       "sensitive": false,
-      "sha256": "44e936189cb5ea711eae2565b6f96efe767cb571180090510416ce80cd339845",
-      "size_bytes": 14052
+      "sha256": "2a6c1bbee9f910668e1773296fd72ddd42b2b01646004c28128fbf270915ebbb",
+      "size_bytes": 14109
     },
     {
       "exists": true,

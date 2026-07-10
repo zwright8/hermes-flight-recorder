@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
+from flightrecorder.path_safety import locked_owned_output_directory
 from flightrecorder.promotion_archive import PromotionArchiveError, _prepare_archive_dir
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1723,20 +1724,54 @@ class PromotionLedgerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "flightrecorder.promotion_archive.assert_safe_output_directory",
+                    "flightrecorder.path_safety.assert_safe_output_directory",
                     side_effect=ValueError("protected output directory"),
                 ) as guard,
                 patch(
                     "flightrecorder.promotion_archive._is_existing_promotion_archive",
                     return_value=True,
                 ),
-                patch("flightrecorder.promotion_archive.shutil.rmtree") as remove,
+                patch(
+                    "flightrecorder.path_safety.remove_directory_tree_if_identity"
+                ) as remove,
             ):
                 with self.assertRaisesRegex(PromotionArchiveError, "protected output directory"):
                     _prepare_archive_dir(target, force=True)
 
             guard.assert_called_once()
             remove.assert_not_called()
+
+    def test_promotion_archive_schema_version_only_spoof_is_not_owned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "promotion_archive"
+            target.mkdir()
+            marker = target / "promotion_archive.json"
+            marker.write_text(
+                '{"schema_version":"hfr.promotion_archive.v1"}\n',
+                encoding="utf-8",
+            )
+            protected = target / "keep.txt"
+            protected.write_text("do not delete\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(PromotionArchiveError, "unrecognized"):
+                _prepare_archive_dir(target, force=True)
+
+            self.assertTrue(marker.is_file())
+            self.assertEqual(protected.read_text(encoding="utf-8"), "do not delete\n")
+
+    def test_promotion_archive_concurrent_publisher_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "promotion_archive"
+
+            with locked_owned_output_directory(
+                target,
+                repo_root=ROOT,
+                force=False,
+                label="promotion archive output",
+                is_owned=lambda _path: False,
+            ):
+                with self.assertRaisesRegex(PromotionArchiveError, "locked for publication"):
+                    _prepare_archive_dir(target, force=False)
 
     def test_promotion_archive_rejects_empty_symlink_output_before_early_return(self):
         with tempfile.TemporaryDirectory() as tmp:

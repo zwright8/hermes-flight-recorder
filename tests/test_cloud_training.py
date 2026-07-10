@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,8 +12,10 @@ from flightrecorder.cloud_training import (
     PROVIDER_ADAPTER_RECEIPT_TYPES,
     build_cloud_training_artifact_manifest,
     build_cloud_training_launch_plan,
+    build_cloud_training_preflight,
     build_cloud_training_provider_registry,
     provider_choices,
+    write_cloud_training_artifact,
 )
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 from flightrecorder.validation import validate_artifacts
@@ -27,6 +30,48 @@ def sha256_file(path: Path) -> str:
 
 
 class CloudTrainingTests(unittest.TestCase):
+    def test_launch_plan_blocks_schema_valid_semantically_forged_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(ROOT / "examples" / "agentic_training", root / "examples" / "agentic_training")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                example_root = Path("examples") / "agentic_training"
+                preflight_path = Path("preflight.json")
+                artifact_manifest_path = Path("artifact_manifest.json")
+                preflight = build_cloud_training_preflight(
+                    provider_id="modal",
+                    agentic_training_plan_path=example_root / "plans" / "sft_then_dpo_plan.json",
+                    trainer_preflight_path=example_root / "trainer_preflight.json",
+                    trainer_launch_check_path=example_root / "trainer_launch_check.json",
+                    region="provider_default",
+                    gpu_class="a100",
+                    max_cost_usd=0,
+                    created_at="2026-07-03T00:00:00+00:00",
+                )
+                self.assertTrue(preflight["passed"], preflight["blocked_reasons"])
+                preflight["checks"][0]["passed"] = False
+                write_cloud_training_artifact(preflight_path, preflight)
+                self.assertTrue(check_schema_file(preflight_path)["passed"])
+                artifact_manifest = build_cloud_training_artifact_manifest(
+                    provider_id="modal",
+                    upload_paths=[example_root / "plans" / "sft_then_dpo_plan.json"],
+                    created_at="2026-07-03T00:00:00+00:00",
+                )
+                write_cloud_training_artifact(artifact_manifest_path, artifact_manifest)
+
+                launch_plan = build_cloud_training_launch_plan(
+                    preflight_path=preflight_path,
+                    artifact_manifest_path=artifact_manifest_path,
+                    created_at="2026-07-03T00:00:00+00:00",
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertFalse(launch_plan["passed"])
+            self.assertIn("preflight_ready", {check["id"] for check in launch_plan["checks"] if not check["passed"]})
+
     def test_provider_registry_lists_fail_closed_partner_contracts(self):
         registry = build_cloud_training_provider_registry(created_at="2026-07-03T00:00:00+00:00")
 
@@ -99,8 +144,18 @@ class CloudTrainingTests(unittest.TestCase):
         status_receipt_path = cloud_root / "status_receipt.json"
 
         self.assertEqual(sha256_file(plan_source), sha256_file(example_root / "plans" / "sft_then_dpo_plan.json"))
-        self.assertEqual(sha256_file(trainer_preflight_source), sha256_file(example_root / "trainer_preflight.json"))
-        self.assertEqual(sha256_file(trainer_launch_check_source), sha256_file(example_root / "trainer_launch_check.json"))
+        staged_trainer_validation = validate_artifacts(
+            trainer_preflight_paths=[trainer_preflight_source],
+            trainer_launch_check_paths=[trainer_launch_check_source],
+            strict=True,
+        )
+        self.assertTrue(staged_trainer_validation["passed"], staged_trainer_validation)
+        staged_preflight = json.loads(trainer_preflight_source.read_text(encoding="utf-8"))
+        self.assertEqual(
+            staged_preflight["artifacts"]["agentic_training_plan"]["path"],
+            "plans/sft_then_dpo_plan.json",
+        )
+        self.assertEqual(staged_preflight["required_gates"], ["agentic_training_plan"])
 
         preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
         source_paths = {role: ref["path"] for role, ref in preflight["source_artifacts"].items()}
@@ -643,9 +698,11 @@ class CloudTrainingTests(unittest.TestCase):
                         str(status_receipt),
                     ]
                 ),
-                0,
+                1,
             )
             status_payload = json.loads(status_receipt.read_text(encoding="utf-8"))
+            self.assertFalse(status_payload["passed"])
+            self.assertEqual(status_payload["readiness"], "blocked")
             self.assertEqual(status_payload["status"]["provider_status"], "not_started")
             self.assertFalse(status_payload["status"]["provider_cancel_called"])
             self.assert_schema_and_validate(status_receipt, "cloud_training_status_receipt")
@@ -783,7 +840,7 @@ class CloudTrainingTests(unittest.TestCase):
             )
             self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
             self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
-            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 1)
             self.assert_schema_and_validate(launch_receipt, "cloud_training_launch_receipt")
             self.assert_schema_and_validate(status_receipt, "cloud_training_status_receipt")
 
@@ -897,7 +954,7 @@ class CloudTrainingTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
-            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 1)
 
             self.assert_schema_and_validate(artifact_manifest, "cloud_training_artifact_manifest")
             self.assert_schema_and_validate(preflight, "cloud_training_preflight")
@@ -1295,7 +1352,7 @@ class CloudTrainingTests(unittest.TestCase):
             )
             self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
             self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
-            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 1)
             launch_payload = json.loads(launch_plan.read_text(encoding="utf-8"))
             self.assertTrue(launch_payload["provider_chain"]["artifact_manifest_required"])
             self.assertFalse(launch_payload["provider_chain"]["provider_consistent"])
@@ -1369,7 +1426,7 @@ class CloudTrainingTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
-            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 1)
 
             artifact_payload = json.loads(artifact_manifest.read_text(encoding="utf-8"))
             artifact_payload["upload_artifacts"] = []

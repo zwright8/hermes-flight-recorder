@@ -24,7 +24,7 @@
       "passed": null,
       "path": "harness_handoff/harness_result.json",
       "schema_version": "hfr.harness_run_result.v1",
-      "sha256": "56c7c655f09aab8ab7a7e4fcab0205b155688d8de55cc1496390811409a238e9",
+      "sha256": "7c4d23d64e415df95e2e4f96e376103bb174b9681d9957e0a5e18691198b2be6",
       "size_bytes": 2987
     },
     "repair_queue": {
@@ -57,7 +57,7 @@
       "passed": null,
       "path": "suite_summary.json",
       "schema_version": "hfr.run_suite.v1",
-      "sha256": "aa049e57a7a2efb5dcd4404485399ecef1b7c1fa90b3ba7e3efc736bea7e89c8",
+      "sha256": "b0ed623e63b50d160c36bf58eb0f38b7cbc2e0912dba910d7b331a100c5a061e",
       "size_bytes": 3321
     },
     "trace_observability": {

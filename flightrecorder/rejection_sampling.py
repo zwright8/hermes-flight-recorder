@@ -148,9 +148,9 @@ def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, outpu
     path = Path(path_value)
     displayed_path = _display_path(path, preserve_paths, output_dir)
     public_path = _is_public_rejection_sampling_ref_path(displayed_path)
-    source = inspect_artifact_source(path, role) if public_path else {"payload": {}, "regular_file": False, "schema_valid": False}
-    exists = public_path and source.get("regular_file") is True and source.get("schema_valid") is True
-    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+    source = inspect_artifact_source(path, role) if public_path else {"payload": {}, "ready": False}
+    exists = public_path and source.get("ready") is True
+    payload = source["payload"] if exists and isinstance(source.get("payload"), dict) else {}
     boundary = payload.get("execution_boundary") if isinstance(payload.get("execution_boundary"), dict) else {}
     ref = {
         "role": role,

@@ -109,6 +109,33 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertEqual(receipt["readiness"], "blocked")
             self.assertFalse(receipt["source_plan"]["exists"])
 
+    def test_rollout_receipt_rejects_schema_valid_semantically_forged_source_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root)
+            plan_path = root / "plan.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="forged-source-plan",
+                scenario_paths=scenarios,
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            plan["checks"][0]["passed"] = False
+            write_agentic_rollout_plan(plan_path, plan)
+            self.assertTrue(check_schema_file(plan_path)["passed"])
+
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=root / "receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(receipt["passed"])
+            self.assertFalse(receipt["source_plan"]["exists"])
+            self.assertIn("plan_schema_supported", {check["id"] for check in receipt["checks"] if not check["passed"]})
+
     def test_committed_example_rollout_plan_is_public_safe_and_valid(self):
         plan_path = ROOT / "examples" / "rollout_generation" / "rollout_plan.json"
         payload = json.loads(plan_path.read_text(encoding="utf-8"))

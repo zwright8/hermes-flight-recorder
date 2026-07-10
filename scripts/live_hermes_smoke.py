@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
 from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
-from flightrecorder.path_safety import json_marker_has_schema_version, replace_owned_output_directory
+from flightrecorder.path_safety import json_marker_matches_schema, locked_owned_output_directory
 from flightrecorder.schema import ScenarioError
 from scripts.hermes_harness import (
     _add_path_mode_arguments,
@@ -166,19 +166,25 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = Path(args.out).expanduser()
     try:
-        replace_owned_output_directory(
+        with locked_owned_output_directory(
             out_dir,
             repo_root=Path(__file__).resolve().parents[1],
             force=bool(args.force),
             label="Hermes smoke output",
-            is_owned=lambda path: json_marker_has_schema_version(
+            is_owned=lambda path: json_marker_matches_schema(
                 path,
                 "live_smoke_summary.json",
-                LIVE_SMOKE_SUMMARY_SCHEMA_VERSION,
+                "live_smoke_summary",
             ),
-        )
+        ):
+            return _run_locked_smoke(args, hermes_root, out_dir)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+
+
+def _run_locked_smoke(
+    args: argparse.Namespace, hermes_root: Path, out_dir: Path
+) -> int:
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True)
 

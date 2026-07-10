@@ -10,7 +10,10 @@ from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .governance import PROMOTION_RELEASE_RECORD_SCHEMA_VERSION
-from .path_safety import assert_safe_output_directory, path_has_symlink_component as _path_has_symlink_component
+from .path_safety import (
+    locked_owned_output_directory,
+    path_has_symlink_component as _path_has_symlink_component,
+)
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .schema_registry import SchemaRegistryError, check_schema_file
@@ -35,8 +38,38 @@ def build_promotion_archive(
 ) -> dict[str, Any]:
     """Copy promotion evidence into a portable directory with a hash manifest."""
     target = Path(out_dir)
+    try:
+        with locked_owned_output_directory(
+            target,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=force,
+            label="promotion archive output",
+            is_owned=_is_existing_promotion_archive,
+        ):
+            return _build_promotion_archive_locked(
+                target=target,
+                promotion_ledger_path=promotion_ledger_path,
+                promotion_ledger_gate_path=promotion_ledger_gate_path,
+                decision_gate_paths=decision_gate_paths,
+                promotion_release_record_paths=promotion_release_record_paths,
+                require_self_contained=require_self_contained,
+                preserve_paths=preserve_paths,
+            )
+    except ValueError as exc:
+        raise PromotionArchiveError(str(exc)) from exc
+
+
+def _build_promotion_archive_locked(
+    *,
+    target: Path,
+    promotion_ledger_path: str | Path,
+    promotion_ledger_gate_path: str | Path | None,
+    decision_gate_paths: list[str | Path] | None,
+    promotion_release_record_paths: list[str | Path] | None,
+    require_self_contained: bool,
+    preserve_paths: bool,
+) -> dict[str, Any]:
     artifacts_dir = target / "artifacts"
-    _prepare_archive_dir(target, force)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     ledger_path = Path(promotion_ledger_path)
@@ -193,20 +226,16 @@ def _decision_gate_sources(
 
 def _prepare_archive_dir(target: Path, force: bool) -> None:
     try:
-        assert_safe_output_directory(target, repo_root=Path(__file__).resolve().parents[1])
+        with locked_owned_output_directory(
+            target,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=force,
+            label="promotion archive output",
+            is_owned=_is_existing_promotion_archive,
+        ):
+            return
     except ValueError as exc:
         raise PromotionArchiveError(str(exc)) from exc
-    if target.exists() and not target.is_dir():
-        raise PromotionArchiveError(f"promotion archive output is not a directory: {target}")
-    if not target.exists() or not any(target.iterdir()):
-        return
-    if not force:
-        raise PromotionArchiveError(f"promotion archive output is not empty: {target}; pass --force to replace it")
-    if not _is_existing_promotion_archive(target):
-        raise PromotionArchiveError(
-            f"refusing to replace non-archive directory: {target}; choose an empty output directory or an existing promotion archive"
-        )
-    shutil.rmtree(target)
 
 
 def _is_existing_promotion_archive(target: Path) -> bool:
@@ -214,8 +243,16 @@ def _is_existing_promotion_archive(target: Path) -> bool:
     if not manifest_path.is_file() or _path_has_symlink_component(manifest_path, include_leaf=True):
         return False
     try:
-        return check_schema_file(manifest_path, "promotion_archive").get("passed") is True
+        schema_valid = check_schema_file(manifest_path, "promotion_archive").get("passed") is True
     except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError):
+        return False
+    if not schema_valid:
+        return False
+    try:
+        from .validation import validate_promotion_archive
+
+        return not validate_promotion_archive(target).errors
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return False
 
 

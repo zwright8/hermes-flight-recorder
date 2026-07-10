@@ -81,6 +81,7 @@ from .cloud_training import (
     PROVIDER_ADAPTER_RECEIPT_TYPES,
 )
 from .schema_registry import SchemaRegistryError, check_schema_contract, check_schema_file
+from .source_contract import inspect_artifact_source
 from .compare_gate import compare_movement_summary
 from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
@@ -192,7 +193,7 @@ from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_check import SCENARIO_CHECK_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
-from .state_diff import STATE_DIFF_SCHEMA_VERSION
+from .state_diff import STATE_DIFF_SCHEMA_VERSION, resolve_state_diff_semantics
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .trainer_archive import TRAINER_ARCHIVE_SCHEMA_VERSION
 from .trainer_archive_check import TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION
@@ -3443,6 +3444,8 @@ def _validate_agentic_training_runtime_preflight(
 ) -> None:
     from .agentic_training_runtime import (
         _blocked_reasons,
+        _dependency_checks,
+        _dependency_policy,
         _json_schema_record,
         _mode_contract_check,
         _read_json_object,
@@ -3528,10 +3531,31 @@ def _validate_agentic_training_runtime_preflight(
             "agentic_training_runtime_preflight.mode_contract_check does not match the source plan mode contract."
         )
 
+    dependency_policy = preflight.get("dependency_policy")
+    if not isinstance(dependency_policy, dict):
+        target.errors.append("agentic_training_runtime_preflight.dependency_policy must be an object.")
+        dependency_policy = {}
+    recorded_overrides = dependency_policy.get("override_modules")
+    recorded_skip_defaults = dependency_policy.get("skip_default_modules")
+    expected_dependency_policy = _dependency_policy(
+        expected_backend,
+        recorded_overrides if isinstance(recorded_overrides, list) else (),
+        recorded_skip_defaults if isinstance(recorded_skip_defaults, bool) else False,
+    )
+    if dependency_policy != expected_dependency_policy:
+        target.errors.append(
+            "agentic_training_runtime_preflight.dependency_policy must match the backend and declared override policy."
+        )
+
     dependency_checks = preflight.get("dependency_checks")
     if not isinstance(dependency_checks, list):
         target.errors.append("agentic_training_runtime_preflight.dependency_checks must be a list.")
         dependency_checks = []
+    expected_dependency_checks = _dependency_checks(expected_dependency_policy)
+    if dependency_checks != expected_dependency_checks:
+        target.errors.append(
+            "agentic_training_runtime_preflight.dependency_checks must match fresh dependency probes for the declared policy."
+        )
     for index, check in enumerate(dependency_checks):
         if not isinstance(check, dict):
             target.errors.append(f"agentic_training_runtime_preflight.dependency_checks[{index}] must be an object.")
@@ -3550,8 +3574,9 @@ def _validate_agentic_training_runtime_preflight(
         and all(view.get("passed") is True for view in expected_view_checks),
         "mode_contract_ready": expected_mode_contract.get("passed") is True,
         "runtime_dependencies_available": all(
-            isinstance(check, dict) and check.get("passed") is True for check in dependency_checks
-        ),
+            isinstance(check, dict) and check.get("passed") is True for check in expected_dependency_checks
+        )
+        and bool(expected_dependency_checks),
         "flight_recorder_did_not_launch_training": True,
         "model_downloads_not_started": True,
     }
@@ -3605,7 +3630,7 @@ def _validate_agentic_training_runtime_preflight(
     blocked_reasons = preflight.get("blocked_reasons")
     expected_blocked_reasons = _blocked_reasons(
         [check for check in checks if isinstance(check, dict) and check.get("passed") is False],
-        [check for check in dependency_checks if isinstance(check, dict)],
+        expected_dependency_checks,
         [check for check in view_checks if isinstance(check, dict)],
         expected_mode_contract,
     )
@@ -4942,6 +4967,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         cloud_training_receipt_state,
         target,
         "agentic_training_loop_plan.cloud_training",
+        source_path,
     )
     _validate_agentic_training_loop_cloud_training_receipt_state(
         plan.get("cloud_training_receipt_state"),
@@ -5003,10 +5029,10 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         "agentic_training_loop_plan.checks",
     )
     expected_heldout_eval_passed = (
-        "heldout_manifest" in source_artifacts
-        and "external_eval_plan" in source_artifacts
-        and "external_eval_receipt" in source_artifacts
-        and "eval_summary" in source_artifacts
+        _agentic_training_loop_role_source_ready(source_artifacts, "heldout_manifest", source_path)
+        and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_plan", source_path)
+        and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_receipt", source_path)
+        and _agentic_training_loop_role_source_ready(source_artifacts, "eval_summary", source_path)
         and eval_summary_state["valid"]
         and eval_summary_state["passed"]
         and external_eval_receipt_state["receipts_passed"]
@@ -5182,6 +5208,33 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
         if isinstance(ref.get("sha256"), str) and len(ref.get("sha256", "")) == 64 and tree["sha256"] != ref.get("sha256"):
             target.errors.append(f"{label}.sha256 does not match the current directory.")
 
+    if ref.get("exists") is True:
+        role = ref.get("role")
+        artifact_path = _resolve_agentic_training_loop_plan_ref_path(path_value, source_path)
+        if isinstance(role, str) and role and artifact_path is not None:
+            inspection = inspect_artifact_source(artifact_path, role)
+            if inspection.get("ready") is not True:
+                target.errors.append(
+                    f"{label}.exists cannot be true because the referenced {role} artifact is not semantically ready."
+                )
+
+
+def _agentic_training_loop_role_source_ready(
+    source_artifacts: dict[str, Any],
+    role: str,
+    source_path: Path,
+) -> bool:
+    refs = source_artifacts.get(role)
+    if not isinstance(refs, list) or not refs:
+        return False
+    for ref in refs:
+        if not isinstance(ref, dict) or ref.get("exists") is not True:
+            return False
+        ref_path = _resolve_agentic_training_loop_plan_ref_path(ref.get("path"), source_path)
+        if ref_path is None or inspect_artifact_source(ref_path, role).get("ready") is not True:
+            return False
+    return True
+
 
 def _agentic_training_loop_source_validation_state(
     source_artifacts: dict[str, Any],
@@ -5298,12 +5351,17 @@ def _validate_agentic_training_loop_cloud_training(
     receipt_state: dict[str, Any],
     target: ValidationTarget,
     label: str,
+    source_path: Path,
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_TRAINING_KEYS, target, label)
-    present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if _agentic_loop_role_ready(source_artifacts, role)]
+    present = [
+        role
+        for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES
+        if _agentic_training_loop_role_source_ready(source_artifacts, role, source_path)
+    ]
     missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
     expected = {
         "required_artifacts": list(AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
@@ -7704,6 +7762,12 @@ def _validate_cloud_training_contract(
             target,
             "cloud_training_preflight.handoff_contract",
         )
+        _validate_cloud_training_preflight_source_readiness(
+            payload,
+            checks if isinstance(checks, list) else [],
+            target,
+            source_path,
+        )
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
         _validate_cloud_training_launch_receipt_readiness(
             payload,
@@ -8080,6 +8144,37 @@ def _validate_cloud_training_launch_plan_provider_matches_chain(
         target.errors.append("cloud_training_launch_plan.provider.id must match provider_chain.preflight_provider_id.")
 
 
+def _validate_cloud_training_preflight_source_readiness(
+    payload: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path | None,
+) -> None:
+    sources = payload.get("source_artifacts") if isinstance(payload.get("source_artifacts"), dict) else {}
+    role_checks = (
+        ("agentic_training_plan", "agentic_training_plan_ready"),
+        ("trainer_preflight", "trainer_preflight_ready"),
+        ("trainer_launch_check", "trainer_launch_check_ready"),
+    )
+    for role, check_id in role_checks:
+        state = _cloud_training_source_state(sources.get(role), source_path, role)
+        _validate_cloud_training_source_state(
+            f"cloud_training_preflight.source_artifacts.{role}",
+            state,
+            target,
+        )
+        check = _cloud_training_check_by_id(
+            checks,
+            check_id,
+            target,
+            "cloud_training_preflight.checks",
+        )
+        if check is not None and check.get("passed") != state["ready"]:
+            target.errors.append(
+                f"cloud_training_preflight.checks.{check_id}.passed must match semantic source readiness."
+            )
+
+
 def _validate_cloud_training_launch_plan_readiness(
     payload: dict[str, Any],
     checks: list[Any],
@@ -8222,7 +8317,7 @@ def _validate_cloud_training_status_receipt_readiness(
     if status.get("cost_incurred_usd") != 0:
         target.errors.append("cloud_training_status_receipt.status.cost_incurred_usd must be 0.")
     expected_checks = {
-        "launch_receipt_readable": launch_receipt_state["ref_exists"],
+        "launch_receipt_readable": launch_receipt_state["ready"],
         "status_check_did_not_call_provider": status.get("provider_api_called") is False,
         "cancel_is_dry_run": status.get("provider_cancel_called") is False,
     }
@@ -8290,8 +8385,9 @@ def _cloud_training_source_state(record: Any, source_path: Path | None, schema_n
     artifact_path = _resolve_regular_cloud_training_artifact_path(record.get("path"), source_path)
     if artifact_path is None:
         return state
-    payload = _read_json_object_silent(artifact_path)
-    schema_passed = _cloud_training_schema_check_passed(artifact_path, schema_name)
+    inspection = inspect_artifact_source(artifact_path, schema_name)
+    payload = inspection.get("payload") if isinstance(inspection.get("payload"), dict) else {}
+    schema_passed = inspection.get("schema_valid") is True
     source_passed = payload.get("passed") if isinstance(payload.get("passed"), bool) else None
     state.update(
         {
@@ -8299,7 +8395,7 @@ def _cloud_training_source_state(record: Any, source_path: Path | None, schema_n
             "schema_passed": schema_passed,
             "source_passed": source_passed,
             "source_recommendation": str(payload.get("recommendation") or ""),
-            "ready": schema_passed and source_passed is True,
+            "ready": inspection.get("ready") is True,
         }
     )
     return state
@@ -11548,13 +11644,14 @@ def _validate_state_diff(diff: Any, target: ValidationTarget, label: str) -> Non
     if not isinstance(comparison_truncated, bool):
         target.errors.append(f"{label}.comparison_truncated must be a boolean when present.")
         comparison_truncated = False
-    comparison_complete = diff.get("comparison_complete", not comparison_truncated)
+    comparison_complete = diff.get("comparison_complete")
     if not isinstance(comparison_complete, bool):
-        target.errors.append(f"{label}.comparison_complete must be a boolean when present.")
+        target.errors.append(f"{label}.comparison_complete must be a boolean.")
+        comparison_complete = False
     elif comparison_complete == comparison_truncated:
         target.errors.append(f"{label}.comparison_complete must be the inverse of comparison_truncated.")
-    expected_change_status = "changed" if bool(change_count) else "unknown" if comparison_truncated else "unchanged"
-    change_status = diff.get("change_status", expected_change_status)
+    expected_change_status = "changed" if bool(change_count) else "unknown" if not comparison_complete else "unchanged"
+    change_status = diff.get("change_status")
     if change_status != expected_change_status:
         target.errors.append(
             f"{label}.change_status expected {expected_change_status!r}, got {change_status!r}."
@@ -11798,9 +11895,11 @@ def _validate_run_digest_state_changes(
     label: str,
     state_diff: Any,
 ) -> None:
-    for field_name in ("available", "changed", "truncated"):
+    for field_name in ("available", "changed", "truncated", "comparison_complete"):
         if not isinstance(state_changes.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if state_changes.get("change_status") not in {"changed", "unchanged", "unknown"}:
+        target.errors.append(f"{label}.change_status must be changed, unchanged, or unknown.")
     if not _is_non_negative_int(state_changes.get("change_count")):
         target.errors.append(f"{label}.change_count must be a non-negative integer.")
     if not isinstance(state_changes.get("summary"), str):
@@ -11822,13 +11921,20 @@ def _validate_run_digest_state_changes(
     if state_diff is None:
         if state_changes.get("available") is not False:
             target.errors.append(f"{label}.available must be false when state_diff.json is absent.")
+        if state_changes.get("comparison_complete") is not False:
+            target.errors.append(f"{label}.comparison_complete must be false when state_diff.json is absent.")
+        if state_changes.get("change_status") != "unknown":
+            target.errors.append(f"{label}.change_status must be unknown when state_diff.json is absent.")
         return
     if state_changes.get("available") is not True:
         target.errors.append(f"{label}.available must be true when state_diff.json is present.")
+    comparison_complete, change_status = resolve_state_diff_semantics(state_diff)
     expected_fields = {
         "changed": state_diff.get("changed"),
         "change_count": state_diff.get("change_count"),
         "truncated": state_diff.get("truncated"),
+        "comparison_complete": comparison_complete,
+        "change_status": change_status,
         "summary": state_diff.get("summary"),
     }
     for field_name, expected_value in expected_fields.items():
@@ -12011,6 +12117,58 @@ def _validate_snapshot_directory_record(record: Any, target: ValidationTarget, l
             entries = []
         if isinstance(entry_count, int) and len(entries) > entry_count:
             target.errors.append(f"{label}.entries length must not exceed entry_count.")
+        scan_fields = {
+            "entry_count_is_lower_bound",
+            "scanned_entry_count",
+            "scan_limit",
+            "scan_incomplete",
+            "entry_selection",
+        }
+        if any(field_name in record for field_name in scan_fields):
+            missing_scan_fields = sorted(field_name for field_name in scan_fields if field_name not in record)
+            if missing_scan_fields:
+                target.errors.append(
+                    f"{label} bounded-scan metadata is incomplete; missing {missing_scan_fields!r}."
+                )
+            scan_incomplete = record.get("scan_incomplete")
+            lower_bound = record.get("entry_count_is_lower_bound")
+            scanned_entry_count = record.get("scanned_entry_count")
+            scan_limit = record.get("scan_limit")
+            if not isinstance(scan_incomplete, bool):
+                target.errors.append(f"{label}.scan_incomplete must be a boolean.")
+            if not isinstance(lower_bound, bool):
+                target.errors.append(f"{label}.entry_count_is_lower_bound must be a boolean.")
+            if not _is_non_negative_int(scanned_entry_count):
+                target.errors.append(f"{label}.scanned_entry_count must be a non-negative integer.")
+            if not _is_non_negative_int(scan_limit) or scan_limit < 1:
+                target.errors.append(f"{label}.scan_limit must be a positive integer.")
+            if record.get("entry_selection") != "lexicographic_within_scanned_prefix":
+                target.errors.append(
+                    f"{label}.entry_selection must be 'lexicographic_within_scanned_prefix'."
+                )
+            if isinstance(scan_incomplete, bool):
+                if lower_bound is not scan_incomplete:
+                    target.errors.append(
+                        f"{label}.entry_count_is_lower_bound must match scan_incomplete."
+                    )
+                if record.get("entries_truncated") is not scan_incomplete:
+                    target.errors.append(f"{label}.entries_truncated must match scan_incomplete.")
+            if _is_non_negative_int(scanned_entry_count) and isinstance(entry_count, int):
+                if entry_count != scanned_entry_count:
+                    target.errors.append(f"{label}.entry_count must match scanned_entry_count.")
+            if _is_non_negative_int(scanned_entry_count) and _is_non_negative_int(scan_limit) and scan_limit >= 1:
+                if scanned_entry_count > scan_limit:
+                    target.errors.append(f"{label}.scanned_entry_count must not exceed scan_limit.")
+                expected_incomplete = scanned_entry_count == scan_limit
+                if isinstance(scan_incomplete, bool) and scan_incomplete is not expected_incomplete:
+                    target.errors.append(
+                        f"{label}.scan_incomplete must match whether scanned_entry_count reached scan_limit."
+                    )
+                expected_entries = scanned_entry_count - 1 if expected_incomplete else scanned_entry_count
+                if len(entries) != expected_entries:
+                    target.errors.append(
+                        f"{label}.entries length must match the bounded scan selection."
+                    )
         for index, entry in enumerate(entries):
             _validate_snapshot_directory_entry(entry, target, f"{label}.entries[{index}]")
 
@@ -15573,6 +15731,7 @@ def _validate_serving_compatibility_report(report: dict[str, Any], target: Valid
             checks.get(field_name),
             target,
             f"serving_compatibility_report.checks.{field_name}",
+            capability=field_name,
         )
 
     target.details.update(
@@ -15927,7 +16086,13 @@ def _validate_serving_readiness(
         target.errors.append(f"{label}.failed_checks must explain blocked readiness.")
 
 
-def _validate_serving_capability_check(value: Any, target: ValidationTarget, label: str) -> None:
+def _validate_serving_capability_check(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    *,
+    capability: str,
+) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -15942,6 +16107,68 @@ def _validate_serving_capability_check(value: Any, target: ValidationTarget, lab
         target.errors.append(f"{label}.status must be supported when response_ok is true.")
     if "error" in value and value.get("error") is not None and not isinstance(value.get("error"), str):
         target.errors.append(f"{label}.error must be a string or null when present.")
+    error_value = value.get("error")
+    if value.get("status") == "supported" and error_value is not None and error_value != "":
+        target.errors.append(f"{label}.error must be empty when status is supported.")
+
+    if capability == "streaming":
+        event_count = value.get("event_count")
+        done_seen = value.get("done_seen")
+        text = value.get("text")
+        if not _is_non_negative_int(event_count):
+            target.errors.append(f"{label}.event_count must be a non-negative integer.")
+            event_count = 0
+        if not isinstance(done_seen, bool):
+            target.errors.append(f"{label}.done_seen must be a boolean.")
+        if not isinstance(text, str):
+            target.errors.append(f"{label}.text must be a string.")
+            text = ""
+        evidence_supported = (
+            value.get("response_ok") is True
+            and done_seen is True
+            and event_count > 0
+            and bool(text)
+        )
+        if value.get("status") == "supported" and done_seen is not True:
+            target.errors.append(f"{label}.done_seen must be true when status is supported.")
+    elif capability == "tool_calls":
+        tool_call_count = value.get("tool_call_count")
+        tool_calls = value.get("tool_calls")
+        if not _is_non_negative_int(tool_call_count):
+            target.errors.append(f"{label}.tool_call_count must be a non-negative integer.")
+            tool_call_count = 0
+        if not isinstance(tool_calls, list):
+            target.errors.append(f"{label}.tool_calls must be a list.")
+            tool_calls = []
+        if _is_non_negative_int(tool_call_count) and tool_call_count != len(tool_calls):
+            target.errors.append(f"{label}.tool_call_count must match tool_calls length.")
+        evidence_supported = value.get("response_ok") is True and tool_call_count > 0
+    elif capability == "structured_outputs":
+        json_parse_passed = value.get("json_parse_passed")
+        parsed = value.get("parsed")
+        text = value.get("text")
+        if not isinstance(json_parse_passed, bool):
+            target.errors.append(f"{label}.json_parse_passed must be a boolean.")
+        if parsed is not None and not isinstance(parsed, dict):
+            target.errors.append(f"{label}.parsed must be an object or null.")
+        if not isinstance(text, str):
+            target.errors.append(f"{label}.text must be a string.")
+        if isinstance(json_parse_passed, bool) and json_parse_passed != isinstance(parsed, dict):
+            target.errors.append(f"{label}.json_parse_passed must match whether parsed is an object.")
+        evidence_supported = (
+            value.get("response_ok") is True
+            and json_parse_passed is True
+            and isinstance(parsed, dict)
+        )
+    else:  # pragma: no cover - internal callers use the three declared capabilities
+        target.errors.append(f"{label} has unsupported capability type {capability!r}.")
+        evidence_supported = False
+
+    expected_status = "supported" if evidence_supported else "not_verified"
+    if value.get("status") != expected_status:
+        target.errors.append(
+            f"{label}.status must replay to {expected_status!r} from its capability evidence."
+        )
 
 
 def _validate_serving_demo_metrics(metrics: dict[str, Any], index: int, target: ValidationTarget) -> None:

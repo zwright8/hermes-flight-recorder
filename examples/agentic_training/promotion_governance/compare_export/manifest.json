@@ -15,8 +15,8 @@
     "improvement_pairs": {
       "exists": true,
       "path": "examples/agentic_training/promotion_governance/compare_export/improvement_pairs.jsonl",
-      "sha256": "257b34bf489d42f9f2da1025cfffeff744aa82d2e2cfdd380363088da270a15e",
-      "size_bytes": 38378
+      "sha256": "f7e1c3214d19fe1371687ab57c71964f71165ac8f8fca0402b25dc79cb21396c",
+      "size_bytes": 38610
     }
   },
   "baseline_run_count": 1,
@@ -39,7 +39,7 @@
     "required_state": 1,
     "required_state_transitions": 1
   },
-  "generated_at": "2026-07-03T00:00:00+00:00",
+  "generated_at": "2026-07-10T01:40:23.548470+00:00",
   "metadata": {
     "baseline": "local/mock-baseline",
     "candidate": "local/mock-candidate",

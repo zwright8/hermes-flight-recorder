@@ -218,6 +218,27 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertIn("training_exports_present", {check["id"] for check in receipt["checks"] if not check["passed"]})
             self.assertFalse(receipt["execution_boundary"]["dataset_rows_written"])
 
+    def test_receipt_rejects_schema_valid_semantically_forged_sampling_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
+            forged = json.loads(gate.read_text(encoding="utf-8"))
+            forged["checks"][0]["passed"] = False
+            gate.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(check_schema_file(gate)["passed"])
+            export_dir = self.write_training_export(root / "training_export")
+
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=root / "receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(receipt["passed"])
+            self.assertFalse(receipt["input_artifacts"]["rejection_sampling_gate"][0]["exists"])
+            self.assertIn("rejection_sampling_gate_ready", {check["id"] for check in receipt["checks"] if not check["passed"]})
+
     def test_validation_rejects_dataset_write_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -360,9 +381,10 @@ class DatasetCurationReceiptTests(unittest.TestCase):
         self.assertIn("dataset_curation_receipt", names)
 
     def write_rejection_sampling_gate(self, path: Path, *, passed: bool = True) -> Path:
-        payload = json.loads(
-            (ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json").read_text(encoding="utf-8")
-        )
+        example_root = ROOT / "examples" / "agentic_training"
+        shutil.copytree(example_root / "model_grader", path.parent / "model_grader", dirs_exist_ok=True)
+        shutil.copytree(example_root / "rollouts", path.parent / "rollouts", dirs_exist_ok=True)
+        payload = json.loads((example_root / "rejection_sampling_gate.json").read_text(encoding="utf-8"))
         payload["passed"] = passed
         payload["readiness"] = "ready_for_dataset_curation" if passed else "blocked"
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

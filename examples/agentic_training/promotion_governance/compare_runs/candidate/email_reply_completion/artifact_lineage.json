@@ -228,8 +228,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/candidate/email_reply_completion/state_diff.json",
       "role": "output",
       "sensitive": false,
-      "sha256": "8a1716c85f669e3c083e164f337188269ed5670f7bc17c648c7edf2bb04c1814",
-      "size_bytes": 644
+      "sha256": "afba2d17d0fd80260d756335f139e7cf92604ef234a5c7f01db7678b4e567296",
+      "size_bytes": 705
     },
     {
       "exists": true,
@@ -255,8 +255,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/candidate/email_reply_completion/run_digest.json",
       "role": "output",
       "sensitive": false,
-      "sha256": "9fc525225160740a027918645b30d63a49fa571adc5354915caf322aeaf33be0",
-      "size_bytes": 2323
+      "sha256": "49598ab1b80fe2a4bace5c63745006c6e15090aa27123d341e3ad99241286f56",
+      "size_bytes": 2388
     },
     {
       "exists": true,
@@ -264,8 +264,8 @@
       "path": "examples/agentic_training/promotion_governance/compare_runs/candidate/email_reply_completion/report.html",
       "role": "output",
       "sensitive": false,
-      "sha256": "8b6528537f32e566846d4acbb1eb8db90b4737e740d67a0fd1e08215e1cee49d",
-      "size_bytes": 13559
+      "sha256": "20ff7169c0f9692f04a7cdf454379ebe4cab63b92fc813ed9b8ade847281ec1a",
+      "size_bytes": 13620
     }
   ],
   "replay": {

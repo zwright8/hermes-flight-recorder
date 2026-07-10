@@ -70,7 +70,7 @@
       "passed": false,
       "path": "evidence_bundle.json",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "d477c84f0641821b30c7d647981e86c29036ce896bd033d55e734234e264aa63",
+      "sha256": "b7b2b8d5c566461f7e49c5c1ed97f48b970f13cd374478aaed83d9bd617b0766",
       "size_bytes": 5888
     }
   },

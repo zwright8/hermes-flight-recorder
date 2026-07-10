@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts, _safe_run_id, cmd_replay
 from flightrecorder.lineage import REPLAY_BUNDLE_SCHEMA_VERSION
-from flightrecorder.path_safety import json_marker_has_schema_version, replace_owned_output_directory
+from flightrecorder.path_safety import json_marker_matches_schema, locked_owned_output_directory
 from flightrecorder.schema import load_scenario
 
 
@@ -203,7 +203,36 @@ def publish_trace_run(
 ) -> dict[str, Any]:
     """Publish a recorded trace as common harness manifest/result artifacts."""
     run_dir = Path(out_dir).expanduser().resolve()
-    _prepare_harness_output(run_dir, force=force, suite=False)
+    with _harness_output_lock(run_dir, force=force, suite=False):
+        return _publish_trace_run_locked(
+            scenario_path=scenario_path,
+            trace_path=trace_path,
+            run_dir=run_dir,
+            trace_format=trace_format,
+            runner=runner,
+            provider=provider,
+            model=model,
+            base_url=base_url,
+            tool_policy=tool_policy,
+            force=force,
+            preserve_paths=preserve_paths,
+        )
+
+
+def _publish_trace_run_locked(
+    *,
+    scenario_path: str | Path,
+    trace_path: str | Path,
+    run_dir: Path,
+    trace_format: str,
+    runner: str,
+    provider: str,
+    model: str | None,
+    base_url: str | None,
+    tool_policy: dict[str, Any] | None,
+    force: bool,
+    preserve_paths: bool,
+) -> dict[str, Any]:
     run_dir.mkdir(parents=True, exist_ok=True)
     resolved_trace = Path(trace_path).expanduser().resolve()
     resolved_scenario = Path(scenario_path).expanduser().resolve()
@@ -293,7 +322,38 @@ def run_suite(
     if not scenario_paths:
         raise ValueError(f"no scenarios matched {pattern!r} under {Path(scenarios_dir)}")
     suite_dir = Path(out_dir).expanduser().resolve()
-    _prepare_harness_output(suite_dir, force=force, suite=True)
+    with _harness_output_lock(suite_dir, force=force, suite=True):
+        return _run_suite_locked(
+            scenario_paths=scenario_paths,
+            scenarios_dir=scenarios_dir,
+            suite_dir=suite_dir,
+            pattern=pattern,
+            recursive=recursive,
+            provider=provider,
+            model=model,
+            runner=runner,
+            base_url=base_url,
+            mock_response=mock_response,
+            force=force,
+            preserve_paths=preserve_paths,
+        )
+
+
+def _run_suite_locked(
+    *,
+    scenario_paths: list[Path],
+    scenarios_dir: str | Path,
+    suite_dir: Path,
+    pattern: str,
+    recursive: bool,
+    provider: str,
+    model: str,
+    runner: str,
+    base_url: str | None,
+    mock_response: str | None,
+    force: bool,
+    preserve_paths: bool,
+) -> dict[str, Any]:
     suite_dir.mkdir(parents=True, exist_ok=True)
 
     runs: list[dict[str, Any]] = []
@@ -480,7 +540,17 @@ def write_fake_secret_canaries(home_dir: str | Path) -> list[str]:
 
 def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = False) -> dict[str, Any]:
     run_dir = Path(manifest["outputs"]["run_dir"])
-    _prepare_harness_output(run_dir, force=bool(manifest.get("force")), suite=False)
+    with _harness_output_lock(
+        run_dir, force=bool(manifest.get("force")), suite=False
+    ):
+        return _run_mock_scenario_locked(
+            manifest, run_dir=run_dir, preserve_paths=preserve_paths
+        )
+
+
+def _run_mock_scenario_locked(
+    manifest: dict[str, Any], *, run_dir: Path, preserve_paths: bool
+) -> dict[str, Any]:
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_json(run_dir / "harness_manifest.json", manifest)
 
@@ -548,16 +618,16 @@ def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = False
     )
 
 
-def _prepare_harness_output(path: Path, *, force: bool, suite: bool) -> None:
+def _harness_output_lock(path: Path, *, force: bool, suite: bool):
     marker_name = "harness_suite_result.json" if suite else "harness_result.json"
-    schema_version = HARNESS_SUITE_RESULT_SCHEMA_VERSION if suite else HARNESS_RUN_RESULT_SCHEMA_VERSION
+    schema_name = "harness_suite_result" if suite else "harness_run_result"
     label = "harness suite output" if suite else "harness run output"
-    replace_owned_output_directory(
+    return locked_owned_output_directory(
         path,
         repo_root=_REPO_ROOT,
         force=force,
         label=label,
-        is_owned=lambda target: json_marker_has_schema_version(target, marker_name, schema_version),
+        is_owned=lambda target: json_marker_matches_schema(target, marker_name, schema_name),
     )
 
 

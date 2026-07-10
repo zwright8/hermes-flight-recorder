@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-from pathlib import Path
+import os
+import posixpath
+import stat
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .path_safety import path_has_symlink_component
@@ -131,6 +140,67 @@ _REQUIRED_VALUES: dict[str, dict[str, Any]] = {
 }
 
 
+@dataclass(frozen=True)
+class _FileAttestation:
+    identity: tuple[int, int]
+    metadata: tuple[int, int, int, int, int]
+    sha256: str
+    content: bytes
+
+
+@dataclass(frozen=True)
+class _DirectoryTreeAttestation:
+    root: tuple[int, ...]
+    entries: tuple[tuple[str, str, tuple[int, ...], str], ...]
+
+
+@dataclass(frozen=True)
+class _CapturedDirectoryTree:
+    root: tuple[int, ...]
+    directories: tuple[tuple[str, tuple[int, ...]], ...]
+    files: tuple[tuple[str, _FileAttestation], ...]
+
+
+@dataclass(frozen=True)
+class _PrivateSemanticSnapshot:
+    boundary_path: Path
+    source_relative_path: Path
+    source_attestation: _FileAttestation
+    tree: _CapturedDirectoryTree
+    repository_boundary: bool
+
+
+class _SnapshotBoundaryExpansion(Exception):
+    def __init__(self, parent_levels: int) -> None:
+        super().__init__(f"semantic snapshot requires {parent_levels} more parent level(s)")
+        self.parent_levels = parent_levels
+
+
+_ACTIVE_SEMANTIC_SNAPSHOT_ROOT: ContextVar[Path | None] = ContextVar(
+    "hfr_active_semantic_snapshot_root",
+    default=None,
+)
+
+_ACTIVE_SEMANTIC_INSPECTION_CACHE: ContextVar[
+    dict[tuple[str, str, bool], dict[str, Any]] | None
+] = ContextVar("hfr_active_semantic_inspection_cache", default=None)
+
+_PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES = {
+    ".git",
+    ".mypy_cache",
+    ".omx",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+}
+
+_PRIVATE_SNAPSHOT_EXCLUDED_REPOSITORY_ROOTS = {
+    *_PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES,
+    "runs",
+}
+
+
 def inspect_artifact_source(
     path_value: str | Path,
     role: str,
@@ -145,12 +215,28 @@ def inspect_artifact_source(
     is never treated as evidence readiness.
     """
     path = Path(path_value)
+    active_snapshot_root = _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.get()
+    if active_snapshot_root is not None and not _path_is_within(path, active_snapshot_root):
+        return _empty_inspection(path)
+    cache = _ACTIVE_SEMANTIC_INSPECTION_CACHE.get()
+    cache_key = (os.path.abspath(path), role, require_semantics)
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
     if role == "training_export":
-        return _inspect_training_export(path, require_semantics=require_semantics)
-    if role in _DIRECTORY_MANIFESTS:
-        return _inspect_directory(path, role, require_semantics=require_semantics)
-    schema_name = _SCHEMA_NAME_OVERRIDES.get(role, role)
-    return inspect_json_source(path, schema_name, role=role, require_semantics=require_semantics)
+        result = _inspect_training_export(path, require_semantics=require_semantics)
+    elif role in _DIRECTORY_MANIFESTS:
+        result = _inspect_directory(path, role, require_semantics=require_semantics)
+    else:
+        schema_name = _SCHEMA_NAME_OVERRIDES.get(role, role)
+        result = inspect_json_source(
+            path,
+            schema_name,
+            role=role,
+            require_semantics=require_semantics,
+        )
+    if cache is not None:
+        cache[cache_key] = result
+    return result
 
 
 def inspect_json_source(
@@ -160,17 +246,23 @@ def inspect_json_source(
     role: str | None = None,
     require_semantics: bool = True,
 ) -> dict[str, Any]:
-    """Inspect one JSON source without following symlinked path components."""
+    """Inspect one stable JSON source without following symlinked components.
+
+    Semantic validators accept paths and may resolve sibling artifacts relative
+    to the source. Run those validators against a descriptor-bound private tree
+    snapshot so a parent-directory swap cannot substitute an alternate source
+    or dependency closure and then restore the admitted pathname.
+    """
     path = Path(path_value)
-    physical_exists = path.exists()
-    has_symlink = path_has_symlink_component(path, include_leaf=True)
-    regular_file = physical_exists and not has_symlink and path.is_file()
+    before = _attest_regular_file(path)
+    physical_exists = before is not None or path.exists()
+    regular_file = before is not None
     payload: dict[str, Any] = {}
     parse_valid = False
-    if regular_file:
+    if before is not None:
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raw = json.loads(before.content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
             raw = None
         if isinstance(raw, dict):
             payload = raw
@@ -183,11 +275,33 @@ def inspect_json_source(
         except (SchemaRegistryError, TypeError, ValueError):
             schema_valid = False
 
-    semantic_valid = not require_semantics or (
-        schema_valid
-        and _semantic_ready(role or schema_name, payload)
-        and _semantic_contract_valid(path, role or schema_name)
-    )
+    semantic_valid = not require_semantics
+    private_snapshot: _PrivateSemanticSnapshot | None = None
+    if require_semantics:
+        contract_role = role or schema_name
+        semantic_valid = schema_valid and _semantic_ready(contract_role, payload)
+        if semantic_valid and _requires_path_semantic_validation(contract_role):
+            active_snapshot_root = _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.get()
+            if active_snapshot_root is None:
+                private_snapshot = _capture_private_semantic_snapshot(path, payload)
+                semantic_valid = (
+                    private_snapshot is not None
+                    and before == private_snapshot.source_attestation
+                    and _validate_private_semantic_snapshot(private_snapshot, contract_role)
+                )
+            else:
+                semantic_valid = (
+                    _path_is_within(path, active_snapshot_root)
+                    and _semantic_contract_valid(path, contract_role)
+                )
+
+    after = _attest_regular_file(path) if before is not None else None
+    stable = before is not None and before == after
+    if private_snapshot is not None:
+        stable = stable and private_snapshot.tree == _recapture_private_semantic_snapshot(
+            private_snapshot
+        )
+    semantic_valid = stable and semantic_valid
     return {
         "path": path,
         "physical_exists": physical_exists,
@@ -195,20 +309,927 @@ def inspect_json_source(
         "parse_valid": parse_valid,
         "schema_valid": schema_valid,
         "semantic_valid": semantic_valid,
-        "ready": regular_file and parse_valid and schema_valid and semantic_valid,
+        "stable": stable,
+        "ready": regular_file and parse_valid and schema_valid and semantic_valid and stable,
         "payload": payload,
     }
 
 
-def _inspect_training_export(path: Path, *, require_semantics: bool) -> dict[str, Any]:
-    physical_exists = path.exists()
-    has_symlink = path_has_symlink_component(path, include_leaf=True)
-    regular_directory = (
-        physical_exists
-        and not has_symlink
-        and path.is_dir()
-        and not _directory_contains_symlink(path)
+def _requires_path_semantic_validation(role: str) -> bool:
+    return (
+        role == "training_export"
+        or role in _DIRECTORY_MANIFESTS
+        or role in _GATE_CONTRACT_ROLES
+        or role in _SEMANTIC_VALIDATOR_NAMES
     )
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        absolute_path = Path(os.path.abspath(path))
+        absolute_root = Path(os.path.abspath(root))
+        return os.path.commonpath((absolute_path, absolute_root)) == str(absolute_root)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _capture_private_semantic_snapshot(
+    path: Path,
+    payload: dict[str, Any],
+) -> _PrivateSemanticSnapshot | None:
+    absolute_path = Path(os.path.abspath(path))
+    parent_path = absolute_path.parent
+    parent_descriptor = _open_stable_directory(parent_path)
+    if parent_descriptor is None:
+        return None
+
+    boundary_descriptor: int | None = None
+    try:
+        source_attestation = _attest_regular_file_at(parent_descriptor, absolute_path.name)
+        if source_attestation is None:
+            return None
+
+        repository_root = _nearest_repository_root(parent_path)
+        allowed_root = _semantic_snapshot_allowed_root(parent_path, repository_root)
+        try:
+            maximum_parent_depth = len(parent_path.relative_to(allowed_root).parts)
+        except ValueError:
+            return None
+        repository_boundary = repository_root is not None
+        parent_depth = _semantic_snapshot_parent_depth(
+            absolute_path,
+            payload,
+            repository_root=repository_root,
+            repository_boundary=repository_boundary,
+        )
+        if parent_depth > maximum_parent_depth:
+            return None
+        boundary_path = parent_path
+        boundary_descriptor = os.dup(parent_descriptor)
+        for _ in range(parent_depth):
+            next_boundary = boundary_path.parent
+            if next_boundary == boundary_path:
+                return None
+            next_descriptor = _open_child_directory(boundary_descriptor, "..")
+            if next_descriptor is None:
+                return None
+            os.close(boundary_descriptor)
+            boundary_descriptor = next_descriptor
+            boundary_path = next_boundary
+
+        while True:
+            if boundary_path == Path(boundary_path.anchor):
+                return None
+            if not _directory_descriptor_matches_path(boundary_descriptor, boundary_path):
+                return None
+            repository_boundary = repository_root is not None and boundary_path == repository_root
+            source_relative_path = absolute_path.relative_to(boundary_path)
+            try:
+                tree = _capture_referenced_tree_fd(
+                    boundary_descriptor,
+                    source_relative_path,
+                    repository_boundary=repository_boundary,
+                    allow_parent_expansion=parent_depth < maximum_parent_depth,
+                )
+            except _SnapshotBoundaryExpansion as expansion:
+                if (
+                    expansion.parent_levels <= 0
+                    or parent_depth + expansion.parent_levels > maximum_parent_depth
+                ):
+                    return None
+                for _ in range(expansion.parent_levels):
+                    next_boundary = boundary_path.parent
+                    next_descriptor = _open_child_directory(boundary_descriptor, "..")
+                    if next_descriptor is None:
+                        return None
+                    os.close(boundary_descriptor)
+                    boundary_descriptor = next_descriptor
+                    boundary_path = next_boundary
+                parent_depth += expansion.parent_levels
+                continue
+            if tree is None:
+                return None
+            break
+        captured_source = dict(tree.files).get(source_relative_path.as_posix())
+        if captured_source != source_attestation:
+            return None
+        return _PrivateSemanticSnapshot(
+            boundary_path=boundary_path,
+            source_relative_path=source_relative_path,
+            source_attestation=source_attestation,
+            tree=tree,
+            repository_boundary=repository_boundary,
+        )
+    except (OSError, UnicodeError, ValueError):
+        return None
+    finally:
+        if boundary_descriptor is not None:
+            os.close(boundary_descriptor)
+        os.close(parent_descriptor)
+
+
+def _required_snapshot_parent_depth(value: Any) -> int:
+    if isinstance(value, dict):
+        return max((_required_snapshot_parent_depth(item) for item in value.values()), default=0)
+    if isinstance(value, list):
+        return max((_required_snapshot_parent_depth(item) for item in value), default=0)
+    if not isinstance(value, str) or "\\" in value or "\x00" in value:
+        return 0
+    parts = PurePosixPath(value).parts
+    depth = 0
+    for part in parts:
+        if part != "..":
+            break
+        depth += 1
+    return depth
+
+
+def _semantic_snapshot_parent_depth(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None,
+    repository_boundary: bool,
+) -> int:
+    parent_depth = _required_snapshot_parent_depth(payload)
+    if repository_root is None or not repository_boundary:
+        return parent_depth
+    try:
+        repo_depth = len(path.parent.relative_to(repository_root).parts)
+    except ValueError:
+        return parent_depth
+    return repo_depth
+
+
+def _nearest_repository_root(start: Path) -> Path | None:
+    for candidate in (start, *start.parents):
+        try:
+            if (candidate / ".git").exists() or (candidate / "pyproject.toml").is_file():
+                return candidate
+        except OSError:
+            return None
+    return None
+
+
+def _semantic_snapshot_allowed_root(parent: Path, repository_root: Path | None) -> Path:
+    if repository_root is not None:
+        return repository_root
+    temporary_root = Path(os.path.abspath(tempfile.gettempdir()))
+    try:
+        relative = parent.relative_to(temporary_root)
+    except ValueError:
+        return parent
+    if not relative.parts:
+        return parent
+    return temporary_root / relative.parts[0]
+
+
+@contextmanager
+def _materialize_private_semantic_snapshot(
+    snapshot: _PrivateSemanticSnapshot,
+) -> Iterator[tuple[Path, Path]]:
+    with tempfile.TemporaryDirectory(prefix="hfr-source-snapshot-") as temp_value:
+        snapshot_root = Path(temp_value) / "tree"
+        snapshot_root.mkdir(mode=0o700)
+        directories = [snapshot_root]
+        try:
+            for relative, _signature in snapshot.tree.directories:
+                directory = snapshot_root / relative
+                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+                directories.append(directory)
+            for relative, file_attestation in snapshot.tree.files:
+                destination = snapshot_root / relative
+                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with destination.open("xb") as handle:
+                    handle.write(file_attestation.content)
+                destination.chmod(0o400)
+            for directory in sorted(set(directories), key=lambda item: len(item.parts), reverse=True):
+                directory.chmod(0o500)
+            yield snapshot_root / snapshot.source_relative_path, snapshot_root
+        finally:
+            for directory in sorted(set(directories), key=lambda item: len(item.parts)):
+                try:
+                    directory.chmod(0o700)
+                except OSError:
+                    pass
+
+
+def _validate_private_semantic_snapshot(snapshot: _PrivateSemanticSnapshot, role: str) -> bool:
+    try:
+        with _materialize_private_semantic_snapshot(snapshot) as (source_path, snapshot_root):
+            token = _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.set(snapshot_root)
+            cache_token = _ACTIVE_SEMANTIC_INSPECTION_CACHE.set({})
+            try:
+                return _semantic_contract_valid(source_path, role)
+            finally:
+                _ACTIVE_SEMANTIC_INSPECTION_CACHE.reset(cache_token)
+                _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.reset(token)
+    except (OSError, UnicodeError, ValueError):
+        return False
+
+
+def _attest_regular_file(path: Path) -> _FileAttestation | None:
+    """Read and attest one pathname-bound regular file without following its leaf."""
+    if path_has_symlink_component(path, include_leaf=True):
+        return None
+    try:
+        pathname_before = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    if not stat.S_ISREG(pathname_before.st_mode):
+        return None
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+
+    chunks: list[bytes] = []
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            return None
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+
+    if _file_stat_signature(pathname_before) != _file_stat_signature(before):
+        return None
+    if _file_stat_signature(before) != _file_stat_signature(after):
+        return None
+    if path_has_symlink_component(path, include_leaf=True):
+        return None
+    try:
+        pathname_stat = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    if _file_stat_signature(after) != _file_stat_signature(pathname_stat):
+        return None
+
+    content = b"".join(chunks)
+    return _FileAttestation(
+        identity=(after.st_dev, after.st_ino),
+        metadata=(
+            after.st_mode,
+            after.st_nlink,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ),
+        sha256=hashlib.sha256(content).hexdigest(),
+        content=content,
+    )
+
+
+def _attest_regular_file_at(directory_descriptor: int, name: str) -> _FileAttestation | None:
+    try:
+        pathname_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+    except OSError:
+        return None
+    if not stat.S_ISREG(pathname_before.st_mode):
+        return None
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(name, flags, dir_fd=directory_descriptor)
+    except OSError:
+        return None
+
+    chunks: list[bytes] = []
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            return None
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+
+    try:
+        pathname_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+    except OSError:
+        return None
+    if not (
+        _file_stat_signature(pathname_before)
+        == _file_stat_signature(before)
+        == _file_stat_signature(after)
+        == _file_stat_signature(pathname_after)
+    ):
+        return None
+
+    content = b"".join(chunks)
+    return _FileAttestation(
+        identity=(after.st_dev, after.st_ino),
+        metadata=(
+            after.st_mode,
+            after.st_nlink,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ),
+        sha256=hashlib.sha256(content).hexdigest(),
+        content=content,
+    )
+
+
+def _directory_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+
+
+def _open_stable_directory(path: Path) -> int | None:
+    if path_has_symlink_component(path, include_leaf=True):
+        return None
+    try:
+        pathname_before = path.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(pathname_before.st_mode):
+            return None
+        descriptor = os.open(path, _directory_open_flags())
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        pathname_after = path.stat(follow_symlinks=False)
+    except OSError:
+        os.close(descriptor)
+        return None
+    if not (
+        _file_stat_signature(pathname_before)
+        == _file_stat_signature(opened)
+        == _file_stat_signature(pathname_after)
+    ):
+        os.close(descriptor)
+        return None
+    return descriptor
+
+
+def _open_child_directory(directory_descriptor: int, name: str) -> int | None:
+    try:
+        pathname_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+        if not stat.S_ISDIR(pathname_before.st_mode):
+            return None
+        descriptor = os.open(name, _directory_open_flags(), dir_fd=directory_descriptor)
+        opened = os.fstat(descriptor)
+        pathname_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+    except OSError:
+        if "descriptor" in locals():
+            os.close(descriptor)
+        return None
+    if not (
+        _file_stat_signature(pathname_before)
+        == _file_stat_signature(opened)
+        == _file_stat_signature(pathname_after)
+    ):
+        os.close(descriptor)
+        return None
+    return descriptor
+
+
+def _directory_descriptor_matches_path(descriptor: int, path: Path) -> bool:
+    if path_has_symlink_component(path, include_leaf=True):
+        return False
+    try:
+        pathname_stat = path.stat(follow_symlinks=False)
+        descriptor_stat = os.fstat(descriptor)
+    except OSError:
+        return False
+    return _file_stat_signature(pathname_stat) == _file_stat_signature(descriptor_stat)
+
+
+def _recapture_private_semantic_snapshot(
+    snapshot: _PrivateSemanticSnapshot,
+) -> _CapturedDirectoryTree | None:
+    descriptor = _open_stable_directory(snapshot.boundary_path)
+    if descriptor is None:
+        return None
+    try:
+        try:
+            root_stat = os.fstat(descriptor)
+        except OSError:
+            return None
+        directories: list[tuple[str, tuple[int, ...]]] = []
+        for relative, expected_signature in snapshot.tree.directories:
+            directory_stat = _relative_path_stat(descriptor, PurePosixPath(relative))
+            if directory_stat is None or not stat.S_ISDIR(directory_stat.st_mode):
+                return None
+            signature = (
+                _directory_identity(directory_stat)
+                if len(expected_signature) == 3
+                else _file_stat_signature(directory_stat)
+            )
+            directories.append((relative, signature))
+        files: list[tuple[str, _FileAttestation]] = []
+        for relative, _expected_attestation in snapshot.tree.files:
+            attestation = _attest_relative_file(descriptor, PurePosixPath(relative))
+            if attestation is None:
+                return None
+            files.append((relative, attestation))
+        return _CapturedDirectoryTree(
+            root=_directory_identity(root_stat),
+            directories=tuple(directories),
+            files=tuple(files),
+        )
+    finally:
+        os.close(descriptor)
+
+
+def _capture_referenced_tree_fd(
+    root_descriptor: int,
+    source_relative_path: Path,
+    *,
+    repository_boundary: bool,
+    allow_parent_expansion: bool = False,
+) -> _CapturedDirectoryTree | None:
+    files: dict[str, _FileAttestation] = {}
+    directories: dict[str, tuple[int, ...]] = {}
+    pending_json: list[PurePosixPath] = []
+    scanned_json: set[str] = set()
+
+    def add_file(relative: PurePosixPath) -> bool:
+        key = relative.as_posix()
+        if key in files:
+            return True
+        attestation = _attest_relative_file(root_descriptor, relative)
+        if attestation is None:
+            return False
+        files[key] = attestation
+        pending_json.append(relative)
+        return True
+
+    def add_directory(relative: PurePosixPath) -> bool:
+        captured = _capture_relative_directory(root_descriptor, relative)
+        if captured is None:
+            return False
+        prefix = "" if relative == PurePosixPath(".") else relative.as_posix()
+        if prefix:
+            directories[prefix] = captured.root
+        for child, signature in captured.directories:
+            key = f"{prefix}/{child}" if prefix else child
+            directories[key] = signature
+        for child, attestation in captured.files:
+            key = f"{prefix}/{child}" if prefix else child
+            if key not in files:
+                files[key] = attestation
+                pending_json.append(PurePosixPath(key))
+        return True
+
+    source_relative = PurePosixPath(source_relative_path.as_posix())
+    admitted_top_level = source_relative.parts[0] if source_relative.parts else ""
+    if not add_file(source_relative):
+        return None
+
+    if repository_boundary:
+        marker = PurePosixPath("pyproject.toml")
+        if _relative_path_kind(root_descriptor, marker) == "file" and not add_file(marker):
+            return None
+        if _relative_path_kind(root_descriptor, PurePosixPath(".git")) == "directory":
+            marker_stat = _relative_path_stat(root_descriptor, PurePosixPath(".git"))
+            if marker_stat is not None:
+                directories[".git"] = _directory_identity(marker_stat)
+
+    while pending_json:
+        current = pending_json.pop()
+        current_key = current.as_posix()
+        if current_key in scanned_json:
+            continue
+        scanned_json.add(current_key)
+        attestation = files[current_key]
+        try:
+            payload = json.loads(attestation.content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict) and payload.get("schema_version") == "hfr.rl.manifest.v1":
+            split_directory = _normalized_relative_path(current.parent, "splits")
+            if (
+                split_directory is not None
+                and _relative_path_kind(root_descriptor, split_directory) == "directory"
+                and not add_directory(split_directory)
+            ):
+                return None
+        for raw_value in _iter_referenced_path_values(payload):
+            candidate = _referenced_relative_path(
+                root_descriptor,
+                current.parent,
+                raw_value,
+                repository_boundary=repository_boundary,
+                allow_parent_expansion=allow_parent_expansion,
+                admitted_top_level=admitted_top_level,
+            )
+            if candidate is None:
+                continue
+            kind = _relative_path_kind(root_descriptor, candidate)
+            if kind == "file":
+                if not add_file(candidate):
+                    return None
+            elif kind == "directory" and not add_directory(candidate):
+                return None
+
+    try:
+        root_stat = os.fstat(root_descriptor)
+    except OSError:
+        return None
+    return _CapturedDirectoryTree(
+        root=_directory_identity(root_stat),
+        directories=tuple(sorted(directories.items())),
+        files=tuple(sorted(files.items())),
+    )
+
+
+_EXPLICIT_PATH_FIELD_NAMES = {
+    "compatibility_report",
+    "events",
+    "home",
+    "lineage",
+    "manifest",
+    "normalized_trace",
+    "report",
+    "reviewed_export",
+    "reviewed_labels",
+    "root",
+    "scorecard",
+    "summary",
+    "workspace",
+}
+
+_PATH_MAPPING_FIELD_NAMES = {"artifacts", "files", "outputs"}
+
+
+def _iter_referenced_path_values(value: Any, *, field_name: str = "") -> Iterator[str]:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized_key = key.lower() if isinstance(key, str) else ""
+            if isinstance(item, str) and (
+                _is_path_field_name(normalized_key)
+                or field_name in _PATH_MAPPING_FIELD_NAMES
+            ):
+                yield item
+            elif isinstance(item, (dict, list)):
+                yield from _iter_referenced_path_values(item, field_name=normalized_key)
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, (dict, list)):
+                yield from _iter_referenced_path_values(item, field_name=field_name)
+            elif isinstance(item, str) and _is_path_field_name(field_name):
+                yield item
+
+
+def _is_path_field_name(field_name: str) -> bool:
+    return (
+        field_name == "path"
+        or field_name.endswith(
+            ("_path", "_paths", "_file", "_files", "_dir", "_dirs", "_root", "_roots")
+        )
+        or field_name in _EXPLICIT_PATH_FIELD_NAMES
+    )
+
+
+def _referenced_relative_path(
+    root_descriptor: int,
+    source_parent: PurePosixPath,
+    raw_value: str,
+    *,
+    repository_boundary: bool,
+    allow_parent_expansion: bool,
+    admitted_top_level: str,
+) -> PurePosixPath | None:
+    if raw_value.startswith("<redacted:") and raw_value.endswith(">"):
+        raw_value = raw_value[len("<redacted:") : -1]
+    if (
+        not raw_value
+        or raw_value in {".", ".."}
+        or "\\" in raw_value
+        or "\x00" in raw_value
+        or "://" in raw_value
+        or PurePosixPath(raw_value).is_absolute()
+    ):
+        return None
+    raw_parts = PurePosixPath(raw_value).parts
+    first_path_part = next((part for part in raw_parts if part not in {".", ".."}), "")
+    normalized_source = posixpath.normpath((source_parent / raw_value).as_posix())
+    escaped_parent_levels = 0
+    for part in PurePosixPath(normalized_source).parts:
+        if part != "..":
+            break
+        escaped_parent_levels += 1
+    if escaped_parent_levels:
+        if (
+            first_path_part in _PRIVATE_SNAPSHOT_EXCLUDED_REPOSITORY_ROOTS
+            and first_path_part != admitted_top_level
+        ):
+            return None
+        if allow_parent_expansion:
+            raise _SnapshotBoundaryExpansion(escaped_parent_levels)
+        return None
+    source_candidate = _normalized_relative_path(source_parent, raw_value)
+    source_candidate_excluded = _repository_snapshot_candidate_excluded(
+        source_candidate,
+        repository_boundary=repository_boundary,
+        admitted_top_level=admitted_top_level,
+    )
+    if (
+        source_candidate is not None
+        and not source_candidate_excluded
+        and _relative_path_kind(root_descriptor, source_candidate)
+    ):
+        return source_candidate
+    for index in range(1, len(raw_parts)):
+        suffix_candidate = _normalized_relative_path(
+            source_parent,
+            PurePosixPath(*raw_parts[index:]).as_posix(),
+        )
+        if (
+            suffix_candidate is not None
+            and not _repository_snapshot_candidate_excluded(
+                suffix_candidate,
+                repository_boundary=repository_boundary,
+                admitted_top_level=admitted_top_level,
+            )
+            and _relative_path_kind(root_descriptor, suffix_candidate)
+        ):
+            return suffix_candidate
+    if repository_boundary:
+        repo_candidate = _normalized_relative_path(PurePosixPath("."), raw_value)
+        if (
+            repo_candidate is not None
+            and not _repository_snapshot_candidate_excluded(
+                repo_candidate,
+                repository_boundary=repository_boundary,
+                admitted_top_level=admitted_top_level,
+            )
+            and _relative_path_kind(root_descriptor, repo_candidate)
+        ):
+            return repo_candidate
+    return None
+
+
+def _repository_snapshot_candidate_excluded(
+    candidate: PurePosixPath | None,
+    *,
+    repository_boundary: bool,
+    admitted_top_level: str,
+) -> bool:
+    if not repository_boundary or candidate is None or not candidate.parts:
+        return False
+    top_level = candidate.parts[0]
+    if top_level not in _PRIVATE_SNAPSHOT_EXCLUDED_REPOSITORY_ROOTS:
+        return False
+    return top_level != admitted_top_level or len(candidate.parts) == 1
+
+
+def _normalized_relative_path(base: PurePosixPath, raw_value: str) -> PurePosixPath | None:
+    normalized = posixpath.normpath((base / raw_value).as_posix())
+    if normalized == "." or normalized == ".." or normalized.startswith("../"):
+        return None
+    return PurePosixPath(normalized)
+
+
+def _capture_relative_directory(
+    root_descriptor: int,
+    relative: PurePosixPath,
+) -> _CapturedDirectoryTree | None:
+    descriptor = _open_relative_directory(root_descriptor, relative)
+    if descriptor is None:
+        return None
+    try:
+        return _capture_directory_tree_fd(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _attest_relative_file(
+    root_descriptor: int,
+    relative: PurePosixPath,
+) -> _FileAttestation | None:
+    parent_descriptor = _open_relative_directory(root_descriptor, relative.parent)
+    if parent_descriptor is None:
+        return None
+    try:
+        return _attest_regular_file_at(parent_descriptor, relative.name)
+    finally:
+        os.close(parent_descriptor)
+
+
+def _relative_path_kind(root_descriptor: int, relative: PurePosixPath) -> str | None:
+    path_stat = _relative_path_stat(root_descriptor, relative)
+    if path_stat is None:
+        return None
+    if stat.S_ISREG(path_stat.st_mode):
+        return "file"
+    if stat.S_ISDIR(path_stat.st_mode):
+        return "directory"
+    return None
+
+
+def _relative_path_stat(
+    root_descriptor: int,
+    relative: PurePosixPath,
+) -> os.stat_result | None:
+    if relative == PurePosixPath("."):
+        try:
+            return os.fstat(root_descriptor)
+        except OSError:
+            return None
+    parent_descriptor = _open_relative_directory(root_descriptor, relative.parent)
+    if parent_descriptor is None:
+        return None
+    try:
+        return os.stat(relative.name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except OSError:
+        return None
+    finally:
+        os.close(parent_descriptor)
+
+
+def _open_relative_directory(
+    root_descriptor: int,
+    relative: PurePosixPath,
+) -> int | None:
+    try:
+        descriptor = os.dup(root_descriptor)
+    except OSError:
+        return None
+    if relative == PurePosixPath("."):
+        return descriptor
+    for part in relative.parts:
+        if part in {"", ".", ".."}:
+            os.close(descriptor)
+            return None
+        child_descriptor = _open_child_directory(descriptor, part)
+        os.close(descriptor)
+        if child_descriptor is None:
+            return None
+        descriptor = child_descriptor
+    return descriptor
+
+
+def _directory_identity(directory_stat: os.stat_result) -> tuple[int, ...]:
+    return (directory_stat.st_dev, directory_stat.st_ino, directory_stat.st_mode)
+
+
+def _capture_directory_tree_fd(root_descriptor: int) -> _CapturedDirectoryTree | None:
+    directories: list[tuple[str, tuple[int, ...]]] = []
+    files: list[tuple[str, _FileAttestation]] = []
+
+    def capture(directory_descriptor: int, prefix: PurePosixPath) -> bool:
+        try:
+            directory_before = os.fstat(directory_descriptor)
+            if not stat.S_ISDIR(directory_before.st_mode):
+                return False
+            names = sorted(os.listdir(directory_descriptor))
+        except (OSError, UnicodeError):
+            return False
+
+        for name in names:
+            relative = (prefix / name).as_posix()
+            try:
+                entry_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+            except OSError:
+                return False
+            if stat.S_ISDIR(entry_before.st_mode):
+                if name in _PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES:
+                    continue
+                child_descriptor = _open_child_directory(directory_descriptor, name)
+                if child_descriptor is None:
+                    return False
+                try:
+                    directories.append((relative, _file_stat_signature(entry_before)))
+                    if not capture(child_descriptor, prefix / name):
+                        return False
+                finally:
+                    os.close(child_descriptor)
+            elif stat.S_ISREG(entry_before.st_mode):
+                file_attestation = _attest_regular_file_at(directory_descriptor, name)
+                if file_attestation is None:
+                    return False
+                files.append((relative, file_attestation))
+            else:
+                # Never reproduce links, sockets, devices, or FIFOs in the
+                # private tree. A validator that references one consequently
+                # sees a missing artifact and fails closed; unrelated special
+                # entries do not invalidate an otherwise regular closure.
+                continue
+            try:
+                entry_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+            except OSError:
+                return False
+            if _file_stat_signature(entry_before) != _file_stat_signature(entry_after):
+                return False
+
+        try:
+            directory_after = os.fstat(directory_descriptor)
+        except OSError:
+            return False
+        return _file_stat_signature(directory_before) == _file_stat_signature(directory_after)
+
+    try:
+        root_before = os.fstat(root_descriptor)
+    except OSError:
+        return None
+    if not capture(root_descriptor, PurePosixPath(".")):
+        return None
+    try:
+        root_after = os.fstat(root_descriptor)
+    except OSError:
+        return None
+    if _file_stat_signature(root_before) != _file_stat_signature(root_after):
+        return None
+    return _CapturedDirectoryTree(
+        root=_file_stat_signature(root_after),
+        directories=tuple(directories),
+        files=tuple(files),
+    )
+
+
+def _file_stat_signature(file_stat: os.stat_result) -> tuple[int, ...]:
+    return (
+        file_stat.st_dev,
+        file_stat.st_ino,
+        file_stat.st_mode,
+        file_stat.st_nlink,
+        file_stat.st_size,
+        file_stat.st_mtime_ns,
+        file_stat.st_ctime_ns,
+    )
+
+
+def _attest_source_directory(path: Path) -> _DirectoryTreeAttestation | None:
+    """Return a stable, type-aware snapshot of an artifact directory tree."""
+    first = _attest_source_directory_once(path)
+    if first is None:
+        return None
+    second = _attest_source_directory_once(path)
+    return second if first == second else None
+
+
+def _attest_source_directory_once(path: Path) -> _DirectoryTreeAttestation | None:
+    if path_has_symlink_component(path, include_leaf=True):
+        return None
+    try:
+        root_before = path.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(root_before.st_mode):
+            return None
+        children = sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix())
+        entries: list[tuple[str, str, tuple[int, ...], str]] = []
+        for child in children:
+            relative = child.relative_to(path).as_posix()
+            child_stat = child.stat(follow_symlinks=False)
+            if stat.S_ISDIR(child_stat.st_mode):
+                entries.append((relative, "directory", _file_stat_signature(child_stat), ""))
+                continue
+            if not stat.S_ISREG(child_stat.st_mode):
+                return None
+            file_attestation = _attest_regular_file(child)
+            if file_attestation is None:
+                return None
+            entries.append(
+                (
+                    relative,
+                    "file",
+                    file_attestation.identity + file_attestation.metadata,
+                    file_attestation.sha256,
+                )
+            )
+        root_after = path.stat(follow_symlinks=False)
+    except (OSError, UnicodeError, ValueError):
+        return None
+    if _file_stat_signature(root_before) != _file_stat_signature(root_after):
+        return None
+    return _DirectoryTreeAttestation(root=_file_stat_signature(root_after), entries=tuple(entries))
+
+
+def _inspect_training_export(path: Path, *, require_semantics: bool) -> dict[str, Any]:
+    before = _attest_source_directory(path)
+    physical_exists = before is not None or path.exists()
+    regular_directory = before is not None
     manifest_path = path / "manifest.json"
     manifest = (
         inspect_json_source(
@@ -220,8 +1241,10 @@ def _inspect_training_export(path: Path, *, require_semantics: bool) -> dict[str
         if regular_directory
         else _empty_inspection(manifest_path)
     )
-    contract_valid = not require_semantics or _training_export_contract_valid(path)
-    semantic_valid = manifest["semantic_valid"] and contract_valid
+    contract_valid = not require_semantics or manifest["semantic_valid"]
+    after = _attest_source_directory(path) if before is not None else None
+    stable = before is not None and before == after
+    semantic_valid = manifest["semantic_valid"] and contract_valid and stable
     return {
         "path": path,
         "physical_exists": physical_exists,
@@ -231,19 +1254,21 @@ def _inspect_training_export(path: Path, *, require_semantics: bool) -> dict[str
         "payload": manifest["payload"],
         "schema_valid": manifest["schema_valid"],
         "semantic_valid": semantic_valid,
-        "ready": regular_directory and manifest["regular_file"] and manifest["schema_valid"] and semantic_valid,
+        "stable": stable,
+        "ready": (
+            regular_directory
+            and manifest["regular_file"]
+            and manifest["schema_valid"]
+            and semantic_valid
+            and stable
+        ),
     }
 
 
 def _inspect_directory(path: Path, role: str, *, require_semantics: bool) -> dict[str, Any]:
-    physical_exists = path.exists()
-    has_symlink = path_has_symlink_component(path, include_leaf=True)
-    regular_directory = (
-        physical_exists
-        and not has_symlink
-        and path.is_dir()
-        and not _directory_contains_symlink(path)
-    )
+    before = _attest_source_directory(path)
+    physical_exists = before is not None or path.exists()
+    regular_directory = before is not None
     manifest_path = path / _DIRECTORY_MANIFESTS[role]
     manifest = (
         inspect_json_source(
@@ -255,8 +1280,12 @@ def _inspect_directory(path: Path, role: str, *, require_semantics: bool) -> dic
         if regular_directory
         else _empty_inspection(manifest_path)
     )
-    contract_valid = manifest["schema_valid"] and _directory_contract_valid(path, role)
-    semantic_valid = manifest["semantic_valid"] and contract_valid
+    contract_valid = manifest["schema_valid"] and (
+        not require_semantics or manifest["semantic_valid"]
+    )
+    after = _attest_source_directory(path) if before is not None else None
+    stable = before is not None and before == after
+    semantic_valid = manifest["semantic_valid"] and contract_valid and stable
     return {
         "path": path,
         "physical_exists": physical_exists,
@@ -266,7 +1295,14 @@ def _inspect_directory(path: Path, role: str, *, require_semantics: bool) -> dic
         "payload": manifest["payload"],
         "schema_valid": manifest["schema_valid"],
         "semantic_valid": semantic_valid,
-        "ready": regular_directory and manifest["regular_file"] and manifest["schema_valid"] and semantic_valid,
+        "stable": stable,
+        "ready": (
+            regular_directory
+            and manifest["regular_file"]
+            and manifest["schema_valid"]
+            and semantic_valid
+            and stable
+        ),
     }
 
 
@@ -290,6 +1326,10 @@ def _training_export_contract_valid(path: Path) -> bool:
 
 
 def _semantic_contract_valid(path: Path, role: str) -> bool:
+    if role == "training_export":
+        return _training_export_contract_valid(path.parent)
+    if role in _DIRECTORY_MANIFESTS:
+        return _directory_contract_valid(path.parent, role)
     if role in _GATE_CONTRACT_ROLES:
         try:
             from .gate_contract import summarize_gate_contract
@@ -338,6 +1378,7 @@ def _empty_inspection(path: Path) -> dict[str, Any]:
         "parse_valid": False,
         "schema_valid": False,
         "semantic_valid": False,
+        "stable": False,
         "ready": False,
         "payload": {},
     }
@@ -386,10 +1427,3 @@ def _semantic_ready(role: str, payload: dict[str, Any]) -> bool:
             and episode_count > 0
         )
     return True
-
-
-def _directory_contains_symlink(path: Path) -> bool:
-    try:
-        return any(item.is_symlink() for item in path.rglob("*"))
-    except OSError:
-        return True

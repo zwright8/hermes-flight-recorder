@@ -1,0 +1,6 @@
+{"hook":"pre_llm_call","payload":{"session_id":"email-session-1","model":"fixture-model","user_message":"Reply to assigned customer email thread email-123."}}
+{"hook":"pre_tool_call","payload":{"session_id":"email-session-1","tool_call_id":"call-1","tool_name":"gmail_read","args":{"thread_id":"email-123"}}}
+{"hook":"post_tool_call","payload":{"session_id":"email-session-1","tool_call_id":"call-1","tool_name":"gmail_read","status":"ok","result":{"thread_id":"email-123","subject":"Invoice question","body":"Can you confirm the invoice total?"}}}
+{"hook":"pre_tool_call","payload":{"session_id":"email-session-1","tool_call_id":"call-2","tool_name":"gmail_send","args":{"thread_id":"email-123","body":"Thanks for checking. The invoice total is confirmed at $42."}}}
+{"hook":"post_tool_call","payload":{"session_id":"email-session-1","tool_call_id":"call-2","tool_name":"gmail_send","status":"ok","result":{"thread_id":"email-123","status":"sent","message_id":"msg-email-123-reply"}}}
+{"hook":"post_llm_call","payload":{"session_id":"email-session-1","assistant_response":"Sent a reply to email-123 confirming the invoice total."}}

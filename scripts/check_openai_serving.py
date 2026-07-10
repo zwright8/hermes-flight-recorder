@@ -255,7 +255,8 @@ def _tool_call_check(base_url: str, model: str, *, api_key: str, timeout: float)
         timeout=timeout,
     )
     tool_calls = _tool_calls(response.get("json"))
-    return {"status": "supported" if response["ok"] and tool_calls else "not_verified", "response_ok": response["ok"], "tool_call_count": len(tool_calls), "tool_calls": tool_calls, "error": response.get("error")}
+    response_ok = bool(response["ok"] and tool_calls)
+    return {"status": "supported" if response_ok else "not_verified", "response_ok": response_ok, "tool_call_count": len(tool_calls), "tool_calls": tool_calls, "error": response.get("error")}
 
 
 def _structured_output_check(base_url: str, model: str, *, api_key: str, timeout: float) -> dict[str, Any]:
@@ -274,7 +275,8 @@ def _structured_output_check(base_url: str, model: str, *, api_key: str, timeout
             parsed = value if isinstance(value, dict) else None
         except json.JSONDecodeError:
             parsed = None
-    return {"status": "supported" if response["ok"] and isinstance(parsed, dict) else "not_verified", "response_ok": response["ok"], "json_parse_passed": isinstance(parsed, dict), "parsed": parsed, "text": text, "error": response.get("error")}
+    response_ok = bool(response["ok"] and isinstance(parsed, dict))
+    return {"status": "supported" if response_ok else "not_verified", "response_ok": response_ok, "json_parse_passed": isinstance(parsed, dict), "parsed": parsed, "text": text, "error": response.get("error")}
 
 
 def _streaming_check(base_url: str, model: str, *, api_key: str, timeout: float) -> dict[str, Any]:
@@ -290,9 +292,15 @@ def _streaming_check(base_url: str, model: str, *, api_key: str, timeout: float)
         api_key=api_key,
         timeout=timeout,
     )
+    response_ok = bool(
+        response["ok"]
+        and response["done_seen"]
+        and response["event_count"] > 0
+        and response["text"]
+    )
     return {
-        "status": "supported" if response["ok"] and response["event_count"] > 0 and response["text"] else "not_verified",
-        "response_ok": response["ok"],
+        "status": "supported" if response_ok else "not_verified",
+        "response_ok": response_ok,
         "event_count": response["event_count"],
         "done_seen": response["done_seen"],
         "text": response["text"],
@@ -365,14 +373,20 @@ def _request_stream(url: str, *, payload: dict[str, Any], api_key: str, timeout:
                 chunk = _stream_chunk_text(event)
                 if chunk:
                     text_parts.append(chunk)
+        completed = event_count > 0 and done_seen and bool(text_parts)
         return {
-            "ok": event_count > 0,
+            "ok": completed,
             "status_code": status_code,
             "url": url,
             "elapsed_ms": int((time.time() - started) * 1000),
             "event_count": event_count,
             "done_seen": done_seen,
             "text": "".join(text_parts),
+            "error": (
+                None
+                if completed
+                else "SSE stream ended before a complete [DONE]-terminated response with text content was observed"
+            ),
         }
     except HttpStatusError as exc:
         return {"ok": False, "status_code": exc.status_code, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": str(exc)}

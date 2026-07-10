@@ -240,7 +240,7 @@
       "summary": "flight_recorder_did_not_execute_trainer_flow: passed=True"
     }
   ],
-  "created_at": "2026-07-02T00:00:00+00:00",
+  "created_at": "2026-07-10T01:22:01.727383+00:00",
   "delegated_flow": {
     "backend": "axolotl",
     "command": {
@@ -295,7 +295,7 @@
     "weights_updated_by_flight_recorder": false
   },
   "failed_check_count": 0,
-  "flow_id": "example-sft-then-dpo-flow",
+  "flow_id": "delegated-sft_then_dpo-sft-dpo",
   "flow_mode_gate": {
     "blocked_by_default": false,
     "category": "default_executable",
@@ -424,8 +424,8 @@
       "regular_file": true,
       "role": "agentic_training_runtime_preflight",
       "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-      "sha256": "a170ded0f3dce2658e093b9534483bd6211248075092c54f7023bfe33def2ff4",
-      "size_bytes": 8094
+      "sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+      "size_bytes": 8513
     },
     "trainer_consumer_plan": {
       "exists": true,

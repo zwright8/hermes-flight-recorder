@@ -42,7 +42,7 @@
       "path": "artifacts/decision_gate_001.json",
       "role": "decision_gate",
       "schema_version": "hfr.decision_gate.v1",
-      "sha256": "d278635f8cc1c77c79c62833d02370072166f3b863d0c7a479d8ae18031e74db",
+      "sha256": "cc6dbe65048a8a52d50982e9893c4874c6e2d423d3243cdf6cad379d0242af89",
       "size_bytes": 2331
     },
     {
@@ -64,7 +64,7 @@
       "path": "artifacts/source_artifact_001.json",
       "role": "source_artifact",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
+      "sha256": "96ccced56144f4e91f6ed76e490b4b4947f3ba7d4e15ac46bc7497ede836e683",
       "size_bytes": 32793
     },
     {
@@ -75,7 +75,7 @@
       "path": "artifacts/promotion_release_record_000.json",
       "role": "promotion_release_record",
       "schema_version": "hfr.promotion_release_record.v1",
-      "sha256": "5bb189fccdefaf2c4d2f36cdbeff0bafe6d9d75b9840dbaab1b505b67ea22ca4",
+      "sha256": "9406c6b733b9184ca3ebd2788bbcbd75fbb28a87cad9727b1b79801535109a53",
       "size_bytes": 19412
     }
   ],

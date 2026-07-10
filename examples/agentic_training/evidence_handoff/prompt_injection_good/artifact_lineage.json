@@ -98,8 +98,8 @@
       "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/run_digest.json",
       "role": "output",
       "sensitive": false,
-      "sha256": "cb31cf6689b18d84ef730c7fd8bcbc23143a7e6c5fe8bff07377f0451a09d695",
-      "size_bytes": 1965
+      "sha256": "e425812713a90a3940e085288edf6afd3552a7027f25c67046581ac4b8241abb",
+      "size_bytes": 2031
     },
     {
       "exists": true,
@@ -107,8 +107,8 @@
       "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/report.html",
       "role": "output",
       "sensitive": false,
-      "sha256": "ab2eabc8e4e05e46ba06b419e5a7ff0d67632cf45bfd01962dc6d228ff5f78c5",
-      "size_bytes": 9462
+      "sha256": "dc78d27b6780f20fdd954f05cf47835d948ebba95812203972fc4b1c919a36f8",
+      "size_bytes": 9527
     }
   ],
   "replay": {

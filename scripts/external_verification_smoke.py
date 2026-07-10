@@ -15,9 +15,8 @@ if str(ROOT) not in sys.path:
 
 from flightrecorder.cli import main as flightrecorder_main  # noqa: E402 - repo bootstrap precedes local import
 from flightrecorder.path_safety import (  # noqa: E402 - repo bootstrap precedes local import
-    assert_safe_output_directory,
-    json_marker_has_schema_version,
-    replace_owned_output_directory,
+    locked_owned_output_directory,
+    path_has_symlink_component,
 )
 
 
@@ -29,7 +28,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     out = Path(args.out)
-    _prepare_smoke_output(out, force=bool(args.force), keep_existing=bool(args.keep_existing))
+    if args.force and args.keep_existing:
+        raise SystemExit("--force and --keep-existing are mutually exclusive")
+    try:
+        with locked_owned_output_directory(
+            out,
+            repo_root=ROOT,
+            force=bool(args.force),
+            label="external-verification smoke output",
+            is_owned=_is_owned_smoke_output,
+            keep_existing=bool(args.keep_existing),
+        ):
+            return _run_locked_smoke(out)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _run_locked_smoke(out: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     before_maildir = _maildir(out / "maildir_before")
@@ -111,30 +126,29 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if summary["passed"] else 1
 
 
-def _prepare_smoke_output(out: Path, *, force: bool, keep_existing: bool) -> None:
-    if force and keep_existing:
-        raise SystemExit("--force and --keep-existing are mutually exclusive")
-    def owned(path: Path) -> bool:
-        return json_marker_has_schema_version(
-            path,
-            "external_verification_smoke_summary.json",
-            "hfr.external_verification_smoke.v1",
-        )
+def _is_owned_smoke_output(path: Path) -> bool:
+    marker = path / "external_verification_smoke_summary.json"
+    if not marker.is_file() or path_has_symlink_component(marker, include_leaf=True):
+        return False
     try:
-        if keep_existing:
-            assert_safe_output_directory(out, repo_root=ROOT)
-            if out.exists() and any(out.iterdir()) and not owned(out):
-                raise ValueError(f"refusing to reuse unrecognized external-verification smoke output: {out}")
-            return
-        replace_owned_output_directory(
-            out,
-            repo_root=ROOT,
-            force=force,
-            label="external-verification smoke output",
-            is_owned=owned,
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    positive = payload.get("positive") if isinstance(payload, dict) else None
+    negative = payload.get("negative") if isinstance(payload, dict) else None
+    return (
+        payload.get("schema_version") == "hfr.external_verification_smoke.v1"
+        and isinstance(payload.get("passed"), bool)
+        and isinstance(positive, dict)
+        and isinstance(positive.get("passed"), bool)
+        and isinstance(positive.get("score"), (int, float))
+        and isinstance(negative, dict)
+        and isinstance(negative.get("passed"), bool)
+        and isinstance(negative.get("score"), (int, float))
+        and isinstance(negative.get("critical_failures"), list)
+        and (path / "positive" / "scorecard.json").is_file()
+        and (path / "negative" / "scorecard.json").is_file()
         )
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
 
 
 def _run_cli(args: list[str]) -> None:

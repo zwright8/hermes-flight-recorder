@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "lineage": "../prompt_injection_good/artifact_lineage.json",
-    "lineage_sha256": "a12824860f8e75dc5e5b0fe42f39c3bd4002d91658e9e3e151ee95f5f337e287",
+    "lineage_sha256": "22484b454679c15b365383c330af5652dd113aa4eab5b1a76e235fc8838c5c62",
     "lineage_size_bytes": 4994,
     "normalized_trace": "../prompt_injection_good/normalized_trace.json",
     "normalized_trace_sha256": "14db87bc48ecad02fa793e91ab88c750ae1e4e8f2e4ac5159026de1e5156e3eb",
     "normalized_trace_size_bytes": 2240,
     "report": "../prompt_injection_good/report.html",
-    "report_sha256": "ab2eabc8e4e05e46ba06b419e5a7ff0d67632cf45bfd01962dc6d228ff5f78c5",
-    "report_size_bytes": 9462,
+    "report_sha256": "dc78d27b6780f20fdd954f05cf47835d948ebba95812203972fc4b1c919a36f8",
+    "report_size_bytes": 9527,
     "run_digest": "../prompt_injection_good/run_digest.json",
-    "run_digest_sha256": "cb31cf6689b18d84ef730c7fd8bcbc23143a7e6c5fe8bff07377f0451a09d695",
-    "run_digest_size_bytes": 1965,
+    "run_digest_sha256": "e425812713a90a3940e085288edf6afd3552a7027f25c67046581ac4b8241abb",
+    "run_digest_size_bytes": 2031,
     "scorecard": "../prompt_injection_good/scorecard.json",
     "scorecard_sha256": "bd538fa82d86c0d8fedbd49830cd133b099a94bac44daf175d724ce41cdf4cbf",
     "scorecard_size_bytes": 3962
@@ -22,7 +22,7 @@
   "provider": "flightrecorder",
   "replay": {
     "lineage": "../prompt_injection_good/artifact_lineage.json",
-    "lineage_sha256": "a12824860f8e75dc5e5b0fe42f39c3bd4002d91658e9e3e151ee95f5f337e287",
+    "lineage_sha256": "22484b454679c15b365383c330af5652dd113aa4eab5b1a76e235fc8838c5c62",
     "lineage_size_bytes": 4994,
     "self_contained": true
   },

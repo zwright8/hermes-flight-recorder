@@ -38,6 +38,9 @@ class PromotionDecisionTests(unittest.TestCase):
         alias_apply_path = root / "promotion_alias_apply.json"
         release_record_path = root / "promotion_release_record.json"
         archive_path = root / "promotion_archive"
+        registry_entry_path = root / "model_registry_entry.json"
+        registry_before_path = root / "model_registry_before_alias_apply.json"
+        registry_after_path = root / "model_registry.json"
         compare_gate = json.loads(compare_gate_path.read_text(encoding="utf-8"))
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
         gate = json.loads(gate_path.read_text(encoding="utf-8"))
@@ -107,6 +110,12 @@ class PromotionDecisionTests(unittest.TestCase):
                     str(ledger_gate_path),
                     "--promotion-archive",
                     str(archive_path),
+                    "--model-registry-entry",
+                    str(registry_entry_path),
+                    "--model-registry",
+                    str(registry_before_path),
+                    "--model-registry",
+                    str(registry_after_path),
                     "--strict",
                 ]
             ),
@@ -312,6 +321,28 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(receipt["alias_history_entry"]["updated_aliases"]["champion"], "candidate-v2")
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_promotion_alias_apply_uses_canonical_registry_entries_without_legacy_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["entries"] = {
+                model_id: {"entry_id": model_id}
+                for model_id in registry.pop("models")
+            }
+            registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+
+            code = run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path))
+
+            self.assertEqual(code, 0)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertTrue(receipt["passed"])
+            self.assertEqual(receipt["registry_after"]["aliases"]["champion"], "candidate-v2")
 
     def test_validate_promotion_alias_apply_rejects_unknown_control_fields(self):
         with tempfile.TemporaryDirectory() as tmp:

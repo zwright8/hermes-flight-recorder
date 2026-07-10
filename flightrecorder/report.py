@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .redaction import redact_text
+from .state_diff import resolve_state_diff_semantics
 
 
 def write_report(
@@ -63,7 +64,7 @@ def render_report(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{_esc(scenario['title'])} - Hermes Flight Recorder</title>
   <style>
-    :root {{ color-scheme: light; --ink:#17202a; --muted:#566573; --line:#d6dbdf; --ok:#147a3d; --bad:#b42318; --bg:#f7f9fb; --card:#ffffff; --accent:#1f6feb; }}
+    :root {{ color-scheme: light; --ink:#17202a; --muted:#566573; --line:#d6dbdf; --ok:#147a3d; --bad:#b42318; --warn:#b54708; --bg:#f7f9fb; --card:#ffffff; --accent:#1f6feb; }}
     body {{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }}
     header {{ background:#101820; color:#fff; padding:28px 32px; }}
     header p {{ color:#c7d0d9; max-width:880px; }}
@@ -80,6 +81,7 @@ def render_report(
     .muted {{ color:var(--muted); }}
     .rule {{ border-left:5px solid var(--ok); margin-bottom:12px; }}
     .rule.fail {{ border-left-color:var(--bad); }}
+    .rule.unknown {{ border-left-color:var(--warn); }}
     .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
     .checklist {{ display:grid; gap:10px; }}
     .check {{ border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px; background:#fff; }}
@@ -126,13 +128,13 @@ def render_report(
       <div class="panel"><h2>Source Trace</h2><p><code>{source_trace}</code></p><p class="muted">Format: {_esc(trace.get('session', {}).get('source_format', 'unknown'))}</p></div>
     </section>
     <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
-    {task_completion}
-    {state_changes}
-    {action_checklist}
+{task_completion}
+{state_changes}
+{action_checklist}
     <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
     <section class="panel"><h2>Scorecard</h2>{rules}</section>
     <section class="panel violations"><h2>Violations</h2>{violations}</section>
-    {regression}
+{regression}
     <section class="panel"><h2>Timeline</h2><div class="timeline">{timeline}</div></section>
   </main>
 </body>
@@ -378,17 +380,22 @@ def _render_state_diff(state_diff: dict[str, Any] | None, secret_patterns: list[
             f"<td data-label=\"After\"><pre>{_esc(_render_diff_value(change.get('after'), secret_patterns))}</pre></td>"
             "</tr>"
         )
+    comparison_complete, change_status = resolve_state_diff_semantics(state_diff)
     body = (
         "<table class=\"diff-table\"><thead><tr><th>Path</th><th>Kind</th><th>Before</th><th>After</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
         if rows
-        else "<p class=\"muted\">No changed state paths were emitted.</p>"
+        else (
+            "<p class=\"muted\">No changed state paths were emitted before the comparison became incomplete.</p>"
+            if not comparison_complete
+            else "<p class=\"muted\">No changed state paths were emitted.</p>"
+        )
     )
-    changed = bool(state_diff.get("changed"))
-    status = "CHANGED" if changed else "UNCHANGED"
+    status = change_status.upper()
+    status_class = " unknown" if change_status == "unknown" else ""
     return (
         f"<section class=\"panel\"><h2>State Changes</h2>"
-        f"<article class=\"rule\"><h3><span>{status}</span>"
+        f"<article class=\"rule{status_class}\"><h3><span>{status}</span>"
         f"<span>{_esc(state_diff.get('change_count', 0))}</span></h3>"
         f"<p>{_esc(state_diff.get('summary', ''))}</p></article>{body}</section>"
     )

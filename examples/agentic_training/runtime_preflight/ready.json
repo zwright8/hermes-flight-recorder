@@ -122,6 +122,27 @@
       "summary": "json: available=True"
     }
   ],
+  "dependency_policy": {
+    "backend_default_modules": [
+      "accelerate",
+      "axolotl",
+      "datasets",
+      "peft",
+      "torch",
+      "transformers",
+      "trl",
+      "yaml"
+    ],
+    "dependency_resolution_delegated": true,
+    "effective_required_modules": [
+      "json"
+    ],
+    "normalized_backend": "axolotl",
+    "override_modules": [
+      "json"
+    ],
+    "skip_default_modules": true
+  },
   "execution_boundary": {
     "cloud_jobs_started": false,
     "dependency_resolution_method": "importlib.util.find_spec",

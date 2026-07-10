@@ -82,6 +82,33 @@ def make_review_flow(tmp: str) -> tuple[Path, Path]:
 
 
 class ModelGraderTests(unittest.TestCase):
+    def test_disagreement_queue_blocks_schema_valid_semantically_forged_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "model_grader"
+            shutil.copytree(ROOT / "examples" / "agentic_training" / "model_grader", root)
+            dry_run = root / "dry_run.json"
+            forged = json.loads(dry_run.read_text(encoding="utf-8"))
+            forged["graded_item_count"] += 1
+            dry_run.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(check_schema_file(dry_run)["passed"])
+            out = root / "forged_disagreement_queue.json"
+
+            code = run_cli(
+                [
+                    "model-grader",
+                    "disagreement-queue",
+                    "--dry-run",
+                    str(dry_run),
+                    "--out",
+                    str(out),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertFalse(payload["passed"])
+            self.assertIn("dry_run_receipt_valid", {check["id"] for check in payload["checks"] if not check["passed"]})
+
     def test_cli_emits_fail_closed_model_grader_flow(self):
         with tempfile.TemporaryDirectory() as tmp:
             review, calibration = make_review_flow(tmp)

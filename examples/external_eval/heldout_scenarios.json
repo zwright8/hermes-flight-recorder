@@ -1,7 +1,7 @@
 {
   "blocking_reasons": [],
   "cross_arm_claims_allowed": false,
-  "generated_at": "2026-07-09T23:16:54.140692+00:00",
+  "generated_at": "2026-07-10T01:39:42.223957+00:00",
   "governance_handoff": {
     "cross_arm_claims_allowed": false,
     "external_adapter_manifest_allowed": true,
@@ -20,11 +20,11 @@
     {
       "blocking_reasons": [],
       "duplicate_scenario_ids": [],
-      "label": "candidate",
+      "label": "heldout_suite_summary",
       "path": "heldout_suite_summary.json",
       "scenario_count": 1,
       "scenario_fingerprints": {
-        "email_reply_completion_good": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5"
+        "email_reply_completion_good": "d61c2711c1e3fcde834b3a0fdd899e62beb2d27c0f314db579398015560415a7"
       },
       "scenario_ids": [
         "email_reply_completion_good"

@@ -1,36 +1,111 @@
 {
   "candidate": {
-    "id": "local/mock-candidate",
-    "serving_profile": "examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_profile.json",
-    "source": "examples/agentic_training/completed_result.json"
+    "candidate_id": "local/mock-candidate",
+    "compatibility": {
+      "chat_template": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "context_length": 2048,
+      "memory": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "quantization": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "serving": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "structured_outputs": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "tokenizer": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "tool_calls": {
+        "notes": "Synthetic fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      }
+    },
+    "license": {
+      "accepted_terms": true,
+      "license_id": "synthetic-local-fixture",
+      "notes": [
+        "No model weights are distributed by this trace-only fixture."
+      ],
+      "review_status": "approved",
+      "reviewed_at": "2026-07-03T00:00:00Z",
+      "reviewer": "public-fixture-review",
+      "source_url": "https://spdx.org/licenses/MIT.html",
+      "status": "known",
+      "terms_url": "https://spdx.org/licenses/MIT.html",
+      "training_allowed": false
+    },
+    "model_id": "local/mock-candidate",
+    "notes": [
+      "Trace-only candidate for the closed-loop public fixture; no weights are downloaded."
+    ],
+    "schema_version": "hfr.model_candidate.v1",
+    "source": {
+      "revision": "public-fixture-v1",
+      "type": "local_fixture",
+      "url": "file://examples/agentic_training/completed_result.json",
+      "weight_download_allowed": false
+    }
   },
   "candidate_id": "local/mock-candidate",
-  "entry_id": "local-mock-candidate",
+  "entry_id": "local/mock-candidate",
   "license_status": "known",
   "links": {
     "adapters": [],
     "datasets": [
       {
         "id": "agentic-training-export",
-        "kind": "training_export",
-        "recorded_at": "2026-07-03T00:00:00Z",
+        "kind": "training_export_manifest",
+        "metadata": {},
+        "path": "examples/agentic_training/training_export/manifest.json",
+        "recorded_at": "2026-07-10T01:48:06Z",
+        "sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
+        "size_bytes": 22973,
         "status": "ready"
       }
     ],
     "evals": [
       {
-        "id": "heldout-eval",
-        "kind": "eval_summary",
-        "recorded_at": "2026-07-03T00:00:00Z",
-        "status": "blocked_external_adapters"
+        "id": "heldout-compare-gate",
+        "kind": "compare_gate",
+        "metadata": {},
+        "path": "examples/agentic_training/promotion_governance/compare_gate.json",
+        "recorded_at": "2026-07-10T01:48:06Z",
+        "sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
+        "size_bytes": 16328,
+        "status": "ready"
       }
     ],
     "promotion_decisions": [],
     "serving_probes": [
       {
         "id": "managed-mock-serving",
-        "kind": "serving_lifecycle",
-        "recorded_at": "2026-07-03T00:00:00Z",
+        "kind": "serving_check",
+        "metadata": {},
+        "path": "examples/agentic_training/serving_lifecycle/managed_mock/preflight/serving_check.json",
+        "recorded_at": "2026-07-10T01:48:06Z",
+        "sha256": "767c7e9d96f91f003b2eef0f3b1249e18857dca18f7849471e18537085716e06",
+        "size_bytes": 4632,
         "status": "ready"
       }
     ],
@@ -38,17 +113,19 @@
       {
         "id": "demo-loop-001-training",
         "kind": "agentic_training_result",
-        "recorded_at": "2026-07-03T00:00:00Z",
+        "metadata": {},
+        "path": "examples/agentic_training/completed_result.json",
+        "recorded_at": "2026-07-10T01:48:06Z",
+        "sha256": "4a77bea1176b4df76458cb71e6ade458d117639009ebc420b1c71745f8602c95",
+        "size_bytes": 11554,
         "status": "completed"
       }
     ]
   },
-  "notes": [
-    "Trace-only local candidate for the fail-closed loop fixture; no alias movement is authorized."
-  ],
-  "registered_at": "2026-07-03T00:00:00Z",
+  "notes": [],
+  "registered_at": "2026-07-10T01:48:05Z",
   "schema_version": "hfr.model_registry_entry.v1",
-  "status": "promotion_blocked_pending_eval_governance",
+  "status": "promotion_candidate",
   "training_eligible": false,
-  "updated_at": "2026-07-03T00:00:00Z"
+  "updated_at": "2026-07-10T01:48:06Z"
 }

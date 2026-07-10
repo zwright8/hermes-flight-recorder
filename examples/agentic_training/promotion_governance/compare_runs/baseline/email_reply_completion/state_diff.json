@@ -1,7 +1,9 @@
 {
   "change_count": 0,
+  "change_status": "unchanged",
   "changed": false,
   "changes": [],
+  "comparison_complete": true,
   "max_changes": 200,
   "schema_version": "hfr.state_diff.v1",
   "summary": "0 state change(s) detected.",

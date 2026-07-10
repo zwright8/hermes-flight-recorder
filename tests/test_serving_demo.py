@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -6,6 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 from flightrecorder.validation import validate_artifacts
@@ -103,6 +105,140 @@ class ServingDemoTests(unittest.TestCase):
                 [target["type"] for target in validation["targets"]],
                 ["serving_profile", "serving_compatibility_report", "serving_endpoint_check"],
             )
+
+    def test_partial_sse_stream_without_done_marker_is_not_supported(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_partial_sse")
+        partial_body = (
+            b'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n'
+        )
+
+        class PartialResponse(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _traceback):
+                self.close()
+
+        with mock.patch.object(
+            check_openai_serving,
+            "open_http_response",
+            return_value=PartialResponse(partial_body),
+        ):
+            response = check_openai_serving._request_stream(
+                "http://127.0.0.1:8000/v1/chat/completions",
+                payload={"model": "hfr-mock-model", "stream": True},
+                api_key="",
+                timeout=1.0,
+            )
+
+        self.assertFalse(response["ok"])
+        self.assertEqual(response["event_count"], 1)
+        self.assertFalse(response["done_seen"])
+        self.assertEqual(response["text"], "partial")
+        self.assertIn("[DONE]", response["error"])
+
+    def test_streaming_capability_defensively_requires_done_marker(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_done_requirement")
+        partial_response = {
+            "ok": True,
+            "event_count": 1,
+            "done_seen": False,
+            "text": "partial",
+            "error": None,
+        }
+
+        with mock.patch.object(
+            check_openai_serving,
+            "_request_stream",
+            return_value=partial_response,
+        ):
+            capability = check_openai_serving._streaming_check(
+                "http://127.0.0.1:8000/v1",
+                "hfr-mock-model",
+                api_key="",
+                timeout=1.0,
+            )
+
+        self.assertEqual(capability["status"], "not_verified")
+        self.assertFalse(capability["response_ok"])
+        self.assertFalse(capability["done_seen"])
+
+    def test_done_terminated_sse_without_text_is_not_supported(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_empty_sse")
+        empty_body = (
+            b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+            b"data: [DONE]\n\n"
+        )
+
+        class EmptyResponse(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _traceback):
+                self.close()
+
+        with mock.patch.object(
+            check_openai_serving,
+            "open_http_response",
+            return_value=EmptyResponse(empty_body),
+        ):
+            response = check_openai_serving._request_stream(
+                "http://127.0.0.1:8000/v1/chat/completions",
+                payload={"model": "hfr-mock-model", "stream": True},
+                api_key="",
+                timeout=1.0,
+            )
+
+        self.assertFalse(response["ok"])
+        self.assertEqual(response["event_count"], 1)
+        self.assertTrue(response["done_seen"])
+        self.assertEqual(response["text"], "")
+        self.assertIn("text content", response["error"])
+
+    def test_validate_replays_all_serving_capability_evidence(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT, "check_openai_serving_capability_replay"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with redirect_stdout(StringIO()):
+                code = check_openai_serving.main(
+                    [
+                        "--out",
+                        str(root / "serving"),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            original = _read_json(root / "serving" / "compatibility_report.json")
+
+            mutations = (
+                ("streaming", "done_seen", False, "done_seen"),
+                ("tool_calls", "tool_call_count", 0, "tool_call_count"),
+                ("structured_outputs", "json_parse_passed", False, "json_parse_passed"),
+            )
+            for capability, field_name, forged_value, expected_error in mutations:
+                with self.subTest(capability=capability):
+                    forged = json.loads(json.dumps(original))
+                    forged["checks"][capability][field_name] = forged_value
+                    forged_path = root / f"forged_{capability}.json"
+                    _write_json(forged_path, forged)
+                    schema_result = check_schema_file(forged_path)
+                    self.assertTrue(schema_result["passed"], schema_result)
+                    validation = validate_artifacts(
+                        serving_compatibility_report_paths=[forged_path],
+                        strict=True,
+                    )
+                    self.assertFalse(validation["passed"], validation)
+                    errors = "\n".join(validation["targets"][0]["errors"])
+                    self.assertIn(expected_error, errors)
 
     def test_validate_rejects_serving_artifacts_with_unknown_control_plane_fields(self):
         check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_unknown_fields")

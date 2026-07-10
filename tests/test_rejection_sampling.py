@@ -260,6 +260,34 @@ class RejectionSamplingGateTests(unittest.TestCase):
             self.assertIn("review_calibration_present_and_passing", {check["id"] for check in gate["checks"] if not check["passed"]})
             self.assertFalse(gate["execution_boundary"]["dataset_rows_written"])
 
+    def test_gate_rejects_schema_valid_semantically_forged_review_calibration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            model_grader_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            forged = json.loads(review_calibration.read_text(encoding="utf-8"))
+            forged["metrics"]["agreement_count"] = 1
+            review_calibration.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(check_schema_file(review_calibration)["passed"])
+
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[model_grader_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=root / "gate.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(gate["passed"])
+            self.assertFalse(gate["input_artifacts"]["review_calibration"][0]["exists"])
+            self.assertIn(
+                "review_calibration_present_and_passing",
+                {check["id"] for check in gate["checks"] if not check["passed"]},
+            )
+
     def test_validation_rejects_dataset_side_effect_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -348,10 +376,15 @@ class RejectionSamplingGateTests(unittest.TestCase):
         return receipt_path
 
     def write_json(self, path: Path, schema_version: str) -> Path:
+        example_dir = ROOT / "examples" / "agentic_training" / "model_grader"
+        for directory_name in ("review", "reviewed"):
+            shutil.copytree(example_dir / directory_name, path.parent / directory_name, dirs_exist_ok=True)
+        for filename in ("dry_run.json", "rubric.json"):
+            shutil.copyfile(example_dir / filename, path.parent / filename)
         sources = {
-            "hfr.model_grader_gate.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json",
-            "hfr.review_calibration.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "review_calibration.json",
-            "hfr.reviewed_gate.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "reviewed_gate.json",
+            "hfr.model_grader_gate.v1": example_dir / "passing_gate.json",
+            "hfr.review_calibration.v1": example_dir / "review_calibration.json",
+            "hfr.reviewed_gate.v1": example_dir / "reviewed_gate.json",
         }
         shutil.copyfile(sources[schema_version], path)
         return path

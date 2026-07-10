@@ -6,8 +6,8 @@
       "path": "model_registry_before_alias_apply.json",
       "role": "registry",
       "schema_version": "hfr.model_registry.v1",
-      "sha256": "0e1ed605e3b713e46990e7ea7bca11ef14c8304ad72afb9d831e157609e6c738",
-      "size_bytes": 1222
+      "sha256": "d4f9497fdd99c0a94d4d4d0e3527cc6056b0a6e9c26c42f55410f33af8a402da",
+      "size_bytes": 11698
     }
   },
   "available": true,
@@ -142,7 +142,7 @@
     "alias_count": 3,
     "check_count": 9,
     "failed_check_count": 0,
-    "registered_model_count": 2
+    "registered_model_count": 3
   },
   "notes": [
     "Rollback receipts are side-effect free; they do not move registry aliases.",
@@ -156,11 +156,11 @@
     "aliases": {
       "candidate": "local/mock-candidate",
       "champion": "local/mock-baseline",
-      "rollback": "local/mock-baseline"
+      "rollback": "local/mock-rollback"
     },
     "path": "model_registry_before_alias_apply.json",
-    "sha256": "0e1ed605e3b713e46990e7ea7bca11ef14c8304ad72afb9d831e157609e6c738",
-    "size_bytes": 1222
+    "sha256": "d4f9497fdd99c0a94d4d4d0e3527cc6056b0a6e9c26c42f55410f33af8a402da",
+    "size_bytes": 11698
   },
   "rollback": {
     "available": true,

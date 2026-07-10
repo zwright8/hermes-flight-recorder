@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.report import _render_state_diff
 from flightrecorder.state_diff import build_state_diff
 
 
@@ -151,6 +152,43 @@ class StateDiffTests(unittest.TestCase):
         self.assertEqual(diff["change_status"], "unknown")
         self.assertFalse(diff["comparison_complete"])
         self.assertEqual(diff["truncation_reason"], "incomplete_snapshot")
+
+    def test_legacy_directory_truncation_markers_make_comparison_unknown(self):
+        for legacy_marker in ("entries_truncated", "entry_count_is_lower_bound"):
+            with self.subTest(marker=legacy_marker):
+                captured = {
+                    "filesystem": {
+                        "directories": {
+                            "workspace": {
+                                "kind": "directory",
+                                legacy_marker: True,
+                                "entries": [{"name": "visible.txt", "kind": "file"}],
+                            }
+                        }
+                    }
+                }
+
+                diff = build_state_diff(captured, json.loads(json.dumps(captured)))
+
+                self.assertFalse(diff["changed"])
+                self.assertFalse(diff["comparison_complete"])
+                self.assertEqual(diff["change_status"], "unknown")
+                self.assertEqual(diff["truncation_reason"], "incomplete_snapshot")
+
+    def test_report_renders_incomplete_comparison_as_unknown(self):
+        state_diff = build_state_diff(
+            {"outer": {"items": [{"value": "before"}] * 20}},
+            {"outer": {"items": [{"value": "after"}] * 20}},
+            max_depth=1,
+        )
+
+        rendered = _render_state_diff(state_diff, [])
+
+        self.assertIn('<article class="rule unknown">', rendered)
+        self.assertIn("<span>UNKNOWN</span>", rendered)
+        self.assertNotIn("UNCHANGED", rendered)
+        self.assertIn("comparison became incomplete", rendered)
+        self.assertIn("result is unknown", rendered)
 
     def test_diff_state_cli_redacts_and_validates(self):
         with tempfile.TemporaryDirectory() as tmp:

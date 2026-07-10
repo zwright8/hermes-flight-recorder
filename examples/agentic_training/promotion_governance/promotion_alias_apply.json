@@ -3,9 +3,9 @@
     "previous_aliases": {
       "candidate": "local/mock-candidate",
       "champion": "local/mock-baseline",
-      "rollback": "local/mock-baseline"
+      "rollback": "local/mock-rollback"
     },
-    "promotion_decision_sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
+    "promotion_decision_sha256": "96ccced56144f4e91f6ed76e490b4b4947f3ba7d4e15ac46bc7497ede836e683",
     "updated_aliases": {
       "candidate": "local/mock-candidate",
       "champion": "local/mock-candidate",
@@ -19,7 +19,7 @@
       "path": "promotion_decision.json",
       "role": "promotion_decision",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
+      "sha256": "96ccced56144f4e91f6ed76e490b4b4947f3ba7d4e15ac46bc7497ede836e683",
       "size_bytes": 32793
     },
     "registry": {
@@ -28,8 +28,8 @@
       "path": "model_registry.json",
       "role": "registry",
       "schema_version": "hfr.model_registry.v1",
-      "sha256": "d5a281ceb8c6faae8bc567d488e77921efe411239da7a44f2ac705c7ae138de8",
-      "size_bytes": 1674
+      "sha256": "625c56bdfaedc402535529443e91eb7c8096f913fd22cd898e1d423b7bf902f0",
+      "size_bytes": 12148
     }
   },
   "check_count": 15,
@@ -252,11 +252,11 @@
   "metrics": {
     "alias_count_after": 3,
     "alias_count_before": 3,
-    "alias_history_count_after": 1,
-    "alias_history_count_before": 0,
+    "alias_history_count_after": 4,
+    "alias_history_count_before": 3,
     "check_count": 15,
     "failed_check_count": 0,
-    "registered_model_count": 2
+    "registered_model_count": 3
   },
   "notes": [
     "Promotion alias application is the guarded side-effectful step after promotion-decision validation.",
@@ -268,7 +268,7 @@
     "champion_previous_target": "local/mock-baseline",
     "path": "promotion_decision.json",
     "rollback_id": "local/mock-baseline",
-    "sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
+    "sha256": "96ccced56144f4e91f6ed76e490b4b4947f3ba7d4e15ac46bc7497ede836e683",
     "size_bytes": 32793
   },
   "promotion_decision_validation": {
@@ -295,14 +295,14 @@
       "rollback": "local/mock-baseline"
     },
     "path": "model_registry.json",
-    "sha256": "d5a281ceb8c6faae8bc567d488e77921efe411239da7a44f2ac705c7ae138de8",
-    "size_bytes": 1674
+    "sha256": "625c56bdfaedc402535529443e91eb7c8096f913fd22cd898e1d423b7bf902f0",
+    "size_bytes": 12148
   },
   "registry_before": {
     "aliases": {
       "candidate": "local/mock-candidate",
       "champion": "local/mock-baseline",
-      "rollback": "local/mock-baseline"
+      "rollback": "local/mock-rollback"
     }
   },
   "schema_version": "hfr.promotion_alias_apply.v1"

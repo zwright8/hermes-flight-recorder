@@ -1,5 +1,7 @@
 {
-  "blocked_reasons": [],
+  "blocked_reasons": [
+    "launch_receipt_readable: passed=False"
+  ],
   "check_count": 3,
   "checks": [
     {
@@ -22,8 +24,8 @@
         "exists": true
       },
       "id": "launch_receipt_readable",
-      "passed": true,
-      "summary": "launch_receipt_readable: passed=True"
+      "passed": false,
+      "summary": "launch_receipt_readable: passed=False"
     },
     {
       "actual": {
@@ -62,10 +64,10 @@
     "provider_api_called": false,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 0,
-  "passed": true,
-  "readiness": "status_recorded",
-  "recommendation": "archive_status_receipt",
+  "failed_check_count": 1,
+  "passed": false,
+  "readiness": "blocked",
+  "recommendation": "inspect_launch_receipt",
   "schema_version": "hfr.cloud_training_status_receipt.v1",
   "source_artifacts": {
     "launch_receipt": {
