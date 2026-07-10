@@ -7,8 +7,18 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import flightrecorder.agentic_training_loop_plan as loop_plan_module
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan
+from flightrecorder.agentic_training_result import build_agentic_training_result
+from flightrecorder.external_eval import (
+    build_external_eval_plan,
+    build_external_eval_receipt,
+    write_external_eval_plan,
+    write_external_eval_receipt,
+)
+from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 from flightrecorder.validation import validate_artifacts
 from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
@@ -35,7 +45,390 @@ def directory_tree_fingerprint(path: Path) -> dict[str, int | str]:
     return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
 
 
+def write_external_result_fixture(
+    artifacts: dict[str, list[Path]],
+    *,
+    execution_status: str,
+    benchmark_passed: bool = True,
+) -> tuple[Path, dict[str, object]]:
+    result_dir = artifacts["external_eval_plan"][0].parent.resolve()
+    heldout_path = artifacts["heldout_manifest"][0].resolve()
+    heldout = json.loads(heldout_path.read_text(encoding="utf-8"))
+    scenario_ids = heldout["scenario_ids"]
+    if execution_status == "completed":
+        runs = [
+            {
+                "scenario_id": scenario_id,
+                "passed": benchmark_passed,
+                "score": 100 if benchmark_passed else 0,
+            }
+            for scenario_id in scenario_ids
+        ]
+        raw_format = "hfr.run_suite.v1"
+        normalizer_id = "hfr.local_mock.run_suite"
+        raw = {
+            "schema_version": "hfr.run_suite.v1",
+            "scenarios_dir": "scenarios",
+            "out_dir": "runs",
+            "total": len(runs),
+            "passed": sum(row["passed"] is True for row in runs),
+            "failed": sum(row["passed"] is False for row in runs),
+            "error_count": 0,
+            "errors": [],
+            "metrics": {},
+            "runs": runs,
+            "artifacts": {},
+        }
+        failure_class = "none"
+        failure_message = ""
+    else:
+        raw_format = "aggregate_json"
+        normalizer_id = "hfr.local_mock.aggregate_json"
+        raw = {"error": "external runner exited before emitting per-case results"}
+        failure_class = "runner_error"
+        failure_message = "External runner exited before emitting per-case results."
+    raw_path = result_dir / f"loop-{execution_status}-raw-result.json"
+    raw_path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    out_path = result_dir / f"loop-{execution_status}-external-eval-result.json"
+    result = build_external_eval_result(
+        plan_path=artifacts["external_eval_plan"][0].resolve(),
+        heldout_manifest_path=heldout_path,
+        raw_result_path=raw_path.resolve(),
+        runner_metadata_path=None,
+        runner_observation={
+            "runner_id": "loop-test-runner",
+            "runner_version": "1",
+            "started_at": "2026-07-03T00:00:00+00:00",
+            "finished_at": "2026-07-03T00:01:00+00:00",
+            "exit_code": 0 if execution_status == "completed" else 17,
+            "cost": {"reported": True, "amount": 0, "currency": "USD"},
+            "side_effects": {
+                "network_access": "not_observed",
+                "provider_api_calls": "not_observed",
+                "model_downloads": "not_observed",
+                "filesystem_writes": "observed",
+                "credential_values_recorded": "not_observed",
+            },
+        },
+        adapter_id="local_mock",
+        execution_id=f"loop-{execution_status}",
+        model_id="local/mock-candidate",
+        normalizer_id=normalizer_id,
+        normalizer_version="1",
+        raw_format=raw_format,
+        execution_status=execution_status,
+        failure_class=failure_class,
+        failure_message=failure_message,
+        out_path=out_path,
+        created_at="2026-07-03T00:02:00+00:00",
+    )
+    write_external_eval_result(result, out_path)
+    return out_path, result
+
+
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
+    def test_multi_adapter_external_results_require_an_exact_completed_set(self):
+        def inspection(adapter_id: str, status: str = "completed") -> dict[str, object]:
+            return {
+                "physical_exists": True,
+                "parse_valid": True,
+                "schema_valid": True,
+                "semantic_valid": True,
+                "payload": {
+                    "identity": {"adapter_id": adapter_id},
+                    "integrity": {"passed": True},
+                    "execution": {"status": status},
+                    "coverage": {"complete": status == "completed"},
+                    "benchmark_outcome": {"status": "passed" if status == "completed" else "not_available"},
+                    "governance": {
+                        "readiness": "ready_for_review" if status == "completed" else "blocked",
+                        "external_eval_claims_allowed": status == "completed",
+                    },
+                },
+            }
+
+        plan = {"selected_adapters": ["bfcl", "inspect_ai"]}
+        artifact_paths = {
+            "external_eval_plan": [Path("plan.json")],
+            "external_eval_result": [Path("bfcl.json"), Path("inspect.json")],
+        }
+        inspections = {
+            Path("bfcl.json"): inspection("bfcl"),
+            Path("inspect.json"): inspection("inspect_ai"),
+        }
+        with (
+            patch.object(loop_plan_module, "_single_payload", return_value=plan),
+            patch.object(
+                loop_plan_module,
+                "inspect_artifact_source",
+                side_effect=lambda path, role: inspections[path],
+            ),
+        ):
+            self.assertEqual(
+                loop_plan_module._execution_result_status(artifact_paths, "external_eval_result"),
+                "completed",
+            )
+            self.assertEqual(
+                loop_plan_module._execution_result_status(
+                    {**artifact_paths, "external_eval_result": [Path("bfcl.json")]},
+                    "external_eval_result",
+                ),
+                "incomplete",
+            )
+            inspections[Path("bfcl.json")] = inspection("bfcl", "failed")
+            self.assertEqual(
+                loop_plan_module._execution_result_status(
+                    {**artifact_paths, "external_eval_result": [Path("bfcl.json")]},
+                    "external_eval_result",
+                ),
+                "failed",
+            )
+
+    def test_dry_run_external_eval_receipt_cannot_complete_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            result_path, _ = write_external_result_fixture(artifacts, execution_status="completed")
+            artifacts["external_eval_result"] = [result_path]
+            artifacts.pop("external_eval_result")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="dry-run-is-not-completion",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "incomplete")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertEqual(plan["recommendation"], "execute_ready_plan")
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertIn("external_eval_result", plan["missing_phase_inputs"])
+            heldout = next(phase for phase in plan["phases"] if phase["id"] == "heldout_eval")
+            self.assertEqual(heldout["status"], "blocked")
+            self.assertIn("external_eval_result", heldout["missing_required_artifacts"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertFalse(heldout_check["actual"]["external_eval_result_completed"])
+
+    def test_training_plan_and_dry_run_receipts_cannot_complete_training(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            artifacts.pop("agentic_training_result")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="training-plan-is-not-completion",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["execution_completion"], "incomplete")
+            self.assertEqual(plan["recommendation"], "execute_ready_plan")
+            training = next(phase for phase in plan["phases"] if phase["id"] == "external_trainer_execution")
+            self.assertEqual(training["status"], "blocked")
+            self.assertIn("agentic_training_result", training["missing_required_artifacts"])
+            execution_check = next(
+                check for check in plan["checks"] if check["id"] == "external_trainer_execution_completed"
+            )
+            self.assertFalse(execution_check["passed"])
+            self.assertEqual(execution_check["actual"]["training_result_status"], "missing")
+
+    def test_duplicate_external_eval_handoff_inputs_block_plan_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            artifacts["external_eval_plan"].append(artifacts["external_eval_plan"][0])
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="ambiguous-external-eval-plan",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "blocked")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertEqual(plan["recommendation"], "collect_missing_plan_evidence")
+            handoff_check = next(
+                check for check in plan["checks"] if check["id"] == "external_eval_handoff_is_preflighted"
+            )
+            self.assertFalse(handoff_check["passed"])
+            self.assertEqual(handoff_check["actual"]["external_eval_plan_count"], 2)
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_external_eval_receipt_from_another_plan_blocks_plan_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            handoff_dir = artifacts["external_eval_plan"][0].parent.resolve()
+            other_plan_path = handoff_dir / "other-external-eval-plan.json"
+            other_plan = build_external_eval_plan(
+                adapters=["local_mock"],
+                scenario_manifest=artifacts["heldout_manifest"][0].resolve(),
+                model_endpoint="local/other-candidate",
+                model="local/other-candidate",
+                allow_installed=True,
+                output_base_dir=handoff_dir,
+            )
+            write_external_eval_plan(other_plan, other_plan_path)
+            other_receipt_path = handoff_dir / "other-external-eval-receipt.json"
+            other_receipt = build_external_eval_receipt(
+                plan_path=other_plan_path,
+                created_at="2026-07-03T00:00:00+00:00",
+                output_base_dir=handoff_dir,
+            )
+            write_external_eval_receipt(other_receipt, other_receipt_path)
+            artifacts["external_eval_receipt"] = [other_receipt_path]
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="mismatched-external-eval-receipt",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "blocked")
+            handoff_check = next(
+                check for check in plan["checks"] if check["id"] == "external_eval_handoff_is_preflighted"
+            )
+            self.assertFalse(handoff_check["passed"])
+            self.assertTrue(handoff_check["actual"]["plan_heldout_manifest_bound"])
+            self.assertFalse(handoff_check["actual"]["receipt_plan_bound"])
+            self.assertEqual(handoff_check["actual"]["external_eval_handoff_status"], "mismatched")
+
+    def test_duplicate_external_eval_results_cannot_complete_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            result_path, _ = write_external_result_fixture(artifacts, execution_status="completed")
+            artifacts["external_eval_result"] = [result_path, result_path]
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="ambiguous-external-eval-result",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "incomplete")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            heldout = next(phase for phase in plan["phases"] if phase["id"] == "heldout_eval")
+            self.assertIn("external_eval_result", heldout["present_required_artifacts"])
+            self.assertNotIn("external_eval_result", heldout["missing_required_artifacts"])
+            self.assertEqual(heldout["non_completed_required_artifacts"], ["external_eval_result"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertEqual(heldout_check["actual"]["external_eval_result_count"], 2)
+            self.assertEqual(heldout_check["actual"]["external_eval_result_status"], "incomplete")
+
+    def test_valid_external_eval_runner_failure_marks_execution_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            result_path, result = write_external_result_fixture(artifacts, execution_status="failed")
+            self.assertTrue(result["integrity"]["passed"], result["integrity"])
+            artifacts["external_eval_result"] = [result_path]
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="external-eval-runner-failed",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "failed")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertEqual(plan["recommendation"], "investigate_failed_execution")
+            heldout = next(phase for phase in plan["phases"] if phase["id"] == "heldout_eval")
+            self.assertIn("external_eval_result", heldout["present_required_artifacts"])
+            self.assertNotIn("external_eval_result", heldout["missing_required_artifacts"])
+            self.assertEqual(heldout["non_completed_required_artifacts"], ["external_eval_result"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertEqual(heldout_check["actual"]["external_eval_result_status"], "failed")
+
+    def test_failed_benchmark_outcome_still_counts_as_completed_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            result_path, result = write_external_result_fixture(
+                artifacts,
+                execution_status="completed",
+                benchmark_passed=False,
+            )
+            self.assertTrue(result["integrity"]["passed"], result["integrity"])
+            self.assertEqual(result["benchmark_outcome"]["status"], "failed")
+            artifacts["external_eval_result"] = [result_path]
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="external-eval-benchmark-failed",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "completed")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertEqual(plan["recommendation"], "resolve_governance_blockers")
+            heldout = next(phase for phase in plan["phases"] if phase["id"] == "heldout_eval")
+            self.assertNotIn("external_eval_result", heldout["non_completed_required_artifacts"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertEqual(heldout_check["actual"]["external_eval_result_status"], "completed")
+            self.assertFalse(heldout_check["actual"]["eval_summary_result_bound"])
+
+    def test_valid_classified_training_failure_marks_execution_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            result_dir = artifacts["agentic_training_result"][0].parent
+            failure_log = result_dir / "trainer-failure.log"
+            failure_log.write_text("external trainer ran out of memory\n", encoding="utf-8")
+            failed_result_path = result_dir / "failed-training-result.json"
+            failed_result = build_agentic_training_result(
+                plan_path=artifacts["agentic_training_plan"][0].resolve(),
+                runtime_preflight_path=artifacts["agentic_training_runtime_preflight"][0].resolve(),
+                agentic_training_flow_path=artifacts["agentic_training_flow"][0].resolve(),
+                out_path=failed_result_path.resolve(),
+                status="failed",
+                failure_class="out_of_memory",
+                failure_message="External trainer exhausted its assigned device memory.",
+                artifacts={"log": [failure_log.resolve()]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertTrue(failed_result["passed"], failed_result["blocked_reasons"])
+            failed_result_path.write_text(json.dumps(failed_result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            artifacts["agentic_training_result"] = [failed_result_path.resolve()]
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="classified-training-failure",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "failed")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertEqual(plan["recommendation"], "investigate_failed_execution")
+            self.assertFalse(plan["passed"])
+            training = next(phase for phase in plan["phases"] if phase["id"] == "external_trainer_execution")
+            self.assertEqual(training["status"], "blocked")
+            self.assertIn("agentic_training_result", training["present_required_artifacts"])
+            self.assertNotIn("agentic_training_result", training["missing_required_artifacts"])
+            self.assertEqual(training["non_completed_required_artifacts"], ["agentic_training_result"])
+            self.assertNotIn("agentic_training_result", plan["missing_phase_inputs"])
+            execution_check = next(
+                check for check in plan["checks"] if check["id"] == "external_trainer_execution_completed"
+            )
+            self.assertFalse(execution_check["passed"])
+            self.assertEqual(execution_check["actual"]["training_result_status"], "failed")
+
     def test_validator_rejects_refreshed_hash_for_semantically_invalid_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -134,6 +527,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         heldout_manifest_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "heldout_manifest.json"
         external_eval_plan_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_plan.json"
         external_eval_receipt_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_receipt.json"
+        external_eval_result_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_result.json"
         eval_summary_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "eval_summary.json"
         model_grader_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json"
         action_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json"
@@ -174,6 +568,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "heldout_manifest": ("heldout_eval/heldout_manifest.json", heldout_manifest_path),
             "external_eval_plan": ("heldout_eval/external_eval_plan.json", external_eval_plan_path),
             "external_eval_receipt": ("heldout_eval/external_eval_receipt.json", external_eval_receipt_path),
+            "external_eval_result": ("heldout_eval/external_eval_result.json", external_eval_result_path),
             "eval_summary": ("heldout_eval/eval_summary.json", eval_summary_path),
             "model_grader_gate": ("model_grader/passing_gate.json", model_grader_gate_path),
             "action_ledger": ("iteration_ledgers/action_ledger.json", action_ledger_path),
@@ -210,7 +605,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertTrue(plan["passed"])
         self.assertEqual(plan["readiness"], "ready_for_governance_review")
-        self.assertEqual(plan["artifact_count"], 40)
+        self.assertEqual(plan["artifact_count"], 41)
+        self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+        self.assertEqual(plan["execution_completion"], "completed")
+        self.assertEqual(plan["governance_readiness"], "ready_for_review")
         self.assertEqual(plan["missing_phase_inputs"], [])
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
@@ -314,8 +712,11 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
 
             self.assertTrue(plan["passed"], plan["blocked_reasons"])
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "completed")
+            self.assertEqual(plan["governance_readiness"], "ready_for_review")
             self.assertEqual(plan["readiness"], "ready_for_governance_review")
-            self.assertEqual(plan["recommendation"], "approve_iteration_execution")
+            self.assertEqual(plan["recommendation"], "submit_for_governance_review")
             self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
             self.assertFalse(plan["handoff_contract"]["default_live_execution_allowed"])
             self.assertEqual(plan["cloud_training"]["missing_artifacts"], [])
@@ -349,7 +750,11 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
 
             self.assertFalse(plan["passed"])
+            self.assertEqual(plan["plan_readiness"], "blocked")
+            self.assertEqual(plan["execution_completion"], "incomplete")
+            self.assertEqual(plan["governance_readiness"], "blocked")
             self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertEqual(plan["recommendation"], "collect_missing_plan_evidence")
             self.assertIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
             self.assertIn("rejection_sampling_gate", plan["missing_phase_inputs"])
             self.assertIn("dataset_curation_receipt", plan["missing_phase_inputs"])
@@ -1060,7 +1465,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             try:
                 os.chdir(root)
                 plan = build_agentic_training_loop_plan(
-                    out_path=Path("runs/agentic_training_loop_plan.json"),
+                    out_path=runs / "agentic_training_loop_plan.json",
                     iteration_id="loop-documented-paths",
                     artifact_paths={"agentic_training_plan": [Path("runs/agentic_training_plan.json")]},
                     created_at="2026-07-03T00:00:00+00:00",
@@ -1286,7 +1691,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertFalse(plan["cloud_training_receipt_state"]["fail_closed"])
             forged_readiness = json.loads(json.dumps(plan))
             forged_readiness["readiness"] = "ready_for_governance_review"
-            forged_readiness["recommendation"] = "approve_iteration_execution"
+            forged_readiness["recommendation"] = "submit_for_governance_review"
             loop_plan.write_text(json.dumps(forged_readiness, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
@@ -1295,7 +1700,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_loop_plan.readiness expected 'planned_fail_closed'", errors)
             self.assertIn(
-                "agentic_training_loop_plan.recommendation expected 'collect_missing_receipts_before_live_execution'",
+                "agentic_training_loop_plan.recommendation expected 'collect_missing_plan_evidence'",
                 errors,
             )
             for check in plan["checks"]:

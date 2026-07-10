@@ -39,6 +39,7 @@ def build_eval_summary(
     compare_export_specs: list[str | Path] | None = None,
     compare_gate_specs: list[str | Path] | None = None,
     external_adapter_plan_specs: list[str | Path] | None = None,
+    external_adapter_result_specs: list[str | Path] | None = None,
     serving_check_specs: list[str | Path] | None = None,
     require_serving_preflight: bool = False,
     preserve_paths: bool = False,
@@ -49,9 +50,10 @@ def build_eval_summary(
     compare_specs = [_labeled_path(spec) for spec in compare_export_specs or []]
     gate_specs = [_labeled_path(spec) for spec in compare_gate_specs or []]
     adapter_specs = [_labeled_path(spec) for spec in external_adapter_plan_specs or []]
+    result_specs = [_labeled_path(spec) for spec in external_adapter_result_specs or []]
     serving_specs = [_labeled_path(spec) for spec in serving_check_specs or []]
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
-    if not suite_specs and not compare_specs and not gate_specs and not adapter_specs and not serving_specs:
+    if not suite_specs and not compare_specs and not gate_specs and not adapter_specs and not result_specs and not serving_specs:
         raise EvalSummaryError("At least one eval artifact source is required")
 
     serving_by_label, duplicate_serving_labels = _serving_preflight_inputs(
@@ -81,8 +83,19 @@ def build_eval_summary(
     comparisons = [_compare_export(spec, heldout, preserve_paths, display_base_dir) for spec in compare_specs]
     gates = [_compare_gate(spec, preserve_paths, display_base_dir) for spec in gate_specs]
     external_adapters = [_external_adapter_plan(spec, preserve_paths, display_base_dir) for spec in adapter_specs]
-    repair_curriculum = _repair_curriculum(arms, comparisons, gates, external_adapters)
-    risks = _risks(arms, heldout, comparisons, gates, external_adapters, serving_preflight)
+    external_results = [_external_adapter_result(spec, preserve_paths, display_base_dir) for spec in result_specs]
+    external_result_risks = _external_result_association_risks(external_adapters, external_results)
+    repair_curriculum = _repair_curriculum(arms, comparisons, gates, external_adapters, external_results)
+    risks = _risks(
+        arms,
+        heldout,
+        comparisons,
+        gates,
+        external_adapters,
+        external_results,
+        external_result_risks,
+        serving_preflight,
+    )
     passed = not risks
     return {
         "schema_version": EVAL_SUMMARY_SCHEMA_VERSION,
@@ -93,11 +106,13 @@ def build_eval_summary(
         "comparison_count": len(comparisons),
         "gate_count": len(gates),
         "external_adapter_plan_count": len(external_adapters),
+        "external_adapter_result_count": len(external_results),
         "heldout_scenarios": heldout,
         "arms": arms,
         "comparisons": comparisons,
         "compare_gates": gates,
         "external_adapter_plans": external_adapters,
+        "external_adapter_results": external_results,
         "repair_curriculum": repair_curriculum,
         "serving_preflight": serving_preflight,
         "risks": risks,
@@ -123,6 +138,7 @@ def render_eval_summary_markdown(summary: dict[str, Any]) -> str:
     lines.extend(_markdown_arms(summary.get("arms")))
     lines.extend(_markdown_comparisons(summary.get("comparisons")))
     lines.extend(_markdown_gates(summary.get("compare_gates")))
+    lines.extend(_markdown_external_results(summary.get("external_adapter_results")))
     lines.extend(_markdown_repair_curriculum(summary.get("repair_curriculum")))
     lines.extend(_markdown_risks(risks))
     lines.extend(
@@ -477,8 +493,106 @@ def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool, display_base
         "ready": ready,
         "adapter_count": _int_value(plan.get("adapter_count")),
         "ready_adapter_count": _int_value(plan.get("ready_adapter_count")),
+        "selected_adapters": _string_list(plan.get("selected_adapters")),
         "blocking_reasons": [] if ready else blocking_reasons or ["external_adapter_plan_not_ready"],
     }
+
+
+def _external_adapter_result(spec: LabeledPath, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
+    result = _read_object(spec.path, "external adapter result")
+    source = inspect_artifact_source(spec.path, "external_eval_result")
+    identity = result.get("identity") if isinstance(result.get("identity"), dict) else {}
+    integrity = result.get("integrity") if isinstance(result.get("integrity"), dict) else {}
+    execution = result.get("execution") if isinstance(result.get("execution"), dict) else {}
+    outcome = result.get("benchmark_outcome") if isinstance(result.get("benchmark_outcome"), dict) else {}
+    coverage = result.get("coverage") if isinstance(result.get("coverage"), dict) else {}
+    governance = result.get("governance") if isinstance(result.get("governance"), dict) else {}
+    blocking_reasons = _string_list(governance.get("blocking_reasons"))
+    if source.get("schema_valid") is not True:
+        blocking_reasons.append("invalid_external_eval_result_schema")
+    elif source.get("semantic_valid") is not True:
+        blocking_reasons.append("external_eval_result_semantic_validation_failed")
+    if integrity.get("passed") is not True:
+        blocking_reasons.append("external_eval_result_integrity_failed")
+    if execution.get("status") != "completed":
+        blocking_reasons.append("external_eval_execution_not_completed")
+    if coverage.get("complete") is not True:
+        blocking_reasons.append("external_eval_result_coverage_incomplete")
+    if outcome.get("status") == "failed":
+        blocking_reasons.append("external_eval_result_benchmark_failed")
+    elif outcome.get("status") != "passed":
+        blocking_reasons.append("external_eval_result_outcome_unavailable")
+    if governance.get("readiness") != "ready_for_review" or governance.get("external_eval_claims_allowed") is not True:
+        blocking_reasons.append("external_eval_result_not_ready_for_review")
+    return {
+        "label": spec.label,
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        **_file_fingerprint(spec.path),
+        "schema_version": result.get("schema_version"),
+        "adapter_id": str(identity.get("adapter_id") or ""),
+        "model_id": str(identity.get("model_id") or ""),
+        "source_plan_sha256": str(identity.get("plan_sha256") or ""),
+        "heldout_manifest_sha256": str(identity.get("heldout_manifest_sha256") or ""),
+        "integrity_passed": integrity.get("passed") is True,
+        "execution_status": str(execution.get("status") or ""),
+        "benchmark_status": str(outcome.get("status") or ""),
+        "coverage_complete": coverage.get("complete") is True,
+        "governance_readiness": str(governance.get("readiness") or ""),
+        "external_eval_claims_allowed": governance.get("external_eval_claims_allowed") is True,
+        "blocking_reasons": _unique_strings(blocking_reasons),
+    }
+
+
+def _external_result_association_risks(
+    plans: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    expected: dict[tuple[str, str], dict[str, Any]] = {}
+    risks: list[dict[str, Any]] = []
+    for plan in plans:
+        plan_sha = str(plan.get("sha256") or "")
+        for adapter_id in _string_list(plan.get("selected_adapters")):
+            key = (plan_sha, adapter_id)
+            if key in expected:
+                risks.append(
+                    {
+                        "source": "external_eval_result",
+                        "label": str(plan.get("label") or ""),
+                        "reason": "duplicate_external_eval_plan_adapter_identity",
+                    }
+                )
+            expected[key] = plan
+    observed: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for result in results:
+        key = (str(result.get("source_plan_sha256") or ""), str(result.get("adapter_id") or ""))
+        observed.setdefault(key, []).append(result)
+        if key not in expected:
+            risks.append(
+                {
+                    "source": "external_eval_result",
+                    "label": str(result.get("label") or ""),
+                    "reason": "external_eval_result_unmatched",
+                }
+            )
+    for key, plan in expected.items():
+        matches = observed.get(key, [])
+        if not matches:
+            risks.append(
+                {
+                    "source": "external_eval_result",
+                    "label": str(plan.get("label") or ""),
+                    "reason": "external_eval_result_missing",
+                }
+            )
+        elif len(matches) > 1:
+            risks.append(
+                {
+                    "source": "external_eval_result",
+                    "label": str(plan.get("label") or ""),
+                    "reason": "external_eval_result_duplicate",
+                }
+            )
+    return risks
 
 
 def _repair_curriculum(
@@ -486,6 +600,7 @@ def _repair_curriculum(
     comparisons: list[dict[str, Any]],
     gates: list[dict[str, Any]],
     external_adapters: list[dict[str, Any]],
+    external_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     for arm in arms:
@@ -496,6 +611,8 @@ def _repair_curriculum(
         items.extend(_gate_work_items(gate))
     for adapter in external_adapters:
         items.extend(_external_adapter_work_items(adapter))
+    for result in external_results:
+        items.extend(_external_result_work_items(result))
     finalized = _finalize_work_items(items)
     return {
         "work_item_count": len(finalized),
@@ -668,6 +785,23 @@ def _external_adapter_work_items(adapter: dict[str, Any]) -> list[dict[str, Any]
     ]
 
 
+def _external_result_work_items(result: dict[str, Any]) -> list[dict[str, Any]]:
+    label = str(result.get("label") or "external_eval_result")
+    critical = {"external_eval_result_integrity_failed", "external_eval_result_coverage_incomplete"}
+    return [
+        _work_item(
+            category="eval_harness",
+            priority="critical" if reason in critical else "high",
+            source="external_eval_result",
+            label=label,
+            reason=reason,
+            summary=f"External eval result {label} is blocked by {reason}.",
+            suggested_action="Repair or rerun the external evaluation and import exact per-case evidence before governance review.",
+        )
+        for reason in _string_list(result.get("blocking_reasons"))
+    ]
+
+
 def _work_item(
     *,
     category: str,
@@ -769,6 +903,8 @@ def _risks(
     comparisons: list[dict[str, Any]],
     gates: list[dict[str, Any]],
     external_adapters: list[dict[str, Any]],
+    external_results: list[dict[str, Any]],
+    external_result_risks: list[dict[str, Any]],
     serving_preflight: dict[str, Any],
 ) -> list[dict[str, Any]]:
     risks: list[dict[str, Any]] = []
@@ -787,6 +923,10 @@ def _risks(
     for plan in external_adapters:
         for reason in plan["blocking_reasons"]:
             risks.append({"source": "external_adapter_plan", "label": plan["label"], "reason": reason})
+    for result in external_results:
+        for reason in result["blocking_reasons"]:
+            risks.append({"source": "external_eval_result", "label": result["label"], "reason": reason})
+    risks.extend(external_result_risks)
     for reason in serving_preflight["blocking_reasons"]:
         risks.append({"source": "serving_preflight", "reason": reason})
     return _dedupe_risks(risks)
@@ -879,6 +1019,38 @@ def _markdown_gates(value: Any) -> list[str]:
                     _md_cell(gate.get("label")),
                     str(_int_value(gate.get("failed_check_count"))),
                     _md_cell(_join_reasons(gate.get("blocking_reasons"))),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_external_results(value: Any) -> list[str]:
+    results = value if isinstance(value, list) else []
+    lines = ["## External Eval Results", ""]
+    if not results:
+        return [*lines, "- No external benchmark results were provided.", ""]
+    lines.extend(
+        [
+            "| Adapter | Execution | Benchmark | Coverage | Governance | Blockers |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(result.get("adapter_id")),
+                    _md_cell(result.get("execution_status")),
+                    _md_cell(result.get("benchmark_status")),
+                    _yes_no(result.get("coverage_complete") is True),
+                    _md_cell(result.get("governance_readiness")),
+                    _md_cell(_join_reasons(result.get("blocking_reasons"))),
                 ]
             )
             + " |"
@@ -1292,6 +1464,10 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
 
 
 def _int_value(value: Any) -> int:

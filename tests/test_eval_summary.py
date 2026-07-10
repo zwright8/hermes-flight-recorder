@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
 from flightrecorder.schema_registry import check_schema_file
 
 
@@ -21,6 +22,170 @@ def run_cli(args):
 
 
 class EvalSummaryTests(unittest.TestCase):
+    def test_completed_external_result_unlocks_only_its_bound_plan_adapter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "heldout_eval"
+            shutil.copytree(ROOT / "examples" / "agentic_training" / "heldout_eval", root)
+            plan_path = root / "external_eval_plan.json"
+            plan = _read_json(plan_path)
+            plan["governance_handoff"] = {
+                "external_eval_claims_allowed": False,
+                "requires_identical_heldout_scenarios": True,
+                "recommendation": "External eval adapters are ready to execute, but claims remain disabled until a passing external eval result is imported.",
+            }
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            runner_path = root / "external_eval_runner.json"
+            runner_path.write_text(
+                json.dumps(
+                    {
+                        "adapter_id": "local_mock",
+                        "execution_id": "local-mock-eval-001",
+                        "model_id": "local/mock-candidate",
+                        "runner_observation": {
+                            "runner_id": "public-local-runner",
+                            "runner_version": "1",
+                            "started_at": "2026-07-10T00:00:00+00:00",
+                            "finished_at": "2026-07-10T00:01:00+00:00",
+                            "exit_code": 0,
+                            "cost": {"reported": True, "amount": 0, "currency": "USD"},
+                            "side_effects": {
+                                "network_access": "not_observed",
+                                "provider_api_calls": "not_observed",
+                                "model_downloads": "not_observed",
+                                "filesystem_writes": "observed",
+                                "credential_values_recorded": "not_observed",
+                            },
+                        },
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result_path = root / "external_eval_result.json"
+            result = build_external_eval_result(
+                plan_path=plan_path,
+                heldout_manifest_path=root / "heldout_manifest.json",
+                raw_result_path=root / "external_eval_raw_result.json",
+                runner_metadata_path=runner_path,
+                adapter_id="local_mock",
+                execution_id="local-mock-eval-001",
+                model_id="local/mock-candidate",
+                normalizer_id="hfr.local_mock.per_case_json",
+                normalizer_version="1",
+                raw_format="json",
+                execution_status="completed",
+                out_path=result_path,
+                created_at="2026-07-10T00:01:00+00:00",
+            )
+            write_external_eval_result(result, result_path)
+            out = root / "eval_summary_with_result.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={root / 'candidate_suite_summary.json'}",
+                    "--external-adapter-plan",
+                    f"external={plan_path}",
+                    "--external-adapter-result",
+                    f"external={result_path}",
+                    "--out",
+                    str(out),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            summary = _read_json(out)
+            self.assertTrue(summary["governance_ready"], summary["risks"])
+            self.assertEqual(summary["external_adapter_result_count"], 1)
+            self.assertEqual(summary["external_adapter_results"][0]["sha256"], _sha256(result_path))
+            self.assertEqual(run_cli(["validate", "--eval-summary", str(out), "--strict"]), 0)
+
+    def test_ready_external_adapter_plan_cannot_replace_execution_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            adapter_plan = _external_adapter_plan(root / "external_eval_plan.json")
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--external-adapter-plan",
+                    f"external={adapter_plan}",
+                    "--out",
+                    str(out),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertFalse(summary["governance_ready"])
+            self.assertIn(
+                {"source": "external_eval_result", "label": "external", "reason": "external_eval_result_missing"},
+                summary["risks"],
+            )
+
+    def test_completed_failed_benchmark_result_blocks_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "heldout_eval"
+            shutil.copytree(
+                ROOT / "examples" / "agentic_training" / "heldout_eval", root
+            )
+            plan_path = root / "external_eval_plan.json"
+            result_path = root / "failed_external_eval_result.json"
+            result = build_external_eval_result(
+                plan_path=plan_path,
+                heldout_manifest_path=root / "heldout_manifest.json",
+                raw_result_path=root / "candidate_suite_summary.json",
+                runner_metadata_path=root / "external_eval_runner.json",
+                adapter_id="local_mock",
+                execution_id="local-mock-eval-001",
+                model_id="local/mock-candidate",
+                normalizer_id="hfr.local_mock.run_suite",
+                normalizer_version="1",
+                raw_format="hfr.run_suite.v1",
+                execution_status="completed",
+                out_path=result_path,
+                created_at="2026-07-10T00:01:00+00:00",
+            )
+            write_external_eval_result(result, result_path)
+            out = root / "failed_eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={root / 'candidate_suite_summary.json'}",
+                    "--external-adapter-plan",
+                    f"external={plan_path}",
+                    "--external-adapter-result",
+                    f"external={result_path}",
+                    "--out",
+                    str(out),
+                ]
+            )
+
+            self.assertEqual(result["execution"]["status"], "completed")
+            self.assertEqual(result["benchmark_outcome"]["status"], "failed")
+            self.assertFalse(result["governance"]["external_eval_claims_allowed"])
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertFalse(summary["governance_ready"])
+            self.assertIn(
+                {
+                    "source": "external_eval_result",
+                    "label": "external",
+                    "reason": "external_eval_result_benchmark_failed",
+                },
+                summary["risks"],
+            )
+            self.assertEqual(run_cli(["validate", "--eval-summary", str(out), "--strict"]), 0)
+
     def test_eval_summary_accepts_helper_suite_with_semantic_source_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -665,7 +830,7 @@ class EvalSummaryTests(unittest.TestCase):
             validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
             schema_result = check_schema_file(out)
 
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 1)
             self.assertEqual(validate_code, 0)
             self.assertTrue(schema_result["passed"], schema_result["errors"])
             summary = _read_json(out)
@@ -810,7 +975,7 @@ class EvalSummaryTests(unittest.TestCase):
             non_strict_code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
             strict_code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(strict_validation)])
 
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 1)
             self.assertEqual(non_strict_code, 0)
             self.assertEqual(strict_code, 1)
             warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
@@ -1351,6 +1516,13 @@ def _external_adapter_plan(path: Path) -> Path:
     example_dir = ROOT / "examples" / "agentic_training" / "heldout_eval"
     shutil.copyfile(example_dir / "heldout_manifest.json", path.parent / "heldout_manifest.json")
     shutil.copyfile(example_dir / "external_eval_plan.json", path)
+    payload = _read_json(path)
+    payload["governance_handoff"] = {
+        "external_eval_claims_allowed": False,
+        "requires_identical_heldout_scenarios": True,
+        "recommendation": "External eval adapters are ready to execute, but claims remain disabled until a passing external eval result is imported.",
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 

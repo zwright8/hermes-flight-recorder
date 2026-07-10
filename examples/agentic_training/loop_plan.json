@@ -1,5 +1,5 @@
 {
-  "artifact_count": 40,
+  "artifact_count": 41,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -72,6 +72,10 @@
     {
       "count": 1,
       "role": "external_eval_receipt"
+    },
+    {
+      "count": 1,
+      "role": "external_eval_result"
     },
     {
       "count": 1,
@@ -170,7 +174,7 @@
     "max_rollouts": null,
     "max_training_examples": null
   },
-  "check_count": 13,
+  "check_count": 16,
   "checks": [
     {
       "actual": {
@@ -287,6 +291,23 @@
       "id": "external_trainer_handoff_is_preflighted",
       "passed": true,
       "summary": "external_trainer_handoff_is_preflighted: passed=True"
+    },
+    {
+      "actual": {
+        "agentic_training_result_count": 1,
+        "agentic_training_result_present": true,
+        "training_result_plan_bound": true,
+        "training_result_status": "completed"
+      },
+      "expected": {
+        "agentic_training_result_count": 1,
+        "agentic_training_result_present": true,
+        "training_result_plan_bound": true,
+        "training_result_status": "completed"
+      },
+      "id": "external_trainer_execution_completed",
+      "passed": true,
+      "summary": "external_trainer_execution_completed: passed=True"
     },
     {
       "actual": {
@@ -562,15 +583,65 @@
     },
     {
       "actual": {
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "eval_summary_passed": true,
-        "eval_summary_present": true,
-        "eval_summary_valid": true,
+        "external_eval_handoff_status": "matched",
+        "external_eval_plan_count": 1,
         "external_eval_plan_present": true,
+        "external_eval_receipt_count": 1,
         "external_eval_receipt_present": true,
         "external_eval_receipts_fail_closed": true,
         "external_eval_receipts_passed": true,
+        "heldout_manifest_count": 1,
+        "heldout_manifest_present": true,
+        "plan_heldout_manifest_bound": true,
+        "receipt_plan_bound": true
+      },
+      "expected": {
+        "external_eval_handoff_status": "matched",
+        "external_eval_plan_count": 1,
+        "external_eval_plan_present": true,
+        "external_eval_receipt_count": 1,
+        "external_eval_receipt_present": true,
+        "external_eval_receipts_fail_closed": true,
+        "external_eval_receipts_passed": true,
+        "heldout_manifest_count": 1,
+        "heldout_manifest_present": true,
+        "plan_heldout_manifest_bound": true,
+        "receipt_plan_bound": true
+      },
+      "id": "external_eval_handoff_is_preflighted",
+      "passed": true,
+      "summary": "external_eval_handoff_is_preflighted: passed=True"
+    },
+    {
+      "actual": {
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "eval_summary_count": 1,
+        "eval_summary_passed": true,
+        "eval_summary_present": true,
+        "eval_summary_result_bound": true,
+        "eval_summary_result_evidence_bound": true,
+        "eval_summary_result_expected_count": 1,
+        "eval_summary_result_governance_ready": true,
+        "eval_summary_result_match_count": 1,
+        "eval_summary_result_status": "matched",
+        "eval_summary_valid": true,
+        "external_eval_plan_count": 1,
+        "external_eval_plan_present": true,
+        "external_eval_receipt_count": 1,
+        "external_eval_receipt_present": true,
+        "external_eval_receipts_fail_closed": true,
+        "external_eval_receipts_passed": true,
+        "external_eval_result_adapter_coverage_complete": true,
+        "external_eval_result_binding_status": "matched",
+        "external_eval_result_completed": true,
+        "external_eval_result_count": 1,
+        "external_eval_result_expected_count": 1,
+        "external_eval_result_heldout_manifest_bound": true,
+        "external_eval_result_plan_bound": true,
+        "external_eval_result_present": true,
+        "external_eval_result_status": "completed",
+        "heldout_manifest_count": 1,
         "heldout_manifest_present": true,
         "live_benchmark_requested": false,
         "live_benchmarks_started": false,
@@ -580,13 +651,32 @@
       "expected": {
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
+        "eval_summary_count": 1,
         "eval_summary_passed": true,
         "eval_summary_present": true,
+        "eval_summary_result_bound": true,
+        "eval_summary_result_evidence_bound": true,
+        "eval_summary_result_expected_count": 1,
+        "eval_summary_result_governance_ready": true,
+        "eval_summary_result_match_count": 1,
+        "eval_summary_result_status": "matched",
         "eval_summary_valid": true,
+        "external_eval_plan_count": 1,
         "external_eval_plan_present": true,
+        "external_eval_receipt_count": 1,
         "external_eval_receipt_present": true,
         "external_eval_receipts_fail_closed": true,
         "external_eval_receipts_passed": true,
+        "external_eval_result_adapter_coverage_complete": true,
+        "external_eval_result_binding_status": "matched",
+        "external_eval_result_completed": true,
+        "external_eval_result_count": 1,
+        "external_eval_result_expected_count": 1,
+        "external_eval_result_heldout_manifest_bound": true,
+        "external_eval_result_plan_bound": true,
+        "external_eval_result_present": true,
+        "external_eval_result_status": "completed",
+        "heldout_manifest_count": 1,
         "heldout_manifest_present": true,
         "live_benchmark_requested": false,
         "live_benchmarks_started": false,
@@ -618,6 +708,17 @@
       "id": "governance_required_for_promotion",
       "passed": true,
       "summary": "governance_required_for_promotion: passed=True"
+    },
+    {
+      "actual": {
+        "missing_phase_inputs": []
+      },
+      "expected": {
+        "missing_phase_inputs": []
+      },
+      "id": "required_phase_inputs_present",
+      "passed": true,
+      "summary": "required_phase_inputs_present: passed=True"
     }
   ],
   "cloud_training": {
@@ -863,6 +964,7 @@
     "public_artifact_paths_redacted": true,
     "weights_updated_by_flight_recorder": false
   },
+  "execution_completion": "completed",
   "external_eval_receipt_state": {
     "adapter_count": 1,
     "cost_incurred_usd": 0,
@@ -883,6 +985,7 @@
     "weights_updated_by_flight_recorder": false
   },
   "failed_check_count": 0,
+  "governance_readiness": "ready_for_review",
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -906,6 +1009,8 @@
   "notes": [
     "This artifact is a closed-loop iteration contract; it does not call graders, trainers, cloud APIs, or benchmarks.",
     "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
+    "Dry-run trainer and external-eval receipts establish plan readiness only; they never count as completed execution.",
+    "Governance review requires completed external training and external-eval result artifacts in addition to passing gates.",
     "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived."
   ],
   "objective": "Close held-out tool-use regressions with fail-closed external trainers.",
@@ -921,6 +1026,7 @@
       "id": "scenario_task_generation",
       "missing_required_artifacts": [],
       "name": "Scenario and task generation",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [],
       "produces": [
         "scenario_quality",
@@ -934,6 +1040,7 @@
       "id": "rollout_collection",
       "missing_required_artifacts": [],
       "name": "Rollout collection",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "agentic_rollout_plan",
         "agentic_rollout_receipt",
@@ -956,6 +1063,7 @@
       "id": "evidence_scoring",
       "missing_required_artifacts": [],
       "name": "Evidence scoring",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "evidence_bundle"
       ],
@@ -974,6 +1082,7 @@
       "id": "rubric_model_grader_review",
       "missing_required_artifacts": [],
       "name": "Rubric and model-grader review",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "rubric_spec",
         "model_grader_gate",
@@ -998,6 +1107,7 @@
       "id": "rejection_sampling",
       "missing_required_artifacts": [],
       "name": "Rejection sampling",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "reviewed_gate",
         "rejection_sampling_gate"
@@ -1017,6 +1127,7 @@
       "id": "dataset_curation",
       "missing_required_artifacts": [],
       "name": "Dataset curation",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "rejection_sampling_gate",
         "dataset_curation_receipt",
@@ -1038,6 +1149,7 @@
       "id": "external_trainer_execution",
       "missing_required_artifacts": [],
       "name": "External trainer execution",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "agentic_training_plan",
         "trainer_preflight",
@@ -1047,7 +1159,8 @@
         "cloud_training_artifact_manifest",
         "cloud_training_launch_plan",
         "cloud_training_launch_receipt",
-        "cloud_training_status_receipt"
+        "cloud_training_status_receipt",
+        "agentic_training_result"
       ],
       "produces": [
         "agentic_training_runtime_preflight",
@@ -1063,7 +1176,8 @@
         "cloud_training_artifact_manifest",
         "cloud_training_launch_plan",
         "cloud_training_launch_receipt",
-        "cloud_training_status_receipt"
+        "cloud_training_status_receipt",
+        "agentic_training_result"
       ],
       "status": "ready"
     },
@@ -1072,6 +1186,7 @@
       "id": "serving_checks",
       "missing_required_artifacts": [],
       "name": "Serving checks",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "serving_lifecycle"
       ],
@@ -1089,10 +1204,12 @@
       "id": "heldout_eval",
       "missing_required_artifacts": [],
       "name": "Held-out eval and external benchmarks",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "heldout_manifest",
         "external_eval_plan",
         "external_eval_receipt",
+        "external_eval_result",
         "eval_summary"
       ],
       "produces": [
@@ -1104,6 +1221,7 @@
         "heldout_manifest",
         "external_eval_plan",
         "external_eval_receipt",
+        "external_eval_result",
         "eval_summary"
       ],
       "status": "ready"
@@ -1113,6 +1231,7 @@
       "id": "improvement_planning",
       "missing_required_artifacts": [],
       "name": "Improvement planning",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "improvement_plan"
       ],
@@ -1130,6 +1249,7 @@
       "id": "governance_decision",
       "missing_required_artifacts": [],
       "name": "Governance decision",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "promotion_decision"
       ],
@@ -1148,6 +1268,7 @@
       "id": "promotion_or_rollback",
       "missing_required_artifacts": [],
       "name": "Promotion or rollback",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "promotion_ledger"
       ],
@@ -1165,6 +1286,7 @@
       "id": "next_iteration",
       "missing_required_artifacts": [],
       "name": "Next-iteration scheduling",
+      "non_completed_required_artifacts": [],
       "present_required_artifacts": [
         "action_ledger"
       ],
@@ -1178,7 +1300,8 @@
       "status": "ready"
     }
   ],
-  "plan_path": "examples/agentic_training/loop_plan.json",
+  "plan_path": "loop_plan.json",
+  "plan_readiness": "ready_to_execute",
   "provider_constraints": {
     "gpu_classes": [
       "none"
@@ -1194,7 +1317,7 @@
     "requires_secret_redaction": true
   },
   "readiness": "ready_for_governance_review",
-  "recommendation": "approve_iteration_execution",
+  "recommendation": "submit_for_governance_review",
   "schema_version": "hfr.agentic_training_loop_plan.v1",
   "source_artifacts": {
     "action_ledger": [
@@ -1418,8 +1541,8 @@
         "readiness": "",
         "role": "eval_summary",
         "schema_version": "hfr.eval_summary.v1",
-        "sha256": "777bd3682d9e3ff1bf7ecedc144c824b550d0c4f36dfc33eb5e60d83d95a8712",
-        "size_bytes": 12299
+        "sha256": "397b10bcd00495b68d03fa08d3c649bed182765613afd1c3d915e61f84debfdb",
+        "size_bytes": 13218
       }
     ],
     "evidence_bundle": [
@@ -1448,8 +1571,8 @@
         "readiness": "",
         "role": "external_eval_plan",
         "schema_version": "hfr.external_eval_adapters.v1",
-        "sha256": "4a59b06ad386a5abb5496fb91642de6f2d0eee0805863a005bcf3b3b88a06809",
-        "size_bytes": 2858
+        "sha256": "3c0d4b0956f3146ac0e2133b1312f23e2e6822d68e5fb363af052d569830c68e",
+        "size_bytes": 2922
       }
     ],
     "external_eval_receipt": [
@@ -1463,8 +1586,23 @@
         "readiness": "dry_run_recorded",
         "role": "external_eval_receipt",
         "schema_version": "hfr.external_eval_receipt.v1",
-        "sha256": "115ebfe485c058a7a1939626ff556b688b2c635792611da7111bbfd49a97c01e",
-        "size_bytes": 4119
+        "sha256": "ac2df3b961af3b0dad1fb46c952e4faeeb6da41e80a1192fca462045acd71d3d",
+        "size_bytes": 4153
+      }
+    ],
+    "external_eval_result": [
+      {
+        "contains_symlinks": null,
+        "exists": true,
+        "file_count": null,
+        "kind": "file",
+        "passed": null,
+        "path": "heldout_eval/external_eval_result.json",
+        "readiness": "",
+        "role": "external_eval_result",
+        "schema_version": "hfr.external_eval_result.v1",
+        "sha256": "2451915cb2754765b112aedc731f1b9283de0cd3473427185d9f5373e941a156",
+        "size_bytes": 9823
       }
     ],
     "harness_result": [

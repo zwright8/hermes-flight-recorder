@@ -44,7 +44,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
         "trainer_launch_check",
     ),
     "serving": ("serving_lifecycle", "serving_endpoint_check", "model_serving_probe_receipt"),
-    "eval": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "eval_summary"),
+    "eval": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "external_eval_result", "eval_summary"),
     "improvement": ("repair_queue", "improvement_plan", "improvement_ledger", "action_ledger"),
     "governance": (
         "agentic_loop_governance_receipt",
@@ -142,6 +142,9 @@ def _iteration_record(
         "schema_version": str(plan.get("schema_version") or ""),
         "iteration_id": str(plan.get("iteration_id") or ""),
         "passed": plan.get("passed") is True,
+        "plan_readiness": str(plan.get("plan_readiness") or ""),
+        "execution_completion": str(plan.get("execution_completion") or ""),
+        "governance_readiness": str(plan.get("governance_readiness") or ""),
         "readiness": str(plan.get("readiness") or ""),
         "recommendation": str(plan.get("recommendation") or ""),
         "missing_phase_inputs": [str(item) for item in plan.get("missing_phase_inputs", []) if isinstance(item, str)],
@@ -178,8 +181,8 @@ def _iteration_record(
 
 def _metrics(iterations: list[dict[str, Any]]) -> dict[str, Any]:
     latest = iterations[-1] if iterations else {}
-    ready_count = sum(1 for row in iterations if row.get("readiness") == "ready_for_governance_review")
-    blocked_count = sum(1 for row in iterations if row.get("readiness") != "ready_for_governance_review")
+    ready_count = sum(1 for row in iterations if row.get("governance_readiness") == "ready_for_review")
+    blocked_count = sum(1 for row in iterations if row.get("governance_readiness") != "ready_for_review")
     total_cost = sum(_number_or_zero(row.get("cost_estimate", {}).get("max_cloud_cost_usd")) for row in iterations)
     total_gpu_hours = sum(_number_or_zero(row.get("cost_estimate", {}).get("max_gpu_hours")) for row in iterations)
     return {
@@ -188,6 +191,9 @@ def _metrics(iterations: list[dict[str, Any]]) -> dict[str, Any]:
         "blocked_iteration_count": blocked_count,
         "latest_iteration_id": latest.get("iteration_id") if latest else "",
         "latest_readiness": latest.get("readiness") if latest else "",
+        "latest_plan_readiness": latest.get("plan_readiness") if latest else "",
+        "latest_execution_completion": latest.get("execution_completion") if latest else "",
+        "latest_governance_readiness": latest.get("governance_readiness") if latest else "",
         "latest_recommendation": latest.get("recommendation") if latest else "",
         "latest_missing_phase_input_count": len(latest.get("missing_phase_inputs", [])) if latest else 0,
         "scheduled_next_iteration_count": sum(1 for row in iterations if row.get("next_actions", {}).get("scheduled") is True),
@@ -226,7 +232,12 @@ def _decision(iterations: list[dict[str, Any]], metrics: dict[str, Any]) -> dict
 
 
 def _latest_ready_for_governance_review(latest: dict[str, Any]) -> bool:
-    if latest.get("readiness") != "ready_for_governance_review":
+    if (
+        latest.get("plan_readiness") != "ready_to_execute"
+        or latest.get("execution_completion") != "completed"
+        or latest.get("governance_readiness") != "ready_for_review"
+        or latest.get("readiness") != "ready_for_governance_review"
+    ):
         return False
     missing_phase_inputs = latest.get("missing_phase_inputs") if isinstance(latest.get("missing_phase_inputs"), list) else []
     if missing_phase_inputs:
@@ -343,7 +354,10 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     external_eval_receipt_state_fail_closed = external_eval_receipt_state.get("fail_closed") is True
     external_eval_receipts_passed = external_eval_receipt_state.get("receipts_passed") is True
     ready = (
-        latest.get("readiness") == "ready_for_governance_review"
+        latest.get("plan_readiness") == "ready_to_execute"
+        and latest.get("execution_completion") == "completed"
+        and latest.get("governance_readiness") == "ready_for_review"
+        and latest.get("readiness") == "ready_for_governance_review"
         and not missing_phase_inputs
         and not side_effects_started
         and lineage_bound
@@ -362,6 +376,9 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "latest_iteration_index": latest.get("index"),
         "latest_iteration_id": str(latest.get("iteration_id") or ""),
         "readiness": str(latest.get("readiness") or ""),
+        "plan_readiness": str(latest.get("plan_readiness") or ""),
+        "execution_completion": str(latest.get("execution_completion") or ""),
+        "governance_readiness": str(latest.get("governance_readiness") or ""),
         "recommendation": str(latest.get("recommendation") or ""),
         "decision_readiness": str(decision.get("readiness") or ""),
         "decision_recommendation": str(decision.get("recommendation") or ""),

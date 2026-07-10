@@ -53,6 +53,7 @@ _SEMANTIC_VALIDATOR_NAMES = {
     "evidence_coverage": "validate_evidence_coverage",
     "external_eval_plan": "validate_external_eval_plan",
     "external_eval_receipt": "validate_external_eval_receipt",
+    "external_eval_result": "validate_external_eval_result",
     "harness_manifest": "validate_harness_run_manifest",
     "harness_result": "validate_harness_run_result",
     "heldout_manifest": "validate_heldout_manifest",

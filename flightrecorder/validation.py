@@ -43,13 +43,22 @@ from .agentic_training_loop_plan import (
     AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
     CLOUD_TRAINING_LINEAGE_LINKS,
+    PHASES as AGENTIC_TRAINING_LOOP_PHASES,
+    PLAN_READINESS_CHECK_IDS,
+    PLAN_REQUIRED_ARTIFACT_ROLES,
+    build_agentic_training_loop_plan as _build_agentic_training_loop_plan,
     _cloud_training_launch_receipt_semantic_passed as _loop_cloud_training_launch_receipt_semantic_passed,
     _cloud_training_status_receipt_semantic_passed as _loop_cloud_training_status_receipt_semantic_passed,
+    _execution_completion as _loop_execution_completion,
+    _execution_result_status as _loop_execution_result_status,
     _external_eval_receipt_semantic_passed as _loop_external_eval_receipt_semantic_passed,
+    _phase_row as _build_agentic_training_loop_phase,
 )
 from .agentic_loop_ledger import (
     AGENTIC_LOOP_LEDGER_SCHEMA_VERSION,
     _decision as _build_agentic_loop_ledger_decision,
+    _iteration_record as _build_agentic_loop_ledger_iteration,
+    _metrics as _build_agentic_loop_ledger_metrics,
     _readiness_digest as _build_agentic_loop_ledger_readiness_digest,
 )
 from .agentic_loop_governance import (
@@ -87,7 +96,14 @@ from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
-from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION, LabeledPath, _suite_arm
+from .eval_summary import (
+    EVAL_SUMMARY_SCHEMA_VERSION,
+    LabeledPath,
+    _external_adapter_plan as _build_eval_summary_external_plan,
+    _external_adapter_result as _build_eval_summary_external_result,
+    _external_result_association_risks as _build_eval_summary_external_result_risks,
+    _suite_arm,
+)
 from .external_eval import (
     ADAPTERS,
     EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION,
@@ -96,6 +112,12 @@ from .external_eval import (
     EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION,
     ExternalEvalPlanError,
     build_external_eval_receipt,
+    external_eval_plan_semantic_errors,
+)
+from .external_eval_result import (
+    EXTERNAL_EVAL_RESULT_SCHEMA_VERSION,
+    ExternalEvalResultError,
+    build_external_eval_result,
 )
 from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
@@ -346,6 +368,7 @@ def validate_artifacts(
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
     external_eval_receipt_paths: list[str | Path] | None = None,
+    external_eval_result_paths: list[str | Path] | None = None,
     heldout_manifest_paths: list[str | Path] | None = None,
     serving_profile_paths: list[str | Path] | None = None,
     serving_compatibility_report_paths: list[str | Path] | None = None,
@@ -516,6 +539,8 @@ def validate_artifacts(
         targets.append(validate_external_eval_plan(external_eval_plan_path))
     for external_eval_receipt_path in external_eval_receipt_paths or []:
         targets.append(validate_external_eval_receipt(external_eval_receipt_path))
+    for external_eval_result_path in external_eval_result_paths or []:
+        targets.append(validate_external_eval_result(external_eval_result_path))
     for heldout_manifest_path in heldout_manifest_paths or []:
         targets.append(validate_heldout_manifest(heldout_manifest_path))
     for serving_profile_path in serving_profile_paths or []:
@@ -1040,6 +1065,16 @@ def validate_external_eval_receipt(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "external_eval_receipt.json")
     if receipt is not None:
         _validate_external_eval_receipt(receipt, target, receipt_path)
+    return target
+
+
+def validate_external_eval_result(path: str | Path) -> ValidationTarget:
+    """Validate and replay one import-only external evaluation result."""
+    result_path = Path(path)
+    target = ValidationTarget("external_eval_result", str(result_path))
+    result = _read_object(result_path, target, "external_eval_result.json")
+    if result is not None:
+        _validate_external_eval_result(result, target, result_path)
     return target
 
 
@@ -4674,6 +4709,9 @@ _AGENTIC_TRAINING_LOOP_PLAN_KEYS = {
     "objective",
     "participants",
     "passed",
+    "plan_readiness",
+    "execution_completion",
+    "governance_readiness",
     "readiness",
     "recommendation",
     "check_count",
@@ -4851,6 +4889,7 @@ _AGENTIC_TRAINING_LOOP_PHASE_KEYS = {
     "required_artifacts",
     "present_required_artifacts",
     "missing_required_artifacts",
+    "non_completed_required_artifacts",
     "produces",
     "gate",
 }
@@ -4896,8 +4935,18 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target.errors.append(
             f"agentic_training_loop_plan.failed_check_count expected {failed_checks}, got {plan.get('failed_check_count')!r}."
         )
-    if plan.get("passed") != (failed_checks == 0):
-        target.errors.append("agentic_training_loop_plan.passed must match failed_check_count.")
+    expected_check_ids = PLAN_READINESS_CHECK_IDS | {
+        "external_trainer_execution_completed",
+        "heldout_eval_is_fail_closed",
+        "governance_required_for_promotion",
+        "required_phase_inputs_present",
+    }
+    actual_check_ids = [str(check.get("id") or "") for check in checks if isinstance(check, dict)]
+    check_contract_complete = len(actual_check_ids) == len(expected_check_ids) and set(actual_check_ids) == expected_check_ids
+    if not check_contract_complete:
+        target.errors.append(
+            "agentic_training_loop_plan.checks must contain every canonical readiness, execution, and governance check exactly once."
+        )
     if not isinstance(plan.get("iteration_id"), str) or not plan.get("iteration_id"):
         target.errors.append("agentic_training_loop_plan.iteration_id must be a non-empty string.")
     plan_path = plan.get("plan_path")
@@ -4957,6 +5006,14 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
                 )
     if plan.get("artifact_count") != artifact_count:
         target.errors.append(f"agentic_training_loop_plan.artifact_count expected {artifact_count}, got {plan.get('artifact_count')!r}.")
+    expected_role_counts = [
+        {"role": role, "count": len(refs)}
+        for role, refs in sorted(source_artifacts.items())
+        if isinstance(refs, list) and refs
+    ]
+    if plan.get("artifact_role_counts") != expected_role_counts:
+        target.errors.append("agentic_training_loop_plan.artifact_role_counts must match source_artifacts exactly.")
+    resolved_artifact_paths = _agentic_training_loop_resolved_artifact_paths(source_artifacts, source_path)
     cloud_training_receipt_state = _expected_agentic_training_loop_cloud_training_receipt_state(
         source_artifacts,
         source_path,
@@ -4992,6 +5049,13 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target,
         "agentic_training_loop_plan.external_eval_receipt_state",
     )
+    training_result_status = _loop_execution_result_status(resolved_artifact_paths, "agentic_training_result")
+    external_eval_result_status = _loop_execution_result_status(resolved_artifact_paths, "external_eval_result")
+    execution_result_statuses = {
+        "agentic_training_result": training_result_status,
+        "external_eval_result": external_eval_result_status,
+    }
+    expected_execution_completion = _loop_execution_completion(execution_result_statuses)
     eval_summary_state = _agentic_training_loop_source_validation_state(
         source_artifacts,
         "eval_summary",
@@ -5022,6 +5086,36 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target.errors.append(
             "agentic_training_loop_plan.checks.cloud_training_receipts_are_side_effect_free.passed must match receipt state."
         )
+    training_execution_check = _cloud_training_check_by_id(
+        checks,
+        "external_trainer_execution_completed",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    if training_execution_check is not None and training_execution_check.get("passed") != (training_result_status == "completed"):
+        target.errors.append(
+            "agentic_training_loop_plan.checks.external_trainer_execution_completed.passed must match the training result state."
+        )
+    external_eval_handoff_check = _cloud_training_check_by_id(
+        checks,
+        "external_eval_handoff_is_preflighted",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    expected_external_eval_handoff_passed = (
+        _agentic_training_loop_role_source_ready(source_artifacts, "heldout_manifest", source_path)
+        and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_plan", source_path)
+        and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_receipt", source_path)
+        and external_eval_receipt_state["receipts_passed"]
+        and external_eval_receipt_state["fail_closed"]
+    )
+    if (
+        external_eval_handoff_check is not None
+        and external_eval_handoff_check.get("passed") != expected_external_eval_handoff_passed
+    ):
+        target.errors.append(
+            "agentic_training_loop_plan.checks.external_eval_handoff_is_preflighted.passed must match external eval preflight evidence."
+        )
     heldout_eval_check = _cloud_training_check_by_id(
         checks,
         "heldout_eval_is_fail_closed",
@@ -5032,6 +5126,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         _agentic_training_loop_role_source_ready(source_artifacts, "heldout_manifest", source_path)
         and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_plan", source_path)
         and _agentic_training_loop_role_source_ready(source_artifacts, "external_eval_receipt", source_path)
+        and external_eval_result_status == "completed"
         and _agentic_training_loop_role_source_ready(source_artifacts, "eval_summary", source_path)
         and eval_summary_state["valid"]
         and eval_summary_state["passed"]
@@ -5076,20 +5171,80 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
                 if isinstance(item, str)
             }
         )
+        expected_phases = [
+            _build_agentic_training_loop_phase(spec, source_artifacts, execution_result_statuses)
+            for spec in AGENTIC_TRAINING_LOOP_PHASES
+        ]
+        if phases != expected_phases:
+            target.errors.append(
+                "agentic_training_loop_plan.phases must match canonical phase contracts and current source artifact completion."
+            )
     if plan.get("missing_phase_inputs") != phase_missing_inputs:
         target.errors.append("agentic_training_loop_plan.missing_phase_inputs must match phase missing_required_artifacts.")
-    expected_readiness = "ready_for_governance_review" if failed_checks == 0 and not phase_missing_inputs else "planned_fail_closed"
+    failed_check_ids = {
+        str(check.get("id") or "")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is not True
+    }
+    missing_plan_inputs = sorted(
+        role
+        for role in PLAN_REQUIRED_ARTIFACT_ROLES
+        if not _agentic_training_loop_role_source_ready(source_artifacts, role, source_path)
+    )
+    expected_plan_readiness = (
+        "ready_to_execute"
+        if check_contract_complete
+        and not (failed_check_ids & PLAN_READINESS_CHECK_IDS)
+        and not missing_plan_inputs
+        else "blocked"
+    )
+    expected_governance_readiness = (
+        "ready_for_review"
+        if expected_plan_readiness == "ready_to_execute"
+        and expected_execution_completion == "completed"
+        and failed_checks == 0
+        and not phase_missing_inputs
+        else "blocked"
+    )
+    if plan.get("plan_readiness") != expected_plan_readiness:
+        target.errors.append(
+            f"agentic_training_loop_plan.plan_readiness expected {expected_plan_readiness!r}, got {plan.get('plan_readiness')!r}."
+        )
+    if plan.get("execution_completion") != expected_execution_completion:
+        target.errors.append(
+            "agentic_training_loop_plan.execution_completion must match semantic training and external eval result states."
+        )
+    if plan.get("governance_readiness") != expected_governance_readiness:
+        target.errors.append(
+            f"agentic_training_loop_plan.governance_readiness expected {expected_governance_readiness!r}, got {plan.get('governance_readiness')!r}."
+        )
+    expected_passed = expected_governance_readiness == "ready_for_review"
+    if plan.get("passed") != expected_passed:
+        target.errors.append("agentic_training_loop_plan.passed must match governance_readiness.")
+    expected_readiness = "ready_for_governance_review" if expected_passed else "planned_fail_closed"
     if plan.get("readiness") != expected_readiness:
         target.errors.append(f"agentic_training_loop_plan.readiness expected {expected_readiness!r}, got {plan.get('readiness')!r}.")
-    expected_recommendation = (
-        "approve_iteration_execution"
-        if expected_readiness == "ready_for_governance_review"
-        else "collect_missing_receipts_before_live_execution"
-    )
+    if expected_execution_completion == "failed":
+        expected_recommendation = "investigate_failed_execution"
+    elif expected_plan_readiness == "blocked":
+        expected_recommendation = "collect_missing_plan_evidence"
+    elif expected_execution_completion == "incomplete":
+        expected_recommendation = "execute_ready_plan"
+    elif expected_governance_readiness == "blocked":
+        expected_recommendation = "resolve_governance_blockers"
+    else:
+        expected_recommendation = "submit_for_governance_review"
     if plan.get("recommendation") != expected_recommendation:
         target.errors.append(
             f"agentic_training_loop_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}."
         )
+    expected_blocked_reasons = [
+        str(check.get("summary") or "")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is not True
+    ]
+    if plan.get("blocked_reasons") != expected_blocked_reasons:
+        target.errors.append("agentic_training_loop_plan.blocked_reasons must match failed check summaries.")
 
     boundary = plan.get("execution_boundary")
     if not isinstance(boundary, dict):
@@ -5131,9 +5286,41 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         if contract.get("default_live_execution_allowed") is not False:
             target.errors.append("agentic_training_loop_plan.handoff_contract.default_live_execution_allowed must be false.")
 
+    participants = plan.get("participants") if isinstance(plan.get("participants"), dict) else {}
+    budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
+    provider_constraints = (
+        plan.get("provider_constraints") if isinstance(plan.get("provider_constraints"), dict) else {}
+    )
+    next_iteration = plan.get("next_iteration") if isinstance(plan.get("next_iteration"), dict) else {}
+    try:
+        replayed_plan = _build_agentic_training_loop_plan(
+            out_path=source_path,
+            iteration_id=str(plan.get("iteration_id") or ""),
+            artifact_paths=resolved_artifact_paths,
+            objective=str(plan.get("objective") or ""),
+            candidate=str(participants.get("candidate_policy") or ""),
+            baseline=str(participants.get("baseline_policy") or ""),
+            teacher=str(participants.get("teacher_policy") or ""),
+            budget=budget,
+            provider_constraints=provider_constraints,
+            schedule=(next_iteration.get("schedule") if isinstance(next_iteration.get("schedule"), dict) else {}),
+            preserve_paths=False,
+            created_at=str(plan.get("created_at") or ""),
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        target.errors.append(f"agentic_training_loop_plan could not replay current source artifacts: {exc}")
+    else:
+        if plan != replayed_plan:
+            target.errors.append(
+                "agentic_training_loop_plan must match deterministic replay of its current source artifacts exactly."
+            )
+
     target.details.update(
         {
             "iteration_id": plan.get("iteration_id"),
+            "plan_readiness": plan.get("plan_readiness"),
+            "execution_completion": plan.get("execution_completion"),
+            "governance_readiness": plan.get("governance_readiness"),
             "readiness": plan.get("readiness"),
             "artifact_count": plan.get("artifact_count"),
             "phase_count": len(phases) if isinstance(phases, list) else 0,
@@ -5312,6 +5499,26 @@ def _resolve_agentic_training_loop_plan_ref_path(value: Any, source_path: Path) 
     return source_path.parent / value
 
 
+def _agentic_training_loop_resolved_artifact_paths(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+) -> dict[str, list[Path]]:
+    resolved: dict[str, list[Path]] = {}
+    for role, refs in source_artifacts.items():
+        if not isinstance(role, str) or not isinstance(refs, list):
+            continue
+        paths = [
+            path
+            for ref in refs
+            if isinstance(ref, dict)
+            for path in [_resolve_agentic_training_loop_plan_ref_path(ref.get("path"), source_path)]
+            if path is not None
+        ]
+        if paths:
+            resolved[role] = paths
+    return resolved
+
+
 def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTarget, label: str) -> None:
     if not isinstance(phase, dict):
         target.errors.append(f"{label} must be an object.")
@@ -5325,6 +5532,7 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
     required = phase.get("required_artifacts")
     present = phase.get("present_required_artifacts")
     missing = phase.get("missing_required_artifacts")
+    non_completed = phase.get("non_completed_required_artifacts")
     produces = phase.get("produces")
     if not _is_string_list(required):
         target.errors.append(f"{label}.required_artifacts must be a list of strings.")
@@ -5335,14 +5543,19 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
     if not _is_string_list(missing):
         target.errors.append(f"{label}.missing_required_artifacts must be a list of strings.")
         missing = []
+    if not _is_string_list(non_completed):
+        target.errors.append(f"{label}.non_completed_required_artifacts must be a list of strings.")
+        non_completed = []
     if not _is_string_list(produces):
         target.errors.append(f"{label}.produces must be a list of strings.")
     if sorted(set(present) | set(missing)) != sorted(set(required)):
         target.errors.append(f"{label}.present_required_artifacts plus missing_required_artifacts must match required_artifacts.")
-    if phase.get("status") == "ready" and missing:
-        target.errors.append(f"{label}.status cannot be ready while required artifacts are missing.")
-    if phase.get("status") == "blocked" and not missing:
-        target.errors.append(f"{label}.status cannot be blocked without missing required artifacts.")
+    if not set(non_completed).issubset(set(present)):
+        target.errors.append(f"{label}.non_completed_required_artifacts must be a subset of present_required_artifacts.")
+    if phase.get("status") == "ready" and (missing or non_completed):
+        target.errors.append(f"{label}.status cannot be ready while required artifacts are missing or incomplete.")
+    if phase.get("status") == "blocked" and not missing and not non_completed:
+        target.errors.append(f"{label}.status cannot be blocked without missing or incomplete required artifacts.")
 
 
 def _validate_agentic_training_loop_cloud_training(
@@ -5897,6 +6110,9 @@ _AGENTIC_LOOP_LEDGER_METRICS_KEYS = {
     "ready_iteration_count",
     "blocked_iteration_count",
     "latest_iteration_id",
+    "latest_plan_readiness",
+    "latest_execution_completion",
+    "latest_governance_readiness",
     "latest_readiness",
     "latest_recommendation",
     "latest_missing_phase_input_count",
@@ -5930,6 +6146,9 @@ _AGENTIC_LOOP_LEDGER_GOVERNANCE_ACTION_KEYS = {
 _AGENTIC_LOOP_LEDGER_DIGEST_KEYS = {
     "latest_iteration_index",
     "latest_iteration_id",
+    "plan_readiness",
+    "execution_completion",
+    "governance_readiness",
     "readiness",
     "recommendation",
     "decision_readiness",
@@ -5990,6 +6209,9 @@ _AGENTIC_LOOP_LEDGER_ITERATION_KEYS = {
     "schema_version",
     "iteration_id",
     "passed",
+    "plan_readiness",
+    "execution_completion",
+    "governance_readiness",
     "readiness",
     "recommendation",
     "missing_phase_inputs",
@@ -6066,10 +6288,16 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             target.errors.append(f"{label}.schema_version must be {AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION!r}.")
         if not isinstance(row.get("iteration_id"), str) or not row.get("iteration_id"):
             target.errors.append(f"{label}.iteration_id must be a non-empty string.")
-        if row.get("readiness") == "ready_for_governance_review":
+        if row.get("governance_readiness") == "ready_for_review":
             ready_count += 1
         else:
             blocked_count += 1
+        if row.get("plan_readiness") not in {"ready_to_execute", "blocked"}:
+            target.errors.append(f"{label}.plan_readiness has an unsupported value.")
+        if row.get("execution_completion") not in {"completed", "incomplete", "failed"}:
+            target.errors.append(f"{label}.execution_completion has an unsupported value.")
+        if row.get("governance_readiness") not in {"ready_for_review", "blocked"}:
+            target.errors.append(f"{label}.governance_readiness has an unsupported value.")
         if not _is_string_list(row.get("missing_phase_inputs")):
             target.errors.append(f"{label}.missing_phase_inputs must be a list of strings.")
         if not _is_non_negative_int(row.get("blocked_reason_count")):
@@ -6124,7 +6352,10 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
     _validate_agentic_loop_ledger_counts(metrics.get("readiness_counts"), target, "agentic_loop_ledger.metrics.readiness_counts", "id")
     _validate_agentic_loop_ledger_counts(metrics.get("recommendation_counts"), target, "agentic_loop_ledger.metrics.recommendation_counts", "id")
     _validate_agentic_loop_ledger_counts(metrics.get("artifact_group_totals"), target, "agentic_loop_ledger.metrics.artifact_group_totals", "group")
-    expected_decision = _build_agentic_loop_ledger_decision(iterations, metrics)
+    expected_metrics = _build_agentic_loop_ledger_metrics(iterations)
+    if metrics != expected_metrics:
+        target.errors.append("agentic_loop_ledger.metrics must match the current iteration projections exactly.")
+    expected_decision = _build_agentic_loop_ledger_decision(iterations, expected_metrics)
     expected_digest = _build_agentic_loop_ledger_readiness_digest(iterations, expected_decision)
     _validate_agentic_loop_ledger_decision(ledger.get("decision"), expected_decision, target)
     _validate_agentic_loop_ledger_digest(ledger.get("readiness_digest"), iterations, metrics, expected_decision, expected_digest, target)
@@ -6225,7 +6456,10 @@ def _validate_agentic_loop_ledger_digest(
             latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
         )
         expected_ready = (
-            latest.get("readiness") == "ready_for_governance_review"
+            latest.get("plan_readiness") == "ready_to_execute"
+            and latest.get("execution_completion") == "completed"
+            and latest.get("governance_readiness") == "ready_for_review"
+            and latest.get("readiness") == "ready_for_governance_review"
             and not latest_missing_phase_inputs
             and latest_lineage.get("passed") is True
             and latest_receipt_state.get("fail_closed") is True
@@ -6303,6 +6537,8 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.summary must match latest iteration readiness.")
     if digest.get("latest_iteration_id") != metrics.get("latest_iteration_id"):
         target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match metrics.latest_iteration_id.")
+    if digest != expected_digest:
+        target.errors.append("agentic_loop_ledger.readiness_digest must match the canonical latest-iteration projection exactly.")
 
 
 def _validate_agentic_loop_ledger_decision(
@@ -6571,6 +6807,9 @@ def _validate_agentic_loop_governance_source_snapshots(value: dict[str, Any], ta
             {
                 "latest_iteration_id",
                 "latest_iteration_index",
+                "plan_readiness",
+                "execution_completion",
+                "governance_readiness",
                 "readiness",
                 "recommendation",
                 "ready_for_governance_review",
@@ -7008,6 +7247,17 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
         target.errors.append(f"{label}.path must resolve to a JSON object source loop plan.")
         return
     _validate_agentic_training_loop_plan(source_plan, target, source_path)
+    index = row.get("index")
+    if isinstance(index, int) and not isinstance(index, bool) and index >= 0:
+        expected = _build_agentic_loop_ledger_iteration(
+            source_path,
+            source_plan,
+            index,
+            ledger_path,
+            False,
+        )
+        if row != expected:
+            target.errors.append(f"{label} must match the current source loop plan projection exactly.")
 
 
 def _resolve_agentic_loop_ledger_source_path(row: dict[str, Any], ledger_path: Path) -> Path | None:
@@ -16547,11 +16797,13 @@ _EVAL_SUMMARY_KEYS = {
     "comparison_count",
     "gate_count",
     "external_adapter_plan_count",
+    "external_adapter_result_count",
     "heldout_scenarios",
     "arms",
     "comparisons",
     "compare_gates",
     "external_adapter_plans",
+    "external_adapter_results",
     "repair_curriculum",
     "serving_preflight",
     "risks",
@@ -16669,6 +16921,25 @@ _EVAL_SUMMARY_EXTERNAL_ADAPTER_KEYS = {
     "ready",
     "adapter_count",
     "ready_adapter_count",
+    "selected_adapters",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_EXTERNAL_RESULT_KEYS = {
+    "label",
+    "path",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "adapter_id",
+    "model_id",
+    "source_plan_sha256",
+    "heldout_manifest_sha256",
+    "integrity_passed",
+    "execution_status",
+    "benchmark_status",
+    "coverage_complete",
+    "governance_readiness",
+    "external_eval_claims_allowed",
     "blocking_reasons",
 }
 _EVAL_SUMMARY_REPAIR_KEYS = {
@@ -16747,6 +17018,10 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
     if not isinstance(adapters, list):
         target.errors.append("eval_summary.external_adapter_plans must be a list.")
         adapters = []
+    external_results = summary.get("external_adapter_results")
+    if not isinstance(external_results, list):
+        target.errors.append("eval_summary.external_adapter_results must be a list.")
+        external_results = []
     repair_curriculum = summary.get("repair_curriculum")
     if not isinstance(repair_curriculum, dict):
         target.errors.append("eval_summary.repair_curriculum must be an object.")
@@ -16775,6 +17050,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
         "comparison_count": len(comparisons),
         "gate_count": len(gates),
         "external_adapter_plan_count": len(adapters),
+        "external_adapter_result_count": len(external_results),
     }
     for field_name, expected in expected_counts.items():
         if summary.get(field_name) != expected:
@@ -16796,6 +17072,8 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
         _validate_eval_summary_gate(gate, index, target, source_dir=source_dir)
     for index, adapter in enumerate(adapters):
         _validate_eval_summary_external_adapter(adapter, index, target, source_dir=source_dir)
+    for index, result in enumerate(external_results):
+        _validate_eval_summary_external_result(result, index, target, source_dir=source_dir)
     _validate_eval_summary_repair_curriculum(repair_curriculum, target)
     for index, risk in enumerate(risks):
         if not isinstance(risk, dict):
@@ -16806,12 +17084,49 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
             if not isinstance(risk.get(field_name), str) or not risk.get(field_name):
                 target.errors.append(f"eval_summary.risks[{index}].{field_name} must be a non-empty string.")
 
+    expected_external_risks = _build_eval_summary_external_result_risks(adapters, external_results)
+    expected_external_risks.extend(
+        {
+            "source": "external_eval_result",
+            "label": str(result.get("label") or ""),
+            "reason": reason,
+        }
+        for result in external_results
+        if isinstance(result, dict)
+        for reason in result.get("blocking_reasons", [])
+        if isinstance(reason, str)
+    )
+    expected_external_risk_keys = {
+        (str(risk.get("label") or ""), str(risk.get("reason") or ""))
+        for risk in expected_external_risks
+    }
+    actual_external_risk_keys = {
+        (str(risk.get("label") or ""), str(risk.get("reason") or ""))
+        for risk in risks
+        if isinstance(risk, dict) and risk.get("source") == "external_eval_result"
+    }
+    if actual_external_risk_keys != expected_external_risk_keys:
+        target.errors.append(
+            "eval_summary external_eval_result risks must match result readiness and plan/result associations."
+        )
+
     has_failed_child = any(isinstance(item, dict) and item.get("passed") is False for item in [*comparisons, *gates])
     has_blocked_adapter = any(isinstance(item, dict) and item.get("ready") is False for item in adapters)
+    has_blocked_external_result = any(
+        isinstance(item, dict) and item.get("blocking_reasons") for item in external_results
+    )
     has_arm_blockers = any(isinstance(item, dict) and item.get("blocking_reasons") for item in arms)
     has_blocking_status = bool(comparisons) and heldout.get("cross_arm_claims_allowed") is not True
     has_serving_blockers = bool(serving_preflight and serving_preflight.get("blocking_reasons"))
-    expected_passed = not risks and not has_failed_child and not has_blocked_adapter and not has_arm_blockers and not has_blocking_status and not has_serving_blockers
+    expected_passed = (
+        not risks
+        and not has_failed_child
+        and not has_blocked_adapter
+        and not has_blocked_external_result
+        and not has_arm_blockers
+        and not has_blocking_status
+        and not has_serving_blockers
+    )
     if isinstance(summary.get("passed"), bool) and summary.get("passed") != expected_passed:
         target.errors.append(f"eval_summary.passed expected {expected_passed}, got {summary.get('passed')!r}.")
 
@@ -17314,8 +17629,68 @@ def _validate_eval_summary_external_adapter(
             target.errors.append(f"eval_summary.external_adapter_plans[{index}].{field_name} must be a non-negative integer.")
     if not _is_string_list(adapter.get("blocking_reasons")):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must be a list of strings.")
+    if not _is_string_list(adapter.get("selected_adapters")):
+        target.errors.append(f"eval_summary.external_adapter_plans[{index}].selected_adapters must be a list of strings.")
     if adapter.get("ready") is False and not adapter.get("blocking_reasons"):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must explain why the plan is not ready.")
+    raw_path = adapter.get("path")
+    plan_path = _resolve_eval_summary_source_path(raw_path, source_dir) if isinstance(raw_path, str) else None
+    if plan_path is None or not plan_path.is_file() or _path_has_symlink_component(plan_path, include_leaf=True):
+        return
+    try:
+        expected = _build_eval_summary_external_plan(
+            LabeledPath(label=str(adapter.get("label") or ""), path=plan_path),
+            preserve_paths=False,
+            display_base_dir=source_dir,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        target.errors.append(f"{label}.path could not be replayed as an external eval plan: {exc}")
+        return
+    if {key: value for key, value in adapter.items() if key != "path"} != {
+        key: value for key, value in expected.items() if key != "path"
+    }:
+        target.errors.append(f"{label} must match the current external eval plan source projection exactly.")
+
+
+def _validate_eval_summary_external_result(
+    result: Any,
+    index: int,
+    target: ValidationTarget,
+    *,
+    source_dir: Path | None = None,
+) -> None:
+    if not isinstance(result, dict):
+        target.errors.append(f"eval_summary.external_adapter_results[{index}] must be an object.")
+        return
+    label = f"eval_summary.external_adapter_results[{index}]"
+    _validate_allowed_keys(result, _EVAL_SUMMARY_EXTERNAL_RESULT_KEYS, target, label)
+    _validate_eval_summary_source_file_ref(result, "path", "sha256", "size_bytes", target, label, source_dir)
+    for field_name in ("integrity_passed", "coverage_complete", "external_eval_claims_allowed"):
+        if not isinstance(result.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not _is_string_list(result.get("blocking_reasons")):
+        target.errors.append(f"{label}.blocking_reasons must be a list of strings.")
+    raw_path = result.get("path")
+    result_path = _resolve_eval_summary_source_path(raw_path, source_dir) if isinstance(raw_path, str) else None
+    if (
+        result_path is None
+        or not result_path.is_file()
+        or _path_has_symlink_component(result_path, include_leaf=True)
+    ):
+        return
+    try:
+        expected = _build_eval_summary_external_result(
+            LabeledPath(label=str(result.get("label") or ""), path=result_path),
+            preserve_paths=False,
+            display_base_dir=source_dir,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        target.errors.append(f"{label}.path could not be replayed as an external eval result: {exc}")
+        return
+    if {key: value for key, value in result.items() if key != "path"} != {
+        key: value for key, value in expected.items() if key != "path"
+    }:
+        target.errors.append(f"{label} must match the current external eval result source projection exactly.")
 
 
 def _validate_eval_summary_repair_curriculum(value: dict[str, Any], target: ValidationTarget) -> None:
@@ -17383,6 +17758,127 @@ def _count_eval_summary_work_item_field(items: list[Any], field_name: str) -> di
             continue
         counts[value] = counts.get(value, 0) + 1
     return counts
+
+
+def _validate_external_eval_result(result: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    schema_check = check_schema_contract(result, name_or_id="external_eval_result", artifact_path=source_path)
+    for error in schema_check.get("errors", []):
+        target.errors.append(f"external_eval_result schema: {error}")
+    if result.get("schema_version") != EXTERNAL_EVAL_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"external_eval_result.schema_version must be {EXTERNAL_EVAL_RESULT_SCHEMA_VERSION!r}."
+        )
+
+    sources = result.get("sources") if isinstance(result.get("sources"), dict) else {}
+    resolved: dict[str, Path | None] = {}
+    for name in ("plan", "heldout_manifest", "raw_result", "runner_metadata"):
+        ref = sources.get(name) if isinstance(sources.get(name), dict) else None
+        if ref is None:
+            target.errors.append(f"external_eval_result.sources.{name} must be an object.")
+            resolved[name] = None
+            continue
+        optional = name == "runner_metadata"
+        resolved[name] = _validate_external_eval_result_source_ref(
+            ref,
+            target,
+            f"external_eval_result.sources.{name}",
+            source_path,
+            optional=optional,
+        )
+
+    identity = result.get("identity") if isinstance(result.get("identity"), dict) else {}
+    normalizer = result.get("normalizer") if isinstance(result.get("normalizer"), dict) else {}
+    execution = result.get("execution") if isinstance(result.get("execution"), dict) else {}
+    failure = execution.get("failure") if isinstance(execution.get("failure"), dict) else {}
+    required_sources = (resolved.get("plan"), resolved.get("heldout_manifest"), resolved.get("raw_result"))
+    if all(path is not None for path in required_sources):
+        try:
+            expected = build_external_eval_result(
+                plan_path=resolved["plan"],
+                heldout_manifest_path=resolved["heldout_manifest"],
+                raw_result_path=resolved["raw_result"],
+                runner_metadata_path=resolved.get("runner_metadata"),
+                runner_observation=(
+                    result.get("runner_observation")
+                    if resolved.get("runner_metadata") is None
+                    and isinstance(result.get("runner_observation"), dict)
+                    else None
+                ),
+                adapter_id=str(identity.get("adapter_id") or ""),
+                execution_id=str(identity.get("execution_id") or ""),
+                model_id=str(identity.get("model_id") or ""),
+                normalizer_id=str(normalizer.get("id") or ""),
+                normalizer_version=str(normalizer.get("version") or ""),
+                raw_format=str(normalizer.get("input_format") or ""),
+                execution_status=str(execution.get("status") or ""),
+                failure_class=str(failure.get("class") or "none"),
+                failure_message=str(failure.get("message") or ""),
+                out_path=source_path,
+                created_at=str(result.get("created_at") or ""),
+            )
+        except (ExternalEvalResultError, OSError, TypeError, ValueError) as exc:
+            target.errors.append(f"external_eval_result could not replay imported sources: {exc}")
+        else:
+            if result != expected:
+                target.errors.append(
+                    "external_eval_result must match deterministic normalization of its current source files."
+                )
+
+    integrity = result.get("integrity") if isinstance(result.get("integrity"), dict) else {}
+    coverage = result.get("coverage") if isinstance(result.get("coverage"), dict) else {}
+    outcome = result.get("benchmark_outcome") if isinstance(result.get("benchmark_outcome"), dict) else {}
+    governance = result.get("governance") if isinstance(result.get("governance"), dict) else {}
+    target.details.update(
+        {
+            "integrity_passed": integrity.get("passed") is True,
+            "execution_status": execution.get("status"),
+            "coverage_complete": coverage.get("complete") is True,
+            "benchmark_outcome": outcome.get("status"),
+            "governance_readiness": governance.get("readiness"),
+        }
+    )
+
+
+def _validate_external_eval_result_source_ref(
+    ref: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    result_path: Path,
+    *,
+    optional: bool,
+) -> Path | None:
+    path_value = ref.get("path")
+    if path_value is None and optional:
+        if any(
+            ref.get(field) not in expected
+            for field, expected in (
+                ("exists", {False}),
+                ("regular_file", {False}),
+                ("replayable", {True}),
+                ("sha256", {None}),
+                ("size_bytes", {None}),
+                ("schema_version", {None}),
+            )
+        ):
+            target.errors.append(f"{label} must be an empty optional source reference when path is null.")
+        return None
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty relative path.")
+        return None
+    if not _is_replayable_external_eval_ref_path(path_value):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+        return None
+    path = result_path.parent / path_value
+    if _path_has_symlink_component(path, include_leaf=True) or not path.is_file():
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return None
+    if ref.get("exists") is not True or ref.get("regular_file") is not True or ref.get("replayable") is not True:
+        target.errors.append(f"{label} must describe an existing replayable regular file.")
+    if ref.get("size_bytes") != path.stat().st_size:
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if ref.get("sha256") != _sha256(path):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    return path
 
 
 def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
@@ -17462,8 +17958,10 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget,
         )
         if handoff.get("requires_identical_heldout_scenarios") is not True:
             target.errors.append("external_eval_plan.governance_handoff.requires_identical_heldout_scenarios must be true.")
-        if handoff.get("external_eval_claims_allowed") != plan.get("ready"):
-            target.errors.append("external_eval_plan.governance_handoff.external_eval_claims_allowed must match ready.")
+        if handoff.get("external_eval_claims_allowed") is not False:
+            target.errors.append(
+                "external_eval_plan.governance_handoff.external_eval_claims_allowed must remain false until a passing external eval result exists."
+            )
         if not isinstance(handoff.get("recommendation"), str) or not handoff.get("recommendation"):
             target.errors.append("external_eval_plan.governance_handoff.recommendation must be a non-empty string.")
 
@@ -17475,6 +17973,10 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget,
             "selected_adapters": selected,
         }
     )
+    for error in external_eval_plan_semantic_errors(plan):
+        message = f"external_eval_plan semantic validation: {error}."
+        if message not in target.errors:
+            target.errors.append(message)
 
 
 def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

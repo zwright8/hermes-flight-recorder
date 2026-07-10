@@ -37,13 +37,15 @@
       "planned_ready": true,
       "provided_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ],
       "provider_api_called": false,
       "ready": true,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ]
     }
   ],
@@ -132,7 +134,7 @@
     "path": "external_eval_plan.json",
     "ready": true,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "4a59b06ad386a5abb5496fb91642de6f2d0eee0805863a005bcf3b3b88a06809",
-    "size_bytes": 2858
+    "sha256": "3c0d4b0956f3146ac0e2133b1312f23e2e6822d68e5fb363af052d569830c68e",
+    "size_bytes": 2922
   }
 }

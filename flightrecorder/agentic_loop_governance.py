@@ -203,6 +203,9 @@ def _compact_readiness_digest(digest: dict[str, Any]) -> dict[str, Any]:
         "latest_iteration_index",
         "readiness",
         "recommendation",
+        "plan_readiness",
+        "execution_completion",
+        "governance_readiness",
         "ready_for_governance_review",
         "recommended_governance_action",
         "promotion_decision_present",
@@ -212,6 +215,9 @@ def _compact_readiness_digest(digest: dict[str, Any]) -> dict[str, Any]:
         "summary",
     )
     compact = {field: digest.get(field) for field in fields if field in digest}
+    compact.setdefault("plan_readiness", "blocked")
+    compact.setdefault("execution_completion", "incomplete")
+    compact.setdefault("governance_readiness", "blocked")
     compact.setdefault("promotion_ledger_present", False)
     return compact
 
@@ -247,6 +253,7 @@ def _missing_action_summary(action: str) -> str:
 
 def _checks(ledger_ref: dict[str, Any], action: str, action_row: dict[str, Any] | None) -> list[dict[str, Any]]:
     boundary = ledger_ref.get("execution_boundary") if isinstance(ledger_ref.get("execution_boundary"), dict) else {}
+    digest = ledger_ref.get("readiness_digest") if isinstance(ledger_ref.get("readiness_digest"), dict) else {}
     fail_closed = (
         boundary.get("ledger_only") is True
         and boundary.get("cloud_jobs_started") is False
@@ -305,6 +312,31 @@ def _checks(ledger_ref: dict[str, Any], action: str, action_row: dict[str, Any] 
             "blocked_reasons": action_row.get("blocked_reasons") if isinstance(action_row, dict) else ["requested_action_not_listed_by_ledger"],
         },
         {"available": True, "blocked_reasons": []},
+    )
+    approval_ready = (
+        digest.get("plan_readiness") == "ready_to_execute"
+        and digest.get("execution_completion") == "completed"
+        and digest.get("governance_readiness") == "ready_for_review"
+        and digest.get("ready_for_governance_review") is True
+    )
+    _add_check(
+        checks,
+        "approval_requires_completed_governance_ready_execution",
+        action != "approve" or approval_ready,
+        {
+            "action": action,
+            "plan_readiness": digest.get("plan_readiness"),
+            "execution_completion": digest.get("execution_completion"),
+            "governance_readiness": digest.get("governance_readiness"),
+            "ready_for_governance_review": digest.get("ready_for_governance_review"),
+        },
+        {
+            "action": "approve",
+            "plan_readiness": "ready_to_execute",
+            "execution_completion": "completed",
+            "governance_readiness": "ready_for_review",
+            "ready_for_governance_review": True,
+        },
     )
     _add_check(
         checks,

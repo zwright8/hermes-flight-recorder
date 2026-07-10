@@ -257,12 +257,36 @@
       "ready": true,
       "ready_adapter_count": 1,
       "schema_version": "hfr.external_eval_adapters.v1",
-      "sha256": "4a59b06ad386a5abb5496fb91642de6f2d0eee0805863a005bcf3b3b88a06809",
-      "size_bytes": 2858
+      "selected_adapters": [
+        "local_mock"
+      ],
+      "sha256": "3c0d4b0956f3146ac0e2133b1312f23e2e6822d68e5fb363af052d569830c68e",
+      "size_bytes": 2922
+    }
+  ],
+  "external_adapter_result_count": 1,
+  "external_adapter_results": [
+    {
+      "adapter_id": "local_mock",
+      "benchmark_status": "passed",
+      "blocking_reasons": [],
+      "coverage_complete": true,
+      "execution_status": "completed",
+      "external_eval_claims_allowed": true,
+      "governance_readiness": "ready_for_review",
+      "heldout_manifest_sha256": "254686ff60629b6f232c5f77c915c6a3e92e1754544b6549b2f615cc7957dc03",
+      "integrity_passed": true,
+      "label": "local_mock",
+      "model_id": "local/mock-candidate",
+      "path": "external_eval_result.json",
+      "schema_version": "hfr.external_eval_result.v1",
+      "sha256": "2451915cb2754765b112aedc731f1b9283de0cd3473427185d9f5373e941a156",
+      "size_bytes": 9823,
+      "source_plan_sha256": "3c0d4b0956f3146ac0e2133b1312f23e2e6822d68e5fb363af052d569830c68e"
     }
   ],
   "gate_count": 0,
-  "generated_at": "2026-07-10T04:46:29.123387+00:00",
+  "generated_at": "2026-07-10T06:17:30.852066+00:00",
   "governance_ready": true,
   "heldout_scenarios": {
     "arms": [

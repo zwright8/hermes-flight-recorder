@@ -231,7 +231,8 @@ flightrecorder cloud-training status \
   --out examples/agentic_training/cloud_training/status_receipt.json
 ```
 
-Seed the held-out eval lane with fail-closed external adapter receipts:
+Seed the held-out eval lane with a fail-closed external adapter handoff and an
+import-only result:
 the committed `baseline_suite_summary.json` and `candidate_suite_summary.json`
 cover the held-out scenario IDs excluded from the training export.
 
@@ -267,20 +268,49 @@ flightrecorder external-eval-receipt \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/heldout_eval/external_eval_receipt.json
 
+flightrecorder external-eval-result \
+  --plan examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
+  --raw-result examples/agentic_training/heldout_eval/external_eval_raw_result.json \
+  --runner-metadata examples/agentic_training/heldout_eval/external_eval_runner.json \
+  --adapter local_mock \
+  --execution-id local-mock-eval-001 \
+  --model-id local/mock-candidate \
+  --normalizer-id hfr.local_mock.per_case_json \
+  --normalizer-version 1 \
+  --raw-format json \
+  --status completed \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/heldout_eval/external_eval_result.json
+
 flightrecorder eval-summary \
   --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \
   --suite-summary candidate=examples/agentic_training/heldout_eval/candidate_suite_summary.json \
   --external-adapter-plan local_mock=examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --external-adapter-result local_mock=examples/agentic_training/heldout_eval/external_eval_result.json \
   --out examples/agentic_training/heldout_eval/eval_summary.json \
   --markdown-out examples/agentic_training/heldout_eval/eval_summary.md
 ```
 
-The agentic-training fixture uses the built-in `local_mock` adapter so held-out
-eval can pass offline while still proving zero provider API calls, model
-downloads, benchmark launches, credential recording, cost, or weight updates.
+The dry-run receipt proves only that Flight Recorder prepared a side-effect-free
+handoff; it is not benchmark-completion evidence. The committed runner metadata
+and per-case raw result represent synthetic output owned by the external local
+runner.
+`external-eval-result` imports and fingerprints those files without loading an
+adapter package or launching a benchmark. A completed import can truthfully
+carry either a passed or failed benchmark outcome, but a failed outcome blocks
+claims and governance readiness while remaining separate from receipt
+integrity.
+
+The agentic-training fixture uses the built-in `local_mock` adapter so its plan
+and per-case result can be reproduced offline while Flight Recorder itself
+makes zero provider API calls, model downloads, benchmark launches, credential
+recordings, cloud spend, or weight updates.
+
 Real BFCL, Inspect AI, lm-eval-harness, and SWE-bench adapters remain
 fail-closed in the standalone `examples/external_eval/` fixtures until their
-dependencies, inputs, and explicit opt-in flags are present.
+dependencies, inputs, and explicit opt-in flags are present; each selected
+adapter must then supply exactly one plan-bound result.
 
 Generate the evidence handoff harness result and bundle:
 
@@ -469,6 +499,7 @@ flightrecorder agentic-loop plan \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
+  --external-eval-result examples/agentic_training/heldout_eval/external_eval_result.json \
   --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
   --rubric-spec examples/agentic_training/model_grader/rubric.json \
   --model-grader-dry-run examples/agentic_training/model_grader/dry_run.json \
@@ -489,15 +520,21 @@ flightrecorder agentic-loop plan \
   --out examples/agentic_training/loop_plan.json
 ```
 
-The committed plan is `ready_for_governance_review` because this example binds
-passing offline held-out eval, compare, promotion-history, promotion-decision,
+The committed plan separates three states: `plan_readiness` is
+`ready_to_execute`, `execution_completion` is `completed`, and
+`governance_readiness` is `ready_for_review`. Its derived legacy `readiness` is
+therefore `ready_for_governance_review`. This example binds a completed,
+integrity-valid external result for every selected adapter and the exact same
+result set in the eval summary; it does not infer execution from the dry-run
+receipt. It also binds compare, promotion-history, promotion-decision,
 promotion-ledger, rollback, alias-apply, release-record, and promotion-archive
-receipts. It also binds a loop-local rollout plan
+receipts, plus a loop-local rollout plan
 and mock receipt, harness/evidence handoff artifacts, a managed mock serving
 lifecycle, nested model-grader review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
 action-ledger, improvement-ledger, and promotion-governance receipts without
-provider, dataset-write, benchmark-launch, scheduler, or weight side effects.
+Flight Recorder starting a provider call, dataset write, benchmark, scheduler,
+or weight update.
 The loop plan and governance receipt do not move aliases; the explicit
 alias-apply receipt is a local JSON-registry fixture. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
@@ -520,9 +557,14 @@ flightrecorder validate \
   --strict
 
 flightrecorder schemas --check examples/agentic_training/loop_plan.json
+flightrecorder schemas --check examples/agentic_training/heldout_eval/external_eval_result.json
 flightrecorder schemas --check examples/agentic_training/model_grader/reviewed_gate.json
 flightrecorder schemas --check examples/agentic_training/training_gate.json
 flightrecorder schemas --check examples/agentic_training/promotion_governance/compare_gate.json
+flightrecorder validate \
+  --external-eval-result examples/agentic_training/heldout_eval/external_eval_result.json \
+  --strict
+
 flightrecorder validate \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
@@ -543,6 +585,7 @@ flightrecorder validate \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
+  --external-eval-result examples/agentic_training/heldout_eval/external_eval_result.json \
   --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
   --promotion-cards examples/agentic_training/promotion_governance/promotion_cards \
   --promotion-decision examples/agentic_training/promotion_governance/promotion_decision.json \

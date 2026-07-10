@@ -105,6 +105,14 @@ from .external_eval import (
     write_external_eval_plan,
     write_external_eval_receipt,
 )
+from .external_eval_result import (
+    EXECUTION_STATUSES as EXTERNAL_EVAL_EXECUTION_STATUSES,
+    FAILURE_CLASSES as EXTERNAL_EVAL_FAILURE_CLASSES,
+    SUPPORTED_RAW_FORMATS as EXTERNAL_EVAL_RAW_FORMATS,
+    ExternalEvalResultError,
+    build_external_eval_result,
+    write_external_eval_result,
+)
 from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, write_heldout_manifest
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .model_registry import (
@@ -302,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionDecisionError,
         EvalSummaryError,
         ExternalEvalPlanError,
+        ExternalEvalResultError,
         HeldoutManifestError,
 
         ReviewCalibrationError,
@@ -1309,6 +1318,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         eval_summary_paths=args.eval_summary,
         external_eval_plan_paths=args.external_eval_plan,
         external_eval_receipt_paths=args.external_eval_receipt,
+        external_eval_result_paths=args.external_eval_result,
         heldout_manifest_paths=args.heldout_manifest,
         serving_profile_paths=args.serving_profile,
         serving_compatibility_report_paths=args.serving_compatibility_report,
@@ -1579,6 +1589,7 @@ def cmd_eval_summary(args: argparse.Namespace) -> int:
         compare_export_specs=args.compare_export,
         compare_gate_specs=args.compare_gate,
         external_adapter_plan_specs=args.external_adapter_plan,
+        external_adapter_result_specs=args.external_adapter_result,
         serving_check_specs=args.serving_check,
         require_serving_preflight=args.require_serving_preflight,
         preserve_paths=args.preserve_paths,
@@ -1638,6 +1649,30 @@ def cmd_external_eval_receipt(args: argparse.Namespace) -> int:
     return 0 if receipt["passed"] else 1
 
 
+def cmd_external_eval_result(args: argparse.Namespace) -> int:
+    result = build_external_eval_result(
+        plan_path=args.plan,
+        heldout_manifest_path=args.heldout_manifest,
+        raw_result_path=args.raw_result,
+        runner_metadata_path=args.runner_metadata,
+        adapter_id=args.adapter,
+        execution_id=args.execution_id,
+        model_id=args.model_id,
+        normalizer_id=args.normalizer_id,
+        normalizer_version=args.normalizer_version,
+        raw_format=args.raw_format,
+        execution_status=args.status,
+        failure_class=args.failure_class,
+        failure_message=args.failure_message,
+        out_path=args.out,
+        created_at=args.created_at,
+    )
+    write_external_eval_result(result, args.out)
+    print(f"wrote {args.out}")
+    integrity = result.get("integrity") if isinstance(result.get("integrity"), dict) else {}
+    return 0 if integrity.get("passed") is True else 1
+
+
 def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
     artifact_paths = {
         "action_ledger": args.action_ledger,
@@ -1658,6 +1693,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "eval_summary": args.eval_summary,
         "external_eval_plan": args.external_eval_plan,
         "external_eval_receipt": args.external_eval_receipt,
+        "external_eval_result": args.external_eval_result,
         "harness_manifest": args.harness_manifest,
         "harness_result": args.harness_result,
         "heldout_manifest": args.heldout_manifest,
@@ -3424,6 +3460,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one hfr.external_eval_receipt.v1 JSON file; may be repeated",
     )
     validate.add_argument(
+        "--external-eval-result",
+        action="append",
+        default=[],
+        help="Validate one hfr.external_eval_result.v1 JSON file; may be repeated",
+    )
+    validate.add_argument(
         "--heldout-manifest",
         action="append",
         default=[],
@@ -3645,6 +3687,27 @@ def _parser() -> argparse.ArgumentParser:
     external_eval_receipt.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in receipt output; unsafe absolute or traversal refs remain redacted")
     external_eval_receipt.set_defaults(func=cmd_external_eval_receipt)
 
+    external_eval_result = subparsers.add_parser(
+        "external-eval-result",
+        help="Import and normalize externally executed benchmark evidence without running benchmark code",
+    )
+    external_eval_result.add_argument("--plan", required=True, help="Ready external eval plan JSON")
+    external_eval_result.add_argument("--heldout-manifest", required=True, help="Held-out scenario manifest bound by the plan")
+    external_eval_result.add_argument("--raw-result", required=True, help="Bounded JSON or JSONL output produced by the external runner")
+    external_eval_result.add_argument("--runner-metadata", required=True, help="Public-safe runner metadata JSON")
+    external_eval_result.add_argument("--adapter", required=True, choices=adapter_choices(), help="Adapter that produced the result")
+    external_eval_result.add_argument("--execution-id", required=True, help="Public external execution identifier")
+    external_eval_result.add_argument("--model-id", required=True, help="Model identity matching the external eval plan")
+    external_eval_result.add_argument("--normalizer-id", required=True, help="Allowlisted result normalizer identifier")
+    external_eval_result.add_argument("--normalizer-version", default="1", help="Allowlisted normalizer version")
+    external_eval_result.add_argument("--raw-format", required=True, choices=EXTERNAL_EVAL_RAW_FORMATS, help="Raw result serialization contract")
+    external_eval_result.add_argument("--status", required=True, choices=EXTERNAL_EVAL_EXECUTION_STATUSES, help="Externally reported execution status")
+    external_eval_result.add_argument("--failure-class", default="none", choices=EXTERNAL_EVAL_FAILURE_CLASSES, help="Classified execution failure, if any")
+    external_eval_result.add_argument("--failure-message", default="", help="Public-safe failure summary for incomplete or failed execution")
+    external_eval_result.add_argument("--created-at", help="Override generated timestamp for deterministic receipts")
+    external_eval_result.add_argument("--out", required=True, help="Write hfr.external_eval_result.v1 JSON")
+    external_eval_result.set_defaults(func=cmd_external_eval_result)
+
     agentic_loop = subparsers.add_parser("agentic-loop", help="Plan closed-loop agentic training iterations")
     agentic_loop_subparsers = agentic_loop.add_subparsers(dest="agentic_loop_command", required=True)
     agentic_loop_plan = agentic_loop_subparsers.add_parser("plan", help="Write a fail-closed agentic training loop plan")
@@ -3701,6 +3764,7 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--heldout-manifest", action="append", default=[], help="heldout manifest artifact; may be repeated")
     agentic_loop_plan.add_argument("--external-eval-plan", action="append", default=[], help="external_eval_plan artifact; may be repeated")
     agentic_loop_plan.add_argument("--external-eval-receipt", action="append", default=[], help="external_eval_receipt artifact; may be repeated")
+    agentic_loop_plan.add_argument("--external-eval-result", action="append", default=[], help="external_eval_result artifact; may be repeated")
     agentic_loop_plan.add_argument("--eval-summary", action="append", default=[], help="eval_summary artifact; may be repeated")
     agentic_loop_plan.add_argument("--improvement-plan", action="append", default=[], help="improvement_plan artifact; may be repeated")
     agentic_loop_plan.add_argument("--improvement-ledger", action="append", default=[], help="improvement_ledger artifact; may be repeated")
@@ -3974,6 +4038,13 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         metavar="LABEL=PATH",
         help="External eval adapter readiness plan JSON to include; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--external-adapter-result",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="Imported hfr.external_eval_result.v1 evidence to include; may be repeated",
     )
     eval_summary.add_argument(
         "--serving-check",

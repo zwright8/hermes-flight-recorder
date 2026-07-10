@@ -16,6 +16,57 @@ from .source_contract import inspect_artifact_source
 
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
 
+PLAN_READINESS_CHECK_IDS = frozenset(
+    {
+        "phase_contracts_present",
+        "artifact_references_are_public_safe",
+        "flight_recorder_did_not_launch_external_work",
+        "live_launches_require_explicit_opt_in",
+        "rollout_receipt_required_before_review",
+        "uncalibrated_labels_block_training_data",
+        "dataset_curation_receipt_required_for_trainer_handoff",
+        "external_trainer_handoff_is_preflighted",
+        "cloud_training_receipts_bound_for_provider_handoff",
+        "cloud_training_receipts_are_side_effect_free",
+        "cloud_training_lineage_bound_for_provider_handoff",
+        "external_eval_handoff_is_preflighted",
+    }
+)
+
+PLAN_REQUIRED_ARTIFACT_ROLES = frozenset(
+    {
+        "agentic_rollout_plan",
+        "agentic_rollout_receipt",
+        "harness_result",
+        "evidence_bundle",
+        "rubric_spec",
+        "model_grader_gate",
+        "review_calibration",
+        "reviewed_gate",
+        "rejection_sampling_gate",
+        "dataset_curation_receipt",
+        "training_export",
+        "agentic_training_plan",
+        "trainer_preflight",
+        "trainer_launch_check",
+        "cloud_training_provider_registry",
+        "cloud_training_preflight",
+        "cloud_training_artifact_manifest",
+        "cloud_training_launch_plan",
+        "cloud_training_launch_receipt",
+        "cloud_training_status_receipt",
+        "heldout_manifest",
+        "external_eval_plan",
+        "external_eval_receipt",
+    }
+)
+
+EXTERNAL_EVAL_HANDOFF_ROLES = (
+    "heldout_manifest",
+    "external_eval_plan",
+    "external_eval_receipt",
+)
+
 CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
     {
         "id": "preflight_links_agentic_training_plan",
@@ -130,6 +181,7 @@ PHASES: tuple[dict[str, Any], ...] = (
             "cloud_training_launch_plan",
             "cloud_training_launch_receipt",
             "cloud_training_status_receipt",
+            "agentic_training_result",
         ),
         "produces": ("agentic_training_runtime_preflight", "agentic_training_flow", "agentic_training_result"),
         "gate": "live trainer launch requires explicit opt-in, credentials, cloud-provider receipts, and a passing preflight.",
@@ -144,7 +196,13 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "heldout_eval",
         "name": "Held-out eval and external benchmarks",
-        "required": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "eval_summary"),
+        "required": (
+            "heldout_manifest",
+            "external_eval_plan",
+            "external_eval_receipt",
+            "external_eval_result",
+            "eval_summary",
+        ),
         "produces": ("eval_summary", "compare_gate", "decision_gate"),
         "gate": "live external benchmarks remain disabled until dependencies and held-out scenario parity pass.",
     },
@@ -202,6 +260,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "eval_summary": "eval_summary",
     "external_eval_plan": "external_eval_plan",
     "external_eval_receipt": "external_eval_receipt",
+    "external_eval_result": "external_eval_result",
     "harness_manifest": "harness_manifest",
     "harness_result": "harness_result",
     "heldout_manifest": "heldout_manifest",
@@ -260,10 +319,29 @@ def build_agentic_training_loop_plan(
     cloud_training_receipt_state = _cloud_training_receipt_state(normalized_artifact_paths)
     external_eval_receipt_state = _external_eval_receipt_state(normalized_artifact_paths)
     eval_summary_state = _eval_summary_state(normalized_artifact_paths)
+    external_eval_handoff_binding = _external_eval_handoff_binding(normalized_artifact_paths, refs)
+    external_eval_result_binding = _external_eval_result_binding(normalized_artifact_paths, refs)
+    eval_summary_result_binding = _eval_summary_result_binding(normalized_artifact_paths, refs)
     promotion_governance_state = _promotion_governance_state(normalized_artifact_paths)
     cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
-    phases = [_phase_row(spec, refs) for spec in PHASES]
+    training_result_status = _execution_result_status(
+        normalized_artifact_paths,
+        "agentic_training_result",
+        refs,
+    )
+    external_eval_result_status = _execution_result_status(
+        normalized_artifact_paths,
+        "external_eval_result",
+        refs,
+    )
+    execution_result_statuses = {
+        "agentic_training_result": training_result_status,
+        "external_eval_result": external_eval_result_status,
+    }
+    execution_completion = _execution_completion(execution_result_statuses)
+    training_result_plan_bound = _agentic_training_result_plan_bound(normalized_artifact_paths, refs)
+    phases = [_phase_row(spec, refs, execution_result_statuses) for spec in PHASES]
     checks: list[dict[str, Any]] = []
     _add_check(checks, "phase_contracts_present", len(phases) == len(PHASES), {"phase_count": len(phases)}, {"phase_count": len(PHASES)})
     _add_check(checks, "artifact_references_are_public_safe", _refs_are_safe(refs), {"unsafe_refs": _unsafe_refs(refs)}, {"unsafe_refs": []})
@@ -353,6 +431,23 @@ def build_agentic_training_loop_plan(
     )
     _add_check(
         checks,
+        "external_trainer_execution_completed",
+        training_result_status == "completed" and training_result_plan_bound,
+        {
+            "agentic_training_result_present": _role_ready(refs, "agentic_training_result"),
+            "agentic_training_result_count": len(normalized_artifact_paths.get("agentic_training_result", [])),
+            "training_result_status": training_result_status,
+            "training_result_plan_bound": training_result_plan_bound,
+        },
+        {
+            "agentic_training_result_present": True,
+            "agentic_training_result_count": 1,
+            "training_result_status": "completed",
+            "training_result_plan_bound": True,
+        },
+    )
+    _add_check(
+        checks,
         "cloud_training_receipts_bound_for_provider_handoff",
         not cloud_training["missing_artifacts"],
         {"cloud_training": cloud_training},
@@ -388,22 +483,82 @@ def build_agentic_training_loop_plan(
     )
     _add_check(
         checks,
-        "heldout_eval_is_fail_closed",
-        _role_ready(refs, "heldout_manifest")
-        and _role_ready(refs, "external_eval_plan")
-        and _role_ready(refs, "external_eval_receipt")
-        and _role_ready(refs, "eval_summary")
-        and eval_summary_state["valid"]
-        and eval_summary_state["passed"]
+        "external_eval_handoff_is_preflighted",
+        all(_role_ready_once(refs, role) for role in EXTERNAL_EVAL_HANDOFF_ROLES)
+        and external_eval_handoff_binding["passed"]
         and external_eval_receipt_state["receipts_passed"]
         and external_eval_receipt_state["fail_closed"],
         {
             "heldout_manifest_present": _role_ready(refs, "heldout_manifest"),
+            "heldout_manifest_count": len(refs.get("heldout_manifest", [])),
             "external_eval_plan_present": _role_ready(refs, "external_eval_plan"),
+            "external_eval_plan_count": len(refs.get("external_eval_plan", [])),
             "external_eval_receipt_present": _role_ready(refs, "external_eval_receipt"),
+            "external_eval_receipt_count": len(refs.get("external_eval_receipt", [])),
+            "external_eval_receipts_passed": external_eval_receipt_state["receipts_passed"],
+            "external_eval_receipts_fail_closed": external_eval_receipt_state["fail_closed"],
+            "plan_heldout_manifest_bound": external_eval_handoff_binding["plan_heldout_manifest_bound"],
+            "receipt_plan_bound": external_eval_handoff_binding["receipt_plan_bound"],
+            "external_eval_handoff_status": external_eval_handoff_binding["status"],
+        },
+        {
+            "heldout_manifest_present": True,
+            "heldout_manifest_count": 1,
+            "external_eval_plan_present": True,
+            "external_eval_plan_count": 1,
+            "external_eval_receipt_present": True,
+            "external_eval_receipt_count": 1,
+            "external_eval_receipts_passed": True,
+            "external_eval_receipts_fail_closed": True,
+            "plan_heldout_manifest_bound": True,
+            "receipt_plan_bound": True,
+            "external_eval_handoff_status": "matched",
+        },
+    )
+    _add_check(
+        checks,
+        "heldout_eval_is_fail_closed",
+        all(_role_ready_once(refs, role) for role in EXTERNAL_EVAL_HANDOFF_ROLES)
+        and external_eval_result_status == "completed"
+        and external_eval_result_binding["passed"]
+        and _role_ready_once(refs, "eval_summary")
+        and eval_summary_state["valid"]
+        and eval_summary_state["passed"]
+        and eval_summary_result_binding["passed"]
+        and external_eval_receipt_state["receipts_passed"]
+        and external_eval_receipt_state["fail_closed"],
+        {
+            "heldout_manifest_present": _role_ready(refs, "heldout_manifest"),
+            "heldout_manifest_count": len(refs.get("heldout_manifest", [])),
+            "external_eval_plan_present": _role_ready(refs, "external_eval_plan"),
+            "external_eval_plan_count": len(refs.get("external_eval_plan", [])),
+            "external_eval_receipt_present": _role_ready(refs, "external_eval_receipt"),
+            "external_eval_receipt_count": len(refs.get("external_eval_receipt", [])),
+            "external_eval_result_present": _role_ready(refs, "external_eval_result"),
+            "external_eval_result_count": len(normalized_artifact_paths.get("external_eval_result", [])),
+            "external_eval_result_expected_count": external_eval_result_binding["expected_count"],
+            "external_eval_result_adapter_coverage_complete": external_eval_result_binding[
+                "adapter_coverage_complete"
+            ],
+            "external_eval_result_completed": external_eval_result_status == "completed",
+            "external_eval_result_status": external_eval_result_status,
+            "external_eval_result_plan_bound": external_eval_result_binding["result_plan_bound"],
+            "external_eval_result_heldout_manifest_bound": external_eval_result_binding["result_heldout_manifest_bound"],
+            "external_eval_result_binding_status": external_eval_result_binding["status"],
             "eval_summary_present": _role_ready(refs, "eval_summary"),
+            "eval_summary_count": len(refs.get("eval_summary", [])),
             "eval_summary_valid": eval_summary_state["valid"],
             "eval_summary_passed": eval_summary_state["passed"],
+            "eval_summary_result_bound": eval_summary_result_binding["passed"],
+            "eval_summary_result_evidence_bound": eval_summary_result_binding[
+                "evidence_set_bound"
+            ],
+            "eval_summary_result_governance_ready": eval_summary_result_binding[
+                "governance_ready"
+            ],
+            "eval_summary_result_expected_count": eval_summary_result_binding["expected_count"],
+            "eval_summary_result_match_count": eval_summary_result_binding["match_count"],
+            "eval_summary_result_status": eval_summary_result_binding["status"],
             "external_eval_receipts_passed": external_eval_receipt_state["receipts_passed"],
             "external_eval_receipts_fail_closed": external_eval_receipt_state["fail_closed"],
             "live_benchmark_requested": external_eval_receipt_state["live_benchmark_requested"],
@@ -415,11 +570,30 @@ def build_agentic_training_loop_plan(
         },
         {
             "heldout_manifest_present": True,
+            "heldout_manifest_count": 1,
             "external_eval_plan_present": True,
+            "external_eval_plan_count": 1,
             "external_eval_receipt_present": True,
+            "external_eval_receipt_count": 1,
+            "external_eval_result_present": True,
+            "external_eval_result_count": external_eval_result_binding["expected_count"],
+            "external_eval_result_expected_count": external_eval_result_binding["expected_count"],
+            "external_eval_result_adapter_coverage_complete": True,
+            "external_eval_result_completed": True,
+            "external_eval_result_status": "completed",
+            "external_eval_result_plan_bound": True,
+            "external_eval_result_heldout_manifest_bound": True,
+            "external_eval_result_binding_status": "matched",
             "eval_summary_present": True,
+            "eval_summary_count": 1,
             "eval_summary_valid": True,
             "eval_summary_passed": True,
+            "eval_summary_result_bound": True,
+            "eval_summary_result_evidence_bound": True,
+            "eval_summary_result_governance_ready": True,
+            "eval_summary_result_expected_count": eval_summary_result_binding["expected_count"],
+            "eval_summary_result_match_count": eval_summary_result_binding["expected_count"],
+            "eval_summary_result_status": "matched",
             "external_eval_receipts_passed": True,
             "external_eval_receipts_fail_closed": True,
             "live_benchmark_requested": False,
@@ -443,10 +617,37 @@ def build_agentic_training_loop_plan(
             "promotion_ledger_schema_valid": True,
         },
     )
-    failed_checks = [check for check in checks if not check["passed"]]
     missing_phase_inputs = sorted({missing for phase in phases for missing in phase["missing_required_artifacts"]})
-    readiness = "ready_for_governance_review" if not failed_checks and not missing_phase_inputs else "planned_fail_closed"
-    recommendation = "approve_iteration_execution" if readiness == "ready_for_governance_review" else "collect_missing_receipts_before_live_execution"
+    _add_check(
+        checks,
+        "required_phase_inputs_present",
+        not missing_phase_inputs,
+        {"missing_phase_inputs": missing_phase_inputs},
+        {"missing_phase_inputs": []},
+    )
+    failed_checks = [check for check in checks if not check["passed"]]
+    plan_failed_checks = [check for check in failed_checks if check["id"] in PLAN_READINESS_CHECK_IDS]
+    missing_plan_inputs = sorted(role for role in PLAN_REQUIRED_ARTIFACT_ROLES if not _role_ready(refs, role))
+    plan_readiness = "ready_to_execute" if not plan_failed_checks and not missing_plan_inputs else "blocked"
+    governance_readiness = (
+        "ready_for_review"
+        if plan_readiness == "ready_to_execute"
+        and execution_completion == "completed"
+        and not failed_checks
+        and not missing_phase_inputs
+        else "blocked"
+    )
+    readiness = "ready_for_governance_review" if governance_readiness == "ready_for_review" else "planned_fail_closed"
+    if execution_completion == "failed":
+        recommendation = "investigate_failed_execution"
+    elif plan_readiness == "blocked":
+        recommendation = "collect_missing_plan_evidence"
+    elif execution_completion == "incomplete":
+        recommendation = "execute_ready_plan"
+    elif governance_readiness == "blocked":
+        recommendation = "resolve_governance_blockers"
+    else:
+        recommendation = "submit_for_governance_review"
 
     return {
         "schema_version": AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
@@ -459,7 +660,10 @@ def build_agentic_training_loop_plan(
             "candidate_policy": candidate or "",
             "teacher_policy": teacher or "",
         },
-        "passed": not failed_checks,
+        "passed": governance_readiness == "ready_for_review",
+        "plan_readiness": plan_readiness,
+        "execution_completion": execution_completion,
+        "governance_readiness": governance_readiness,
         "readiness": readiness,
         "recommendation": recommendation,
         "check_count": len(checks),
@@ -510,6 +714,8 @@ def build_agentic_training_loop_plan(
         "notes": [
             "This artifact is a closed-loop iteration contract; it does not call graders, trainers, cloud APIs, or benchmarks.",
             "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
+            "Dry-run trainer and external-eval receipts establish plan readiness only; they never count as completed execution.",
+            "Governance review requires completed external training and external-eval result artifacts in addition to passing gates.",
             "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived.",
         ],
     }
@@ -568,12 +774,21 @@ def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path
     }
 
 
-def _phase_row(spec: dict[str, Any], refs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def _phase_row(
+    spec: dict[str, Any],
+    refs: dict[str, list[dict[str, Any]]],
+    execution_result_statuses: dict[str, str],
+) -> dict[str, Any]:
     required = list(spec["required"])
     present = [role for role in required if _role_ready(refs, role)]
     missing = [role for role in required if role not in present]
-    status = "ready" if required and not missing else "planned"
-    if missing and required:
+    non_completed = [
+        role
+        for role in present
+        if role in execution_result_statuses and execution_result_statuses[role] != "completed"
+    ]
+    status = "ready" if required and not missing and not non_completed else "planned"
+    if required and (missing or non_completed):
         status = "blocked"
     return {
         "id": spec["id"],
@@ -582,6 +797,7 @@ def _phase_row(spec: dict[str, Any], refs: dict[str, list[dict[str, Any]]]) -> d
         "required_artifacts": required,
         "present_required_artifacts": present,
         "missing_required_artifacts": missing,
+        "non_completed_required_artifacts": non_completed,
         "produces": list(spec["produces"]),
         "gate": spec["gate"],
     }
@@ -619,6 +835,153 @@ def _role_counts(refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
 def _role_ready(refs: dict[str, list[dict[str, Any]]], role: str) -> bool:
     rows = refs.get(role)
     return bool(rows) and all(isinstance(row, dict) and row.get("exists") is True for row in rows)
+
+
+def _role_ready_once(refs: dict[str, list[dict[str, Any]]], role: str) -> bool:
+    rows = refs.get(role)
+    return isinstance(rows, list) and len(rows) == 1 and _role_ready(refs, role)
+
+
+def _execution_completion(result_statuses: dict[str, str]) -> str:
+    statuses = set(result_statuses.values())
+    if "failed" in statuses:
+        return "failed"
+    if statuses == {"completed"}:
+        return "completed"
+    return "incomplete"
+
+
+def _execution_result_status(
+    artifact_paths: dict[str, list[Path]],
+    role: str,
+    refs: dict[str, list[dict[str, Any]]] | None = None,
+) -> str:
+    if role == "external_eval_result":
+        return _external_eval_results_status(artifact_paths, refs)
+    paths = artifact_paths.get(role, [])
+    if not paths:
+        return "missing"
+    if len(paths) != 1:
+        return "incomplete"
+    statuses: list[str] = []
+    for path in paths:
+        source = inspect_artifact_source(path, role)
+        if source.get("physical_exists") is not True:
+            statuses.append("incomplete")
+            continue
+        if (
+            source.get("parse_valid") is not True
+            or source.get("schema_valid") is not True
+            or source.get("semantic_valid") is not True
+        ):
+            statuses.append("incomplete")
+            continue
+        payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+        if role == "agentic_training_result" and refs is not None:
+            lineage = payload.get("lineage") if isinstance(payload.get("lineage"), dict) else {}
+            source_plan = lineage.get("plan") if isinstance(lineage.get("plan"), dict) else {}
+            if source_plan.get("sha256") != _single_ref_sha256(refs, "agentic_training_plan"):
+                statuses.append("incomplete")
+                continue
+        statuses.append(_execution_result_payload_status(role, payload))
+    if "failed" in statuses:
+        return "failed"
+    if statuses and all(status == "completed" for status in statuses):
+        return "completed"
+    return "incomplete"
+
+
+def _external_eval_results_status(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]] | None = None,
+) -> str:
+    expected_adapter_ids = _external_eval_expected_adapter_ids(artifact_paths)
+    paths = artifact_paths.get("external_eval_result", [])
+    if not expected_adapter_ids or not paths:
+        return "missing"
+    statuses_by_adapter: dict[str, str] = {}
+    invalid_or_ambiguous = False
+    for path in paths:
+        source = inspect_artifact_source(path, "external_eval_result")
+        if (
+            source.get("physical_exists") is not True
+            or source.get("parse_valid") is not True
+            or source.get("schema_valid") is not True
+            or source.get("semantic_valid") is not True
+        ):
+            invalid_or_ambiguous = True
+            continue
+        payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+        identity = payload.get("identity") if isinstance(payload.get("identity"), dict) else {}
+        adapter_id = identity.get("adapter_id")
+        if (
+            not isinstance(adapter_id, str)
+            or adapter_id not in expected_adapter_ids
+            or adapter_id in statuses_by_adapter
+        ):
+            invalid_or_ambiguous = True
+            continue
+        if refs is not None and (
+            identity.get("plan_sha256") != _single_ref_sha256(refs, "external_eval_plan")
+            or identity.get("heldout_manifest_sha256") != _single_ref_sha256(refs, "heldout_manifest")
+        ):
+            invalid_or_ambiguous = True
+            continue
+        statuses_by_adapter[adapter_id] = _execution_result_payload_status("external_eval_result", payload)
+    if invalid_or_ambiguous:
+        return "incomplete"
+    if any(status == "failed" for status in statuses_by_adapter.values()):
+        return "failed"
+    if set(statuses_by_adapter) != set(expected_adapter_ids):
+        return "incomplete"
+    if all(status == "completed" for status in statuses_by_adapter.values()):
+        return "completed"
+    return "incomplete"
+
+
+def _external_eval_expected_adapter_ids(artifact_paths: dict[str, list[Path]]) -> list[str]:
+    plan = _single_payload(artifact_paths, "external_eval_plan")
+    selected = plan.get("selected_adapters")
+    if not isinstance(selected, list) or not all(isinstance(item, str) and item for item in selected):
+        return []
+    adapter_ids = sorted(selected)
+    return adapter_ids if len(adapter_ids) == len(set(adapter_ids)) else []
+
+
+def _execution_result_payload_status(role: str, payload: dict[str, Any]) -> str:
+    if role == "agentic_training_result":
+        training_result = payload.get("training_result")
+        training_result = training_result if isinstance(training_result, dict) else {}
+        status = training_result.get("status")
+        if status == "completed" and payload.get("passed") is True:
+            return "completed"
+        if status in {"failed", "blocked", "aborted"}:
+            return "failed"
+        return "incomplete"
+    if role == "external_eval_result":
+        execution = payload.get("execution")
+        execution = execution if isinstance(execution, dict) else {}
+        status = execution.get("status")
+        if status == "failed":
+            return "failed"
+        if status != "completed":
+            return "incomplete"
+        integrity = payload.get("integrity")
+        integrity = integrity if isinstance(integrity, dict) else {}
+        coverage = payload.get("coverage")
+        coverage = coverage if isinstance(coverage, dict) else {}
+        benchmark_outcome = payload.get("benchmark_outcome")
+        benchmark_outcome = benchmark_outcome if isinstance(benchmark_outcome, dict) else {}
+        governance = payload.get("governance")
+        governance = governance if isinstance(governance, dict) else {}
+        if (
+            integrity.get("passed") is True
+            and coverage.get("complete") is True
+            and benchmark_outcome.get("status") in {"passed", "failed"}
+        ):
+            return "completed"
+        return "incomplete"
+    return "incomplete"
 
 
 def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state: dict[str, Any]) -> dict[str, Any]:
@@ -821,6 +1184,171 @@ def _eval_summary_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]
         "passed_count": passed_count,
         "valid": bool(records) and valid_count == len(records),
         "passed": bool(records) and passed_count == len(records),
+    }
+
+
+def _external_eval_handoff_binding(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    plan_sha256 = _single_ref_sha256(refs, "external_eval_plan")
+    heldout_sha256 = _single_ref_sha256(refs, "heldout_manifest")
+    plan = _single_payload(artifact_paths, "external_eval_plan")
+    receipt = _single_payload(artifact_paths, "external_eval_receipt")
+    inputs = plan.get("inputs") if isinstance(plan.get("inputs"), dict) else {}
+    scenario_manifest = (
+        inputs.get("scenario_manifest") if isinstance(inputs.get("scenario_manifest"), dict) else {}
+    )
+    source_plan = receipt.get("source_plan") if isinstance(receipt.get("source_plan"), dict) else {}
+    plan_heldout_manifest_bound = bool(plan_sha256 and heldout_sha256) and scenario_manifest.get("sha256") == heldout_sha256
+    receipt_plan_bound = bool(plan_sha256) and source_plan.get("sha256") == plan_sha256
+    passed = plan_heldout_manifest_bound and receipt_plan_bound
+    return {
+        "passed": passed,
+        "plan_heldout_manifest_bound": plan_heldout_manifest_bound,
+        "receipt_plan_bound": receipt_plan_bound,
+        "status": "matched" if passed else "mismatched",
+    }
+
+
+def _agentic_training_result_plan_bound(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]],
+) -> bool:
+    plan_sha256 = _single_ref_sha256(refs, "agentic_training_plan")
+    result = _single_payload(artifact_paths, "agentic_training_result")
+    lineage = result.get("lineage") if isinstance(result.get("lineage"), dict) else {}
+    source_plan = lineage.get("plan") if isinstance(lineage.get("plan"), dict) else {}
+    return bool(plan_sha256) and source_plan.get("sha256") == plan_sha256
+
+
+def _external_eval_result_binding(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    plan_sha256 = _single_ref_sha256(refs, "external_eval_plan")
+    heldout_sha256 = _single_ref_sha256(refs, "heldout_manifest")
+    expected_adapter_ids = _external_eval_expected_adapter_ids(artifact_paths)
+    result_records = _payload_records(artifact_paths, "external_eval_result")
+    result_identities = [
+        payload.get("identity") if isinstance(payload.get("identity"), dict) else {}
+        for payload in (record["payload"] for record in result_records)
+    ]
+    observed_adapter_ids = [
+        identity.get("adapter_id") for identity in result_identities if isinstance(identity.get("adapter_id"), str)
+    ]
+    adapter_coverage_complete = (
+        bool(expected_adapter_ids)
+        and len(observed_adapter_ids) == len(set(observed_adapter_ids))
+        and set(observed_adapter_ids) == set(expected_adapter_ids)
+        and len(result_records) == len(artifact_paths.get("external_eval_result", []))
+    )
+    result_plan_bound = bool(plan_sha256) and bool(result_identities) and all(
+        identity.get("plan_sha256") == plan_sha256 for identity in result_identities
+    )
+    result_heldout_manifest_bound = bool(heldout_sha256) and bool(result_identities) and all(
+        identity.get("heldout_manifest_sha256") == heldout_sha256 for identity in result_identities
+    )
+    passed = adapter_coverage_complete and result_plan_bound and result_heldout_manifest_bound
+    return {
+        "passed": passed,
+        "expected_count": len(expected_adapter_ids),
+        "actual_count": len(artifact_paths.get("external_eval_result", [])),
+        "adapter_coverage_complete": adapter_coverage_complete,
+        "result_plan_bound": result_plan_bound,
+        "result_heldout_manifest_bound": result_heldout_manifest_bound,
+        "status": "matched" if passed else "mismatched",
+    }
+
+
+def _single_ref_sha256(refs: dict[str, list[dict[str, Any]]], role: str) -> str:
+    rows = refs.get(role)
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        return ""
+    value = rows[0].get("sha256")
+    return value if isinstance(value, str) else ""
+
+
+def _single_payload(artifact_paths: dict[str, list[Path]], role: str) -> dict[str, Any]:
+    records = _payload_records(artifact_paths, role)
+    return records[0]["payload"] if len(records) == 1 else {}
+
+
+def _eval_summary_result_binding(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    result_refs = refs.get("external_eval_result", [])
+    summary_records = _payload_records(artifact_paths, "eval_summary")
+    expected_count = len(_external_eval_expected_adapter_ids(artifact_paths))
+    if not expected_count or len(result_refs) != expected_count:
+        return {
+            "passed": False,
+            "evidence_set_bound": False,
+            "governance_ready": False,
+            "expected_count": expected_count,
+            "match_count": 0,
+            "status": "external_eval_result_count_invalid",
+        }
+    if len(summary_records) != 1:
+        return {
+            "passed": False,
+            "evidence_set_bound": False,
+            "governance_ready": False,
+            "expected_count": expected_count,
+            "match_count": 0,
+            "status": "eval_summary_count_invalid",
+        }
+    result_sha256s = [row.get("sha256") for row in result_refs]
+    if (
+        not all(isinstance(value, str) and value for value in result_sha256s)
+        or len(result_sha256s) != len(set(result_sha256s))
+    ):
+        return {
+            "passed": False,
+            "evidence_set_bound": False,
+            "governance_ready": False,
+            "expected_count": expected_count,
+            "match_count": 0,
+            "status": "external_eval_result_sha256_invalid",
+        }
+    summary = summary_records[0]["payload"]
+    result_rows = summary.get("external_adapter_results")
+    rows = [row for row in result_rows if isinstance(row, dict)] if isinstance(result_rows, list) else []
+    matches = [row for row in rows if row.get("sha256") in set(result_sha256s)]
+    summary_sha256s = [row.get("sha256") for row in rows]
+    exact_set = (
+        len(rows) == expected_count
+        and all(isinstance(value, str) and value for value in summary_sha256s)
+        and len(summary_sha256s) == len(set(summary_sha256s))
+        and set(summary_sha256s) == set(result_sha256s)
+    )
+    evidence_set_bound = exact_set and all(
+        match.get("integrity_passed") is True
+        and match.get("execution_status") == "completed"
+        and match.get("benchmark_status") in {"passed", "failed"}
+        and match.get("coverage_complete") is True
+        for match in matches
+    )
+    governance_ready = evidence_set_bound and all(
+        match.get("benchmark_status") == "passed"
+        and match.get("governance_readiness") == "ready_for_review"
+        and match.get("external_eval_claims_allowed") is True
+        for match in matches
+    )
+    return {
+        "passed": governance_ready,
+        "evidence_set_bound": evidence_set_bound,
+        "governance_ready": governance_ready,
+        "expected_count": expected_count,
+        "match_count": len(matches),
+        "status": (
+            "matched"
+            if governance_ready
+            else "matched_but_not_governance_ready"
+            if evidence_set_bound
+            else "matching_eval_summary_result_set_invalid"
+        ),
     }
 
 
@@ -1238,12 +1766,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _display_path(path: Path, preserve_paths: bool) -> str:
     if preserve_paths:
         return str(path)
-    if not path.is_absolute():
-        return str(path)
-    try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
-    except (OSError, ValueError):
-        return path.name
+    return path.name
 
 
 def _display_source_path(path: Path, output_path: Path, preserve_paths: bool) -> str:

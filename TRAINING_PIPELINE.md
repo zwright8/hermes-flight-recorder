@@ -839,11 +839,14 @@ It also includes a `training_gate.json`, `trainer_preflight.json`, and
 `trainer_launch_check.json` that approve only the local dry-run trainer command
 against the selected dataset version. The `heldout_eval/` fixture adds
 deterministic baseline/candidate suite summaries, a held-out manifest,
-an offline `local_mock` external-eval plan/receipt, plus an eval summary. That
-receipt passes without provider calls, downloads, benchmark launches, secrets,
-cost, or weight updates. Real BFCL, Inspect AI, lm-eval-harness, and SWE-bench
-adapters remain fail-closed in the standalone `examples/external_eval/`
-fixtures until optional dependencies are explicitly enabled. The
+an offline `local_mock` external-eval plan and dry-run receipt, an imported
+per-case external result, plus an eval summary. The receipt passes without
+provider calls, downloads, benchmark launches, secrets, cost, or weight
+updates, but it is only handoff evidence. The imported result, not the receipt,
+records completion of the externally owned run. Real BFCL, Inspect AI,
+lm-eval-harness, and SWE-bench adapters remain fail-closed in the standalone
+`examples/external_eval/` fixtures until optional dependencies are explicitly
+enabled. The
 `evidence_handoff/` fixture records a compact passing harness result and ready
 evidence bundle for a deterministic prompt-injection scenario. The
 `serving_lifecycle/managed_mock/` fixture records a normalized mock serving
@@ -885,6 +888,7 @@ flightrecorder agentic-loop plan \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \
+  --external-eval-result runs/external_eval_result.json \
   --eval-summary runs/eval_summary.json \
   --promotion-decision runs/promotion_decision.json \
   --promotion-ledger runs/promotion_ledger.json \
@@ -934,17 +938,21 @@ flightrecorder validate \
 The plan is side-effect free. It records artifact paths and hashes, missing phase
 inputs, provider constraints, live-spend boundaries, next-iteration scheduling
 intent, and a handoff contract declaring that external trainers own weight
-updates. It becomes `ready_for_governance_review` only when rollout, evidence,
-calibrated review, rejection sampling, dataset curation, trainer preflight,
-serving, held-out eval, improvement, promotion decision, promotion ledger, and
-release-governance receipts are present and fail-closed. Release-governance
-receipts can include generated promotion cards, rollback proof, guarded
-alias-apply receipt, release record, and promotion archive. The loop planner and
-governance receipt do not move aliases or publish artifacts; alias movement stays
-isolated in the explicit `promotion-alias-apply` command against a registry
-artifact. Missing required phase inputs keep the loop blocked and recommend
-another iteration. Public plans reject absolute home paths, `/tmp` paths, secret
-path fragments, and credential-looking strings.
+updates. `plan_readiness` covers the pre-execution handoffs,
+`execution_completion` is derived from the bound training result and exact
+external eval result set, and `governance_readiness` becomes
+`ready_for_review` only when execution is complete and every remaining check
+passes. The legacy `readiness` value is derived from those states. Rollout,
+evidence, calibrated review, rejection sampling, dataset curation, trainer
+preflight, serving, held-out eval, improvement, promotion decision, promotion
+ledger, and release-governance artifacts must remain present and fail-closed.
+Release-governance receipts can include generated promotion cards, rollback
+proof, guarded alias-apply receipt, release record, and promotion archive. The
+loop planner and governance receipt do not move aliases or publish artifacts;
+alias movement stays isolated in the explicit `promotion-alias-apply` command
+against a registry artifact. Missing required phase inputs keep the loop blocked
+and recommend another iteration. Public plans reject absolute home paths,
+`/tmp` paths, secret path fragments, and credential-looking strings.
 
 External benchmark adapters stay fail-closed until a separate runner executes
 them. The built-in `local_mock` adapter is available for deterministic offline
@@ -953,8 +961,10 @@ model download, credential value, cloud spend, or weight update. External eval
 plans only keep scenario-manifest refs when they are safe
 relative paths from the plan output; unreplayable absolute or traversal refs are
 redacted and treated as missing, including with `--preserve-paths`. Archive an
-external eval receipt to prove no live BFCL, Inspect AI, lm-eval, or SWE-bench
-job was started by Flight Recorder:
+external eval receipt to attest that Flight Recorder did not start a live BFCL,
+Inspect AI, lm-eval, or SWE-bench job. That receipt does not prove that the
+external runner started or completed one:
+
 External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
@@ -964,19 +974,36 @@ receipts.
 Their receipt type lists are exact allowlists for the plan and receipt schemas;
 unsupported live/provider receipt names fail schema and strict validation.
 Strict receipt validation replays the current source plan, selected adapters,
-and dry-run/live mode so stale or forged benchmark receipts cannot promote
-external-eval claims. Receipt source-plan refs that cannot be replayed from the
-receipt output directory are redacted and treated as missing, keeping public
-artifacts from publishing local source paths.
+and dry-run/live mode so stale or forged receipts cannot alter the handoff
+state. Regardless of receipt status, a matching `hfr.external_eval_result.v1`
+is required before external-eval claims can be reviewed. Receipt source-plan
+refs that cannot be replayed from the receipt output directory are redacted and
+treated as missing, keeping public artifacts from publishing local source paths.
 
 ```bash
 flightrecorder external-eval-receipt \
   --plan runs/external_eval_plan.json \
   --out runs/external_eval_receipt.json
 
+# Run the benchmark outside Flight Recorder, then import its public evidence.
+flightrecorder external-eval-result \
+  --plan runs/external_eval_plan.json \
+  --heldout-manifest runs/heldout_manifest.json \
+  --raw-result runs/external_runner/candidate_suite_summary.json \
+  --runner-metadata runs/external_runner/runner_metadata.json \
+  --adapter local_mock \
+  --execution-id eval-001 \
+  --model-id local/candidate \
+  --normalizer-id hfr.local_mock.run_suite \
+  --normalizer-version 1 \
+  --raw-format hfr.run_suite.v1 \
+  --status completed \
+  --out runs/external_eval_result.json
+
 flightrecorder validate \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \
+  --external-eval-result runs/external_eval_result.json \
   --strict
 ```
 
@@ -984,9 +1011,10 @@ The loop artifact is `hfr.agentic_training_loop_plan.v1`. It is a
 schema-checkable control-plane contract, not an executor: it records
 `cloud_jobs_started: false`, `paid_model_grader_calls_started: false`,
 `live_benchmarks_started: false`, `model_downloads_started: false`, and
-`weights_updated_by_flight_recorder: false`. If required receipts are missing,
-the plan remains `planned_fail_closed` and recommends collecting those receipts
-before any live launch or promotion claim.
+`weights_updated_by_flight_recorder: false`. If required phase evidence is
+missing, the plan remains fail-closed. Its recommendation distinguishes missing
+plan evidence, ready-but-incomplete execution, failed execution, governance
+blockers, and a completed iteration ready to submit for review.
 The companion `hfr.agentic_loop_ledger.v1` artifact records chronological
 iteration inputs, rollout/review/training/serving/eval/governance group counts,
 cost ceilings, promotion/rollback posture, and next-action scheduling state.
@@ -1016,14 +1044,17 @@ cancellation calls, credential recording, or non-zero cost remain visible and
 keep the loop fail-closed.
 Review group counts include `model_grader_disagreement_queue` and
 `model_grader_override_receipt` when human override resolution is needed, and
-eval group counts include both `external_eval_plan` and `external_eval_receipt`
-so dry-run benchmark receipts are not lost between planning and promotion
-review. The plan and ledger also expose `external_eval_receipt_state`: receipt
+eval group counts include `external_eval_plan`, `external_eval_receipt`, and
+`external_eval_result` so planning, handoff, and execution evidence remain
+distinct between planning and promotion review. The plan and ledger also
+expose `external_eval_receipt_state`: receipt
 count, adapter count, pass/fail state, launch mode, cost, and live benchmark /
 provider API / model download / credential flags are replayed from the archived
 receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
-stale or forged receipts cannot self-certify held-out eval readiness.
+stale or forged receipts cannot alter handoff state. Held-out eval readiness
+also requires exactly one integrity-valid, plan- and manifest-bound result for
+every selected adapter and the exact same result set in the eval summary.
 The committed agentic-training loop example binds loop-local rollout plan and
 mock-receipt artifacts, a local model-grader bundle, reviewed gate,
 rejection-sampling gate, training export, dataset-curation receipt, action
@@ -1043,9 +1074,11 @@ downstream evidence counts.
 Validation also reopens the referenced `eval_summary`, `promotion_decision`,
 and `promotion_ledger` artifacts before trusting held-out eval or governance
 readiness, and readiness-bearing sources with public-unsafe absolute paths do
-not count as ready. Governance readiness requires those receipts to have passed
-and remain fail-closed; a present but blocked, malformed, path-leaky, or
-side-effecting external-eval receipt keeps the loop in `planned_fail_closed`.
+not count as ready. Governance readiness requires those referenced artifacts to
+have passed and remain fail-closed; a present but blocked, malformed,
+path-leaky, or side-effecting external-eval receipt keeps the loop blocked, as
+does a missing, duplicate, incomplete, failed, or mismatched external eval
+result.
 Governance receipts also replay their source loop ledger from the receipt file,
 and validation rejects source-ledger refs that traverse symlinked components
 before trusting the ledger size, hash, readiness digest, execution boundary, or

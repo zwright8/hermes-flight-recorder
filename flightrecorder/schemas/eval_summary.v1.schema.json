@@ -20,8 +20,13 @@
     },
     "conclusion": { "$ref": "#/$defs/conclusion" },
     "external_adapter_plan_count": { "minimum": 0, "type": "integer" },
+    "external_adapter_result_count": { "minimum": 0, "type": "integer" },
     "external_adapter_plans": {
       "items": { "$ref": "#/$defs/external_adapter_plan" },
+      "type": "array"
+    },
+    "external_adapter_results": {
+      "items": { "$ref": "#/$defs/external_adapter_result" },
       "type": "array"
     },
     "gate_count": { "minimum": 0, "type": "integer" },
@@ -46,11 +51,13 @@
     "comparison_count",
     "gate_count",
     "external_adapter_plan_count",
+    "external_adapter_result_count",
     "heldout_scenarios",
     "arms",
     "comparisons",
     "compare_gates",
     "external_adapter_plans",
+    "external_adapter_results",
     "repair_curriculum",
     "risks",
     "conclusion"
@@ -127,11 +134,40 @@
         "path": { "minLength": 1, "type": "string" },
         "ready": { "type": "boolean" },
         "ready_adapter_count": { "minimum": 0, "type": "integer" },
+        "selected_adapters": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
         "schema_version": { "type": ["string", "null"] },
         "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
         "size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["label", "path", "sha256", "size_bytes", "ready", "adapter_count", "ready_adapter_count", "blocking_reasons"],
+      "required": ["label", "path", "sha256", "size_bytes", "ready", "adapter_count", "ready_adapter_count", "selected_adapters", "blocking_reasons"],
+      "type": "object"
+    },
+    "external_adapter_result": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": { "minLength": 1, "type": "string" },
+        "benchmark_status": { "enum": ["passed", "failed", "inconclusive", "not_available"] },
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "coverage_complete": { "type": "boolean" },
+        "execution_status": { "enum": ["completed", "incomplete", "failed"] },
+        "external_eval_claims_allowed": { "type": "boolean" },
+        "governance_readiness": { "enum": ["ready_for_review", "blocked"] },
+        "heldout_manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "integrity_passed": { "type": "boolean" },
+        "label": { "minLength": 1, "type": "string" },
+        "model_id": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.external_eval_result.v1" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" },
+        "source_plan_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "label", "path", "sha256", "size_bytes", "schema_version", "adapter_id", "model_id",
+        "source_plan_sha256", "heldout_manifest_sha256", "integrity_passed", "execution_status",
+        "benchmark_status", "coverage_complete", "governance_readiness", "external_eval_claims_allowed",
+        "blocking_reasons"
+      ],
       "type": "object"
     },
     "gate": {

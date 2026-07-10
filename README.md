@@ -68,7 +68,7 @@ and handoff receipts that make those systems auditable.
 | Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
 | Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, governance-action, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `agentic-loop governance`, `next-iteration-schedule`, `validate --agentic-loop-governance-receipt` |
-| Eval | Require identical held-out scenarios, adapter contracts, and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `compare-suite` |
+| Eval | Require identical held-out scenarios, adapter contracts, imported per-case execution evidence, and separation between raw movement and governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `external-eval-result`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
 
@@ -355,8 +355,9 @@ Completed receipts require a ready delegated flow for the same plan and runtime
 preflight. The receipt fingerprints supplied artifacts and proposes a registry
 update. It does not apply that update until governance accepts it.
 
-Bind the receipts into a closed-loop contract before live execution or
-promotion claims:
+Bind the complete evidence chain into a closed-loop contract before governance
+or promotion claims. A pre-execution snapshot can establish plan readiness,
+but it remains execution-incomplete until the result artifacts are present:
 
 ```bash
 flightrecorder agentic-loop plan \
@@ -372,6 +373,11 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan runs/cloud_launch_plan.json \
   --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
   --cloud-training-status-receipt runs/cloud_status_receipt.json \
+  --heldout-manifest runs/heldout_scenarios.json \
+  --external-eval-plan runs/external_eval_plan.json \
+  --external-eval-receipt runs/external_eval_receipt.json \
+  --external-eval-result runs/external_eval_result.json \
+  --eval-summary runs/eval_summary.json \
   --out runs/agentic_training_loop_plan.json
 
 flightrecorder validate \
@@ -381,19 +387,39 @@ flightrecorder validate \
 
 The loop plan remains fail-closed by default: it records that Flight Recorder
 did not launch cloud jobs, paid graders, live benchmarks, model downloads, or
-weight updates. Missing phase receipts produce a schema-checkable
-`planned_fail_closed` contract rather than a live launch.
+weight updates. Missing phase evidence produces a schema-checkable
+`planned_fail_closed` contract rather than a live launch. Three explicit states
+keep planning, execution, and review from being conflated:
+
+- `plan_readiness` is `ready_to_execute` only when the pre-execution contracts
+  and handoffs are complete; otherwise it is `blocked`.
+- `execution_completion` is `completed`, `incomplete`, or `failed`, derived
+  from the bound training result and the exact set of external eval results.
+- `governance_readiness` is `ready_for_review` only after the plan is ready,
+  execution is complete, and every governance check passes; otherwise it is
+  `blocked`.
+
+The legacy `readiness` field is derived from those states and must not be used
+as a substitute for execution evidence.
+
 Loop ledgers add a `readiness_digest` over the latest iteration so review can
 spot missing phase inputs, empty artifact groups, next-action posture, and
 side-effect status without walking every receipt. The digest includes
-`external_eval_receipt_state`, so dry-run external benchmark receipts must have
-passed and must show no live benchmark request, provider API call, model
-download, credential recording, or non-zero cost before governance readiness can
-be claimed. Strict loop-plan and ledger validation also replays each external
-eval receipt against its current source plan before counting it as passed, so a
-forged receipt cannot satisfy held-out eval readiness by self-asserting
-`passed: true`. External eval receipts redact source-plan refs that cannot be
-replayed from the receipt output directory and treat them as missing, so local
+`external_eval_receipt_state`, but a dry-run receipt proves only that the
+handoff contract was recorded without a live benchmark request, provider API
+call, model download, credential recording, or non-zero cost. It never proves
+benchmark completion and never enables external eval claims. Each adapter
+selected by the plan must have exactly one `hfr.external_eval_result.v1`
+artifact bound to that plan and held-out manifest, and the eval summary must
+consume that exact result set. A completed benchmark with a failed outcome is
+still reviewable evidence of failure; an incomplete or failed runner execution
+does not satisfy `execution_completion`.
+
+Strict loop-plan and ledger validation replays each external eval receipt and
+result against its current source artifacts, so forged pass flags, duplicate
+adapter results, aggregate-only output, or partial case coverage cannot satisfy
+held-out eval readiness. External eval artifacts redact source refs that cannot
+be replayed from their output directory and treat them as missing, so local
 paths do not leak into public loop artifacts. Validation also reopens referenced `eval_summary`,
 `promotion_decision`, and `promotion_ledger` artifacts before trusting held-out
 eval or governance readiness, and readiness-bearing sources with public-unsafe
@@ -597,18 +623,61 @@ invariant passes.
 
 ```bash
 flightrecorder heldout-manifest \
-  --suite-summary baseline=runs_baseline/suite_summary.json \
-  --suite-summary candidate=runs_candidate/suite_summary.json \
+  --suite-summary baseline=runs/baseline/suite_summary.json \
+  --suite-summary candidate=runs/candidate/suite_summary.json \
   --out runs/heldout_scenarios.json
 
+flightrecorder external-eval-plan \
+  --adapter local_mock \
+  --scenario-manifest runs/heldout_scenarios.json \
+  --model-endpoint local/candidate \
+  --model local/candidate \
+  --allow-installed \
+  --out runs/external_eval_plan.json
+
+flightrecorder external-eval-receipt \
+  --plan runs/external_eval_plan.json \
+  --out runs/external_eval_receipt.json
+
+# Run the benchmark outside Flight Recorder, then import its public evidence.
+flightrecorder external-eval-result \
+  --plan runs/external_eval_plan.json \
+  --heldout-manifest runs/heldout_scenarios.json \
+  --raw-result runs/external_runner/candidate_suite_summary.json \
+  --runner-metadata runs/external_runner/runner_metadata.json \
+  --adapter local_mock \
+  --execution-id eval-001 \
+  --model-id local/candidate \
+  --normalizer-id hfr.local_mock.run_suite \
+  --normalizer-version 1 \
+  --raw-format hfr.run_suite.v1 \
+  --status completed \
+  --out runs/external_eval_result.json
+
 flightrecorder eval-summary \
-  --suite-summary baseline=runs_baseline/suite_summary.json \
-  --suite-summary candidate=runs_candidate/suite_summary.json \
+  --suite-summary baseline=runs/baseline/suite_summary.json \
+  --suite-summary candidate=runs/candidate/suite_summary.json \
   --serving-check candidate=runs/serving_check.json \
   --require-serving-preflight \
+  --external-adapter-plan local_mock=runs/external_eval_plan.json \
+  --external-adapter-result local_mock=runs/external_eval_result.json \
   --out runs/eval_summary.json \
   --markdown-out runs/eval_summary.md
+
+flightrecorder validate \
+  --external-eval-result runs/external_eval_result.json \
+  --eval-summary runs/eval_summary.json \
+  --strict
 ```
+
+`external-eval-result` is import-only: Flight Recorder does not import an
+adapter package or execute benchmark code. It fingerprints bounded raw JSON or
+JSONL plus public runner metadata, normalizes per-case outcomes, verifies exact
+held-out coverage, and records the execution outcome independently from
+artifact integrity. Aggregate-only results cannot complete the eval. A valid
+result whose benchmark outcome is `failed` remains integrity-valid completion
+evidence, but it blocks external-eval claims and governance readiness. Only a
+passing outcome with explicit safe runner observations can unlock review.
 
 Promotion requires the governed evidence chain:
 
@@ -738,8 +807,8 @@ Registry and governance commands add:
 
 - model candidates, compatibility reports, adapter manifests, serving probes,
 - dataset manifests and cards,
-- eval summaries and external eval readiness plans that keep held-out manifest
-  refs relative and redact unreplayable local paths,
+- eval summaries, external eval readiness plans, and import-only external eval
+  results that keep source refs relative and redact unreplayable local paths,
 - model cards, dataset cards, promotion decisions, rollback receipts, release
   records, and alias apply receipts.
 

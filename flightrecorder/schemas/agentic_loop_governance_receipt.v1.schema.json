@@ -74,8 +74,11 @@
     "source_readiness_digest": {
       "additionalProperties": false,
       "properties": {
+        "execution_completion": { "enum": ["completed", "incomplete", "failed"] },
+        "governance_readiness": { "enum": ["ready_for_review", "blocked"] },
         "latest_iteration_id": { "type": "string" },
         "latest_iteration_index": { "type": ["integer", "null"] },
+        "plan_readiness": { "enum": ["ready_to_execute", "blocked"] },
         "promotion_decision_present": { "type": "boolean" },
         "promotion_ledger_present": { "type": "boolean" },
         "readiness": { "type": "string" },
@@ -86,7 +89,7 @@
         "side_effects_started": { "type": "boolean" },
         "summary": { "type": "string" }
       },
-      "required": ["promotion_ledger_present"],
+      "required": ["plan_readiness", "execution_completion", "governance_readiness", "promotion_ledger_present"],
       "type": "object"
     }
   },

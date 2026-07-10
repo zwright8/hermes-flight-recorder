@@ -25,6 +25,7 @@
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
         "missing_model_endpoint",
+        "missing_model",
         "missing_tool_schema_set"
       ],
       "dependency_status": {
@@ -52,6 +53,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "tool_schema_set"
       ],
       "suite_tags": [
@@ -83,6 +85,7 @@
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
         "missing_model_endpoint",
+        "missing_model",
         "missing_inspect_task_set",
         "missing_sandbox_policy"
       ],
@@ -111,6 +114,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "inspect_task_set",
         "sandbox_policy"
       ],
@@ -144,6 +148,7 @@
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
         "missing_model_endpoint",
+        "missing_model",
         "missing_lm_eval_task_list"
       ],
       "dependency_status": {
@@ -171,6 +176,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "lm_eval_task_list"
       ],
       "suite_tags": [
@@ -200,7 +206,8 @@
       },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
-        "missing_model_endpoint"
+        "missing_model_endpoint",
+        "missing_model"
       ],
       "dependency_status": {
         "available": true,
@@ -222,7 +229,8 @@
       "ready": false,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ],
       "suite_tags": [
         "agentic",
@@ -254,6 +262,7 @@
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
         "missing_model_endpoint",
+        "missing_model",
         "missing_swe_bench_task_set",
         "missing_sandbox_policy"
       ],
@@ -282,6 +291,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "swe_bench_task_set",
         "sandbox_policy"
       ],
@@ -298,12 +308,13 @@
     "dependencies_missing",
     "missing_inspect_task_set",
     "missing_lm_eval_task_list",
+    "missing_model",
     "missing_model_endpoint",
     "missing_sandbox_policy",
     "missing_swe_bench_task_set",
     "missing_tool_schema_set"
   ],
-  "generated_at": "2026-07-10T01:39:47.278900+00:00",
+  "generated_at": "2026-07-10T06:17:11.176835+00:00",
   "governance_handoff": {
     "external_eval_claims_allowed": false,
     "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",

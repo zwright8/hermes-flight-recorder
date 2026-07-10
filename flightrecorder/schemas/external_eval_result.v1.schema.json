@@ -1,0 +1,372 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/external_eval_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Portable import-only evidence for a completed or failed external evaluation, with integrity independent from benchmark outcome.",
+  "properties": {
+    "artifact_path": { "type": ["string", "null"] },
+    "benchmark_outcome": { "$ref": "#/$defs/benchmarkOutcome" },
+    "cases": {
+      "items": { "$ref": "#/$defs/caseResult" },
+      "type": "array"
+    },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "execution": { "$ref": "#/$defs/execution" },
+    "execution_boundary": { "$ref": "#/$defs/executionBoundary" },
+    "governance": { "$ref": "#/$defs/governance" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "normalizer": { "$ref": "#/$defs/normalizer" },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "runner_observation": { "$ref": "#/$defs/runnerObservation" },
+    "schema_version": { "const": "hfr.external_eval_result.v1" },
+    "sources": { "$ref": "#/$defs/sources" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "artifact_path",
+    "integrity",
+    "execution",
+    "benchmark_outcome",
+    "normalizer",
+    "sources",
+    "identity",
+    "coverage",
+    "cases",
+    "runner_observation",
+    "governance",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder External Evaluation Result",
+  "type": "object",
+  "$defs": {
+    "benchmarkOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "case_count": { "minimum": 0, "type": "integer" },
+        "error_case_count": { "minimum": 0, "type": "integer" },
+        "failed_case_count": { "minimum": 0, "type": "integer" },
+        "mean_score": { "type": ["number", "null"] },
+        "passed_case_count": { "minimum": 0, "type": "integer" },
+        "score_count": { "minimum": 0, "type": "integer" },
+        "skipped_case_count": { "minimum": 0, "type": "integer" },
+        "status": {
+          "enum": ["passed", "failed", "inconclusive", "not_available"],
+          "type": "string"
+        },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "status",
+        "summary",
+        "case_count",
+        "passed_case_count",
+        "failed_case_count",
+        "error_case_count",
+        "skipped_case_count",
+        "score_count",
+        "mean_score"
+      ],
+      "type": "object"
+    },
+    "caseResult": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": { "minLength": 1, "type": "string" },
+        "metrics": {
+          "items": { "$ref": "#/$defs/metric" },
+          "type": "array"
+        },
+        "raw_record_index": { "minimum": 0, "type": "integer" },
+        "raw_record_sha256": { "$ref": "#/$defs/sha256" },
+        "score": { "type": ["number", "null"] },
+        "status": {
+          "enum": ["passed", "failed", "error", "skipped"],
+          "type": "string"
+        }
+      },
+      "required": ["case_id", "status", "score", "metrics", "raw_record_index", "raw_record_sha256"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "summary"],
+      "type": "object"
+    },
+    "cost": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": { "minimum": 0, "type": ["number", "null"] },
+        "currency": { "type": ["string", "null"] },
+        "reported": { "type": "boolean" }
+      },
+      "required": ["reported", "amount", "currency"],
+      "type": "object"
+    },
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": { "type": "boolean" },
+        "duplicate_case_ids": { "$ref": "#/$defs/stringArray" },
+        "expected_case_ids": { "$ref": "#/$defs/stringArray" },
+        "expected_count": { "minimum": 0, "type": "integer" },
+        "mapped_case_ids": { "$ref": "#/$defs/stringArray" },
+        "mapped_count": { "minimum": 0, "type": "integer" },
+        "missing_case_ids": { "$ref": "#/$defs/stringArray" },
+        "observed_case_ids": { "$ref": "#/$defs/stringArray" },
+        "observed_count": { "minimum": 0, "type": "integer" },
+        "raw_record_count": { "minimum": 0, "type": "integer" },
+        "unexpected_case_ids": { "$ref": "#/$defs/stringArray" },
+        "unmapped_case_ids": { "$ref": "#/$defs/stringArray" },
+        "unmapped_record_indexes": {
+          "items": { "minimum": 0, "type": "integer" },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "complete",
+        "expected_count",
+        "observed_count",
+        "mapped_count",
+        "raw_record_count",
+        "expected_case_ids",
+        "observed_case_ids",
+        "mapped_case_ids",
+        "missing_case_ids",
+        "unexpected_case_ids",
+        "unmapped_case_ids",
+        "duplicate_case_ids",
+        "unmapped_record_indexes"
+      ],
+      "type": "object"
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "class": {
+              "enum": [
+                "none",
+                "runner_error",
+                "timeout",
+                "interrupted",
+                "dependency_missing",
+                "invalid_output",
+                "aggregate_only_output"
+              ],
+              "type": "string"
+            },
+            "classified": { "type": "boolean" },
+            "message": { "type": "string" }
+          },
+          "required": ["class", "message", "classified"],
+          "type": "object"
+        },
+        "status": {
+          "enum": ["completed", "incomplete", "failed"],
+          "type": "string"
+        }
+      },
+      "required": ["status", "failure"],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_started_by_flight_recorder": { "const": false },
+        "credential_values_recorded_by_flight_recorder": { "const": false },
+        "external_modules_imported_by_flight_recorder": { "const": false },
+        "import_only": { "const": true },
+        "model_downloads_started_by_flight_recorder": { "const": false },
+        "provider_api_called_by_flight_recorder": { "const": false },
+        "raw_prompts_or_outputs_embedded": { "const": false },
+        "runner_owns_execution": { "const": true }
+      },
+      "required": [
+        "import_only",
+        "runner_owns_execution",
+        "benchmark_started_by_flight_recorder",
+        "provider_api_called_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "external_modules_imported_by_flight_recorder",
+        "raw_prompts_or_outputs_embedded",
+        "credential_values_recorded_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "governance": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "external_eval_claims_allowed": { "type": "boolean" },
+        "readiness": { "enum": ["ready_for_review", "blocked"], "type": "string" },
+        "recommendation": {
+          "enum": ["review_external_eval_result", "archive_external_eval_failure", "block_external_eval_claims"],
+          "type": "string"
+        }
+      },
+      "required": ["readiness", "external_eval_claims_allowed", "recommendation", "blocking_reasons"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": { "minLength": 1, "type": "string" },
+        "digest_sha256": { "$ref": "#/$defs/sha256" },
+        "execution_id": { "minLength": 1, "type": "string" },
+        "heldout_manifest_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "model_id": { "minLength": 1, "type": "string" },
+        "normalizer_id": { "minLength": 1, "type": "string" },
+        "normalizer_version": { "minLength": 1, "type": "string" },
+        "plan_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "raw_format": { "enum": ["hfr.run_suite.v1", "json", "jsonl", "aggregate_json"], "type": "string" },
+        "raw_result_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "runner_metadata_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "runner_observation_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "adapter_id",
+        "execution_id",
+        "model_id",
+        "plan_sha256",
+        "heldout_manifest_sha256",
+        "raw_result_sha256",
+        "runner_metadata_sha256",
+        "runner_observation_sha256",
+        "normalizer_id",
+        "normalizer_version",
+        "raw_format",
+        "digest_sha256"
+      ],
+      "type": "object"
+    },
+    "integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "check_count": { "minimum": 0, "type": "integer" },
+        "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+        "failed_check_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" }
+      },
+      "required": ["passed", "check_count", "failed_check_count", "checks", "blocking_reasons"],
+      "type": "object"
+    },
+    "metric": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "minLength": 1, "type": "string" },
+        "value": { "type": "number" }
+      },
+      "required": ["name", "value"],
+      "type": "object"
+    },
+    "normalizer": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_only": { "type": "boolean" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "errors": { "items": { "type": "string" }, "type": "array" },
+        "id": { "minLength": 1, "type": "string" },
+        "implementation": { "const": "flightrecorder.external_eval_result" },
+        "implementation_version": { "const": "1" },
+        "input_format": { "enum": ["hfr.run_suite.v1", "json", "jsonl", "aggregate_json"], "type": "string" },
+        "normalized_case_count": { "minimum": 0, "type": "integer" },
+        "raw_record_count": { "minimum": 0, "type": "integer" },
+        "version": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "id",
+        "version",
+        "input_format",
+        "implementation",
+        "implementation_version",
+        "aggregate_only",
+        "raw_record_count",
+        "normalized_case_count",
+        "error_count",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "nullableSha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "runnerObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "cost": { "$ref": "#/$defs/cost" },
+        "exit_code": { "type": ["integer", "null"] },
+        "finished_at": { "type": ["string", "null"] },
+        "runner_id": { "minLength": 1, "type": "string" },
+        "runner_version": { "type": ["string", "null"] },
+        "side_effects": { "$ref": "#/$defs/sideEffects" },
+        "started_at": { "type": ["string", "null"] }
+      },
+      "required": ["runner_id", "runner_version", "started_at", "finished_at", "exit_code", "cost", "side_effects"],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sideEffects": {
+      "additionalProperties": false,
+      "properties": {
+        "credential_values_recorded": { "$ref": "#/$defs/sideEffectStatus" },
+        "filesystem_writes": { "$ref": "#/$defs/sideEffectStatus" },
+        "model_downloads": { "$ref": "#/$defs/sideEffectStatus" },
+        "network_access": { "$ref": "#/$defs/sideEffectStatus" },
+        "provider_api_calls": { "$ref": "#/$defs/sideEffectStatus" }
+      },
+      "required": ["network_access", "provider_api_calls", "model_downloads", "filesystem_writes", "credential_values_recorded"],
+      "type": "object"
+    },
+    "sideEffectStatus": {
+      "enum": ["observed", "not_observed", "unknown"],
+      "type": "string"
+    },
+    "sourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "path": { "type": ["string", "null"] },
+        "regular_file": { "type": "boolean" },
+        "replayable": { "type": "boolean" },
+        "schema_version": { "type": ["string", "null"] },
+        "sha256": { "$ref": "#/$defs/nullableSha256" },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["path", "exists", "regular_file", "replayable", "sha256", "size_bytes", "schema_version"],
+      "type": "object"
+    },
+    "sources": {
+      "additionalProperties": false,
+      "properties": {
+        "heldout_manifest": { "$ref": "#/$defs/sourceRef" },
+        "plan": { "$ref": "#/$defs/sourceRef" },
+        "raw_result": { "$ref": "#/$defs/sourceRef" },
+        "runner_metadata": { "$ref": "#/$defs/sourceRef" }
+      },
+      "required": ["plan", "heldout_manifest", "raw_result", "runner_metadata"],
+      "type": "object"
+    },
+    "stringArray": {
+      "items": { "minLength": 1, "type": "string" },
+      "type": "array",
+      "uniqueItems": true
+    }
+  }
+}

@@ -45,6 +45,13 @@
     "external_eval_receipt_state": {
       "$ref": "#/$defs/externalEvalReceiptState"
     },
+    "execution_completion": {
+      "enum": [
+        "completed",
+        "incomplete",
+        "failed"
+      ]
+    },
     "created_at": {
       "minLength": 1,
       "type": "string"
@@ -62,6 +69,12 @@
     "iteration_id": {
       "minLength": 1,
       "type": "string"
+    },
+    "governance_readiness": {
+      "enum": [
+        "ready_for_review",
+        "blocked"
+      ]
     },
     "missing_phase_inputs": {
       "items": {
@@ -97,6 +110,12 @@
       "minLength": 1,
       "type": "string"
     },
+    "plan_readiness": {
+      "enum": [
+        "ready_to_execute",
+        "blocked"
+      ]
+    },
     "provider_constraints": {
       "$ref": "#/$defs/providerConstraints"
     },
@@ -108,8 +127,11 @@
     },
     "recommendation": {
       "enum": [
-        "collect_missing_receipts_before_live_execution",
-        "approve_iteration_execution"
+        "collect_missing_plan_evidence",
+        "execute_ready_plan",
+        "investigate_failed_execution",
+        "resolve_governance_blockers",
+        "submit_for_governance_review"
       ]
     },
     "schema_version": {
@@ -133,6 +155,9 @@
     "objective",
     "participants",
     "passed",
+    "plan_readiness",
+    "execution_completion",
+    "governance_readiness",
     "readiness",
     "recommendation",
     "check_count",
@@ -891,6 +916,12 @@
           "minLength": 1,
           "type": "string"
         },
+        "non_completed_required_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "present_required_artifacts": {
           "items": {
             "type": "string"
@@ -924,6 +955,7 @@
         "required_artifacts",
         "present_required_artifacts",
         "missing_required_artifacts",
+        "non_completed_required_artifacts",
         "produces",
         "gate"
       ],

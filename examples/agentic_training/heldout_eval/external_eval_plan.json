@@ -38,12 +38,14 @@
       "name": "Local mock eval",
       "provided_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ],
       "ready": true,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ],
       "suite_tags": [
         "agentic",
@@ -54,10 +56,10 @@
   ],
   "allow_installed": true,
   "blocking_reasons": [],
-  "generated_at": "2026-07-10T04:46:28.877362+00:00",
+  "generated_at": "2026-07-10T06:17:23.741040+00:00",
   "governance_handoff": {
-    "external_eval_claims_allowed": true,
-    "recommendation": "External eval adapters are ready to execute against the declared held-out scenario manifest.",
+    "external_eval_claims_allowed": false,
+    "recommendation": "External eval adapters are ready to execute, but claims remain disabled until a passing external eval result is imported.",
     "requires_identical_heldout_scenarios": true
   },
   "inputs": {

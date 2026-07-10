@@ -11,6 +11,11 @@ from flightrecorder.agentic_loop_ledger import AgenticLoopLedgerError, build_age
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
 from flightrecorder.agentic_loop_governance import build_agentic_loop_governance_receipt
 from flightrecorder.cli import main
+from flightrecorder.eval_summary import build_eval_summary
+from flightrecorder.external_eval_result import (
+    build_external_eval_result,
+    write_external_eval_result,
+)
 from flightrecorder.schema_registry import list_schema_records
 from flightrecorder.source_contract import inspect_artifact_source
 from flightrecorder.validation import validate_promotion_archive, validate_promotion_cards
@@ -163,7 +168,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         self.assertEqual(groups["next_iteration"], 1)
         self.assertEqual(groups["rollouts"], 3)
         self.assertEqual(groups["training"], 6)
-        self.assertEqual(groups["eval"], 4)
+        self.assertEqual(groups["eval"], 5)
         self.assertEqual(groups["evidence"], 1)
         self.assertEqual(groups["serving"], 1)
         self.assertEqual(groups["governance"], 4)
@@ -929,6 +934,106 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertFalse(payload["execution_boundary"]["weights_updated_by_flight_recorder"])
             self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 0)
+
+    def test_failed_external_benchmark_cannot_reach_governance_approval(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            artifacts = copy_valid_loop_artifacts(root)
+            heldout_root = artifacts["heldout_manifest"][0].parent
+            result_path = heldout_root / "failed_external_eval_result.json"
+            result = build_external_eval_result(
+                plan_path=artifacts["external_eval_plan"][0],
+                heldout_manifest_path=artifacts["heldout_manifest"][0],
+                raw_result_path=heldout_root / "candidate_suite_summary.json",
+                runner_metadata_path=heldout_root / "external_eval_runner.json",
+                adapter_id="local_mock",
+                execution_id="local-mock-eval-001",
+                model_id="local/mock-candidate",
+                normalizer_id="hfr.local_mock.run_suite",
+                normalizer_version="1",
+                raw_format="hfr.run_suite.v1",
+                execution_status="completed",
+                out_path=result_path,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_external_eval_result(result, result_path)
+            summary_path = heldout_root / "failed_eval_summary.json"
+            summary = build_eval_summary(
+                suite_summary_specs=[
+                    f"candidate={heldout_root / 'candidate_suite_summary.json'}"
+                ],
+                external_adapter_plan_specs=[
+                    f"external={artifacts['external_eval_plan'][0]}"
+                ],
+                external_adapter_result_specs=[f"external={result_path}"],
+                output_base_dir=heldout_root,
+            )
+            summary_path.write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            artifacts["external_eval_result"] = [result_path]
+            artifacts["eval_summary"] = [summary_path]
+            fixture_root = heldout_root.parent
+            loop_plan = self.write_loop_plan(
+                fixture_root / "failed_loop_plan.json",
+                "failed-external-benchmark",
+                artifacts,
+            )
+            ledger = fixture_root / "failed_loop_ledger.json"
+            receipt = fixture_root / "failed_loop_governance.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "agentic-loop",
+                        "ledger",
+                        "--plan",
+                        str(loop_plan),
+                        "--out",
+                        str(ledger),
+                    ]
+                ),
+                0,
+            )
+            governance_code = run_cli(
+                [
+                    "agentic-loop",
+                    "governance",
+                    "--ledger",
+                    str(ledger),
+                    "--action",
+                    "approve",
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt),
+                ]
+            )
+
+            loop = json.loads(loop_plan.read_text(encoding="utf-8"))
+            ledger_payload = json.loads(ledger.read_text(encoding="utf-8"))
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            self.assertEqual(result["benchmark_outcome"]["status"], "failed")
+            self.assertEqual(loop["execution_completion"], "completed")
+            self.assertEqual(loop["governance_readiness"], "blocked")
+            self.assertEqual(
+                ledger_payload["readiness_digest"]["execution_completion"],
+                "completed",
+            )
+            self.assertEqual(
+                ledger_payload["readiness_digest"]["governance_readiness"],
+                "blocked",
+            )
+            self.assertEqual(governance_code, 1)
+            self.assertFalse(receipt_payload["requested_action"]["available"])
+            approval_check = next(
+                check
+                for check in receipt_payload["checks"]
+                if check["id"]
+                == "approval_requires_completed_governance_ready_execution"
+            )
+            self.assertFalse(approval_check["passed"])
 
     def test_agentic_loop_governance_receipt_blocks_unavailable_approval(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:

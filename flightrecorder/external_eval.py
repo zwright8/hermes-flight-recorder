@@ -30,7 +30,7 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "suite_tags": ["function_calling", "tool_calling"],
         "import_names": ["bfcl_eval"],
         "command_names": ["bfcl"],
-        "required_inputs": ["scenario_manifest", "model_endpoint", "tool_schema_set"],
+        "required_inputs": ["scenario_manifest", "model_endpoint", "model", "tool_schema_set"],
         "execution_boundary": "Function/tool-calling suites must use the same held-out scenario manifest and declared tool schema set.",
     },
     "inspect_ai": {
@@ -40,7 +40,7 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "suite_tags": ["agentic", "red_team", "inspect"],
         "import_names": ["inspect_ai"],
         "command_names": ["inspect"],
-        "required_inputs": ["scenario_manifest", "model_endpoint", "inspect_task_set", "sandbox_policy"],
+        "required_inputs": ["scenario_manifest", "model_endpoint", "model", "inspect_task_set", "sandbox_policy"],
         "execution_boundary": "Inspect tasks must be mapped to held-out scenario IDs and run under an explicit sandbox policy.",
     },
     "lm_eval_harness": {
@@ -50,7 +50,7 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "suite_tags": ["lm_eval", "capability"],
         "import_names": ["lm_eval"],
         "command_names": ["lm_eval"],
-        "required_inputs": ["scenario_manifest", "model_endpoint", "lm_eval_task_list"],
+        "required_inputs": ["scenario_manifest", "model_endpoint", "model", "lm_eval_task_list"],
         "execution_boundary": "Language-model harness tasks must be tied back to the held-out scenario manifest before comparison.",
     },
     "swe_bench": {
@@ -60,7 +60,7 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "suite_tags": ["software_engineering", "repository_tasks"],
         "import_names": ["swebench"],
         "command_names": ["swebench"],
-        "required_inputs": ["scenario_manifest", "model_endpoint", "swe_bench_task_set", "sandbox_policy"],
+        "required_inputs": ["scenario_manifest", "model_endpoint", "model", "swe_bench_task_set", "sandbox_policy"],
         "execution_boundary": "Repository tasks must be selected from a declared held-out task set and run under an explicit sandbox policy.",
     },
     "local_mock": {
@@ -71,7 +71,7 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "import_names": [],
         "command_names": [],
         "built_in_dependency": True,
-        "required_inputs": ["scenario_manifest", "model_endpoint"],
+        "required_inputs": ["scenario_manifest", "model_endpoint", "model"],
         "execution_boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
     },
 }
@@ -126,10 +126,10 @@ def build_external_eval_plan(
         "adapters": adapter_rows,
         "blocking_reasons": blocking_reasons,
         "governance_handoff": {
-            "external_eval_claims_allowed": ready,
+            "external_eval_claims_allowed": False,
             "requires_identical_heldout_scenarios": True,
             "recommendation": (
-                "External eval adapters are ready to execute against the declared held-out scenario manifest."
+                "External eval adapters are ready to execute, but claims remain disabled until a passing external eval result is imported."
                 if ready
                 else "Keep external eval claims disabled until every selected adapter is ready."
             ),
@@ -140,6 +140,124 @@ def build_external_eval_plan(
 def adapter_choices() -> list[str]:
     """Return supported adapter IDs for argparse choices and docs."""
     return sorted(ADAPTERS)
+
+
+def external_eval_plan_semantic_errors(plan: dict[str, Any]) -> list[str]:
+    """Return deterministic semantic errors for an external-eval plan payload."""
+    errors: list[str] = []
+    adapters = plan.get("adapters") if isinstance(plan.get("adapters"), list) else []
+    inputs = plan.get("inputs") if isinstance(plan.get("inputs"), dict) else {}
+    selected = (
+        plan.get("selected_adapters")
+        if isinstance(plan.get("selected_adapters"), list)
+        else []
+    )
+    allow_installed = plan.get("allow_installed") is True
+    adapter_rows: list[dict[str, Any]] = []
+    adapter_ids: list[str] = []
+
+    if plan.get("adapter_count") != len(adapters):
+        errors.append("adapter_count does not match adapters")
+    if not adapters:
+        errors.append("at least one adapter is required")
+
+    for index, adapter in enumerate(adapters):
+        if not isinstance(adapter, dict):
+            errors.append(f"adapter {index} is not an object")
+            continue
+        adapter_id = adapter.get("id")
+        spec = ADAPTERS.get(adapter_id) if isinstance(adapter_id, str) else None
+        if spec is None:
+            errors.append(f"adapter {index} is unsupported")
+            continue
+        adapter_ids.append(adapter_id)
+        dependency = (
+            adapter.get("dependency_status")
+            if isinstance(adapter.get("dependency_status"), dict)
+            else {}
+        )
+        imports = dependency.get("imports") if isinstance(dependency.get("imports"), dict) else {}
+        commands = dependency.get("commands") if isinstance(dependency.get("commands"), dict) else {}
+        expected_imports = set(spec.get("import_names", []))
+        expected_commands = set(spec.get("command_names", []))
+        dependency_shape_valid = (
+            set(imports) == expected_imports
+            and set(commands) == expected_commands
+            and all(isinstance(value, bool) for value in imports.values())
+            and all(isinstance(value, bool) for value in commands.values())
+        )
+        expected_available = (
+            True
+            if spec.get("built_in_dependency") is True
+            else any(imports.values()) or any(commands.values())
+        )
+        dependency_available = (
+            dependency_shape_valid
+            and dependency.get("available") is expected_available
+            and expected_available
+        )
+        if not dependency_shape_valid or dependency.get("available") is not expected_available:
+            errors.append(f"adapter {adapter_id} dependency status is inconsistent")
+
+        expected_blockers: list[str] = []
+        if not dependency_available:
+            expected_blockers.append("dependencies_missing")
+        if not allow_installed:
+            expected_blockers.append("adapter_disabled_until_allow_installed")
+        expected_blockers.extend(
+            reason
+            for name in spec["required_inputs"]
+            for reason in _input_blockers(inputs, name)
+        )
+        expected_ready = not expected_blockers
+        expected_provided = [
+            name for name in spec["required_inputs"] if _input_present(inputs, name)
+        ]
+        execution_contract = (
+            adapter.get("execution_contract")
+            if isinstance(adapter.get("execution_contract"), dict)
+            else {}
+        )
+        manifest = (
+            inputs.get("scenario_manifest")
+            if isinstance(inputs.get("scenario_manifest"), dict)
+            else {}
+        )
+        if adapter.get("required_inputs") != spec["required_inputs"]:
+            errors.append(f"adapter {adapter_id} required inputs do not match its contract")
+        if adapter.get("provided_inputs") != expected_provided:
+            errors.append(f"adapter {adapter_id} provided inputs are inconsistent")
+        if adapter.get("blocking_reasons") != expected_blockers:
+            errors.append(f"adapter {adapter_id} blocking reasons are inconsistent")
+        if adapter.get("ready") is not expected_ready:
+            errors.append(f"adapter {adapter_id} readiness is inconsistent")
+        if execution_contract.get("scenario_manifest_sha256") != manifest.get("sha256"):
+            errors.append(f"adapter {adapter_id} manifest binding is inconsistent")
+        if adapter.get("adapter_contract") != _adapter_contract(adapter_id):
+            errors.append(f"adapter {adapter_id} contract is inconsistent")
+        adapter_rows.append({"ready": expected_ready, "blocking_reasons": expected_blockers})
+
+    if len(adapter_ids) != len(set(adapter_ids)):
+        errors.append("adapter ids must be unique")
+    if selected != sorted(adapter_ids):
+        errors.append("selected_adapters must match adapters exactly")
+    expected_ready_count = sum(row["ready"] for row in adapter_rows)
+    if plan.get("ready_adapter_count") != expected_ready_count:
+        errors.append("ready_adapter_count does not match adapters")
+    expected_blocking_reasons = _blocking_reasons(adapter_rows)
+    if plan.get("blocking_reasons") != expected_blocking_reasons:
+        errors.append("blocking_reasons do not match adapters")
+    expected_ready = bool(adapter_rows) and not expected_blocking_reasons
+    if plan.get("ready") is not expected_ready:
+        errors.append("plan readiness does not match adapters")
+    handoff = (
+        plan.get("governance_handoff")
+        if isinstance(plan.get("governance_handoff"), dict)
+        else {}
+    )
+    if handoff.get("external_eval_claims_allowed") is not False:
+        errors.append("plan readiness cannot enable external-eval claims")
+    return errors
 
 
 def build_external_eval_receipt(
@@ -654,9 +772,9 @@ def _refresh_plan_readiness(payload: dict[str, Any]) -> None:
     payload["ready"] = bool(adapter_rows) and not blocking_reasons
     governance = payload.get("governance_handoff")
     if isinstance(governance, dict):
-        governance["external_eval_claims_allowed"] = payload["ready"]
+        governance["external_eval_claims_allowed"] = False
         governance["recommendation"] = (
-            "External eval adapters are ready to execute against the declared held-out scenario manifest."
+            "External eval adapters are ready to execute, but claims remain disabled until a passing external eval result is imported."
             if payload["ready"]
             else "Keep external eval claims disabled until every selected adapter is ready."
         )

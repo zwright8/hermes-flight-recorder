@@ -24,6 +24,7 @@
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
+        "missing_model",
         "missing_model_endpoint",
         "missing_tool_schema_set"
       ],
@@ -52,6 +53,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "tool_schema_set"
       ]
     },
@@ -79,6 +81,7 @@
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
         "missing_inspect_task_set",
+        "missing_model",
         "missing_model_endpoint",
         "missing_sandbox_policy"
       ],
@@ -107,6 +110,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "inspect_task_set",
         "sandbox_policy"
       ]
@@ -135,6 +139,7 @@
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
         "missing_lm_eval_task_list",
+        "missing_model",
         "missing_model_endpoint"
       ],
       "cost_incurred_usd": 0,
@@ -162,6 +167,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "lm_eval_task_list"
       ]
     },
@@ -187,6 +193,7 @@
       },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
+        "missing_model",
         "missing_model_endpoint"
       ],
       "cost_incurred_usd": 0,
@@ -209,7 +216,8 @@
       "ready": false,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint"
+        "model_endpoint",
+        "model"
       ]
     },
     {
@@ -235,6 +243,7 @@
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
+        "missing_model",
         "missing_model_endpoint",
         "missing_sandbox_policy",
         "missing_swe_bench_task_set"
@@ -264,6 +273,7 @@
       "required_inputs": [
         "scenario_manifest",
         "model_endpoint",
+        "model",
         "swe_bench_task_set",
         "sandbox_policy"
       ]
@@ -356,7 +366,7 @@
     "path": "external_eval_plan.json",
     "ready": false,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "01eedabc6d0b9e89ab2ac0c9339bb75c8deec568791b0c134fe9d73d2dc8d517",
-    "size_bytes": 11251
+    "sha256": "93961393a20e999404c92ca91b756d4ba992f67599847771e8bc019eab6c24df",
+    "size_bytes": 11482
   }
 }

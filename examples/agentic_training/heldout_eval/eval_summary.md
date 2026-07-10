@@ -21,6 +21,12 @@
 
 - No compare gates were provided.
 
+## External Eval Results
+
+| Adapter | Execution | Benchmark | Coverage | Governance | Blockers |
+| --- | --- | --- | --- | --- | --- |
+| local_mock | completed | passed | yes | ready_for_review | none |
+
 ## Repair And Curriculum
 
 - Work items: 8

@@ -1,0 +1,24 @@
+{
+  "adapter_id": "local_mock",
+  "execution_id": "local-mock-eval-001",
+  "model_id": "local/mock-candidate",
+  "runner_observation": {
+    "cost": {
+      "amount": 0,
+      "currency": "USD",
+      "reported": true
+    },
+    "exit_code": 0,
+    "finished_at": "2026-07-03T00:01:00+00:00",
+    "runner_id": "public-local-runner",
+    "runner_version": "1",
+    "side_effects": {
+      "credential_values_recorded": "not_observed",
+      "filesystem_writes": "observed",
+      "model_downloads": "not_observed",
+      "network_access": "not_observed",
+      "provider_api_calls": "not_observed"
+    },
+    "started_at": "2026-07-03T00:00:00+00:00"
+  }
+}

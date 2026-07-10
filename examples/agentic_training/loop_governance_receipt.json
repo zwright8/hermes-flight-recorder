@@ -1,5 +1,5 @@
 {
-  "check_count": 8,
+  "check_count": 9,
   "checks": [
     {
       "actual": {
@@ -98,6 +98,25 @@
       "id": "requested_action_available",
       "passed": true,
       "summary": "requested_action_available: passed=True"
+    },
+    {
+      "actual": {
+        "action": "approve",
+        "execution_completion": "completed",
+        "governance_readiness": "ready_for_review",
+        "plan_readiness": "ready_to_execute",
+        "ready_for_governance_review": true
+      },
+      "expected": {
+        "action": "approve",
+        "execution_completion": "completed",
+        "governance_readiness": "ready_for_review",
+        "plan_readiness": "ready_to_execute",
+        "ready_for_governance_review": true
+      },
+      "id": "approval_requires_completed_governance_ready_execution",
+      "passed": true,
+      "summary": "approval_requires_completed_governance_ready_execution: passed=True"
     },
     {
       "actual": {
@@ -221,13 +240,16 @@
     "passed": true,
     "path": "loop_ledger.json",
     "readiness_digest": {
+      "execution_completion": "completed",
+      "governance_readiness": "ready_for_review",
       "latest_iteration_id": "demo-loop-001",
       "latest_iteration_index": 0,
+      "plan_readiness": "ready_to_execute",
       "promotion_decision_present": true,
       "promotion_ledger_present": true,
       "readiness": "ready_for_governance_review",
       "ready_for_governance_review": true,
-      "recommendation": "approve_iteration_execution",
+      "recommendation": "submit_for_governance_review",
       "recommended_governance_action": "approve",
       "rollback_receipt_present": true,
       "side_effects_started": false,
@@ -235,7 +257,7 @@
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "753f8dbb0ade8dc1ef80d60aee8670daa04a06b328d2a26f19bd112d507750e3",
-    "size_bytes": 22362
+    "sha256": "934ef9401b2b35300c021a7ba6230c21d10db1f87dd7661625c7fb1e3f4db944",
+    "size_bytes": 22904
   }
 }

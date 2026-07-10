@@ -81,6 +81,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "evidence_coverage",
             "external_eval_plan",
             "external_eval_receipt",
+            "external_eval_result",
             "goal3_handoff",
             "harness_model_probe",
             "harness_replay_result",

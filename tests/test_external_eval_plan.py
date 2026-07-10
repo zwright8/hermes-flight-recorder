@@ -153,6 +153,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
                     adapters=["inspect_ai"],
                     scenario_manifest=manifest,
                     model_endpoint="http://127.0.0.1:8000/v1",
+                    model="org/test-model",
                     inspect_task_set="heldout-inspect",
                     sandbox_policy="locked-network",
                     allow_installed=True,
@@ -168,7 +169,8 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(plan["blocking_reasons"], [])
             self.assertTrue(plan["adapters"][0]["ready"])
             self.assertEqual(plan["adapters"][0]["blocking_reasons"], [])
-            self.assertTrue(plan["governance_handoff"]["external_eval_claims_allowed"])
+            self.assertFalse(plan["governance_handoff"]["external_eval_claims_allowed"])
+            self.assertIn("result", plan["governance_handoff"]["recommendation"].lower())
             written = _read_json(out)
             self.assertEqual(written["inputs"]["scenario_manifest"]["path"], manifest.name)
             self.assertEqual(written["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
@@ -187,6 +189,8 @@ class ExternalEvalPlanTests(unittest.TestCase):
                     "--scenario-manifest",
                     str(manifest),
                     "--model-endpoint",
+                    "local/mock-candidate",
+                    "--model",
                     "local/mock-candidate",
                     "--allow-installed",
                     "--out",
@@ -283,6 +287,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
                     adapters=["bfcl"],
                     scenario_manifest=manifest,
                     model_endpoint="http://127.0.0.1:8000/v1",
+                    model="org/test-model",
                     tool_schema_set="tools-v1",
                     allow_installed=True,
                 )
@@ -319,6 +324,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
                         adapters=["bfcl"],
                         scenario_manifest=Path("sources") / "heldout.json",
                         model_endpoint="http://127.0.0.1:8000/v1",
+                        model="org/test-model",
                         tool_schema_set="tools-v1",
                         allow_installed=True,
                     )
@@ -549,6 +555,80 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertIn("adapter_contract.receipt_types contains unsupported receipt types", errors)
             self.assertIn("adapter_contract.live_benchmark_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
+
+    def test_plan_readiness_cannot_forge_governance_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            plan = build_external_eval_plan(
+                adapters=["local_mock"],
+                scenario_manifest=manifest,
+                model_endpoint="local/mock-candidate",
+                model="local/mock-candidate",
+                allow_installed=True,
+            )
+            self.assertTrue(plan["ready"])
+            plan["governance_handoff"]["external_eval_claims_allowed"] = True
+            write_external_eval_plan(plan, out)
+
+            schema_result = check_schema_file(out)
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertFalse(schema_result["passed"], schema_result)
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_claims_allowed must remain false", errors)
+
+    def test_dependency_projection_must_match_recorded_probes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            with patch(
+                "flightrecorder.external_eval._dependency_status",
+                return_value={
+                    "available": True,
+                    "imports": {"inspect_ai": True},
+                    "commands": {"inspect": True},
+                },
+            ):
+                plan = build_external_eval_plan(
+                    adapters=["inspect_ai"],
+                    scenario_manifest=manifest,
+                    model_endpoint="https://provider.example/v1",
+                    model="org/test-model",
+                    inspect_task_set="heldout-inspect",
+                    sandbox_policy="locked-network",
+                    allow_installed=True,
+                )
+            plan["adapters"][0]["dependency_status"] = {
+                "available": True,
+                "imports": {"inspect_ai": False},
+                "commands": {"inspect": False},
+            }
+            write_external_eval_plan(plan, out)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--external-eval-plan",
+                    str(out),
+                    "--out",
+                    str(validation),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error
+                for target in _read_json(validation)["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn("dependency status is inconsistent", errors)
 
     def test_validate_and_schema_reject_unknown_external_eval_plan_fields(self):
         with tempfile.TemporaryDirectory() as tmp:

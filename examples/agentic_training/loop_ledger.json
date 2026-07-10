@@ -51,7 +51,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 40,
+      "artifact_count": 41,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -62,7 +62,7 @@
           "group": "datasets"
         },
         {
-          "count": 4,
+          "count": 5,
           "group": "eval"
         },
         {
@@ -170,6 +170,10 @@
         {
           "count": 1,
           "role": "external_eval_receipt"
+        },
+        {
+          "count": 1,
+          "role": "external_eval_result"
         },
         {
           "count": 1,
@@ -492,16 +496,18 @@
         "max_gpu_hours": 0
       },
       "evals": {
-        "artifact_count": 4,
+        "artifact_count": 5,
         "group": "eval",
         "roles_missing": [],
         "roles_present": [
           "heldout_manifest",
           "external_eval_plan",
           "external_eval_receipt",
+          "external_eval_result",
           "eval_summary"
         ]
       },
+      "execution_completion": "completed",
       "exists": true,
       "external_eval_receipt_state": {
         "adapter_count": 1,
@@ -541,6 +547,7 @@
         "rollback_receipt_present": true,
         "weights_updated_by_flight_recorder": false
       },
+      "governance_readiness": "ready_for_review",
       "index": 0,
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [],
@@ -562,8 +569,9 @@
           "id": "ready"
         }
       ],
+      "plan_readiness": "ready_to_execute",
       "readiness": "ready_for_governance_review",
-      "recommendation": "approve_iteration_execution",
+      "recommendation": "submit_for_governance_review",
       "schema_version": "hfr.agentic_training_loop_plan.v1",
       "serving": {
         "artifact_count": 1,
@@ -576,8 +584,8 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "fcde1d3e338c08d50f435a302f8a19f37c27834372c4781e9c8f70c313433632",
-      "size_bytes": 58234,
+      "sha256": "8ec9d328f965e984bb7f59829bea25fd18da69eaff4e093f8180c3e33fef13c3",
+      "size_bytes": 63710,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -605,7 +613,7 @@
         "group": "datasets"
       },
       {
-        "count": 4,
+        "count": 5,
         "group": "eval"
       },
       {
@@ -643,10 +651,13 @@
     ],
     "blocked_iteration_count": 0,
     "iteration_count": 1,
+    "latest_execution_completion": "completed",
+    "latest_governance_readiness": "ready_for_review",
     "latest_iteration_id": "demo-loop-001",
     "latest_missing_phase_input_count": 0,
+    "latest_plan_readiness": "ready_to_execute",
     "latest_readiness": "ready_for_governance_review",
-    "latest_recommendation": "approve_iteration_execution",
+    "latest_recommendation": "submit_for_governance_review",
     "promotion_ready_count": 1,
     "readiness_counts": [
       {
@@ -658,7 +669,7 @@
     "recommendation_counts": [
       {
         "count": 1,
-        "id": "approve_iteration_execution"
+        "id": "submit_for_governance_review"
       }
     ],
     "rollback_receipt_count": 1,
@@ -687,6 +698,7 @@
     "cloud_training_status_provider_status": "not_started",
     "decision_readiness": "ready",
     "decision_recommendation": "ready_for_governance_review",
+    "execution_completion": "completed",
     "external_eval_adapter_count": 1,
     "external_eval_cost_incurred_usd": 0,
     "external_eval_credential_values_recorded": false,
@@ -699,6 +711,7 @@
     "external_eval_receipt_count": 1,
     "external_eval_receipts_fail_closed": true,
     "external_eval_receipts_passed": true,
+    "governance_readiness": "ready_for_review",
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,
@@ -708,11 +721,12 @@
     "missing_phase_inputs": [],
     "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
     "next_action_scheduled": false,
+    "plan_readiness": "ready_to_execute",
     "promotion_decision_present": true,
     "promotion_ledger_present": true,
     "readiness": "ready_for_governance_review",
     "ready_for_governance_review": true,
-    "recommendation": "approve_iteration_execution",
+    "recommendation": "submit_for_governance_review",
     "recommended_governance_action": "approve",
     "requires_governance_decision": true,
     "rollback_receipt_present": true,

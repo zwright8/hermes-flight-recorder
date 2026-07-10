@@ -15,7 +15,7 @@
     "governance_handoff": {
       "additionalProperties": false,
       "properties": {
-        "external_eval_claims_allowed": { "type": "boolean" },
+        "external_eval_claims_allowed": { "const": false },
         "recommendation": { "minLength": 1, "type": "string" },
         "requires_identical_heldout_scenarios": { "type": "boolean" }
       },
