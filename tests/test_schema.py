@@ -10,6 +10,41 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ScenarioSchemaTests(unittest.TestCase):
+    def test_load_scenario_rejects_non_object_sections_cleanly(self):
+        for field in ("assertions", "scoring"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "bad.json"
+                payload = {"id": "bad", "title": "Bad", "prompt": "x", "policy": {}, field: []}
+                path.write_text(json.dumps(payload), encoding="utf-8")
+
+                with self.assertRaisesRegex(ScenarioError, rf"Scenario {field} must be an object"):
+                    load_scenario(path)
+
+    def test_load_scenario_rejects_boolean_numeric_limits(self):
+        cases = (
+            ({"policy": {"max_tool_calls": True}}, "max_tool_calls"),
+            ({"policy": {}, "scoring": {"pass_threshold": False}}, "pass_threshold"),
+        )
+        for overrides, expected in cases:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "bad.json"
+                payload = {"id": "bad", "title": "Bad", "prompt": "x", **overrides}
+                path.write_text(json.dumps(payload), encoding="utf-8")
+
+                with self.assertRaisesRegex(ScenarioError, expected):
+                    load_scenario(path)
+
+    def test_load_scenario_rejects_non_string_title_and_prompt(self):
+        for field, value in (("title", {}), ("prompt", [])):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "bad.json"
+                payload = {"id": "bad", "title": "Bad", "prompt": "x", "policy": {}}
+                payload[field] = value
+                path.write_text(json.dumps(payload), encoding="utf-8")
+
+                with self.assertRaisesRegex(ScenarioError, rf"Scenario {field} must be a non-empty string"):
+                    load_scenario(path)
+
     def test_load_valid_scenario_applies_defaults(self):
         scenario = load_scenario(ROOT / "scenarios" / "prompt_injection_good.json")
 

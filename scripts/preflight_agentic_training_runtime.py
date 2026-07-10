@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from flightrecorder.agentic_training_runtime import (
+from flightrecorder.agentic_training_runtime import (  # noqa: E402 - repo bootstrap precedes local import
     AgenticTrainingRuntimePreflightError,
     build_agentic_training_runtime_preflight,
     write_agentic_training_runtime_preflight,

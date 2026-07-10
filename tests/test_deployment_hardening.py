@@ -65,6 +65,44 @@ def _sha256_file(path: Path) -> str:
 
 
 class DeploymentHardeningTests(unittest.TestCase):
+    def test_package_harness_force_refuses_unowned_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario = root / "scenario.json"
+            scenario.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.scenario.v1",
+                        "id": "safe_harness_output",
+                        "title": "Safe harness output",
+                        "prompt": "Return the expected response.",
+                        "trace": {"path": "unused.jsonl", "format": "observer_jsonl"},
+                        "rules": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = root / "unrelated"
+            output.mkdir()
+            keep = output / "keep.txt"
+            keep.write_text("keep", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "unrecognized harness output"):
+                package_harness_main(
+                    [
+                        "run",
+                        "--scenario",
+                        str(scenario),
+                        "--out",
+                        str(output),
+                        "--mock-response",
+                        "expected response",
+                        "--force",
+                    ]
+                )
+
+            self.assertEqual(keep.read_text(encoding="utf-8"), "keep")
+
     def test_pyproject_exposes_console_scripts(self):
         pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
@@ -74,7 +112,7 @@ class DeploymentHardeningTests(unittest.TestCase):
         self.assertEqual(scripts["hermes-flight-recorder"], "flightrecorder.cli:main")
         self.assertEqual(scripts["hermes-harness"], "flightrecorder.harness:main")
 
-    def test_live_smoke_script_help_exposes_relative_paths(self):
+    def test_live_smoke_script_help_exposes_explicit_path_modes(self):
         scripts = [
             ("live_hermes_smoke.py", "live Hermes Flight Recorder observer smoke test"),
             ("live_openclaw_smoke.py", "live OpenClaw Flight Recorder smoke test"),
@@ -93,6 +131,7 @@ class DeploymentHardeningTests(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertIn(description, completed.stdout)
                 self.assertIn("--relative-paths", completed.stdout)
+                self.assertIn("--preserve-paths", completed.stdout)
 
     def test_mock_harness_runner_writes_auditable_artifacts_and_replays(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -528,6 +567,30 @@ class DeploymentHardeningTests(unittest.TestCase):
                     os.environ.pop("HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS", None)
                 else:
                     os.environ["HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS"] = previous_max
+
+    def test_write_event_uses_stable_collision_resistant_session_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")
+            os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = tmp
+            try:
+                slash_path = write_event("on_session_start", {"session_id": "tenant/a"})
+                question_path = write_event("on_session_start", {"session_id": "tenant?a"})
+                repeated_path = write_event("on_session_end", {"session_id": "tenant/a"})
+
+                self.assertNotEqual(slash_path, question_path)
+                self.assertEqual(slash_path, repeated_path)
+                slash_digest = hashlib.sha256(b"tenant/a").hexdigest()
+                question_digest = hashlib.sha256(b"tenant?a").hexdigest()
+                self.assertEqual(slash_path.name, f"tenant_a-{slash_digest}.observer.jsonl")
+                self.assertEqual(question_path.name, f"tenant_a-{question_digest}.observer.jsonl")
+                self.assertEqual(len(list(Path(tmp).glob("*.observer.jsonl"))), 2)
+                self.assertEqual(len(slash_path.read_text(encoding="utf-8").splitlines()), 2)
+                self.assertEqual(len(question_path.read_text(encoding="utf-8").splitlines()), 1)
+            finally:
+                if previous is None:
+                    os.environ.pop("HERMES_FLIGHT_RECORDER_OUTPUT_DIR", None)
+                else:
+                    os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = previous
 
 
 if __name__ == "__main__":

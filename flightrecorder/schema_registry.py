@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 from importlib import resources
 from pathlib import Path
 from typing import Any
+
+from .json_semantics import json_semantic_key, json_values_equal
 
 SCHEMA_CATALOG_VERSION = "hfr.schema_catalog.v1"
 SCHEMA_CHECK_VERSION = "hfr.schema_check.v1"
@@ -111,6 +114,7 @@ def check_schema_contract(
     record = _schema_record(name_or_id) if name_or_id is not None else _schema_record_for_payload(payload)
     schema = _read_schema_file(str(record["filename"]))
     errors: list[str] = []
+    _validate_finite_numbers(payload, "$", errors)
     _validate_value(payload, schema, "$", schema, errors)
     return {
         "schema_version": SCHEMA_CHECK_VERSION,
@@ -206,6 +210,13 @@ def _validate_value(value: Any, schema: Any, path: str, root: dict[str, Any], er
     for subschema in schema.get("allOf", []) if isinstance(schema.get("allOf"), list) else []:
         _validate_value(value, subschema, path, root, errors)
 
+    condition = schema.get("if")
+    if condition is not None:
+        condition_errors: list[str] = []
+        _validate_value(value, condition, path, root, condition_errors)
+        if not condition_errors and "then" in schema:
+            _validate_value(value, schema["then"], path, root, errors)
+
     one_of = schema.get("oneOf")
     if isinstance(one_of, list):
         matches = 0
@@ -216,22 +227,24 @@ def _validate_value(value: Any, schema: Any, path: str, root: dict[str, Any], er
                 matches += 1
         if matches != 1:
             errors.append(f"{path}: expected exactly one matching schema from oneOf, got {matches}")
-        return
 
     any_of = schema.get("anyOf")
     if isinstance(any_of, list):
-        matches = 0
+        matched = False
         for subschema in any_of:
             sub_errors: list[str] = []
             _validate_value(value, subschema, path, root, sub_errors)
             if not sub_errors:
-                matches = 1
+                matched = True
                 break
-            errors.append(f"{path}: expected at least one matching schema from anyOf, got {matches}")
+        if not matched:
+            errors.append(f"{path}: expected at least one matching schema from anyOf, got 0")
 
-    if "const" in schema and value != schema["const"]:
+    if "const" in schema and not json_values_equal(value, schema["const"]):
         errors.append(f"{path}: expected constant {schema['const']!r}, got {value!r}")
-    if "enum" in schema and isinstance(schema["enum"], list) and value not in schema["enum"]:
+    if "enum" in schema and isinstance(schema["enum"], list) and not any(
+        json_values_equal(value, candidate) for candidate in schema["enum"]
+    ):
         errors.append(f"{path}: expected one of {schema['enum']!r}, got {value!r}")
 
     expected_type = schema.get("type")
@@ -250,6 +263,10 @@ def _validate_value(value: Any, schema: Any, path: str, root: dict[str, Any], er
 
 
 def _validate_object(value: dict[str, Any], schema: dict[str, Any], path: str, root: dict[str, Any], errors: list[str]) -> None:
+    min_properties = schema.get("minProperties")
+    if isinstance(min_properties, int) and len(value) < min_properties:
+        errors.append(f"{path}: expected at least {min_properties} property, got {len(value)}")
+
     required = schema.get("required")
     if isinstance(required, list):
         for field in required:
@@ -275,6 +292,14 @@ def _validate_array(value: list[Any], schema: dict[str, Any], path: str, root: d
     min_items = schema.get("minItems")
     if isinstance(min_items, int) and len(value) < min_items:
         errors.append(f"{path}: expected at least {min_items} item(s), got {len(value)}")
+    max_items = schema.get("maxItems")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{path}: expected at most {max_items} item(s), got {len(value)}")
+    if schema.get("uniqueItems") is True:
+        duplicate = _duplicate_json_item_indexes(value)
+        if duplicate is not None:
+            left_index, right_index = duplicate
+            errors.append(f"{path}: expected unique items; indexes {left_index} and {right_index} are equal")
     items = schema.get("items")
     if items is not None:
         for index, item in enumerate(value):
@@ -297,6 +322,9 @@ def _validate_number(value: int | float, schema: dict[str, Any], path: str, erro
     minimum = schema.get("minimum")
     if _is_number(minimum) and value < minimum:
         errors.append(f"{path}: expected value >= {minimum}, got {value}")
+    exclusive_minimum = schema.get("exclusiveMinimum")
+    if _is_number(exclusive_minimum) and value <= exclusive_minimum:
+        errors.append(f"{path}: expected value > {exclusive_minimum}, got {value}")
     maximum = schema.get("maximum")
     if _is_number(maximum) and value > maximum:
         errors.append(f"{path}: expected value <= {maximum}, got {value}")
@@ -336,6 +364,29 @@ def _matches_type(value: Any, expected_type: Any) -> bool:
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _validate_finite_numbers(value: Any, path: str, errors: list[str]) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        errors.append(f"{path}: number must be finite, got {value}")
+        return
+    if isinstance(value, dict):
+        for field, item in value.items():
+            _validate_finite_numbers(item, f"{path}.{field}", errors)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_finite_numbers(item, f"{path}[{index}]", errors)
+
+
+def _duplicate_json_item_indexes(value: list[Any]) -> tuple[int, int] | None:
+    first_indexes: dict[tuple[Any, ...], int] = {}
+    for right_index, right_item in enumerate(value):
+        key = json_semantic_key(right_item)
+        left_index = first_indexes.get(key)
+        if left_index is not None:
+            return left_index, right_index
+        first_indexes[key] = right_index
+    return None
 
 
 def _type_label(expected_type: Any) -> str:

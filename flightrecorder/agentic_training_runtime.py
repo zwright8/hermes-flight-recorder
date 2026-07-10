@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .dependency_probe import module_available_without_import as _module_available
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
 
@@ -539,13 +539,6 @@ def _manifest_path(plan: dict[str, Any], key: str, plan_path: Path) -> Path | No
     candidates = [plan_path.parent / path]
     candidates.extend(parent / path for parent in plan_path.parents)
     return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
-
-
-def _module_available(module: str) -> bool:
-    try:
-        return importlib.util.find_spec(module) is not None
-    except (ImportError, AttributeError, ValueError):
-        return False
 
 
 def _normalize_backend(backend: str) -> str:

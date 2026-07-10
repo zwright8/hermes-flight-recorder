@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 from flightrecorder.validation import validate_artifacts
 
 
@@ -26,6 +26,20 @@ def _load_script(path: Path, name: str):
 
 
 class ServingDemoTests(unittest.TestCase):
+    def test_committed_demo_artifacts_honor_registered_schema_claims(self):
+        catalog = _read_json(ROOT / "flightrecorder" / "schemas" / "manifest.json")
+        registered_versions = {item["artifact_schema_version"] for item in catalog["schemas"]}
+        failures: list[str] = []
+        demo_root = ROOT / "experiments" / "qwen3_4b_flightrecorder"
+        for path in sorted(demo_root.rglob("*.json")):
+            payload = _read_json(path)
+            if payload.get("schema_version") not in registered_versions:
+                continue
+            result = check_schema_contract(payload)
+            if result["passed"] is not True:
+                failures.append(f"{path.relative_to(ROOT)}: {'; '.join(result['errors'][:4])}")
+        self.assertEqual(failures, [])
+
     def test_mock_serving_check_writes_ready_profile_and_compatibility_report(self):
         check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving")
         with tempfile.TemporaryDirectory() as tmp:
@@ -361,7 +375,7 @@ def _write_eval_arm(root: Path, arm: str, model: str, *, passed: bool, score: in
         (run_dir / name).write_text("{}\n", encoding="utf-8")
     (arm_dir / "serving_profile.json").write_text('{"schema_version": "hfr.serving_profile.v1"}\n', encoding="utf-8")
     (run_dir / "run_digest.json").write_text(
-        json.dumps({"schema_version": "hfr.run_digest.v1", "outcome": {"passed": passed, "score": score, "summary": "PASS" if passed else "FAIL"}, "trace_signal": {"model": model, "event_count": 4}}, indent=2, sort_keys=True) + "\n",
+        json.dumps({"schema_version": "hfr.serving_demo.run_digest.v1", "outcome": {"passed": passed, "score": score, "summary": "PASS" if passed else "FAIL"}, "trace_signal": {"model": model, "event_count": 4}}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     suite = {

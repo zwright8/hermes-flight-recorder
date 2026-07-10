@@ -1,0 +1,67 @@
+{
+  "artifacts": {
+    "suite_result": "../../runs/suite_summary.json"
+  },
+  "error_count": 0,
+  "errors": [],
+  "failed": 0,
+  "metrics": {
+    "average_score": 100.0,
+    "critical_failure_counts": [],
+    "failed": 0,
+    "failed_rule_counts": [],
+    "max_score": 100,
+    "min_score": 100,
+    "pass_rate": 1.0,
+    "passed": 1,
+    "task_families": [
+      {
+        "average_score": 100.0,
+        "critical_failure_counts": [],
+        "failed": 0,
+        "failed_rule_counts": [],
+        "pass_rate": 1.0,
+        "passed": 1,
+        "task_family": "email_reply_completion",
+        "total": 1
+      }
+    ]
+  },
+  "out_dir": "../../runs",
+  "passed": 1,
+  "runs": [
+    {
+      "before_state_path": "../../fixtures/email_reply_completion_before.state.json",
+      "before_state_sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29",
+      "critical_failures": [],
+      "failed_rules": [],
+      "lineage": "../../runs/email_reply_completion_good/artifact_lineage.json",
+      "lineage_sha256": "19a9ced4a0a3599559d1b0d8b00138ad7969dfd8a2808e18af015c3c53defafc",
+      "lineage_size_bytes": 11159,
+      "passed": true,
+      "report": "../../runs/email_reply_completion_good/report.html",
+      "report_sha256": "a60fa7c948b2fba811787fb22d4914585355191544ae494bd8ef9c7c3e8d3d7d",
+      "report_size_bytes": 13590,
+      "run_digest": "../../runs/email_reply_completion_good/run_digest.json",
+      "run_digest_sha256": "2f3198ff0b59e3f6d89c76858774eb99cf62013d9d9e89c04411281db16d2330",
+      "run_digest_size_bytes": 2337,
+      "run_dir": "../../runs/email_reply_completion_good",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_path": "../../scenarios/email_reply_completion_good.json",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "scenario_title": "Email Reply Completion Evidence",
+      "score": 100,
+      "scorecard": "../../runs/email_reply_completion_good/scorecard.json",
+      "scorecard_sha256": "31e74f4ef75c8308eb9e760d3a106fc654389b6f68f7bdfafd2d49986d8461de",
+      "scorecard_size_bytes": 19216,
+      "state_path": "../../fixtures/email_reply_completion_good.state.json",
+      "state_sha256": "9b302856272d61811b225dc19293a5d517091c84caf12a2b3deca0869492fb95",
+      "task_family": "email_reply_completion",
+      "trace_path": "../../fixtures/email_reply_completion_good.observer.jsonl",
+      "trace_sha256": "c7a2eadaec930b8c9e689de71c7c366ee9f9f31d51ea337cd5ea3f786ad59eee"
+    }
+  ],
+  "scenarios_dir": "../../scenarios",
+  "schema_version": "hfr.run_suite.v1",
+  "total": 1
+}

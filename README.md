@@ -182,12 +182,17 @@ flightrecorder goal3-handoff \
 ```
 
 Use this when a downstream trainer needs one directory containing the validated
-evidence chain instead of a pile of manually assembled files.
+evidence chain instead of a pile of manually assembled files. `--force` only
+replaces a schema-valid existing Goal 3 handoff at a filesystem-safe target; it
+will not recursively delete an arbitrary non-handoff directory.
 
 ## Harness Runs And Replay
 
 The harness layer lets you produce Flight Recorder artifacts without requiring
-a live Hermes process or model provider.
+a live Hermes process or model provider. Reusing a recognized run directory
+removes optional artifacts that no longer apply (including sensitive traces,
+regression scenarios, and state snapshots), so evidence from two runs is not
+silently mixed.
 
 ```bash
 python3.11 scripts/hermes_harness.py run-scenario \
@@ -208,6 +213,10 @@ Data, Eval, and Governance can consume runs without guessing how they were
 produced.
 Harness results also include fake-secret canary leak checks that report only
 canary names and scrubbed artifact paths, not the deterministic fake values.
+Harness, publish, suite, probe, and replay receipts use relative paths or
+`<redacted:...>` placeholders by default. `--relative-paths` remains accepted
+for existing automation; use `--preserve-paths` only for private local
+debugging that explicitly needs absolute machine paths.
 
 ## External State Verification
 
@@ -273,6 +282,9 @@ flightrecorder training-plan dry-run \
 
 Unknown license status can be scouted, but it is blocked from training
 selection. Moving a `champion` alias requires an explicit rollback target.
+Registry mutations use a lock, compare the starting SHA-256, and atomically
+replace the JSON file; concurrent or symlinked updates fail closed instead of
+silently losing another worker's change.
 
 ## Agentic Training Handoff
 
@@ -566,6 +578,10 @@ metadata, and tears the process down. For human inspection, use
 summaries back to traces, scorecards, run digests, and HTML reports. Demo
 validation recomputes aggregate arm metrics from scenario rows so public claims
 stay tied to the linked replay evidence.
+Serving profiles and lifecycle receipts keep adapter and working-directory
+paths public-safe, remove URL credentials, and redact known secret-bearing
+command arguments and log text. The real values are used only for the local
+endpoint call or managed process and are not persisted in those artifacts.
 
 ## Eval And Governance
 

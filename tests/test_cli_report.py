@@ -300,6 +300,118 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(bundle.exists())
 
+    def test_replay_bundle_force_refuses_non_bundle_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            protected = root / "protected"
+            protected.mkdir()
+            sentinel = protected / "keep.txt"
+            sentinel.write_text("do not delete\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                    ]
+                ),
+                0,
+            )
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(
+                        [
+                            "replay-bundle",
+                            "--lineage",
+                            str(source / "artifact_lineage.json"),
+                            "--out",
+                            str(protected),
+                            "--force",
+                        ]
+                    )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertTrue(sentinel.exists())
+
+    def test_replay_bundle_rejects_empty_symlink_output_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            backing = root / "backing"
+            backing.mkdir()
+            output = root / "bundle"
+            try:
+                output.symlink_to(backing, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                    ]
+                ),
+                0,
+            )
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(
+                        [
+                            "replay-bundle",
+                            "--lineage",
+                            str(source / "artifact_lineage.json"),
+                            "--out",
+                            str(output),
+                        ]
+                    )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(list(backing.iterdir()), [])
+
+    def test_replay_bundle_force_replaces_valid_existing_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            bundle = root / "bundle"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                    ]
+                ),
+                0,
+            )
+            command = [
+                "replay-bundle",
+                "--lineage",
+                str(source / "artifact_lineage.json"),
+                "--out",
+                str(bundle),
+            ]
+            self.assertEqual(run_cli(command), 0)
+            sentinel = bundle / "stale.txt"
+            sentinel.write_text("remove me\n", encoding="utf-8")
+
+            self.assertEqual(run_cli([*command, "--force"]), 0)
+
+            self.assertFalse(sentinel.exists())
+            self.assertEqual(
+                json.loads((bundle / "replay_bundle.json").read_text(encoding="utf-8"))["schema_version"],
+                "hfr.replay_bundle.v1",
+            )
+
     def test_validate_replay_bundle_rejects_tampered_copied_input(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"
@@ -432,6 +544,92 @@ class CliReportTests(unittest.TestCase):
             sensitive = out / "raw_trace.sensitive.json"
             self.assertTrue(sensitive.exists())
             self.assertIn("hfr_fixture_secret_value_123", sensitive.read_text(encoding="utf-8"))
+
+    def test_rerun_removes_optional_artifacts_from_the_previous_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_bad.json"),
+                        "--out",
+                        str(out),
+                        "--write-sensitive-trace",
+                    ]
+                ),
+                0,
+            )
+            self.assertTrue((out / "raw_trace.sensitive.json").exists())
+            self.assertTrue((out / "regression_scenario.json").exists())
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "email_reply_completion_good.json"),
+                        "--out",
+                        str(out),
+                    ]
+                ),
+                0,
+            )
+            self.assertTrue((out / "before_state_snapshot.json").exists())
+            self.assertTrue((out / "state_snapshot.json").exists())
+            self.assertTrue((out / "state_diff.json").exists())
+            self.assertFalse((out / "raw_trace.sensitive.json").exists())
+            self.assertFalse((out / "regression_scenario.json").exists())
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(out),
+                    ]
+                ),
+                0,
+            )
+            self.assertFalse((out / "before_state_snapshot.json").exists())
+            self.assertFalse((out / "state_snapshot.json").exists())
+            self.assertFalse((out / "state_diff.json").exists())
+
+    def test_rerun_refuses_forged_lineage_before_removing_optional_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            out.mkdir()
+            stale = out / "regression_scenario.json"
+            stale.write_text("do not delete\n", encoding="utf-8")
+            (out / "artifact_lineage.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.lineage.v1",
+                        "scenario": {},
+                        "outputs": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(
+                        [
+                            "run",
+                            "--scenario",
+                            str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                            "--out",
+                            str(out),
+                        ]
+                    )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(stale.read_text(encoding="utf-8"), "do not delete\n")
 
     def test_run_can_fail_nonzero_for_ci(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -817,7 +1015,7 @@ class CliReportTests(unittest.TestCase):
             self.assertIn(("task_family_min_pass_rate", "prompt_injection"), failed_scoped_checks)
             self.assertIn(("task_family_present", "missing_family"), failed_scoped_checks)
 
-    def test_gate_suite_family_gates_fall_back_to_run_rows(self):
+    def test_gate_suite_rejects_missing_task_family_aggregates(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "runs"
             gate = Path(tmp) / "suite_gate.json"
@@ -825,8 +1023,7 @@ class CliReportTests(unittest.TestCase):
             run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(out)])
             summary_path = out / "suite_summary.json"
             suite_summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            for row in suite_summary["metrics"]["task_families"]:
-                row.pop("critical_failure_counts", None)
+            suite_summary["metrics"]["task_families"] = []
             summary_path.write_text(json.dumps(suite_summary), encoding="utf-8")
             policy.write_text(
                 json.dumps(
@@ -840,28 +1037,24 @@ class CliReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            code = run_cli(
-                [
-                    "gate-suite",
-                    "--suite-summary",
-                    str(summary_path),
-                    "--policy",
-                    str(policy),
-                    "--out",
-                    str(gate),
-                ]
-            )
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as raised:
+                    run_cli(
+                        [
+                            "gate-suite",
+                            "--suite-summary",
+                            str(summary_path),
+                            "--policy",
+                            str(policy),
+                            "--out",
+                            str(gate),
+                        ]
+                    )
 
-            self.assertEqual(code, 1)
-            result = json.loads(gate.read_text(encoding="utf-8"))
-            self.assertIn(
-                ("task_family_forbid_critical_rule", "prompt_injection"),
-                {
-                    (item["id"], item.get("scope", {}).get("task_family"))
-                    for item in result["checks"]
-                    if not item["passed"]
-                },
-            )
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("metrics.task_families missing families", stderr.getvalue())
+            self.assertFalse(gate.exists())
 
     def test_gate_suite_rejects_invalid_policy_file(self):
         with tempfile.TemporaryDirectory() as tmp:

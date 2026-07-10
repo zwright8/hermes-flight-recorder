@@ -55,6 +55,11 @@ serving profile, compatibility report, and endpoint check emitted by
 `check_openai_serving.py`. Semantic validation recomputes lifecycle readiness
 from the readiness probe, smoke check, teardown, and required preflight artifact
 links so forged ready lifecycle records cannot stand on schema shape alone.
+Persisted serving artifacts use stable adapter IDs instead of absolute adapter
+paths, redact non-default working directories, remove URL userinfo/query
+credentials, and scrub known API-key, command-argument, environment-value, and
+log-text secrets. Execution still receives the original inputs; sanitization is
+applied to the public receipts and referenced log files.
 
 For vLLM, use the built-in launch profile or pass an explicit command:
 

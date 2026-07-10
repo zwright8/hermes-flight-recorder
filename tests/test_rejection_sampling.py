@@ -22,6 +22,52 @@ SCENARIO = ROOT / "scenarios" / "prompt_injection_good.json"
 
 
 class RejectionSamplingGateTests(unittest.TestCase):
+    def test_gate_rejects_schema_invalid_and_symlinked_review_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            invalid_gate = root / "invalid_model_grader_gate.json"
+            invalid_gate.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.model_grader_gate.v1",
+                        "passed": True,
+                        "readiness": "labels_calibrated_for_curated_handoff",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[invalid_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=root / "invalid_output.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(gate["passed"])
+            self.assertFalse(gate["input_artifacts"]["model_grader_gate"][0]["exists"])
+
+            valid_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            linked_gate = root / "linked_model_grader_gate.json"
+            try:
+                linked_gate.symlink_to(valid_gate.name)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            symlinked = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[linked_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=root / "symlinked_output.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(symlinked["passed"])
+            self.assertFalse(symlinked["input_artifacts"]["model_grader_gate"][0]["exists"])
+
     def test_committed_agentic_training_rejection_sampling_gate_replays_inputs(self):
         gate_path = ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json"
         gate = json.loads(gate_path.read_text(encoding="utf-8"))
@@ -302,10 +348,12 @@ class RejectionSamplingGateTests(unittest.TestCase):
         return receipt_path
 
     def write_json(self, path: Path, schema_version: str) -> Path:
-        path.write_text(
-            json.dumps({"schema_version": schema_version, "passed": True, "readiness": "ready"}, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        sources = {
+            "hfr.model_grader_gate.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json",
+            "hfr.review_calibration.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "review_calibration.json",
+            "hfr.reviewed_gate.v1": ROOT / "examples" / "agentic_training" / "model_grader" / "reviewed_gate.json",
+        }
+        shutil.copyfile(sources[schema_version], path)
         return path
 
 

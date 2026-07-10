@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .schema_registry import check_schema_contract
+
 EVAL_SUMMARY_SCHEMA_VERSION = "hfr.eval_summary.v1"
 COMPARE_EXPORT_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
 COMPARE_GATE_SCHEMA_VERSION = "hfr.compare_gate.v1"
@@ -149,8 +151,11 @@ def _suite_arm(
     metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
     validation = summary.get("validation") if isinstance(summary.get("validation"), dict) else None
     blocking_reasons: list[str] = []
-    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION:
+    schema_check = check_schema_contract(summary, name_or_id="run_suite")
+    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION or schema_check["passed"] is not True:
         blocking_reasons.append("invalid_suite_summary_schema")
+    elif not _suite_summary_semantics_valid(summary):
+        blocking_reasons.append("suite_summary_semantic_validation_failed")
     if not scenario_ids:
         blocking_reasons.append("empty_suite_summary")
     if int(summary.get("error_count", 0) or 0) > 0:
@@ -182,6 +187,16 @@ def _suite_arm(
         "validation": _validation_summary(validation),
         "blocking_reasons": blocking_reasons,
     }
+
+
+def _suite_summary_semantics_valid(summary: dict[str, Any]) -> bool:
+    try:
+        from .validation import validate_suite_summary_payload_consistency
+
+        result = validate_suite_summary_payload_consistency(summary)
+    except (ImportError, IndexError, KeyError, TypeError, ValueError):
+        return False
+    return not result.errors
 
 
 def _serving_preflight_inputs(

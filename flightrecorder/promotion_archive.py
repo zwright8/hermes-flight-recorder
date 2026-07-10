@@ -10,9 +10,10 @@ from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .governance import PROMOTION_RELEASE_RECORD_SCHEMA_VERSION
-from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .path_safety import assert_safe_output_directory, path_has_symlink_component as _path_has_symlink_component
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
+from .schema_registry import SchemaRegistryError, check_schema_file
 
 PROMOTION_ARCHIVE_SCHEMA_VERSION = "hfr.promotion_archive.v1"
 
@@ -191,6 +192,10 @@ def _decision_gate_sources(
 
 
 def _prepare_archive_dir(target: Path, force: bool) -> None:
+    try:
+        assert_safe_output_directory(target, repo_root=Path(__file__).resolve().parents[1])
+    except ValueError as exc:
+        raise PromotionArchiveError(str(exc)) from exc
     if target.exists() and not target.is_dir():
         raise PromotionArchiveError(f"promotion archive output is not a directory: {target}")
     if not target.exists() or not any(target.iterdir()):
@@ -206,13 +211,12 @@ def _prepare_archive_dir(target: Path, force: bool) -> None:
 
 def _is_existing_promotion_archive(target: Path) -> bool:
     manifest_path = target / "promotion_archive.json"
-    if not manifest_path.is_file():
+    if not manifest_path.is_file() or _path_has_symlink_component(manifest_path, include_leaf=True):
         return False
     try:
-        value = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return check_schema_file(manifest_path, "promotion_archive").get("passed") is True
+    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError):
         return False
-    return isinstance(value, dict) and value.get("schema_version") == PROMOTION_ARCHIVE_SCHEMA_VERSION
 
 
 def _source_artifact_path(decision_gate: dict[str, Any], decision_path: Path, evidence_root: Path | None) -> tuple[Path | None, str | None]:

@@ -38,6 +38,31 @@ def _run_flightrecorder(args: list[str]) -> tuple[int, str, str]:
 
 
 class HarnessManifestCliTests(unittest.TestCase):
+    def test_run_suite_force_refuses_working_directory_and_unowned_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            scenario_path = scenarios / "scenario.json"
+            scenario_path.write_text(json.dumps(_scenario()), encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                with self.assertRaisesRegex(ValueError, "protected working directory"):
+                    run_suite(scenarios_dir=scenarios, out_dir=root, force=True)
+            finally:
+                os.chdir(previous_cwd)
+            self.assertTrue(scenario_path.exists())
+
+            unrelated = root / "unrelated"
+            unrelated.mkdir()
+            keep = unrelated / "keep.txt"
+            keep.write_text("keep", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unrecognized harness suite output"):
+                run_suite(scenarios_dir=scenarios, out_dir=unrelated, force=True)
+            self.assertEqual(keep.read_text(encoding="utf-8"), "keep")
+
     def test_run_alias_executes_single_scenario_manifest_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -79,6 +104,7 @@ class HarnessManifestCliTests(unittest.TestCase):
                     str(out),
                     "--mock-response",
                     "manifest cli complete with auditable evidence",
+                    "--preserve-paths",
                 ]
             )
 
@@ -135,6 +161,7 @@ class HarnessManifestCliTests(unittest.TestCase):
                     str(leak_out),
                     "--mock-response",
                     f"manifest cli complete with auditable evidence {DEFAULT_FAKE_SECRET_CANARIES['HFR_FAKE_API_KEY']}",
+                    "--preserve-paths",
                 ]
             )
             self.assertEqual(leak_rc, 1, leak_stdout)
@@ -173,6 +200,7 @@ class HarnessManifestCliTests(unittest.TestCase):
                 scenarios_dir=scenarios,
                 out_dir=root / "suite",
                 mock_response="suite complete with auditable evidence",
+                preserve_paths=True,
             )
             summary_path = root / "suite" / "harness_suite_result.json"
             validation = root / "suite" / "validation.json"
@@ -229,11 +257,21 @@ class HarnessManifestCliTests(unittest.TestCase):
                     str(out),
                     "--mock-response",
                     "manifest cli complete with auditable evidence",
+                    "--preserve-paths",
                 ]
             )
             self.assertEqual(rc, 0, stdout)
 
-            replay_rc, replay_stdout = _run_harness(["replay-trace", "--lineage", str(out / "artifact_lineage.json"), "--out", str(replay)])
+            replay_rc, replay_stdout = _run_harness(
+                [
+                    "replay-trace",
+                    "--lineage",
+                    str(out / "artifact_lineage.json"),
+                    "--out",
+                    str(replay),
+                    "--preserve-paths",
+                ]
+            )
 
             self.assertEqual(replay_rc, 0, replay_stdout)
             replay_result = _json_from_stdout(replay_stdout)

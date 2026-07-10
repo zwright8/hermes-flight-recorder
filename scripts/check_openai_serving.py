@@ -8,20 +8,48 @@ import hashlib
 import json
 import os
 import platform
+import re
+import sys
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from flightrecorder.redaction import (  # noqa: E402
+    REDACTED_VALUE,
+    is_secret_key,
+    is_unredacted_secret_value,
+    redact_text,
+)
+from flightrecorder.safe_http import (  # noqa: E402
+    DEFAULT_MAX_BODY_BYTES,
+    DEFAULT_MAX_ERROR_BYTES,
+    DEFAULT_MAX_SSE_EVENT_BYTES,
+    DEFAULT_MAX_SSE_EVENTS,
+    DEFAULT_MAX_SSE_LINE_BYTES,
+    DEFAULT_MAX_SSE_TOTAL_BYTES,
+    HttpStatusError,
+    SafeHttpError,
+    bounded_http_request,
+    open_http_response,
+    read_bounded_sse,
+)
 
 
 SCHEMA_PROFILE = "hfr.serving_profile.v1"
 SCHEMA_COMPATIBILITY = "hfr.serving_compatibility_report.v1"
 SCHEMA_CHECK = "hfr.serving_endpoint_check.v1"
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_BEARER_RE = re.compile(r"(?i)\bbearer\s+[^\s,;]+")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -56,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     if not base_url:
         raise SystemExit("--base-url is required unless --mock-response is used")
 
+    api_key = _api_key(args, str(base_url))
     try:
         profile, compatibility, report = check_endpoint(
             base_url=str(base_url),
@@ -64,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             arm=args.arm,
             engine=args.engine,
             adapter=args.adapter,
-            api_key=_api_key(args, str(base_url)),
+            api_key=api_key,
             timeout=float(args.timeout),
             out_dir=out_dir,
             require_streaming=bool(args.require_streaming),
@@ -80,7 +109,17 @@ def main(argv: list[str] | None = None) -> int:
     _write_json(out_dir / "compatibility_report.json", compatibility)
     _write_json(out_dir / "serving_check.json", report)
     if mock_requests:
-        _write_json(out_dir / "mock_requests.json", {"requests": mock_requests})
+        _write_json(
+            out_dir / "mock_requests.json",
+            sanitize_public_artifact(
+                {"requests": mock_requests},
+                secret_values=[api_key, *sensitive_url_values(str(base_url))],
+                path_replacements={
+                    **public_path_replacements(args.adapter, label=Path(args.adapter).name or "adapter"),
+                    **public_path_replacements(args.model, label=Path(args.model).name or "model"),
+                },
+            ),
+        )
     print(json.dumps({"passed": report["passed"], "failed_checks": report["failed_checks"], "out": str(out_dir)}, indent=2))
     return 0 if report["passed"] else 1
 
@@ -192,7 +231,19 @@ def check_endpoint(
         "failed_checks": failed_checks,
         "artifacts": artifacts,
     }
-    return profile, compatibility, report
+    secret_values = [api_key, *sensitive_url_values(base_url)]
+    path_replacements = {
+        **public_path_replacements(adapter, label=Path(adapter).name or "adapter"),
+        **public_path_replacements(model, label=Path(model).name or "model"),
+    }
+    return tuple(
+        sanitize_public_artifact(
+            artifact,
+            secret_values=secret_values,
+            path_replacements=path_replacements,
+        )
+        for artifact in (profile, compatibility, report)
+    )
 
 
 def _tool_call_check(base_url: str, model: str, *, api_key: str, timeout: float) -> dict[str, Any]:
@@ -251,50 +302,61 @@ def _streaming_check(base_url: str, model: str, *, api_key: str, timeout: float)
 
 def _request_json(method: str, url: str, *, payload: dict[str, Any] | None = None, api_key: str, timeout: float) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, method=method, data=data)
-    request.add_header("accept", "application/json")
+    headers = {"accept": "application/json"}
     if data is not None:
-        request.add_header("content-type", "application/json")
+        headers["content-type"] = "application/json"
     if api_key:
-        request.add_header("authorization", f"Bearer {api_key}")
+        headers["authorization"] = f"Bearer {api_key}"
     started = time.time()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            text = response.read().decode("utf-8", "replace")
-            try:
-                parsed = json.loads(text) if text else {}
-            except json.JSONDecodeError:
-                parsed = {"_raw": text}
-            return {"ok": 200 <= int(response.status) < 300, "status_code": int(response.status), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "json": parsed}
-    except urllib.error.HTTPError as exc:
-        return {"ok": False, "status_code": int(exc.code), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": exc.read().decode("utf-8", "replace")}
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        status_code, body = bounded_http_request(
+            method,
+            url,
+            headers=headers,
+            data=data,
+            timeout=timeout,
+            max_body_bytes=DEFAULT_MAX_BODY_BYTES,
+            max_error_bytes=DEFAULT_MAX_ERROR_BYTES,
+        )
+        text = body.decode("utf-8", "replace")
+        try:
+            parsed = json.loads(text) if text else {}
+        except json.JSONDecodeError:
+            parsed = {"_raw": text}
+        return {"ok": 200 <= status_code < 300, "status_code": status_code, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "json": parsed}
+    except HttpStatusError as exc:
+        return {"ok": False, "status_code": exc.status_code, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": str(exc)}
+    except SafeHttpError as exc:
         return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": str(exc)}
 
 
 def _request_stream(url: str, *, payload: dict[str, Any], api_key: str, timeout: float) -> dict[str, Any]:
-    request = urllib.request.Request(url, method="POST", data=json.dumps(payload).encode("utf-8"))
-    request.add_header("accept", "text/event-stream")
-    request.add_header("content-type", "application/json")
+    headers = {"accept": "text/event-stream", "content-type": "application/json"}
     if api_key:
-        request.add_header("authorization", f"Bearer {api_key}")
+        headers["authorization"] = f"Bearer {api_key}"
     started = time.time()
     text_parts: list[str] = []
     event_count = 0
     done_seen = False
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            for _ in range(128):
-                raw_line = response.readline()
-                if not raw_line:
-                    break
-                line = raw_line.decode("utf-8", "replace").strip()
-                if not line.startswith("data:"):
-                    continue
-                data = line.removeprefix("data:").strip()
-                if data == "[DONE]":
-                    done_seen = True
-                    break
+        with open_http_response(
+            "POST",
+            url,
+            headers=headers,
+            data=json.dumps(payload).encode("utf-8"),
+            timeout=timeout,
+            max_error_bytes=DEFAULT_MAX_ERROR_BYTES,
+        ) as response:
+            status_code = int(response.status)
+            sse = read_bounded_sse(
+                response,
+                max_line_bytes=DEFAULT_MAX_SSE_LINE_BYTES,
+                max_event_bytes=DEFAULT_MAX_SSE_EVENT_BYTES,
+                max_events=DEFAULT_MAX_SSE_EVENTS,
+                max_total_bytes=DEFAULT_MAX_SSE_TOTAL_BYTES,
+            )
+            done_seen = sse.done_seen
+            for data in sse.data_events:
                 try:
                     event = json.loads(data)
                 except json.JSONDecodeError:
@@ -305,16 +367,16 @@ def _request_stream(url: str, *, payload: dict[str, Any], api_key: str, timeout:
                     text_parts.append(chunk)
         return {
             "ok": event_count > 0,
-            "status_code": int(getattr(response, "status", 0) or 0),
+            "status_code": status_code,
             "url": url,
             "elapsed_ms": int((time.time() - started) * 1000),
             "event_count": event_count,
             "done_seen": done_seen,
             "text": "".join(text_parts),
         }
-    except urllib.error.HTTPError as exc:
-        return {"ok": False, "status_code": int(exc.code), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": exc.read().decode("utf-8", "replace")}
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except HttpStatusError as exc:
+        return {"ok": False, "status_code": exc.status_code, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": str(exc)}
+    except SafeHttpError as exc:
         return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": str(exc)}
 
 
@@ -470,15 +532,116 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 def _root_url(base_url: str, path: str) -> str:
-    base = base_url.rstrip("/")
-    if base.endswith("/v1"):
-        base = base[:-3]
-    return f"{base}{path}"
+    parsed = urllib.parse.urlsplit(base_url)
+    base_path = parsed.path.rstrip("/")
+    if base_path.endswith("/v1"):
+        base_path = base_path[:-3]
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, f"{base_path}{path}", parsed.query, parsed.fragment)
+    )
 
 
 def _openai_url(base_url: str, path: str) -> str:
-    base = base_url.rstrip("/")
-    return f"{base}{path}" if base.endswith("/v1") else f"{base}/v1{path}"
+    parsed = urllib.parse.urlsplit(base_url)
+    base_path = parsed.path.rstrip("/")
+    api_path = f"{base_path}{path}" if base_path.endswith("/v1") else f"{base_path}/v1{path}"
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, api_path, parsed.query, parsed.fragment))
+
+
+def sanitize_public_artifact(
+    value: Any,
+    *,
+    secret_values: list[str] | tuple[str, ...] = (),
+    path_replacements: dict[str, str] | None = None,
+) -> Any:
+    """Return a public-safe copy of serving receipt data."""
+    secrets = tuple(
+        sorted(
+            {str(item) for item in secret_values if isinstance(item, str) and item},
+            key=len,
+            reverse=True,
+        )
+    )
+    replacements = tuple(
+        sorted(
+            (path_replacements or {}).items(),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        )
+    )
+    return _sanitize_public_value(value, secrets=secrets, path_replacements=replacements)
+
+
+def sensitive_url_values(url: str) -> list[str]:
+    """Return credential-like URL components that must not escape into receipts."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return []
+    values = [parsed.username or "", parsed.password or ""]
+    values.extend(value for _key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    return [urllib.parse.unquote(value) for value in values if value]
+
+
+def public_path_replacements(path: str | Path, *, label: str) -> dict[str, str]:
+    """Map lexical and resolved local paths to a stable public label."""
+    if not str(path):
+        return {}
+    candidate = Path(path).expanduser()
+    resolved = candidate.resolve(strict=False)
+    replacement = Path(label).name or "<local-path>"
+    replacements = {str(resolved): replacement}
+    if candidate.is_absolute():
+        replacements[str(candidate)] = replacement
+    return replacements
+
+
+def _sanitize_public_value(
+    value: Any,
+    *,
+    secrets: tuple[str, ...],
+    path_replacements: tuple[tuple[str, str], ...],
+) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: REDACTED_VALUE
+            if is_secret_key(key) and is_unredacted_secret_value(item)
+            else _sanitize_public_value(item, secrets=secrets, path_replacements=path_replacements)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _sanitize_public_value(item, secrets=secrets, path_replacements=path_replacements)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return [
+            _sanitize_public_value(item, secrets=secrets, path_replacements=path_replacements)
+            for item in value
+        ]
+    if not isinstance(value, str):
+        return value
+    rendered = _URL_RE.sub(lambda match: _public_url(match.group(0)), value)
+    for private_path, replacement in path_replacements:
+        rendered = rendered.replace(private_path, replacement)
+    for secret in secrets:
+        rendered = rendered.replace(secret, REDACTED_VALUE)
+    rendered = redact_text(rendered)
+    return _BEARER_RE.sub(f"Bearer {REDACTED_VALUE}", rendered)
+
+
+def _public_url(url: str) -> str:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = parsed.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        port = f":{parsed.port}" if parsed.port is not None else ""
+    except (ValueError, UnicodeError):
+        return REDACTED_VALUE
+    if not parsed.scheme or not host:
+        return REDACTED_VALUE
+    return urllib.parse.urlunsplit((parsed.scheme, f"{host}{port}", parsed.path, "", ""))
 
 
 def _first_non_empty(*values: str) -> str:

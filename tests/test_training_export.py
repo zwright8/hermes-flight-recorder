@@ -7,10 +7,13 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.redaction import sanitize_trace
+from flightrecorder.scorers import score_trace
 from flightrecorder.training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
     TrainingExportError,
+    _state_diff_summary,
     _dataset_version_id,
     export_rl_dataset,
     redaction_scan_artifacts,
@@ -34,6 +37,22 @@ def split_artifact_keys():
 
 
 class TrainingExportTests(unittest.TestCase):
+    def test_training_export_refuses_incomplete_state_comparisons(self):
+        with self.assertRaisesRegex(TrainingExportError, "incomplete state comparison"):
+            _state_diff_summary(
+                {
+                    "schema_version": "hfr.state_diff.v1",
+                    "changed": False,
+                    "change_count": 0,
+                    "truncated": True,
+                    "comparison_truncated": True,
+                    "comparison_complete": False,
+                    "change_status": "unknown",
+                    "changes": [],
+                    "summary": "Comparison incomplete.",
+                }
+            )
+
     def test_export_rl_writes_episode_reward_preference_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -291,6 +310,75 @@ class TrainingExportTests(unittest.TestCase):
         self.assertNotIn("xwfp-example-token-000000000000", json.dumps(findings))
         self.assertNotIn("xapp-example-token-000000000000", json.dumps(findings))
         self.assertNotIn("xoxe-example-token-000000000000", json.dumps(findings))
+
+    def test_redaction_scan_detects_secret_keys_and_quoted_assignments_but_allows_placeholders(self):
+        rows = {
+            "episodes": [
+                {
+                    "metadata": {
+                        "api_key": "nested secret value",
+                        "token_count": 42,
+                        "api_key_env": "HFR_API_KEY",
+                    }
+                },
+                {"content": '{"password": "correct horse battery staple"}'},
+                {"content": 'Authorization: "Bearer alpha beta"'},
+                {
+                    "metadata": {
+                        "api_key": "[REDACTED]",
+                        "refresh_token": "<redacted:environment>",
+                    },
+                    "content": 'token=[REDACTED] api_key="<redacted:environment>"',
+                },
+            ]
+        }
+
+        findings = redaction_scan_artifacts(rows)
+
+        self.assertEqual(len(findings), 3)
+        self.assertEqual({finding["row_index"] for finding in findings}, {0, 1, 2})
+        self.assertEqual(
+            {finding["kind"] for finding in findings},
+            {"secret_like_key_value", "secret_like_assignment"},
+        )
+        self.assertNotIn("nested secret value", json.dumps(findings))
+        self.assertNotIn("correct horse battery staple", json.dumps(findings))
+        self.assertNotIn("Bearer alpha beta", json.dumps(findings))
+
+    def test_exported_training_rows_do_not_contain_literal_secret_patterns(self):
+        literal_secret = "sk-privatePatternLiteral000000"
+        scenario = {
+            "id": "pattern_export_case",
+            "title": "Secret Pattern Export",
+            "policy": {"secret_patterns": [literal_secret]},
+            "assertions": {},
+            "scoring": {"pass_threshold": 90},
+        }
+        raw_trace = {
+            "session": {"source_format": "test", "model": "test"},
+            "events": [{"type": "assistant_message", "content": literal_secret}],
+            "final_answer": "safe final answer",
+        }
+        scorecard = score_trace(scenario, raw_trace)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            run = runs / scenario["id"]
+            out = Path(tmp) / "training"
+            run.mkdir(parents=True)
+            (run / "normalized_trace.json").write_text(
+                json.dumps(sanitize_trace(raw_trace, [literal_secret]), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            (run / "scorecard.json").write_text(
+                json.dumps(scorecard, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            export_rl_dataset(runs, out)
+
+            exported_rows = "\n".join(path.read_text(encoding="utf-8") for path in out.rglob("*.jsonl"))
+            self.assertNotIn(literal_secret, exported_rows)
 
     def test_redaction_scan_allows_hashes_dataset_ids_and_fingerprints(self):
         sha256 = "a" * 64

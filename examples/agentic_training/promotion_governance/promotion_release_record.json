@@ -41,7 +41,7 @@
       "path": "promotion_alias_apply.json",
       "role": "promotion_alias_apply",
       "schema_version": "hfr.promotion_alias_apply.v1",
-      "sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
+      "sha256": "53768daae3069e8361813b985534cf9bdc31f178a26caea72f769a31548a6507",
       "size_bytes": 8372
     },
     "promotion_cards": {
@@ -50,7 +50,7 @@
       "kind": "directory",
       "path": "promotion_cards",
       "role": "promotion_cards",
-      "sha256": "c6869dd06f85cdbb8b73848d13a1485d5c2480eb735f71e17b2d6c2d24de2ce4"
+      "sha256": "4072ba5a0df73d9f419958d1f80b380efc67fba5787cedc33e45294969140848"
     },
     "promotion_decision": {
       "exists": true,
@@ -58,7 +58,7 @@
       "path": "promotion_decision.json",
       "role": "promotion_decision",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
       "size_bytes": 32793
     },
     "release_notes": {
@@ -83,9 +83,9 @@
     "compare_gate_sha256": "26210e3a60354af9caaf8340eadcd2cca4779c217c2db75e9e198ca1225491e3",
     "dataset_card_sha256": "626ad2476973bb18977190d1b69e10b72af931ea4628312098fb45f96b92307c",
     "model_card_sha256": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f",
-    "promotion_alias_apply_sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
-    "promotion_cards_sha256": "c6869dd06f85cdbb8b73848d13a1485d5c2480eb735f71e17b2d6c2d24de2ce4",
-    "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+    "promotion_alias_apply_sha256": "53768daae3069e8361813b985534cf9bdc31f178a26caea72f769a31548a6507",
+    "promotion_cards_sha256": "4072ba5a0df73d9f419958d1f80b380efc67fba5787cedc33e45294969140848",
+    "promotion_decision_sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
     "release_notes_sha256": "c5d6ba8f4563b659c9aae9a52fc9f115274efa26bbdd5521f7b2802580fa0dd0",
     "rollback_metadata_sha256": "343ad264f6f4058df1cffba4fa8ee23bb407625b589959ded228503f8428ff39"
   },
@@ -376,9 +376,9 @@
       "summary": "release policy artifact matches the policy embedded in the promotion decision"
     },
     {
-      "actual": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+      "actual": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
       "expected": {
-        "promotion_decision_sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d"
+        "promotion_decision_sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343"
       },
       "id": "alias_receipt_matches_decision",
       "passed": true,

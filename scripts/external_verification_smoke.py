@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,18 +13,23 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from flightrecorder.cli import main as flightrecorder_main
+from flightrecorder.cli import main as flightrecorder_main  # noqa: E402 - repo bootstrap precedes local import
+from flightrecorder.path_safety import (  # noqa: E402 - repo bootstrap precedes local import
+    assert_safe_output_directory,
+    json_marker_has_schema_version,
+    replace_owned_output_directory,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the external-state verifier smoke demo.")
     parser.add_argument("--out", default=str(ROOT / "runs" / "external_verification_smoke"))
     parser.add_argument("--keep-existing", action="store_true", help="Do not delete an existing output directory first")
+    parser.add_argument("--force", action="store_true", help="Replace a prior valid external-verification smoke output")
     args = parser.parse_args(argv)
 
     out = Path(args.out)
-    if out.exists() and not args.keep_existing:
-        shutil.rmtree(out)
+    _prepare_smoke_output(out, force=bool(args.force), keep_existing=bool(args.keep_existing))
     out.mkdir(parents=True, exist_ok=True)
 
     before_maildir = _maildir(out / "maildir_before")
@@ -105,6 +109,32 @@ def main(argv: list[str] | None = None) -> int:
     print(f"positive report: {positive_run / 'report.html'}")
     print(f"negative report: {negative_run / 'report.html'}")
     return 0 if summary["passed"] else 1
+
+
+def _prepare_smoke_output(out: Path, *, force: bool, keep_existing: bool) -> None:
+    if force and keep_existing:
+        raise SystemExit("--force and --keep-existing are mutually exclusive")
+    def owned(path: Path) -> bool:
+        return json_marker_has_schema_version(
+            path,
+            "external_verification_smoke_summary.json",
+            "hfr.external_verification_smoke.v1",
+        )
+    try:
+        if keep_existing:
+            assert_safe_output_directory(out, repo_root=ROOT)
+            if out.exists() and any(out.iterdir()) and not owned(out):
+                raise ValueError(f"refusing to reuse unrecognized external-verification smoke output: {out}")
+            return
+        replace_owned_output_directory(
+            out,
+            repo_root=ROOT,
+            force=force,
+            label="external-verification smoke output",
+            is_owned=owned,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _run_cli(args: list[str]) -> None:

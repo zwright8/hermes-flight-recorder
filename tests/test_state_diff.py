@@ -18,6 +18,14 @@ def run_cli(args):
 
 
 class StateDiffTests(unittest.TestCase):
+    def test_build_state_diff_uses_json_scalar_equality(self):
+        diff = build_state_diff({"value": False}, {"value": 0})
+
+        self.assertTrue(diff["changed"])
+        self.assertEqual(diff["change_count"], 1)
+        self.assertEqual(diff["change_status"], "changed")
+        self.assertEqual(diff["changes"][0]["path"], "value")
+
     def test_build_state_diff_is_deterministic_and_bounded(self):
         diff = build_state_diff(
             {"b": 2, "nested": {"same": True, "removed": "x"}, "items": [{"id": 1}]},
@@ -27,8 +35,10 @@ class StateDiffTests(unittest.TestCase):
 
         self.assertEqual(diff["schema_version"], "hfr.state_diff.v1")
         self.assertTrue(diff["changed"])
-        self.assertEqual(diff["change_count"], 6)
+        self.assertEqual(diff["change_count"], 4)
         self.assertTrue(diff["truncated"])
+        self.assertFalse(diff["change_count_exact"])
+        self.assertTrue(diff["comparison_truncated"])
         self.assertEqual(
             [(change["path"], change["kind"]) for change in diff["changes"]],
             [
@@ -37,6 +47,110 @@ class StateDiffTests(unittest.TestCase):
                 ("items.0.id", "changed"),
             ],
         )
+
+    def test_build_state_diff_stops_after_first_omitted_change(self):
+        class ExplodingEquality:
+            def __eq__(self, other):
+                raise AssertionError("state diff traversed beyond its change limit")
+
+        diff = build_state_diff(
+            {"items": [0, 1, ExplodingEquality()]},
+            {"items": [1, 2, ExplodingEquality()]},
+            max_changes=1,
+        )
+
+        self.assertEqual(diff["change_count"], 2)
+        self.assertTrue(diff["truncated"])
+        self.assertFalse(diff["change_count_exact"])
+        self.assertTrue(diff["comparison_truncated"])
+        self.assertEqual([change["path"] for change in diff["changes"]], ["items.0"])
+
+    def test_build_state_diff_bounds_large_values_in_change_records(self):
+        diff = build_state_diff(
+            {},
+            {"payload": {"items": ["x" * 10_000 for _ in range(1_000)]}},
+        )
+
+        rendered_change = json.dumps(diff["changes"][0])
+        self.assertLess(len(rendered_change), 20_000)
+        self.assertIn("$hfr_summary", rendered_change)
+        self.assertNotIn("x" * 2_000, rendered_change)
+
+        branching_value: object = 0
+        for _ in range(4):
+            branching_value = [branching_value] * 16
+        branching_diff = build_state_diff({}, {"payload": branching_value})
+
+        self.assertLess(len(json.dumps(branching_diff["changes"][0])), 20_000)
+
+    def test_build_state_diff_bounds_depth_and_node_comparison(self):
+        class ExplodingLengthDict(dict):
+            def __len__(self):
+                raise AssertionError("state diff exceeded its node budget")
+
+        before = {"items": [0, 0, 0, ExplodingLengthDict()]}
+        after = {"items": [0, 0, 0, ExplodingLengthDict()]}
+
+        node_limited = build_state_diff(before, after, max_nodes=4)
+
+        self.assertFalse(node_limited["changed"])
+        self.assertFalse(node_limited["change_count_exact"])
+        self.assertTrue(node_limited["comparison_truncated"])
+        self.assertEqual(node_limited["truncation_reason"], "max_nodes")
+
+        depth_limited = build_state_diff(
+            {"outer": {"inner": {"before": ["x" * 10_000]}}},
+            {"outer": {"inner": {"after": ["y" * 10_000]}}},
+            max_depth=2,
+        )
+
+        self.assertTrue(depth_limited["changed"])
+        self.assertFalse(depth_limited["change_count_exact"])
+        self.assertTrue(depth_limited["comparison_truncated"])
+        self.assertEqual(depth_limited["truncation_reason"], "max_depth")
+        self.assertLess(len(json.dumps(depth_limited)), 20_000)
+
+    def test_incomplete_comparison_is_explicitly_unknown_and_schema_valid(self):
+        before = {"outer": {"items": [{"value": "before"}] * 20}}
+        after = {"outer": {"items": [{"value": "after"}] * 20}}
+
+        diff = build_state_diff(before, after, max_depth=1)
+
+        self.assertFalse(diff["changed"])
+        self.assertEqual(diff["change_count"], 0)
+        self.assertEqual(diff["change_status"], "unknown")
+        self.assertFalse(diff["comparison_complete"])
+        self.assertTrue(diff["comparison_truncated"])
+        self.assertTrue(diff["truncated"])
+        self.assertFalse(diff["change_count_exact"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state_diff.json"
+            summary = Path(tmp) / "validation.json"
+            path.write_text(json.dumps(diff), encoding="utf-8")
+            self.assertEqual(
+                run_cli(["validate", "--state-diff", str(path), "--strict", "--out", str(summary)]),
+                0,
+            )
+
+    def test_incomplete_directory_capture_makes_comparison_unknown(self):
+        captured = {
+            "filesystem": {
+                "directories": {
+                    "workspace": {
+                        "kind": "directory",
+                        "scan_incomplete": True,
+                        "entries": [{"name": "visible.txt", "kind": "file"}],
+                    }
+                }
+            }
+        }
+
+        diff = build_state_diff(captured, json.loads(json.dumps(captured)))
+
+        self.assertEqual(diff["change_status"], "unknown")
+        self.assertFalse(diff["comparison_complete"])
+        self.assertEqual(diff["truncation_reason"], "incomplete_snapshot")
 
     def test_diff_state_cli_redacts_and_validates(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -82,6 +196,8 @@ class StateDiffTests(unittest.TestCase):
             lineage = json.loads((out / "artifact_lineage.json").read_text(encoding="utf-8"))
             self.assertTrue(diff["changed"])
             self.assertEqual(diff["change_count"], 2)
+            self.assertNotIn("change_count_exact", diff)
+            self.assertNotIn("comparison_truncated", diff)
             self.assertEqual(
                 [(change["path"], change["kind"]) for change in diff["changes"]],
                 [

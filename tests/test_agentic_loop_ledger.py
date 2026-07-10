@@ -1,23 +1,20 @@
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
 
+from flightrecorder.agentic_loop_ledger import AgenticLoopLedgerError, build_agentic_loop_ledger
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
 from flightrecorder.agentic_loop_governance import build_agentic_loop_governance_receipt
 from flightrecorder.cli import main
-from flightrecorder.external_eval import (
-    build_external_eval_plan,
-    build_external_eval_receipt,
-    write_external_eval_plan,
-    write_external_eval_receipt,
-)
 from flightrecorder.schema_registry import list_schema_records
-from tests.agentic_loop_fixtures import write_eval_summary, write_valid_promotion_decision, write_valid_promotion_ledger
+from flightrecorder.source_contract import inspect_artifact_source
+from flightrecorder.validation import validate_promotion_archive, validate_promotion_cards
+from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
 
 
 def run_cli(args):
@@ -28,7 +25,123 @@ def run_cli(args):
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _write_valid_training_export(root: Path) -> Path:
+    runs = root / "runs"
+    assert run_cli(
+        [
+            "run",
+            "--scenario",
+            str(ROOT / "scenarios" / "email_reply_completion_good.json"),
+            "--out",
+            str(runs / "email_reply_completion_good"),
+        ]
+    ) == 0
+    training_export = root / "training_export"
+    assert run_cli(["export-rl", "--runs", str(runs), "--out", str(training_export)]) == 0
+    return training_export
+
+
 class AgenticLoopLedgerTests(unittest.TestCase):
+    def test_ledger_rejects_schema_invalid_loop_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = self.write_loop_plan(root / "plan.json", "loop-invalid", {})
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+            payload.pop("notes")
+            plan_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with self.assertRaises(AgenticLoopLedgerError):
+                build_agentic_loop_ledger([plan_path])
+
+    def test_promotion_directory_sources_require_valid_contents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(
+                ROOT / "examples" / "agentic_training",
+                root / "agentic_training",
+            )
+            cards = root / "agentic_training" / "promotion_governance" / "promotion_cards"
+            archive = root / "agentic_training" / "promotion_governance" / "promotion_archive"
+
+            self.assertTrue(inspect_artifact_source(cards, "promotion_cards")["ready"])
+            self.assertTrue(inspect_artifact_source(archive, "promotion_archive")["ready"])
+
+            cards_manifest_path = cards / "promotion_cards.json"
+            archive_manifest_path = archive / "promotion_archive.json"
+            original_cards_manifest = cards_manifest_path.read_text(encoding="utf-8")
+            original_archive_manifest = archive_manifest_path.read_text(encoding="utf-8")
+            blocked_cards = json.loads(original_cards_manifest)
+            blocked_cards["checks"][0]["passed"] = False
+            blocked_cards["passed"] = False
+            blocked_cards["readiness"] = "blocked"
+            blocked_cards["recommendation"] = "regenerate_or_block_promotion"
+            blocked_cards["failed_check_count"] = 1
+            blocked_cards["metrics"]["failed_check_count"] = 1
+            cards_manifest_path.write_text(json.dumps(blocked_cards, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            blocked_archive = json.loads(original_archive_manifest)
+            blocked_archive["passed"] = False
+            blocked_archive["self_contained"] = False
+            blocked_archive["missing"] = [{"index": 0, "reason": "source unavailable", "role": "source_artifact"}]
+            blocked_archive["metrics"]["missing_count"] = 1
+            blocked_archive["metrics"]["missing_role_counts"] = [{"count": 1, "id": "source_artifact"}]
+            archive_manifest_path.write_text(json.dumps(blocked_archive, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(validate_promotion_cards(cards).errors, [])
+            self.assertEqual(validate_promotion_archive(archive).errors, [])
+            self.assertFalse(inspect_artifact_source(cards, "promotion_cards")["semantic_valid"])
+            self.assertFalse(inspect_artifact_source(archive, "promotion_archive")["semantic_valid"])
+
+            cards_manifest_path.write_text(original_cards_manifest, encoding="utf-8")
+            archive_manifest_path.write_text(original_archive_manifest, encoding="utf-8")
+            (cards / "MODEL_CARD.md").unlink()
+            archived_ledger = archive / "artifacts" / "promotion_ledger.json"
+            archived_ledger.write_text(archived_ledger.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+            cards_source = inspect_artifact_source(cards, "promotion_cards")
+            archive_source = inspect_artifact_source(archive, "promotion_archive")
+            self.assertTrue(cards_source["schema_valid"])
+            self.assertTrue(archive_source["schema_valid"])
+            self.assertFalse(cards_source["semantic_valid"])
+            self.assertFalse(archive_source["semantic_valid"])
+            self.assertFalse(cards_source["ready"])
+            self.assertFalse(archive_source["ready"])
+
+    def test_promotion_directory_sources_reject_empty_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cards = root / "promotion_cards"
+            archive = root / "promotion_archive"
+            cards.mkdir()
+            archive.mkdir()
+
+            self.assertFalse(inspect_artifact_source(cards, "promotion_cards")["ready"])
+            self.assertFalse(inspect_artifact_source(archive, "promotion_archive")["ready"])
+
+    def test_training_export_source_rejects_empty_episode_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            training_export = _write_valid_training_export(Path(tmp))
+            self.assertTrue(inspect_artifact_source(training_export, "training_export")["ready"])
+
+            (training_export / "episodes.jsonl").write_text("", encoding="utf-8")
+
+            source = inspect_artifact_source(training_export, "training_export")
+            self.assertTrue(source["schema_valid"])
+            self.assertFalse(source["semantic_valid"])
+            self.assertFalse(source["ready"])
+
+    def test_training_export_source_rejects_tampered_episode_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            training_export = _write_valid_training_export(Path(tmp))
+            episodes_path = training_export / "episodes.jsonl"
+            self.assertTrue(inspect_artifact_source(training_export, "training_export")["ready"])
+
+            episodes_path.write_text(episodes_path.read_text(encoding="utf-8") + "{}\n", encoding="utf-8")
+
+            source = inspect_artifact_source(training_export, "training_export")
+            self.assertTrue(source["schema_valid"])
+            self.assertFalse(source["semantic_valid"])
+            self.assertFalse(source["ready"])
+
     def test_committed_example_loop_ledger_replays_loop_plan(self):
         ledger_path = ROOT / "examples" / "agentic_training" / "loop_ledger.json"
         loop_plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
@@ -238,13 +351,41 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("readiness_digest.promotion_ledger_present must match the latest iteration", errors)
 
-    def test_governance_actions_mark_rollback_available_when_receipt_is_present(self):
+    def test_governance_counts_exclude_invalid_or_missing_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             ready_artifacts = self.write_ready_artifacts(root / "ready")
-            ready_artifacts["promotion_rollback_receipt"] = [
-                self.write_json(root / "ready" / "promotion_rollback_receipt.json", "hfr.promotion_rollback_receipt.v1")
+            ready_artifacts["promotion_decision"] = [
+                self.write_json(root / "ready" / "invalid_promotion_decision.json", "hfr.promotion_decision.v1")
             ]
+            ready_artifacts["promotion_ledger"] = [root / "ready" / "missing_promotion_ledger.json"]
+            ready_artifacts["promotion_rollback_receipt"] = [
+                self.write_json(
+                    root / "ready" / "invalid_promotion_rollback_receipt.json",
+                    "hfr.promotion_rollback_receipt.v1",
+                )
+            ]
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = build_agentic_loop_ledger([plan])
+
+            iteration = ledger["iterations"][0]
+            role_counts = {row["role"]: row["count"] for row in iteration["artifact_role_counts"]}
+            self.assertNotIn("promotion_decision", role_counts)
+            self.assertNotIn("promotion_ledger", role_counts)
+            self.assertNotIn("promotion_rollback_receipt", role_counts)
+            self.assertFalse(iteration["governance"]["promotion_decision_present"])
+            self.assertFalse(iteration["governance"]["promotion_ledger_present"])
+            self.assertFalse(iteration["governance"]["rollback_receipt_present"])
+            actions = {row["action"]: row for row in ledger["decision"]["governance_actions"]}
+            self.assertIn("missing_promotion_decision", actions["approve"]["blocked_reasons"])
+            self.assertIn("missing_promotion_ledger", actions["approve"]["blocked_reasons"])
+            self.assertIn("missing_rollback_receipt", actions["rollback"]["blocked_reasons"])
+            self.assertEqual(ledger["decision"]["recommended_governance_action"], "request_another_iteration")
+
+    def test_governance_actions_mark_rollback_available_when_receipt_is_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = copy_valid_loop_artifacts(root / "ready")
             plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
             ledger = root / "ledger.json"
 
@@ -373,12 +514,11 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
             code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
 
-            self.assertEqual(code, 1)
-            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
-            self.assertIn(
-                "agentic_training_loop_plan.checks.governance_required_for_promotion.passed must match promotion decision and ledger validation state.",
-                errors,
-            )
+            self.assertEqual(code, 0)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            self.assertTrue(validation["passed"], validation)
+            ledger_payload = json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertEqual(ledger_payload["decision"]["readiness"], "blocked")
 
     def test_validate_rejects_tampered_readiness_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1431,85 +1571,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
 
     def write_ready_artifacts(self, root: Path) -> dict[str, list[Path]]:
         root.mkdir(parents=True, exist_ok=True)
-        training_export = root / "training_export"
-        training_export.mkdir()
-        agentic_training_plan = self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
-        trainer_preflight = self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")
-        trainer_launch_check = self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")
-        cloud_artifact_manifest = self.write_provider_json(
-            root / "cloud_training_artifact_manifest.json",
-            "hfr.cloud_training_artifact_manifest.v1",
-        )
-        cloud_preflight = self.write_provider_json(
-            root / "cloud_training_preflight.json",
-            "hfr.cloud_training_preflight.v1",
-            {
-                "agentic_training_plan": self.artifact_ref(agentic_training_plan, "agentic_training_plan"),
-                "trainer_preflight": self.artifact_ref(trainer_preflight, "trainer_preflight"),
-                "trainer_launch_check": self.artifact_ref(trainer_launch_check, "trainer_launch_check"),
-            },
-        )
-        cloud_launch_plan = self.write_provider_json(
-            root / "cloud_training_launch_plan.json",
-            "hfr.cloud_training_launch_plan.v1",
-            {
-                "preflight": self.artifact_ref(cloud_preflight, "cloud_training_preflight"),
-                "artifact_manifest": self.artifact_ref(cloud_artifact_manifest, "cloud_training_artifact_manifest"),
-            },
-        )
-        cloud_launch_receipt = self.write_json(
-            root / "cloud_training_launch_receipt.json",
-            "hfr.cloud_training_launch_receipt.v1",
-            {"launch_plan": self.artifact_ref(cloud_launch_plan, "cloud_training_launch_plan")},
-        )
-        cloud_status_receipt = self.write_json(
-            root / "cloud_training_status_receipt.json",
-            "hfr.cloud_training_status_receipt.v1",
-            {"launch_receipt": self.artifact_ref(cloud_launch_receipt, "cloud_training_launch_receipt")},
-        )
-        heldout_manifest, external_eval_plan, external_eval_receipt = self.write_external_eval_artifacts(root)
-        return {
-            "agentic_rollout_plan": [self.write_json(root / "agentic_rollout_plan.json", "hfr.agentic_rollout_plan.v1")],
-            "agentic_rollout_receipt": [self.write_json(root / "agentic_rollout_receipt.json", "hfr.agentic_rollout_receipt.v1")],
-            "harness_result": [self.write_json(root / "harness_result.json", "hfr.harness_run_result.v1")],
-            "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
-            "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],
-            "model_grader_dry_run": [self.write_json(root / "model_grader_dry_run.json", "hfr.model_grader_dry_run.v1")],
-            "model_grader_disagreement_queue": [
-                self.write_json(root / "model_grader_disagreement_queue.json", "hfr.model_grader_disagreement_queue.v1")
-            ],
-            "model_grader_override_receipt": [
-                self.write_json(root / "model_grader_override_receipt.json", "hfr.model_grader_override_receipt.v1")
-            ],
-            "model_grader_gate": [self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")],
-            "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
-            "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
-            "rejection_sampling_gate": [self.write_json(root / "rejection_sampling_gate.json", "hfr.rejection_sampling_gate.v1")],
-            "dataset_curation_receipt": [self.write_json(root / "dataset_curation_receipt.json", "hfr.dataset_curation_receipt.v1")],
-            "training_export": [training_export],
-            "agentic_training_plan": [agentic_training_plan],
-            "agentic_training_flow": [self.write_json(root / "agentic_training_flow.json", "hfr.agentic_training_flow.v1")],
-            "cloud_training_provider_registry": [
-                self.write_provider_registry(root / "cloud_training_provider_registry.json")
-            ],
-            "cloud_training_preflight": [cloud_preflight],
-            "cloud_training_artifact_manifest": [cloud_artifact_manifest],
-            "cloud_training_launch_plan": [cloud_launch_plan],
-            "cloud_training_launch_receipt": [cloud_launch_receipt],
-            "cloud_training_status_receipt": [cloud_status_receipt],
-            "trainer_preflight": [trainer_preflight],
-            "trainer_launch_check": [trainer_launch_check],
-            "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],
-            "heldout_manifest": [heldout_manifest],
-            "external_eval_plan": [external_eval_plan],
-            "external_eval_receipt": [external_eval_receipt],
-            "eval_summary": [write_eval_summary(root)],
-            "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
-            "promotion_decision": [write_valid_promotion_decision(root)],
-            "promotion_ledger": [write_valid_promotion_ledger(root)],
-            "next_iteration_schedule": [self.write_json(root / "next_iteration_schedule.json", "hfr.next_iteration_schedule.v1")],
-            "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
-        }
+        artifacts = copy_valid_loop_artifacts(root)
+        artifacts.pop("promotion_rollback_receipt", None)
+        return artifacts
 
     def write_json(self, path: Path, schema_version: str, source_artifacts: dict[str, dict[str, object]] | None = None) -> Path:
         payload = {
@@ -1556,90 +1620,6 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
-    def write_external_eval_artifacts(self, root: Path) -> tuple[Path, Path, Path]:
-        heldout_manifest = self.write_heldout_manifest(root / "heldout_manifest.json")
-        external_eval_plan = root / "external_eval_plan.json"
-        external_eval_receipt = root / "external_eval_receipt.json"
-        with patch(
-            "flightrecorder.external_eval._dependency_status",
-            return_value={"available": True, "imports": {"inspect_ai": True}, "commands": {"inspect": True}},
-        ):
-            plan = build_external_eval_plan(
-                adapters=["inspect_ai"],
-                scenario_manifest=heldout_manifest,
-                model_endpoint="http://127.0.0.1:8000/v1",
-                inspect_task_set="heldout-inspect",
-                sandbox_policy="locked-network",
-                allow_installed=True,
-            )
-        write_external_eval_plan(plan, external_eval_plan)
-        receipt = build_external_eval_receipt(
-            plan_path=external_eval_plan,
-            adapters=["inspect_ai"],
-            created_at="2026-07-03T00:00:00+00:00",
-            output_base_dir=external_eval_receipt.parent,
-        )
-        write_external_eval_receipt(receipt, external_eval_receipt)
-        return heldout_manifest, external_eval_plan, external_eval_receipt
-
-    def write_heldout_manifest(self, path: Path) -> Path:
-        payload = {
-            "schema_version": "hfr.heldout_scenario_manifest.v1",
-            "ready": True,
-            "scenario_count": 1,
-            "scenario_ids": ["email_reply_completion"],
-        }
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        return path
-
-    def write_provider_registry(self, path: Path) -> Path:
-        path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "hfr.cloud_training_provider_registry.v1",
-                    "passed": True,
-                    "readiness": "ready",
-                    "providers": [{"id": "modal"}],
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        return path
-
-    def write_provider_json(
-        self,
-        path: Path,
-        schema_version: str,
-        source_artifacts: dict[str, dict[str, object]] | None = None,
-    ) -> Path:
-        path.write_text(
-            json.dumps(
-                {
-                    "schema_version": schema_version,
-                    "passed": True,
-                    "readiness": "ready",
-                    "provider": {"id": "modal"},
-                    "source_artifacts": source_artifacts or {},
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        return path
-
-    def artifact_ref(self, path: Path, role: str) -> dict[str, object]:
-        return {
-            "role": role,
-            "path": path.name,
-            "exists": True,
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "size_bytes": path.stat().st_size,
-        }
 
 
 if __name__ == "__main__":

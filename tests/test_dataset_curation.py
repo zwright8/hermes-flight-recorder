@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,58 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DatasetCurationReceiptTests(unittest.TestCase):
+    def test_receipt_rejects_invalid_and_semantically_failed_training_manifests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
+            export_dir = self.write_training_export(root / "training_export")
+            manifest = export_dir / "manifest.json"
+            manifest.write_text('{"schema_version":"hfr.rl.manifest.v1"}\n', encoding="utf-8")
+
+            invalid = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=root / "invalid_receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(invalid["passed"])
+            self.assertFalse(invalid["input_artifacts"]["training_export"][0]["exists"])
+
+            shutil.rmtree(export_dir)
+            export_dir = self.write_training_export(root / "training_export")
+            payload = json.loads((export_dir / "manifest.json").read_text(encoding="utf-8"))
+            payload["redaction_status"]["passed"] = False
+            payload["redaction_status"]["unredacted_secret_like_finding_count"] = 1
+            (export_dir / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            failed = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=root / "failed_receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(failed["passed"])
+            self.assertFalse(failed["input_artifacts"]["training_export"][0]["exists"])
+
+    def test_receipt_rejects_symlinked_training_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
+            export_dir = self.write_training_export(root / "training_export")
+            linked = root / "linked_export"
+            try:
+                linked.symlink_to(export_dir.name, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[linked],
+                out_path=root / "symlinked_receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(receipt["passed"])
+            self.assertFalse(receipt["input_artifacts"]["training_export"][0]["exists"])
+
     def test_committed_agentic_training_curation_receipt_binds_real_export_without_writes(self):
         example_root = ROOT / "examples" / "agentic_training"
         receipt_path = example_root / "dataset_curation_receipt.json"
@@ -307,27 +360,16 @@ class DatasetCurationReceiptTests(unittest.TestCase):
         self.assertIn("dataset_curation_receipt", names)
 
     def write_rejection_sampling_gate(self, path: Path, *, passed: bool = True) -> Path:
-        path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "hfr.rejection_sampling_gate.v1",
-                    "passed": passed,
-                    "readiness": "ready_for_dataset_curation" if passed else "blocked",
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
+        payload = json.loads(
+            (ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json").read_text(encoding="utf-8")
         )
+        payload["passed"] = passed
+        payload["readiness"] = "ready_for_dataset_curation" if passed else "blocked"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
     def write_training_export(self, path: Path) -> Path:
-        path.mkdir(parents=True)
-        (path / "manifest.json").write_text(
-            json.dumps({"schema_version": "hfr.training_manifest.v1", "passed": True}, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        shutil.copytree(ROOT / "examples" / "agentic_training" / "training_export", path)
         return path
 
 

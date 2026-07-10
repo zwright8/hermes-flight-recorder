@@ -9,9 +9,11 @@ from pathlib import Path
 from flightrecorder.agentic_training_plan import build_agentic_training_plan
 from flightrecorder.agentic_training_runtime import (
     AgenticTrainingRuntimePreflightError,
+    _module_available,
     build_agentic_training_runtime_preflight,
 )
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
+from flightrecorder.validation import validate_agentic_training_runtime_preflight
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,46 @@ EXAMPLE_PLAN = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_
 
 
 class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
+    def test_full_validator_rejects_schema_valid_forged_check_aggregates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "runtime_preflight.json"
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=EXAMPLE_PLAN,
+                out_path=path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            path.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(validate_agentic_training_runtime_preflight(path).errors, [])
+
+            preflight["checks"][0]["passed"] = False
+            path.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            errors = validate_agentic_training_runtime_preflight(path).errors
+
+            self.assertTrue(errors)
+            self.assertTrue(any("failed_check_count" in error or "plan_json_readable" in error for error in errors))
+
+    def test_dotted_dependency_probe_does_not_import_parent_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = root / "hfr_probe_side_effect"
+            package.mkdir()
+            sentinel = root / "imported.txt"
+            (package / "__init__.py").write_text(
+                f"from pathlib import Path\nPath({str(sentinel)!r}).write_text('imported')\n",
+                encoding="utf-8",
+            )
+            (package / "child.py").write_text("AVAILABLE = True\n", encoding="utf-8")
+            sys.path.insert(0, str(root))
+            try:
+                self.assertTrue(_module_available("hfr_probe_side_effect.child"))
+                self.assertFalse(sentinel.exists())
+            finally:
+                sys.path.remove(str(root))
+                sys.modules.pop("hfr_probe_side_effect.child", None)
+                sys.modules.pop("hfr_probe_side_effect", None)
+
     def test_committed_example_plan_can_pass_dependency_scoped_runtime_preflight(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "runtime_preflight.json"

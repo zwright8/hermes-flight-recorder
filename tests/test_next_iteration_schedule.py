@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,7 @@ from pathlib import Path
 from flightrecorder.next_iteration_schedule import build_next_iteration_schedule, write_next_iteration_schedule
 from flightrecorder.schema_registry import check_schema_file, list_schema_records
 from flightrecorder.validation import validate_artifacts
+from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,63 @@ def sha256_file(path: Path) -> str:
 
 
 class NextIterationScheduleTests(unittest.TestCase):
+    def test_schedule_blocks_schema_invalid_and_symlinked_source_ledgers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loop = self.write_loop_ledger(root / "agentic_loop_ledger.json")
+            improvement = self.write_improvement_ledger(root / "improvement_ledger.json")
+            invalid_action = root / "invalid_action_ledger.json"
+            invalid_action.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger.v1",
+                        "passed": True,
+                        "metrics": {"open_action_count": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            invalid = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=invalid_action,
+                improvement_ledger_path=improvement,
+                out_path=root / "invalid_schedule.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(invalid["passed"])
+            self.assertFalse(invalid["source_ledgers"]["action_ledger"][0]["exists"])
+
+            failed_loop = json.loads(loop.read_text(encoding="utf-8"))
+            failed_loop["passed"] = False
+            loop.write_text(json.dumps(failed_loop, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            semantically_failed = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=self.write_action_ledger(root / "semantic_action_ledger.json"),
+                improvement_ledger_path=improvement,
+                out_path=root / "semantic_schedule.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(semantically_failed["passed"])
+            self.assertFalse(semantically_failed["source_ledgers"]["agentic_loop_ledger"][0]["exists"])
+            loop = self.write_loop_ledger(root / "agentic_loop_ledger.json")
+
+            action = self.write_action_ledger(root / "action_ledger.json")
+            linked_action = root / "linked_action_ledger.json"
+            try:
+                linked_action.symlink_to(action)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            symlinked = build_next_iteration_schedule(
+                loop_ledger_path=loop,
+                action_ledger_path=linked_action,
+                improvement_ledger_path=improvement,
+                out_path=root / "symlinked_schedule.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            self.assertFalse(symlinked["passed"])
+            self.assertFalse(symlinked["source_ledgers"]["action_ledger"][0]["exists"])
+
     def test_committed_example_schedule_replays_ledgers_without_side_effects(self):
         example_root = ROOT / "examples" / "agentic_training"
         schedule_path = example_root / "next_iteration_schedule.json"
@@ -100,7 +159,7 @@ class NextIterationScheduleTests(unittest.TestCase):
             self.assertEqual(payload["next_iteration"]["iteration_id"], "loop-002")
             self.assertFalse(payload["next_iteration"]["scheduled"])
             self.assertFalse(payload["execution_boundary"]["automations_created"])
-            self.assertEqual(payload["pressure"]["total_open_signal_count"], 6)
+            self.assertEqual(payload["pressure"]["total_open_signal_count"], 4)
 
     def test_schedule_redacts_external_output_path_and_keeps_local_sources_replayable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,9 +181,15 @@ class NextIterationScheduleTests(unittest.TestCase):
             payload = json.loads(out.read_text(encoding="utf-8"))
             rendered = json.dumps(payload, sort_keys=True)
             self.assertEqual(payload["schedule_path"], "<redacted:next_iteration_schedule.json>")
-            self.assertEqual(payload["source_ledgers"]["agentic_loop_ledger"][0]["path"], "agentic_loop_ledger.json")
-            self.assertEqual(payload["source_ledgers"]["action_ledger"][0]["path"], "action_ledger.json")
-            self.assertEqual(payload["source_ledgers"]["improvement_ledger"][0]["path"], "improvement_ledger.json")
+            self.assertEqual(
+                payload["source_ledgers"]["agentic_loop_ledger"][0]["path"],
+                str(loop.relative_to(root)),
+            )
+            self.assertEqual(payload["source_ledgers"]["action_ledger"][0]["path"], str(action.relative_to(root)))
+            self.assertEqual(
+                payload["source_ledgers"]["improvement_ledger"][0]["path"],
+                str(improvement.relative_to(root)),
+            )
             self.assertNotIn(str(root), rendered)
             self.assertTrue(validate_artifacts(next_iteration_schedule_paths=[out], strict=True)["passed"])
 
@@ -150,9 +215,14 @@ class NextIterationScheduleTests(unittest.TestCase):
             rendered = json.dumps(payload, sort_keys=True)
             self.assertFalse(payload["passed"])
             self.assertEqual(payload["recommendation"], "fix_schedule_inputs")
-            for role in ("agentic_loop_ledger", "action_ledger", "improvement_ledger"):
+            source_paths = {
+                "agentic_loop_ledger": loop,
+                "action_ledger": action,
+                "improvement_ledger": improvement,
+            }
+            for role, source_path in source_paths.items():
                 ref = payload["source_ledgers"][role][0]
-                self.assertEqual(ref["path"], f"<redacted:{role}.json>")
+                self.assertEqual(ref["path"], f"<redacted:{source_path.name}>")
                 self.assertFalse(ref["exists"])
                 self.assertIsNone(ref["sha256"])
                 self.assertIsNone(ref["size_bytes"])
@@ -386,9 +456,9 @@ class NextIterationScheduleTests(unittest.TestCase):
             linked_source.symlink_to(source, target_is_directory=True)
             base_payload = json.loads(out.read_text(encoding="utf-8"))
             source_files = {
-                "agentic_loop_ledger": "agentic_loop_ledger.json",
-                "action_ledger": "action_ledger.json",
-                "improvement_ledger": "improvement_ledger.json",
+                "agentic_loop_ledger": loop.relative_to(source),
+                "action_ledger": action.relative_to(source),
+                "improvement_ledger": improvement.relative_to(source),
             }
 
             for role, filename in source_files.items():
@@ -464,43 +534,31 @@ class NextIterationScheduleTests(unittest.TestCase):
         self.assertIn("next_iteration_schedule", names)
 
     def write_loop_ledger(self, path: Path) -> Path:
-        return self.write_json(
-            path,
-            {
-                "schema_version": "hfr.agentic_loop_ledger.v1",
-                "passed": True,
-                "metrics": {
-                    "latest_iteration_id": "loop-001",
-                    "latest_readiness": "planned_fail_closed",
-                    "latest_missing_phase_input_count": 2,
-                },
-            },
-        )
+        fixture_root = self._ledger_fixture_root(path.parent)
+        fixture_path = fixture_root / "loop_ledger.json"
+        shutil.copyfile(ROOT / "examples" / "agentic_training" / "loop_ledger.json", fixture_path)
+        return fixture_path
 
     def write_action_ledger(self, path: Path) -> Path:
-        return self.write_json(
-            path,
-            {
-                "schema_version": "hfr.action_ledger.v1",
-                "passed": True,
-                "metrics": {"open_action_count": 1, "new_action_count": 1, "recurring_action_count": 0},
-            },
-        )
+        fixture_root = self._ledger_fixture_root(path.parent)
+        fixture_path = fixture_root / "iteration_ledgers" / "action_ledger.json"
+        shutil.copyfile(ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json", fixture_path)
+        return fixture_path
 
     def write_improvement_ledger(self, path: Path) -> Path:
-        return self.write_json(
-            path,
-            {
-                "schema_version": "hfr.improvement_ledger.v1",
-                "passed": True,
-                "metrics": {
-                    "open_work_item_count": 3,
-                    "critical_open_work_item_count": 1,
-                    "high_open_work_item_count": 1,
-                    "resolved_work_item_count": 2,
-                },
-            },
+        fixture_root = self._ledger_fixture_root(path.parent)
+        fixture_path = fixture_root / "iteration_ledgers" / "improvement_ledger.json"
+        shutil.copyfile(
+            ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "improvement_ledger.json",
+            fixture_path,
         )
+        return fixture_path
+
+    def _ledger_fixture_root(self, root: Path) -> Path:
+        fixture_root = root / "loop_fixture" / "examples" / "agentic_training"
+        if not fixture_root.exists():
+            copy_valid_loop_artifacts(root)
+        return fixture_root
 
     def write_json(self, path: Path, payload: dict) -> Path:
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

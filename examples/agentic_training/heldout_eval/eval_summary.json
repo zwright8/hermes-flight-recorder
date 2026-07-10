@@ -2,12 +2,46 @@
   "arm_count": 2,
   "arms": [
     {
-      "average_score": 100.0,
+      "average_score": 56.67,
       "blocking_reasons": [],
-      "critical_failure_counts": [],
+      "critical_failure_counts": [
+        {
+          "count": 2,
+          "id": "required_evidence"
+        },
+        {
+          "count": 1,
+          "id": "final_answer"
+        },
+        {
+          "count": 1,
+          "id": "forbidden_actions"
+        },
+        {
+          "count": 1,
+          "id": "secret_exposure"
+        }
+      ],
       "error_count": 0,
-      "failed": 0,
-      "failed_rule_counts": [],
+      "failed": 2,
+      "failed_rule_counts": [
+        {
+          "count": 2,
+          "id": "required_evidence"
+        },
+        {
+          "count": 1,
+          "id": "final_answer"
+        },
+        {
+          "count": 1,
+          "id": "forbidden_actions"
+        },
+        {
+          "count": 1,
+          "id": "secret_exposure"
+        }
+      ],
       "label": "baseline",
       "operational_metrics": {
         "cost": {
@@ -45,8 +79,8 @@
           "total_tokens": null
         }
       },
-      "pass_rate": 1.0,
-      "passed": 3,
+      "pass_rate": 0.3333,
+      "passed": 1,
       "path": "baseline_suite_summary.json",
       "scenario_count": 3,
       "scenario_ids": [
@@ -70,18 +104,52 @@
         "schema_version": null,
         "served_model_id": ""
       },
-      "sha256": "721c22bd5818529b1fffe76675f5950342dbd4003a4ae7834489f7de47136276",
-      "size_bytes": 1153,
+      "sha256": "5889506de0193c6a15bf630b2db071b9f3e55adc8c14694d79dd7cee0d088580",
+      "size_bytes": 7503,
       "total": 3,
       "validation": null
     },
     {
-      "average_score": 100.0,
+      "average_score": 56.67,
       "blocking_reasons": [],
-      "critical_failure_counts": [],
+      "critical_failure_counts": [
+        {
+          "count": 2,
+          "id": "required_evidence"
+        },
+        {
+          "count": 1,
+          "id": "final_answer"
+        },
+        {
+          "count": 1,
+          "id": "forbidden_actions"
+        },
+        {
+          "count": 1,
+          "id": "secret_exposure"
+        }
+      ],
       "error_count": 0,
-      "failed": 0,
-      "failed_rule_counts": [],
+      "failed": 2,
+      "failed_rule_counts": [
+        {
+          "count": 2,
+          "id": "required_evidence"
+        },
+        {
+          "count": 1,
+          "id": "final_answer"
+        },
+        {
+          "count": 1,
+          "id": "forbidden_actions"
+        },
+        {
+          "count": 1,
+          "id": "secret_exposure"
+        }
+      ],
       "label": "candidate",
       "operational_metrics": {
         "cost": {
@@ -119,8 +187,8 @@
           "total_tokens": null
         }
       },
-      "pass_rate": 1.0,
-      "passed": 3,
+      "pass_rate": 0.3333,
+      "passed": 1,
       "path": "candidate_suite_summary.json",
       "scenario_count": 3,
       "scenario_ids": [
@@ -144,8 +212,8 @@
         "schema_version": null,
         "served_model_id": ""
       },
-      "sha256": "721c22bd5818529b1fffe76675f5950342dbd4003a4ae7834489f7de47136276",
-      "size_bytes": 1153,
+      "sha256": "5889506de0193c6a15bf630b2db071b9f3e55adc8c14694d79dd7cee0d088580",
+      "size_bytes": 7503,
       "total": 3,
       "validation": null
     }
@@ -167,12 +235,12 @@
       "ready": true,
       "ready_adapter_count": 1,
       "schema_version": "hfr.external_eval_adapters.v1",
-      "sha256": "fada998b85f837d43816aaebf7fe92607a67febd4340694cb5f67f98c985a481",
+      "sha256": "e1eb3463aa1c3fe160c50970a45fdefbd558c5b814cc8f206d9d5b0fd732d69b",
       "size_bytes": 2858
     }
   ],
   "gate_count": 0,
-  "generated_at": "2026-07-04T17:39:53.518395+00:00",
+  "generated_at": "2026-07-09T23:16:43.927635+00:00",
   "governance_ready": true,
   "heldout_scenarios": {
     "arms": [
@@ -209,15 +277,122 @@
   },
   "passed": true,
   "repair_curriculum": {
-    "category_counts": [],
-    "critical_work_item_count": 0,
-    "items": [],
+    "category_counts": [
+      {
+        "count": 8,
+        "id": "repair"
+      }
+    ],
+    "critical_work_item_count": 8,
+    "items": [
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "baseline",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "final_answer",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm baseline has 1 critical failure(s) for rule final_answer.",
+        "work_item_id": "eval-cf0a607a86ffc0bf"
+      },
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "baseline",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "forbidden_actions",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm baseline has 1 critical failure(s) for rule forbidden_actions.",
+        "work_item_id": "eval-a112708ce805e64b"
+      },
+      {
+        "category": "repair",
+        "count": 2,
+        "label": "baseline",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "required_evidence",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm baseline has 2 critical failure(s) for rule required_evidence.",
+        "work_item_id": "eval-327b2ce887091d8c"
+      },
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "baseline",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "secret_exposure",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm baseline has 1 critical failure(s) for rule secret_exposure.",
+        "work_item_id": "eval-faa8cd1a1e62b9fa"
+      },
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "candidate",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "final_answer",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm candidate has 1 critical failure(s) for rule final_answer.",
+        "work_item_id": "eval-2671369fde51da83"
+      },
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "candidate",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "forbidden_actions",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm candidate has 1 critical failure(s) for rule forbidden_actions.",
+        "work_item_id": "eval-5f0d660767810b30"
+      },
+      {
+        "category": "repair",
+        "count": 2,
+        "label": "candidate",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "required_evidence",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm candidate has 2 critical failure(s) for rule required_evidence.",
+        "work_item_id": "eval-9f64cb16689da3c8"
+      },
+      {
+        "category": "repair",
+        "count": 1,
+        "label": "candidate",
+        "priority": "critical",
+        "reason": "critical_failure",
+        "rule_id": "secret_exposure",
+        "source": "suite_summary",
+        "suggested_action": "Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+        "summary": "Suite arm candidate has 1 critical failure(s) for rule secret_exposure.",
+        "work_item_id": "eval-4a683e6ac0b37574"
+      }
+    ],
     "notes": [
       "Repair/curriculum items are derived from eval artifacts; they do not approve promotion.",
       "Use these items to route scenario repair, candidate repair, curriculum generation, or eval-harness follow-up."
     ],
-    "priority_counts": [],
-    "work_item_count": 0
+    "priority_counts": [
+      {
+        "count": 8,
+        "id": "critical"
+      }
+    ],
+    "work_item_count": 8
   },
   "risks": [],
   "schema_version": "hfr.eval_summary.v1",

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .schema_registry import check_schema_contract
+
 HELDOUT_MANIFEST_SCHEMA_VERSION = "hfr.heldout_scenario_manifest.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 
@@ -90,7 +92,8 @@ def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[
             scenario_fingerprints[scenario_id] = scenario_sha
     unique_scenarios = sorted(set(scenario_ids))
     blocking_reasons: list[str] = []
-    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION:
+    schema_check = check_schema_contract(summary, name_or_id="run_suite")
+    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION or schema_check["passed"] is not True:
         blocking_reasons.append("invalid_suite_summary_schema")
     if not unique_scenarios:
         blocking_reasons.append("empty_suite_summary")

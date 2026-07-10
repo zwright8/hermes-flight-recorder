@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .source_contract import inspect_artifact_source
+
 REJECTION_SAMPLING_GATE_SCHEMA_VERSION = "hfr.rejection_sampling_gate.v1"
 
 
@@ -145,8 +147,10 @@ def write_rejection_sampling_gate(path: str | Path, gate: dict[str, Any]) -> Non
 def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, output_dir: Path | None = None) -> dict[str, Any]:
     path = Path(path_value)
     displayed_path = _display_path(path, preserve_paths, output_dir)
-    exists = _is_public_rejection_sampling_ref_path(displayed_path) and path.exists()
-    payload = _read_json(path) if exists and path.is_file() else {}
+    public_path = _is_public_rejection_sampling_ref_path(displayed_path)
+    source = inspect_artifact_source(path, role) if public_path else {"payload": {}, "regular_file": False, "schema_valid": False}
+    exists = public_path and source.get("regular_file") is True and source.get("schema_valid") is True
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
     boundary = payload.get("execution_boundary") if isinstance(payload.get("execution_boundary"), dict) else {}
     ref = {
         "role": role,
@@ -193,14 +197,6 @@ def _rollout_boundaries_are_mock_only(refs: list[dict[str, Any]]) -> bool:
         and ref.get("dataset_rows_written") is not True
         for ref in refs
     )
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:

@@ -20,6 +20,91 @@ def run_cli(args):
 
 
 class EvalSummaryTests(unittest.TestCase):
+    def test_eval_summary_blocks_schema_valid_suite_with_forged_aggregates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            payload = _read_json(suite)
+            payload["total"] = 2
+            payload["metrics"]["passed"] = 0
+            payload["metrics"]["task_families"][0]["average_score"] = 0.0
+            suite.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            out = root / "eval_summary.json"
+
+            schema = check_schema_file(suite)
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertFalse(summary["governance_ready"])
+            self.assertIn("suite_summary_semantic_validation_failed", summary["arms"][0]["blocking_reasons"])
+
+    def test_validate_eval_summary_rejects_arm_metrics_forged_against_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
+                0,
+            )
+            summary = _read_json(out)
+            summary["arms"][0]["passed"] = 0
+            summary["arms"][0]["average_score"] = 0.0
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error for target in _read_json(validation)["targets"] for error in target["errors"]
+            )
+            self.assertIn("does not match the referenced run_suite source", errors)
+
+    def test_validate_eval_summary_rejects_schema_invalid_arm_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
+                0,
+            )
+            suite_payload = _read_json(suite)
+            suite_payload.pop("artifacts")
+            suite.write_text(json.dumps(suite_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            summary = _read_json(out)
+            summary["arms"][0]["sha256"] = hashlib.sha256(suite.read_bytes()).hexdigest()
+            summary["arms"][0]["size_bytes"] = suite.stat().st_size
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error for target in _read_json(validation)["targets"] for error in target["errors"]
+            )
+            self.assertIn("must satisfy the run_suite schema", errors)
+
+    def test_eval_summary_blocks_schema_invalid_suite_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            payload = _read_json(suite)
+            payload.pop("artifacts")
+            suite.write_text(json.dumps(payload), encoding="utf-8")
+            out = root / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertFalse(summary["governance_ready"])
+            self.assertIn("invalid_suite_summary_schema", summary["arms"][0]["blocking_reasons"])
+
     def test_committed_agentic_training_eval_summary_records_ready_local_mock(self):
         eval_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
         summary_path = eval_root / "eval_summary.json"
@@ -35,7 +120,7 @@ class EvalSummaryTests(unittest.TestCase):
         self.assertTrue(summary["external_adapter_plans"][0]["ready"])
         self.assertEqual(summary["external_adapter_plans"][0]["ready_adapter_count"], 1)
         self.assertEqual(summary["risks"], [])
-        self.assertEqual(summary["repair_curriculum"]["work_item_count"], 0)
+        self.assertGreater(summary["repair_curriculum"]["work_item_count"], 0)
         self.assertEqual(summary["conclusion"]["status"], "ready")
         report = markdown_path.read_text(encoding="utf-8")
         self.assertIn("- Governance ready: yes", report)
@@ -807,7 +892,23 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
     runs = [
         {
             "scenario_id": scenario_id,
+            "scenario_title": scenario_id,
             "task_family": scenario_id,
+            "scenario_path": f"scenarios/{scenario_id}.json",
+            "trace_path": f"traces/{scenario_id}.jsonl",
+            "run_dir": f"runs/{scenario_id}",
+            "report": f"runs/{scenario_id}/report.html",
+            "report_sha256": "b" * 64,
+            "report_size_bytes": 1,
+            "scorecard": f"runs/{scenario_id}/scorecard.json",
+            "scorecard_sha256": "c" * 64,
+            "scorecard_size_bytes": 1,
+            "run_digest": f"runs/{scenario_id}/run_digest.json",
+            "run_digest_sha256": "d" * 64,
+            "run_digest_size_bytes": 1,
+            "lineage": f"runs/{scenario_id}/artifact_lineage.json",
+            "lineage_sha256": "e" * 64,
+            "lineage_size_bytes": 1,
             "passed": True,
             "score": 100,
             "failed_rules": [],
@@ -820,6 +921,8 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
             runs[index].update(override)
     payload = {
         "schema_version": "hfr.run_suite.v1",
+        "scenarios_dir": "scenarios",
+        "out_dir": "runs",
         "total": len(runs),
         "passed": len(runs),
         "failed": 0,
@@ -828,13 +931,39 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
         "metrics": {
             "pass_rate": 1.0 if runs else 0.0,
             "average_score": 100.0 if runs else 0.0,
+            "min_score": 100 if runs else None,
+            "max_score": 100 if runs else None,
             "failed_rule_counts": [],
             "critical_failure_counts": [],
+            "task_families": _suite_task_families(runs),
+            "failed": 0,
+            "passed": len(runs),
         },
         "runs": runs,
+        "artifacts": {"suite_result": "runs/harness_suite_result.json"},
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def _suite_task_families(runs: list[dict]) -> list[dict]:
+    rows = []
+    for family in sorted({str(run["task_family"]) for run in runs}):
+        family_runs = [run for run in runs if run["task_family"] == family]
+        passed = sum(1 for run in family_runs if run["passed"] is True)
+        rows.append(
+            {
+                "task_family": family,
+                "total": len(family_runs),
+                "passed": passed,
+                "failed": len(family_runs) - passed,
+                "pass_rate": round(passed / len(family_runs), 4),
+                "average_score": round(sum(run["score"] for run in family_runs) / len(family_runs), 2),
+                "failed_rule_counts": [],
+                "critical_failure_counts": [],
+            }
+        )
+    return rows
 
 
 def _compare_export(

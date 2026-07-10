@@ -13,15 +13,14 @@ import os
 import re
 import shlex
 import sqlite3
-import urllib.error
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 from email.message import EmailMessage, Message
 from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
+from .safe_http import HttpStatusError, SafeHttpError, bounded_http_request
 from .state import sanitize_state_snapshot
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION, capture_state_snapshot
 
@@ -78,14 +77,22 @@ def capture_verified_state(
     if not isinstance(sources, list):
         raise VerifierError("Verifier config sources must be a list")
 
+    validated_sources: list[tuple[dict[str, Any], str, str, bool]] = []
+    source_ids: set[str] = set()
     for source in sources:
         if not isinstance(source, dict):
             raise VerifierError("Each verifier source must be an object")
         source_id = _required_string(source, "id")
         if not _SOURCE_ID_RE.fullmatch(source_id):
             raise VerifierError(f"Verifier source id must match {_SOURCE_ID_RE.pattern}: {source_id!r}")
+        if source_id in source_ids:
+            raise VerifierError(f"duplicate verifier source id: {source_id!r}")
+        source_ids.add(source_id)
         source_type = _required_string(source, "type")
         required = bool(source.get("required", True))
+        validated_sources.append((source, source_id, source_type, required))
+
+    for source, source_id, source_type, required in validated_sources:
         try:
             result = _capture_source(source, base_dir=base_dir, preserve_paths=preserve_paths)
         except Exception as exc:
@@ -1079,19 +1086,23 @@ def _http_request(
     max_bytes: int,
     body: bytes | None = None,
 ) -> tuple[int, bytes]:
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(max_bytes + 1)
-            status_code = int(response.status)
-    except urllib.error.HTTPError as exc:
-        body = exc.read(4096).decode("utf-8", errors="replace")
-        raise VerifierError(f"HTTP {method} {url} failed with status {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise VerifierError(f"HTTP {method} {url} failed: {exc.reason}") from exc
-    if len(body) > max_bytes:
-        raise VerifierError(f"HTTP {method} {url} exceeded max_bytes={max_bytes}")
-    return status_code, body
+        return bounded_http_request(
+            method,
+            url,
+            headers=headers,
+            data=body,
+            timeout=timeout,
+            max_body_bytes=max_bytes,
+        )
+    except HttpStatusError as exc:
+        error_body = exc.body.decode("utf-8", errors="replace")
+        suffix = " [truncated]" if exc.truncated else ""
+        raise VerifierError(
+            f"HTTP {method} request failed with status {exc.status_code}: {error_body}{suffix}"
+        ) from exc
+    except SafeHttpError as exc:
+        raise VerifierError(f"HTTP {method} request failed: {exc}") from exc
 
 
 def _payload_items(payload: Any, list_key: str, label: str) -> list[Any]:

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component
 from .state import sanitize_state_snapshot
 
 STATE_SNAPSHOT_SCHEMA_VERSION = "hfr.state_snapshot.v1"
@@ -95,7 +98,7 @@ def _file_record(path: Path, preserve_paths: bool, include_text: bool, max_text_
         record["size_bytes"] = stat.st_size
         record["sha256"] = _sha256(path)
         if include_text:
-            text = _read_text(path)
+            text = _read_text(path, max_text_chars)
             record["text"] = text[:max_text_chars]
             record["text_truncated"] = len(text) > max_text_chars
     elif path.is_dir():
@@ -106,6 +109,8 @@ def _file_record(path: Path, preserve_paths: bool, include_text: bool, max_text_
 
 
 def _directory_record(path: Path, preserve_paths: bool, max_entries: int) -> dict[str, Any]:
+    if path_has_symlink_component(path, include_leaf=True):
+        raise StateCaptureError(f"Directory source {path} must not traverse a symlink component")
     record: dict[str, Any] = {
         "path": _display_path(path, preserve_paths),
         "exists": path.exists(),
@@ -117,9 +122,20 @@ def _directory_record(path: Path, preserve_paths: bool, max_entries: int) -> dic
         record["kind"] = "not_directory"
         return record
 
-    entries = sorted(path.iterdir(), key=lambda item: item.name)
+    scan_limit = max_entries + 1
+    with os.scandir(path) as directory:
+        scanned_entries = list(islice(directory, scan_limit))
+    entries = sorted((path / entry.name for entry in scanned_entries), key=lambda item: item.name)
+    scan_incomplete = len(scanned_entries) == scan_limit
     record["kind"] = "directory"
+    # Bounded scans cannot promise a globally lexical selection. Sort only the
+    # observed prefix and explicitly expose when the count is a lower bound.
     record["entry_count"] = len(entries)
+    record["entry_count_is_lower_bound"] = scan_incomplete
+    record["scanned_entry_count"] = len(scanned_entries)
+    record["scan_limit"] = scan_limit
+    record["scan_incomplete"] = scan_incomplete
+    record["entry_selection"] = "lexicographic_within_scanned_prefix"
     record["entries_truncated"] = len(entries) > max_entries
     record["entries"] = [_directory_entry(item) for item in entries[:max_entries]]
     return record
@@ -127,7 +143,9 @@ def _directory_record(path: Path, preserve_paths: bool, max_entries: int) -> dic
 
 def _directory_entry(path: Path) -> dict[str, Any]:
     entry: dict[str, Any] = {"name": path.name}
-    if path.is_file():
+    if path.is_symlink():
+        entry["kind"] = "other"
+    elif path.is_file():
         stat = path.stat()
         entry.update({"kind": "file", "size_bytes": stat.st_size, "sha256": _sha256(path)})
     elif path.is_dir():
@@ -147,9 +165,10 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _read_text(path: Path) -> str:
+def _read_text(path: Path, max_chars: int) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="replace")
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            return handle.read(max_chars + 1)
     except OSError as exc:
         raise StateCaptureError(f"Unable to read text from {path}: {exc}") from exc
 

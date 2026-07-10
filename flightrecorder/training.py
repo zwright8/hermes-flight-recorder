@@ -13,6 +13,11 @@ from typing import Any
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
 from .compare_gate import compare_movement_summary
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .redaction import (
+    contains_unredacted_secret_assignment,
+    is_secret_key,
+    is_unredacted_secret_value,
+)
 from .scorers import TASK_COMPLETION_SCHEMA_VERSION
 from .trace_observability import build_trace_signal
 
@@ -43,10 +48,6 @@ DATASET_SPLIT_SEED = "hfr.dataset_split.v1"
 DATASET_SPLIT_ARTIFACTS = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
-UNREDACTED_SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?i)(?<![:\w.-])[\w.-]*(?:api[_-]?key|secret|token|password|authorization|bearer)[\w.-]*"
-    r"\s*[:=]\s*[\"']?(?!\[REDACTED\]\b)[^\"'\s,;}]+"
-)
 UNREDACTED_CREDENTIAL_LITERAL_RE = re.compile(
     r"(?<![A-Za-z0-9_-])(?:"
     r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}"
@@ -564,16 +565,29 @@ def _state_diff_summary(diff: dict[str, Any] | None) -> dict[str, Any]:
             "changed": False,
             "change_count": 0,
             "truncated": False,
+            "comparison_complete": True,
+            "change_status": "unavailable",
             "summary": "No state diff artifact was available.",
             "changes": [],
         }
+    if (
+        diff.get("comparison_truncated") is True
+        or diff.get("comparison_complete") is False
+        or diff.get("change_status") == "unknown"
+    ):
+        raise TrainingExportError(
+            "Training export refuses an incomplete state comparison; recapture complete state evidence before export."
+        )
     changes = diff.get("changes") if isinstance(diff.get("changes"), list) else []
+    changed = bool(diff.get("changed"))
     return {
         "schema_version": "hfr.state_diff.summary.v1",
         "available": True,
-        "changed": bool(diff.get("changed")),
+        "changed": changed,
         "change_count": _int_value(diff.get("change_count")),
         "truncated": bool(diff.get("truncated")),
+        "comparison_complete": True,
+        "change_status": "changed" if changed else "unchanged",
         "summary": str(diff.get("summary") or ""),
         "changes": [
             {
@@ -2532,41 +2546,77 @@ def _append_redaction_findings(
     *,
     row_index: int | None = None,
 ) -> None:
-    for path, value in _walk_strings(payload):
-        if UNREDACTED_SECRET_ASSIGNMENT_RE.search(value):
-            kind = "secret_like_assignment"
-            preview = "secret-like assignment value omitted"
-        elif UNREDACTED_CREDENTIAL_LITERAL_RE.search(value):
-            kind = "secret_like_literal"
-            preview = "secret-like literal value omitted"
-        else:
-            continue
-        finding: dict[str, Any] = {
-            "artifact": artifact,
-            "path": path,
-            "kind": kind,
-            "preview": preview,
-        }
-        if row_index is not None:
-            finding["row_index"] = row_index
-        findings.append(finding)
+    _scan_redaction_value(findings, artifact, payload, path="$", row_index=row_index)
 
 
-def _walk_strings(value: Any, path: str = "$") -> list[tuple[str, str]]:
-    if isinstance(value, str):
-        return [(path, value)]
+def _scan_redaction_value(
+    findings: list[dict[str, Any]],
+    artifact: str,
+    value: Any,
+    *,
+    path: str,
+    row_index: int | None,
+) -> None:
     if isinstance(value, dict):
-        rows: list[tuple[str, str]] = []
         for key, child in value.items():
             key_text = str(key).replace(".", "_")
-            rows.extend(_walk_strings(child, f"{path}.{key_text}"))
-        return rows
+            child_path = f"{path}.{key_text}"
+            if is_secret_key(key):
+                if is_unredacted_secret_value(child):
+                    _append_redaction_finding(
+                        findings,
+                        artifact,
+                        child_path,
+                        "secret_like_key_value",
+                        "secret-like key value omitted",
+                        row_index,
+                    )
+                continue
+            _scan_redaction_value(findings, artifact, child, path=child_path, row_index=row_index)
+        return
     if isinstance(value, list):
-        rows = []
         for index, child in enumerate(value):
-            rows.extend(_walk_strings(child, f"{path}[{index}]"))
-        return rows
-    return []
+            _scan_redaction_value(findings, artifact, child, path=f"{path}[{index}]", row_index=row_index)
+        return
+    if not isinstance(value, str):
+        return
+    if contains_unredacted_secret_assignment(value):
+        _append_redaction_finding(
+            findings,
+            artifact,
+            path,
+            "secret_like_assignment",
+            "secret-like assignment value omitted",
+            row_index,
+        )
+    elif UNREDACTED_CREDENTIAL_LITERAL_RE.search(value):
+        _append_redaction_finding(
+            findings,
+            artifact,
+            path,
+            "secret_like_literal",
+            "secret-like literal value omitted",
+            row_index,
+        )
+
+
+def _append_redaction_finding(
+    findings: list[dict[str, Any]],
+    artifact: str,
+    path: str,
+    kind: str,
+    preview: str,
+    row_index: int | None,
+) -> None:
+    finding: dict[str, Any] = {
+        "artifact": artifact,
+        "path": path,
+        "kind": kind,
+        "preview": preview,
+    }
+    if row_index is not None:
+        finding["row_index"] = row_index
+    findings.append(finding)
 
 
 def _dataset_version_id(artifact_fingerprints: dict[str, Any]) -> str:

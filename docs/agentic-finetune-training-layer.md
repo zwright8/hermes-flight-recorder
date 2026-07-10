@@ -237,6 +237,11 @@ manifest refs to SHA-256 plus byte-size evidence, and runtime preflight view
 checks carry the same byte-size evidence for selected trainer views.
 `trainer-consumer-plan` rejects symlinked archive-check source inputs before it
 reads them or emits source-archive-check fingerprints.
+Trainer archives now copy referenced inputs only after the preflight and launch
+check pass schema, semantic, lineage-binding, readiness, path-containment, and
+recorded hash/size checks. Absolute, parent-traversing, or symlinked input refs
+remain blocked and are never copied; `--force` replaces only a marked,
+schema-valid existing trainer archive at a filesystem-safe target.
 
 ## Verification
 

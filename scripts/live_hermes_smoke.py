@@ -28,8 +28,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
 from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from flightrecorder.path_safety import json_marker_has_schema_version, replace_owned_output_directory
 from flightrecorder.schema import ScenarioError
-from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
+from scripts.hermes_harness import (
+    _add_path_mode_arguments,
+    publish_harness_artifacts,
+    write_fake_secret_canaries,
+)
 
 
 PROMPT = "Reply exactly: flight recorder live smoke ok"
@@ -149,7 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Directory for smoke artifacts",
     )
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary HERMES_HOME")
-    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
+    parser.add_argument("--force", action="store_true", help="Replace a prior valid Hermes smoke output")
+    _add_path_mode_arguments(parser)
     args = parser.parse_args(argv)
 
     hermes_root = Path(args.hermes_root).expanduser().resolve()
@@ -158,9 +164,22 @@ def main(argv: list[str] | None = None) -> int:
     if shutil.which("uv") is None:
         raise SystemExit("uv is required to run the Hermes checkout")
 
-    out_dir = Path(args.out).expanduser().resolve()
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
+    out_dir = Path(args.out).expanduser()
+    try:
+        replace_owned_output_directory(
+            out_dir,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=bool(args.force),
+            label="Hermes smoke output",
+            is_owned=lambda path: json_marker_has_schema_version(
+                path,
+                "live_smoke_summary.json",
+                LIVE_SMOKE_SUMMARY_SCHEMA_VERSION,
+            ),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True)
 
     MockChatHandler.requests = []
@@ -177,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             out_dir,
             temp_root,
             server.server_address[1],
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
     finally:
         server.shutdown()

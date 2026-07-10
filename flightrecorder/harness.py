@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .path_safety import json_marker_has_schema_version, replace_owned_output_directory
 from .schema import load_scenario
 
 HARNESS_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
@@ -146,12 +147,20 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _prepare_output_dir(path: Path, *, force: bool) -> None:
-    if path.exists() and not path.is_dir():
-        raise HarnessError(f"harness output path is not a directory: {path}")
-    if path.exists() and any(path.iterdir()):
-        if not force:
-            raise HarnessError(f"harness output directory is not empty: {path}; pass --force to replace it")
-        shutil.rmtree(path)
+    try:
+        replace_owned_output_directory(
+            path,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=force,
+            label="harness output",
+            is_owned=lambda target: json_marker_has_schema_version(
+                target,
+                "harness_result.json",
+                HARNESS_RESULT_SCHEMA_VERSION,
+            ),
+        )
+    except ValueError as exc:
+        raise HarnessError(str(exc)) from exc
     path.mkdir(parents=True, exist_ok=True)
 
 

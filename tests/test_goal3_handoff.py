@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -17,6 +17,34 @@ def run_cli(args):
 
 
 class Goal3HandoffTests(unittest.TestCase):
+    def test_goal3_handoff_force_refuses_non_handoff_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "protected"
+            out.mkdir()
+            sentinel = out / "keep.txt"
+            sentinel.write_text("do not delete\n", encoding="utf-8")
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(
+                        [
+                            "goal3-handoff",
+                            "--scenarios",
+                            str(ROOT / "scenarios"),
+                            "--out",
+                            str(out),
+                            "--policy",
+                            str(ROOT / "examples" / "training_gate_policy.demo.json"),
+                            "--trainer-command",
+                            "python train.py --dataset training_export",
+                            "--force",
+                        ]
+                    )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertTrue(sentinel.exists())
+
     def test_goal3_handoff_builds_export_gate_preflight_and_evidence_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "handoff"
@@ -59,6 +87,29 @@ class Goal3HandoffTests(unittest.TestCase):
             self.assertTrue((out / "runs" / "evidence_bundle.json").exists())
             self.assertEqual(run_cli(["schemas", "--check", str(out / "goal3_handoff.json")]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(out / "trainer_preflight.json"), "--strict"]), 0)
+
+            sentinel = out / "stale.txt"
+            sentinel.write_text("remove me\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "goal3-handoff",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(out),
+                        "--policy",
+                        str(ROOT / "examples" / "training_gate_policy.demo.json"),
+                        "--trainer-command",
+                        "python train.py --dataset training_export",
+                        "--metadata",
+                        "launcher=dry-run",
+                        "--force",
+                    ]
+                ),
+                0,
+            )
+            self.assertFalse(sentinel.exists())
 
 
 if __name__ == "__main__":

@@ -26,7 +26,16 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
-from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
+from flightrecorder.path_safety import (
+    assert_safe_output_directory,
+    json_marker_has_schema_version,
+    replace_owned_output_directory,
+)
+from scripts.hermes_harness import (
+    _add_path_mode_arguments,
+    publish_harness_artifacts,
+    write_fake_secret_canaries,
+)
 
 
 SUMMARY_SCHEMA_VERSION = "hfr.openclaw.live_smoke.summary.v1"
@@ -140,15 +149,29 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a live OpenClaw Flight Recorder smoke test")
     parser.add_argument("--out", default="live_openclaw_smoke_artifacts/latest", help="Directory for smoke artifacts")
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary OpenClaw state")
-    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
+    parser.add_argument("--force", action="store_true", help="Replace a prior valid OpenClaw smoke output")
+    _add_path_mode_arguments(parser)
     args = parser.parse_args(argv)
 
     if shutil.which("openclaw") is None:
         raise SystemExit("openclaw is required for the live OpenClaw smoke")
 
-    out_dir = Path(args.out).expanduser().resolve()
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
+    out_dir = Path(args.out).expanduser()
+    try:
+        replace_owned_output_directory(
+            out_dir,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=bool(args.force),
+            label="OpenClaw smoke output",
+            is_owned=lambda path: json_marker_has_schema_version(
+                path,
+                "live_openclaw_smoke_summary.json",
+                SUMMARY_SCHEMA_VERSION,
+            ),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True)
 
     MockOpenAIHandler.requests = []
@@ -163,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             out_dir,
             temp_root,
             server.server_address[1],
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
     finally:
         server.shutdown()
@@ -171,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.keep_temp:
             print(f"kept temp root: {temp_root}")
         else:
+            assert_safe_output_directory(temp_root, repo_root=Path(__file__).resolve().parents[1])
             shutil.rmtree(temp_root, ignore_errors=True)
 
     summary = _write_smoke_summary(out_dir, result)

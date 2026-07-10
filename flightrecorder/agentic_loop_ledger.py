@@ -10,6 +10,7 @@ from typing import Any
 
 from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .source_contract import inspect_artifact_source
 
 AGENTIC_LOOP_LEDGER_SCHEMA_VERSION = "hfr.agentic_loop_ledger.v1"
 
@@ -115,11 +116,12 @@ def _read_loop_plan(path: Path) -> dict[str, Any]:
         raise AgenticLoopLedgerError(f"Loop plan must resolve to a regular non-symlink file: {path}")
     if not path.exists() or not path.is_file():
         raise AgenticLoopLedgerError(f"Loop plan not found: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise AgenticLoopLedgerError(f"Loop plan must contain a JSON object: {path}")
-    if payload.get("schema_version") != AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION:
-        raise AgenticLoopLedgerError(f"Loop plan has unsupported schema_version at {path}: {payload.get('schema_version')!r}")
+    source = inspect_artifact_source(path, "agentic_training_loop_plan", require_semantics=False)
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+    if source.get("parse_valid") is not True:
+        raise AgenticLoopLedgerError(f"Loop plan must contain a valid JSON object: {path}")
+    if source.get("schema_valid") is not True:
+        raise AgenticLoopLedgerError(f"Loop plan does not satisfy {AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION}: {path}")
     return payload
 
 
@@ -473,7 +475,9 @@ def _group_count(source_artifacts: dict[str, Any], group: str) -> int:
 
 def _role_count(source_artifacts: dict[str, Any], role: str) -> int:
     rows = source_artifacts.get(role)
-    return len(rows) if isinstance(rows, list) else 0
+    if not isinstance(rows, list):
+        return 0
+    return sum(1 for row in rows if isinstance(row, dict) and row.get("exists") is True)
 
 
 def _role_counts(source_artifacts: dict[str, Any]) -> list[dict[str, Any]]:

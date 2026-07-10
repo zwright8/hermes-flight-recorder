@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .source_contract import inspect_artifact_source
+
 AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION = "hfr.agentic_rollout_plan.v1"
 AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION = "hfr.agentic_rollout_receipt.v1"
 
@@ -133,15 +135,17 @@ def build_agentic_rollout_receipt(
     path = Path(plan_path)
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else (Path(out_path).parent if out_path else None)
     source_path, source_replayable = _source_display_path(path, preserve_paths, display_base_dir)
-    plan = _read_required_json(path, "agentic rollout plan") if source_replayable and path.is_file() else {}
+    source = inspect_artifact_source(path, "agentic_rollout_plan") if source_replayable else {"payload": {}, "schema_valid": False}
+    plan = source["payload"] if isinstance(source.get("payload"), dict) else {}
+    source_contract_valid = source_replayable and source.get("schema_valid") is True
     batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
     checks: list[dict[str, Any]] = []
     _add_check(
         checks,
         "plan_schema_supported",
-        plan.get("schema_version") == AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
-        {"schema_version": plan.get("schema_version")},
-        {"schema_version": AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION},
+        source_contract_valid and plan.get("schema_version") == AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
+        {"schema_version": plan.get("schema_version"), "source_contract_valid": source_contract_valid},
+        {"schema_version": AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, "source_contract_valid": True},
     )
     _add_check(
         checks,
@@ -180,9 +184,9 @@ def build_agentic_rollout_receipt(
         "blocked_reasons": [check["summary"] for check in failed],
         "source_plan": {
             "path": source_path,
-            "exists": source_replayable and path.exists() and path.is_file(),
-            "sha256": _sha256(path) if source_replayable and path.exists() and path.is_file() else None,
-            "size_bytes": path.stat().st_size if source_replayable and path.exists() and path.is_file() else None,
+            "exists": source_contract_valid,
+            "sha256": _sha256(path) if source_contract_valid else None,
+            "size_bytes": path.stat().st_size if source_contract_valid else None,
             "schema_version": plan.get("schema_version") if plan else AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
             "passed": plan.get("passed") if isinstance(plan.get("passed"), bool) else None,
             "readiness": plan.get("readiness") if isinstance(plan.get("readiness"), str) else "",
@@ -243,8 +247,9 @@ def _scenario_ref(path: Path, preserve_paths: bool, output_dir: Path) -> dict[st
     displayed, replayable = _source_display_path(path, preserve_paths, output_dir)
     if not replayable:
         return _missing_scenario_ref(path, displayed)
-    exists = path.exists() and path.is_file()
-    payload = _read_json(path) if exists else {}
+    source = inspect_artifact_source(path, "scenario")
+    exists = source["ready"] is True
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
     return {
         "id": str(payload.get("id") or path.stem),
         "path": displayed,
@@ -262,7 +267,8 @@ def _file_ref(role: str, path: Path, preserve_paths: bool, output_dir: Path) -> 
     displayed, replayable = _source_display_path(path, preserve_paths, output_dir)
     if not replayable:
         return _missing_file_ref(role, displayed)
-    exists = path.exists() and path.is_file()
+    source = inspect_artifact_source(path, role)
+    exists = source["ready"] is True
     return {
         "role": role,
         "path": displayed,
@@ -293,26 +299,6 @@ def _default_environment() -> dict[str, Any]:
         "external_state_verifiers": verifier_refs,
         "external_state_verifier_gate": _external_state_verifier_gate(verifier_refs),
     }
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _read_required_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise RolloutGenerationError(f"{label} not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise RolloutGenerationError(f"{label} is not valid JSON: {path}: {exc.msg}") from exc
-    if not isinstance(payload, dict):
-        raise RolloutGenerationError(f"{label} must contain a JSON object: {path}")
-    return payload
 
 
 def _mock_rollout_record(batch: dict[str, Any], index: int) -> dict[str, Any]:

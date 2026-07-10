@@ -1,3 +1,5 @@
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +10,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class AdapterTests(unittest.TestCase):
+    def test_trajectory_adapter_uses_declared_session_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "trajectory.jsonl"
+            path.write_text(
+                json.dumps(
+                    {
+                        "session_id": "declared-session",
+                        "conversations": [
+                            {"from": "human", "value": "hello"},
+                            {"from": "gpt", "value": "done"},
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            trace = normalize_trace(path, "trajectory_jsonl")
+
+        self.assertEqual(trace["session"]["id"], "declared-session")
+        self.assertEqual({event["session_id"] for event in trace["events"]}, {"declared-session"})
+
     def test_trajectory_adapter_extracts_tool_calls_results_and_final_answer(self):
         trace = normalize_trace(ROOT / "fixtures" / "prompt_injection_good.trajectory.jsonl")
 

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .dependency_probe import module_available_without_import as _module_available
 from .schema_registry import SchemaRegistryError, check_schema_file
 
 CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION = "hfr.cloud_training_provider_registry.v1"
@@ -722,13 +722,6 @@ def _launch_plan_provider_chain(
 def _payload_provider_id(payload: dict[str, Any]) -> str:
     provider = payload.get("provider") if isinstance(payload, dict) else {}
     return str(provider.get("id") or "") if isinstance(provider, dict) else ""
-
-
-def _module_available(module: str) -> bool:
-    try:
-        return importlib.util.find_spec(module) is not None
-    except (ImportError, AttributeError, ValueError):
-        return False
 
 
 def _json_artifact_ref(

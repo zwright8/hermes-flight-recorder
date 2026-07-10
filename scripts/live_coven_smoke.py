@@ -23,7 +23,16 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
-from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
+from flightrecorder.path_safety import (
+    assert_safe_output_directory,
+    json_marker_has_schema_version,
+    replace_owned_output_directory,
+)
+from scripts.hermes_harness import (
+    _add_path_mode_arguments,
+    publish_harness_artifacts,
+    write_fake_secret_canaries,
+)
 
 
 SUMMARY_SCHEMA_VERSION = "hfr.coven.live_smoke.summary.v1"
@@ -41,12 +50,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--node-bin-dir", help="Directory containing node when it is not already on PATH")
     parser.add_argument("--coven-package", default=DEFAULT_COVEN_PACKAGE, help="npm package spec used when installing Coven")
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary Coven state")
-    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
+    parser.add_argument("--force", action="store_true", help="Replace a prior valid Coven smoke output")
+    _add_path_mode_arguments(parser)
     args = parser.parse_args(argv)
 
-    out_dir = Path(args.out).expanduser().resolve()
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
+    out_dir = Path(args.out).expanduser()
+    _prepare_smoke_output(out_dir, force=bool(args.force))
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True)
 
     temp_root = Path(tempfile.mkdtemp(prefix="hfr-live-coven-"))
@@ -61,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             temp_root,
             base_env,
             keep_temp=args.keep_temp,
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
     finally:
         if coven_bin is not None and env is not None:
@@ -69,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.keep_temp:
             print(f"kept temp root: {temp_root}")
         else:
+            assert_safe_output_directory(temp_root, repo_root=Path(__file__).resolve().parents[1])
             shutil.rmtree(temp_root, ignore_errors=True)
 
     summary = _write_smoke_summary(out_dir, result)
@@ -114,6 +125,23 @@ def _resolve_coven_binary(args: argparse.Namespace, temp_root: Path, out_dir: Pa
     if not binary.exists():
         raise SystemExit(f"installed package did not provide {binary}; see {out_dir}")
     return binary
+
+
+def _prepare_smoke_output(out_dir: Path, *, force: bool) -> None:
+    try:
+        replace_owned_output_directory(
+            out_dir,
+            repo_root=Path(__file__).resolve().parents[1],
+            force=force,
+            label="Coven smoke output",
+            is_owned=lambda path: json_marker_has_schema_version(
+                path,
+                "live_coven_smoke_summary.json",
+                SUMMARY_SCHEMA_VERSION,
+            ),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _run_live_session(

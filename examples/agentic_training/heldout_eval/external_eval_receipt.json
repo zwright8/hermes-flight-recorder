@@ -132,7 +132,7 @@
     "path": "external_eval_plan.json",
     "ready": true,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "fada998b85f837d43816aaebf7fe92607a67febd4340694cb5f67f98c985a481",
+    "sha256": "e1eb3463aa1c3fe160c50970a45fdefbd558c5b814cc8f206d9d5b0fd732d69b",
     "size_bytes": 2858
   }
 }

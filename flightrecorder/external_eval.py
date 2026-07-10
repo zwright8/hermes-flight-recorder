@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
+
+from .dependency_probe import module_available_without_import
 
 EXTERNAL_EVAL_PLAN_SCHEMA_VERSION = "hfr.external_eval_adapters.v1"
 EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION = "hfr.external_eval_receipt.v1"
@@ -324,7 +325,7 @@ def _dependency_status(spec: dict[str, Any]) -> dict[str, Any]:
             "imports": {},
             "commands": {},
         }
-    imports = {name: importlib.util.find_spec(name) is not None for name in spec["import_names"]}
+    imports = {name: module_available_without_import(name) for name in spec["import_names"]}
     commands = {name: shutil.which(name) is not None for name in spec["command_names"]}
     return {
         "available": any(imports.values()) or any(commands.values()),

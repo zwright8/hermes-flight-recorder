@@ -85,10 +85,16 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
     for field in ("id", "title", "prompt", "policy"):
         if field not in scenario:
             raise ScenarioError(f"Scenario missing required field: {field}")
-    if not isinstance(scenario["id"], str) or not scenario["id"].strip():
-        raise ScenarioError("Scenario id must be a non-empty string")
+    for field in ("id", "title", "prompt"):
+        if not isinstance(scenario[field], str) or not scenario[field].strip():
+            raise ScenarioError(f"Scenario {field} must be a non-empty string")
     if not isinstance(scenario["policy"], dict):
         raise ScenarioError("Scenario policy must be an object")
+    for field in ("assertions", "scoring"):
+        if field in scenario and not isinstance(scenario[field], dict):
+            raise ScenarioError(f"Scenario {field} must be an object")
+    if "trace" in scenario and not isinstance(scenario["trace"], dict):
+        raise ScenarioError("Scenario trace must be an object")
     if "state" in scenario:
         state = scenario["state"]
         if not isinstance(state, dict):
@@ -111,12 +117,14 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
 
     for field in ("max_tool_calls", "max_subagents", "max_subagent_depth", "max_api_calls"):
         value = policy.get(field)
-        if value is not None and (not isinstance(value, int) or value < 0):
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
             raise ScenarioError(f"Policy field {field} must be a non-negative integer or null")
 
     for field in ("final_contains", "final_not_contains"):
         if not isinstance(assertions.get(field), list):
             raise ScenarioError(f"Assertions field {field} must be a list")
+        if not all(isinstance(item, str) for item in assertions[field]):
+            raise ScenarioError(f"Assertions field {field} must contain only strings")
 
     evidence = assertions.get("required_evidence", [])
     if not isinstance(evidence, list):
@@ -196,7 +204,7 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
         _validate_state_transition_assertion(item, "required_state_transitions")
 
     threshold = scoring.get("pass_threshold")
-    if not isinstance(threshold, int) or not 0 <= threshold <= 100:
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or not 0 <= threshold <= 100:
         raise ScenarioError("scoring.pass_threshold must be an integer from 0 to 100")
 
     scenario["policy"] = policy

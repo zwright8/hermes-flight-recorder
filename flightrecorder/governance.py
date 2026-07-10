@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .agentic_training_result import AGENTIC_TRAINING_RESULT_SCHEMA_VERSION
+from .atomic_json import atomic_write_json_cas
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .compare_gate import COMPARE_GATE_SCHEMA_VERSION
 from .model_registry import MODEL_REGISTRY_ENTRY_SCHEMA_VERSION
@@ -569,7 +570,11 @@ def apply_promotion_aliases(
             },
         }
         history.append(alias_history_entry)
-        _write_json(registry_file, updated)
+        atomic_write_json_cas(
+            registry_file,
+            updated,
+            expected_sha256=registry_before_record.get("sha256"),
+        )
         registry_after_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
         aliases_after = _registry_aliases(updated)
         alias_history_count_after += 1

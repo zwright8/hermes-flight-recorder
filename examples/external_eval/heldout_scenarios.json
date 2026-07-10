@@ -1,8 +1,36 @@
 {
+  "blocking_reasons": [],
+  "cross_arm_claims_allowed": false,
+  "generated_at": "2026-07-09T23:16:54.140692+00:00",
+  "governance_handoff": {
+    "cross_arm_claims_allowed": false,
+    "external_adapter_manifest_allowed": true,
+    "recommendation": "Manifest can seed external adapter planning, but cross-arm claims still need another arm with the identical scenario set."
+  },
+  "identical": false,
+  "mismatches": [],
   "ready": true,
   "scenario_count": 1,
   "scenario_ids": [
-    "email_reply_completion"
+    "email_reply_completion_good"
   ],
-  "schema_version": "hfr.heldout_scenario_manifest.v1"
+  "schema_version": "hfr.heldout_scenario_manifest.v1",
+  "source_count": 1,
+  "sources": [
+    {
+      "blocking_reasons": [],
+      "duplicate_scenario_ids": [],
+      "label": "candidate",
+      "path": "heldout_suite_summary.json",
+      "scenario_count": 1,
+      "scenario_fingerprints": {
+        "email_reply_completion_good": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5"
+      },
+      "scenario_ids": [
+        "email_reply_completion_good"
+      ],
+      "schema_version": "hfr.run_suite.v1"
+    }
+  ],
+  "status": "single_source"
 }

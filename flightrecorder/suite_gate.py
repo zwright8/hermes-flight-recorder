@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .gate_contract import build_gate_decision
+from .schema_registry import check_schema_contract
 
 SUITE_GATE_SCHEMA_VERSION = "hfr.suite_gate.v1"
 SUITE_GATE_POLICY_SCHEMA_VERSION = "hfr.suite_gate.policy.v1"
@@ -26,6 +27,10 @@ _POLICY_FIELDS = {"schema_version", "description", "task_family_gates", *_SCALAR
 
 class SuiteGatePolicyError(ValueError):
     """Raised when a suite gate policy file is malformed."""
+
+
+class SuiteGateError(ValueError):
+    """Raised when a suite summary cannot be evaluated safely."""
 
 
 def load_gate_policy(path: str | Path) -> dict[str, Any]:
@@ -89,6 +94,16 @@ def evaluate_suite_gate(
     task_family_gates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate threshold checks against a run-suite summary."""
+    schema_check = check_schema_contract(suite_summary, name_or_id="run_suite")
+    if schema_check["passed"] is not True:
+        details = "; ".join(str(error) for error in schema_check["errors"][:5])
+        raise SuiteGateError(f"Suite gate input failed run_suite schema: {details}")
+    from .validation import validate_suite_summary_payload_consistency
+
+    semantic_check = validate_suite_summary_payload_consistency(suite_summary)
+    if semantic_check.errors:
+        details = "; ".join(semantic_check.errors[:5])
+        raise SuiteGateError(f"Suite gate input failed semantic validation: {details}")
     metrics = suite_summary.get("metrics") if isinstance(suite_summary.get("metrics"), dict) else {}
     checks: list[dict[str, Any]] = []
 

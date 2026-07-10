@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.schema_registry import (
+    _validate_value,
     check_schema_contract,
     check_schema_file,
     check_schema_jsonl_file,
@@ -19,115 +20,163 @@ from flightrecorder.schema_registry import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _rl_reward_payload(reward):
+    return {
+        "schema_version": "hfr.rl.reward.v1",
+        "episode_id": "episode-1",
+        "scenario_id": "scenario-1",
+        "task_family": "test",
+        "source_fingerprint_status": "complete",
+        "source_fingerprints": {},
+        "reward_scale": "score",
+        "reward": reward,
+        "score": 100,
+        "passed": True,
+        "task_completion_status": "complete",
+        "task_completion_passed": True,
+        "state_changed": False,
+        "state_change_count": 0,
+        "terminal": True,
+        "critical_failures": [],
+        "rule_rewards": [],
+        "attribution": [],
+    }
+
+
 class SchemaRegistryTests(unittest.TestCase):
     def test_catalog_loads_public_artifact_contracts(self):
         records = list_schema_records()
         names = {record["name"] for record in records}
+        expected_names = {
+            "action_ledger",
+            "action_ledger_gate",
+            "agentic_loop_governance_receipt",
+            "agentic_loop_ledger",
+            "agentic_rollout_plan",
+            "agentic_rollout_receipt",
+            "agentic_training_flow",
+            "agentic_training_loop_plan",
+            "agentic_training_plan",
+            "agentic_training_result",
+            "agentic_training_runtime_preflight",
+            "cloud_training_artifact_manifest",
+            "cloud_training_launch_plan",
+            "cloud_training_launch_receipt",
+            "cloud_training_preflight",
+            "cloud_training_provider_registry",
+            "cloud_training_status_receipt",
+            "compare",
+            "compare_gate",
+            "compare_rl_dpo",
+            "compare_rl_manifest",
+            "compare_rl_pair",
+            "coven_event",
+            "dataset_curation_receipt",
+            "dataset_registry",
+            "dataset_splits",
+            "decision_gate",
+            "eval_suite_manifest",
+            "eval_summary",
+            "evidence_bundle",
+            "evidence_coverage",
+            "external_eval_plan",
+            "external_eval_receipt",
+            "goal3_handoff",
+            "harness_model_probe",
+            "harness_replay_result",
+            "harness_run_manifest",
+            "harness_run_result",
+            "harness_suite_result",
+            "heldout_manifest",
+            "improvement_ledger",
+            "improvement_ledger_gate",
+            "improvement_plan",
+            "live_coven_smoke_summary",
+            "live_openclaw_smoke_summary",
+            "live_smoke_summary",
+            "live_verifier_smoke_summary",
+            "model_adapter_manifest",
+            "model_candidate",
+            "model_compatibility_report",
+            "model_grader_disagreement_queue",
+            "model_grader_dry_run",
+            "model_grader_gate",
+            "model_grader_override_receipt",
+            "model_registry",
+            "model_registry_entry",
+            "model_scout_manifest",
+            "model_serving_probe_receipt",
+            "next_iteration_schedule",
+            "openclaw_event",
+            "promotion_alias_apply",
+            "promotion_archive",
+            "promotion_cards",
+            "promotion_decision",
+            "promotion_ledger",
+            "promotion_ledger_gate",
+            "promotion_policy",
+            "promotion_release_record",
+            "promotion_rollback_receipt",
+            "rejection_sampling_gate",
+            "repair_queue",
+            "review_calibration",
+            "review_manifest",
+            "reviewed_gate",
+            "reviewed_manifest",
+            "rl_curriculum",
+            "rl_dataset_metrics",
+            "rl_dpo",
+            "rl_episode",
+            "rl_failure_mode",
+            "rl_preference",
+            "rl_reward",
+            "rl_reward_model",
+            "rl_sft",
+            "rl_step_reward",
+            "rubric_spec",
+            "run_digest",
+            "run_suite",
+            "scenario",
+            "scenario_check",
+            "scenario_quality",
+            "scorecard",
+            "serving_compatibility_report",
+            "serving_demo_run",
+            "serving_endpoint_check",
+            "serving_lifecycle",
+            "serving_profile",
+            "state_diff",
+            "state_snapshot",
+            "state_validator_assertions",
+            "state_validator_config",
+            "suite_compare",
+            "suite_gate",
+            "suite_trend",
+            "supervisor_state",
+            "task_completion",
+            "trace",
+            "trace_observability",
+            "trainer_archive",
+            "trainer_archive_check",
+            "trainer_consumer_plan",
+            "trainer_launch_check",
+            "trainer_preflight",
+            "trainer_wrapper_dry_run",
+            "training_gate",
+            "training_manifest",
+            "training_plan",
+            "validation",
+            "verifier_config",
+        }
 
-        self.assertIn("scenario", names)
-        self.assertIn("trace", names)
-        self.assertIn("scorecard", names)
-        self.assertIn("task_completion", names)
-        self.assertIn("state_diff", names)
-        self.assertIn("state_snapshot", names)
-        self.assertIn("verifier_config", names)
-        self.assertIn("state_validator_config", names)
-        self.assertIn("state_validator_assertions", names)
-        self.assertIn("supervisor_state", names)
-        self.assertIn("validation", names)
-        self.assertIn("run_suite", names)
-        self.assertIn("scenario_check", names)
-        self.assertIn("suite_gate", names)
-        self.assertIn("suite_compare", names)
-        self.assertIn("suite_trend", names)
-        self.assertIn("evidence_coverage", names)
-        self.assertIn("scenario_quality", names)
-        self.assertIn("trace_observability", names)
-        self.assertIn("repair_queue", names)
-        self.assertIn("run_digest", names)
-        self.assertIn("harness_run_manifest", names)
-        self.assertIn("harness_run_result", names)
-        self.assertIn("harness_replay_result", names)
-        self.assertIn("harness_suite_result", names)
-        self.assertIn("harness_model_probe", names)
-        self.assertIn("live_smoke_summary", names)
-        self.assertIn("live_verifier_smoke_summary", names)
-        self.assertIn("openclaw_event", names)
-        self.assertIn("live_openclaw_smoke_summary", names)
-        self.assertIn("harness_run_manifest", names)
-        self.assertIn("harness_run_result", names)
-        self.assertIn("serving_profile", names)
-        self.assertIn("serving_compatibility_report", names)
-        self.assertIn("serving_endpoint_check", names)
-        self.assertIn("serving_lifecycle", names)
-        self.assertIn("serving_demo_run", names)
-        self.assertIn("evidence_bundle", names)
-        self.assertIn("improvement_plan", names)
-        self.assertIn("improvement_ledger", names)
-        self.assertIn("improvement_ledger_gate", names)
-        self.assertIn("training_manifest", names)
-        self.assertIn("rl_episode", names)
-        self.assertIn("rl_reward", names)
-        self.assertIn("rl_step_reward", names)
-        self.assertIn("rl_preference", names)
-        self.assertIn("rl_failure_mode", names)
-        self.assertIn("rl_curriculum", names)
-        self.assertIn("rl_sft", names)
-        self.assertIn("rl_dpo", names)
-        self.assertIn("rl_reward_model", names)
-        self.assertIn("rl_dataset_metrics", names)
-        self.assertIn("dataset_splits", names)
-        self.assertIn("dataset_registry", names)
-        self.assertIn("compare_rl_manifest", names)
-        self.assertIn("compare_rl_pair", names)
-        self.assertIn("compare_rl_dpo", names)
-        self.assertIn("compare_gate", names)
-        self.assertIn("training_gate", names)
-        self.assertIn("heldout_manifest", names)
-        self.assertIn("eval_suite_manifest", names)
-        self.assertIn("external_eval_plan", names)
-        self.assertIn("external_eval_receipt", names)
-        self.assertIn("eval_summary", names)
-        self.assertIn("rejection_sampling_gate", names)
-        self.assertIn("dataset_curation_receipt", names)
-        self.assertIn("review_manifest", names)
-        self.assertIn("reviewed_manifest", names)
-        self.assertIn("trainer_preflight", names)
-        self.assertIn("trainer_launch_check", names)
-        self.assertIn("trainer_archive", names)
-        self.assertIn("agentic_training_plan", names)
-        self.assertIn("agentic_training_runtime_preflight", names)
-        self.assertIn("agentic_training_flow", names)
-        self.assertIn("agentic_training_result", names)
-        self.assertIn("agentic_training_loop_plan", names)
-        self.assertIn("agentic_loop_governance_receipt", names)
-        self.assertIn("cloud_training_provider_registry", names)
-        self.assertIn("next_iteration_schedule", names)
-        self.assertIn("cloud_training_preflight", names)
-        self.assertIn("cloud_training_artifact_manifest", names)
-        self.assertIn("cloud_training_launch_plan", names)
-        self.assertIn("cloud_training_launch_receipt", names)
-        self.assertIn("cloud_training_status_receipt", names)
-        self.assertIn("agentic_rollout_plan", names)
-        self.assertIn("agentic_rollout_receipt", names)
-        self.assertIn("model_candidate", names)
-        self.assertIn("model_scout_manifest", names)
-        self.assertIn("model_compatibility_report", names)
-        self.assertIn("model_serving_probe_receipt", names)
-        self.assertIn("model_adapter_manifest", names)
-        self.assertIn("model_registry_entry", names)
-        self.assertIn("model_registry", names)
-        self.assertIn("promotion_alias_apply", names)
-        self.assertIn("promotion_cards", names)
-        self.assertIn("promotion_decision", names)
-        self.assertIn("decision_gate", names)
-        self.assertIn("promotion_ledger", names)
-        self.assertIn("promotion_ledger_gate", names)
-        self.assertIn("promotion_policy", names)
-        self.assertIn("promotion_archive", names)
-        self.assertIn("promotion_release_record", names)
-        self.assertIn("promotion_rollback_receipt", names)
-        self.assertIn("training_plan", names)
+        self.assertEqual(names, expected_names)
+        self.assertEqual(
+            {path.name for path in (ROOT / "flightrecorder" / "schemas").glob("*.schema.json")},
+            {record["filename"] for record in records},
+        )
+        for key in ("name", "filename", "artifact_schema_version", "id"):
+            with self.subTest(unique_catalog_key=key):
+                self.assertEqual(len(records), len({record[key] for record in records}))
         for record in records:
             schema = load_schema(record["name"])
             self.assertEqual(schema["$id"], record["id"])
@@ -190,6 +239,16 @@ class SchemaRegistryTests(unittest.TestCase):
         )
         self.assertTrue(valid["passed"], valid["errors"])
 
+        valid_second_branch = check_schema_contract(
+            {
+                "kind": "input",
+                "session_id": "coven-session-1",
+                "payload": {"data": "hello"},
+            },
+            name_or_id="coven_event",
+        )
+        self.assertTrue(valid_second_branch["passed"], valid_second_branch["errors"])
+
         invalid = check_schema_contract(
             {
                 "kind": "input",
@@ -199,6 +258,162 @@ class SchemaRegistryTests(unittest.TestCase):
         )
         self.assertFalse(invalid["passed"])
         self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(invalid["errors"]))
+
+    def test_one_of_does_not_skip_sibling_constraints(self):
+        result = check_schema_contract(
+            {
+                "id": "validator-1",
+                "validator": "email_sent",
+                "schema_version": "not-the-published-version",
+            },
+            name_or_id="state_validator_config",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn(
+            "$.schema_version: expected constant 'hfr.state_validator_config.v1'",
+            "\n".join(result["errors"]),
+        )
+
+    def test_const_and_enum_use_json_equality_not_python_bool_integer_equality(self):
+        const_schema = {"const": 0}
+        const_errors: list[str] = []
+        _validate_value(False, const_schema, "$", const_schema, const_errors)
+        self.assertIn("$: expected constant 0, got False", const_errors)
+
+        enum_schema = {"enum": [1]}
+        enum_errors: list[str] = []
+        _validate_value(True, enum_schema, "$", enum_schema, enum_errors)
+        self.assertIn("$: expected one of [1], got True", enum_errors)
+
+        numeric_errors: list[str] = []
+        _validate_value(1.0, enum_schema, "$", enum_schema, numeric_errors)
+        self.assertEqual(numeric_errors, [])
+
+    def test_if_then_enforces_conditional_requirements(self):
+        payload = {
+            "schema_version": "hfr.harness_replay_result.v1",
+            "lineage": "lineage.json",
+            "lineage_sha256": "0" * 64,
+            "lineage_size_bytes": 1,
+            "out_dir": "runs/replay",
+            "exit_code": 0,
+            "passed": True,
+            "scorecard": "scorecard.json",
+        }
+
+        result = check_schema_contract(payload, name_or_id="harness_replay_result")
+
+        self.assertFalse(result["passed"])
+        errors = "\n".join(result["errors"])
+        self.assertIn("missing required property 'scorecard_sha256'", errors)
+        self.assertIn("missing required property 'scorecard_size_bytes'", errors)
+
+        payload.pop("scorecard")
+        result_without_condition = check_schema_contract(payload, name_or_id="harness_replay_result")
+        self.assertTrue(result_without_condition["passed"], result_without_condition["errors"])
+
+    def test_array_max_items_is_enforced(self):
+        schema = {"type": "array", "maxItems": 1}
+        errors = []
+
+        _validate_value(["first", "second"], schema, "$", schema, errors)
+
+        self.assertIn("$: expected at most 1 item(s), got 2", errors)
+
+    def test_unique_items_uses_json_value_equality(self):
+        schema = {"type": "array", "uniqueItems": True}
+        nested_duplicate = [
+            {"outer": [1, {"left": 2, "right": [3]}]},
+            {"outer": [1.0, {"right": [3.0], "left": 2.0}]},
+        ]
+        duplicate_errors = []
+
+        _validate_value(nested_duplicate, schema, "$", schema, duplicate_errors)
+
+        self.assertIn("$: expected unique items; indexes 0 and 1 are equal", duplicate_errors)
+
+        bool_and_number_errors = []
+        _validate_value([{"value": True}, {"value": 1}], schema, "$", schema, bool_and_number_errors)
+        self.assertEqual(bool_and_number_errors, [])
+
+    def test_object_min_properties_is_enforced(self):
+        schema = {"type": "object", "minProperties": 1}
+        errors = []
+
+        _validate_value({}, schema, "$", schema, errors)
+
+        self.assertIn("$: expected at least 1 property, got 0", errors)
+
+    def test_number_exclusive_minimum_is_enforced(self):
+        schema = {"type": "number", "exclusiveMinimum": 0}
+        boundary_errors = []
+        valid_errors = []
+
+        _validate_value(0, schema, "$", schema, boundary_errors)
+        _validate_value(0.1, schema, "$", schema, valid_errors)
+
+        self.assertIn("$: expected value > 0, got 0", boundary_errors)
+        self.assertEqual(valid_errors, [])
+
+    def test_non_finite_numbers_fail_for_direct_payloads(self):
+        payloads = []
+        for value in (float("nan"), float("inf"), float("-inf")):
+            payload = _rl_reward_payload(1.0)
+            payload["source_fingerprints"] = {"nested": [value]}
+            payloads.append(payload)
+
+        for payload in payloads:
+            with self.subTest(value=payload["source_fingerprints"]["nested"][0]):
+                result = check_schema_contract(payload, name_or_id="rl_reward")
+                self.assertFalse(result["passed"])
+                self.assertIn("must be finite", "\n".join(result["errors"]))
+
+    def test_non_finite_numbers_fail_when_loaded_from_json_and_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            json_path = root / "reward.json"
+            json_path.write_text(json.dumps(_rl_reward_payload(float("nan"))), encoding="utf-8")
+
+            json_result = check_schema_file(json_path, "rl_reward")
+
+            self.assertFalse(json_result["passed"])
+            self.assertIn("must be finite", "\n".join(json_result["errors"]))
+
+            jsonl_path = root / "rewards.jsonl"
+            jsonl_path.write_text(
+                "\n".join(json.dumps(_rl_reward_payload(value)) for value in (float("nan"), float("inf"), float("-inf")))
+                + "\n",
+                encoding="utf-8",
+            )
+
+            jsonl_result = check_schema_jsonl_file(jsonl_path, "rl_reward")
+
+            self.assertFalse(jsonl_result["passed"])
+            self.assertEqual(jsonl_result["error_count"], 3)
+            self.assertTrue(all("must be finite" in error for error in jsonl_result["errors"]))
+
+    def test_json_and_jsonl_parse_and_file_errors_keep_existing_api_behavior(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            json_path = root / "invalid.json"
+            json_path.write_text("{invalid", encoding="utf-8")
+            with self.assertRaises(json.JSONDecodeError):
+                check_schema_file(json_path, "rl_reward")
+
+            jsonl_path = root / "invalid.jsonl"
+            jsonl_path.write_text("{invalid\n", encoding="utf-8")
+            result = check_schema_jsonl_file(jsonl_path, "rl_reward")
+
+            self.assertFalse(result["passed"])
+            self.assertEqual(result["error_count"], 1)
+            self.assertIn("line 1: invalid JSON", result["errors"][0])
+
+            missing_path = root / "missing.json"
+            with self.assertRaises(FileNotFoundError):
+                check_schema_file(missing_path, "rl_reward")
+            with self.assertRaises(FileNotFoundError):
+                check_schema_jsonl_file(missing_path, "rl_reward")
 
     def test_task_completion_schema_accepts_not_applicable_status(self):
         result = check_schema_contract(

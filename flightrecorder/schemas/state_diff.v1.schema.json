@@ -17,6 +17,22 @@
       },
       "type": "array"
     },
+    "change_status": {
+      "enum": [
+        "changed",
+        "unchanged",
+        "unknown"
+      ]
+    },
+    "comparison_complete": {
+      "type": "boolean"
+    },
+    "comparison_truncated": {
+      "type": "boolean"
+    },
+    "change_count_exact": {
+      "type": "boolean"
+    },
     "max_changes": {
       "minimum": 0,
       "type": "integer"
@@ -29,6 +45,14 @@
     },
     "truncated": {
       "type": "boolean"
+    },
+    "truncation_reason": {
+      "enum": [
+        "incomplete_snapshot",
+        "max_changes",
+        "max_depth",
+        "max_nodes"
+      ]
     }
   },
   "required": [

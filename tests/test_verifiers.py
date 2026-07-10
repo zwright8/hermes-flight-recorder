@@ -1,14 +1,24 @@
+import io
 import json
 import os
 import sqlite3
 import tempfile
 import threading
 import unittest
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
+from flightrecorder.safe_http import (
+    HttpStatusError,
+    SafeHttpError,
+    SafeRedirectHandler,
+    bounded_http_request,
+    read_bounded_sse,
+)
 from flightrecorder.state_validators import build_state_validator_assertions
 from flightrecorder.verifiers import VerifierError, capture_verified_state
 
@@ -17,6 +27,96 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VerifierAdapterTests(unittest.TestCase):
+    def test_http_policy_rejects_https_downgrade_redirects(self):
+        request = urllib.request.Request(
+            "https://example.test/private",
+            headers={"Authorization": "Bearer top-secret"},
+        )
+
+        with self.assertRaisesRegex(SafeHttpError, "HTTPS downgrade redirect"):
+            SafeRedirectHandler().redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "http://example.test/public",
+            )
+
+    def test_verifier_rejects_oversized_success_body(self):
+        server = _JsonServer({"/oversized": b"x" * 65})
+        try:
+            with self.assertRaisesRegex(VerifierError, "exceeded max_bytes=64"):
+                capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "oversized",
+                                "type": "http_json",
+                                "url": f"{server.url}/oversized",
+                                "max_bytes": 64,
+                            }
+                        ]
+                    }
+                )
+        finally:
+            server.close()
+
+    def test_verifier_rejects_duplicate_source_ids_before_capture(self):
+        config = {
+            "sources": [
+                {"id": "duplicate", "type": "http_json", "url": "https://example.test/one"},
+                {"id": "duplicate", "type": "http_json", "url": "https://example.test/two"},
+            ]
+        }
+
+        with patch("flightrecorder.verifiers._capture_source") as capture:
+            with self.assertRaisesRegex(VerifierError, "duplicate verifier source id"):
+                capture_verified_state(config)
+
+        capture.assert_not_called()
+
+    def test_verifier_rejects_non_http_url_before_opening_it(self):
+        with patch("flightrecorder.safe_http.urllib.request.build_opener") as build_opener:
+            with self.assertRaisesRegex(VerifierError, "must use http or https"):
+                capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "local_file",
+                                "type": "http_json",
+                                "url": "file:///tmp/private.json",
+                            }
+                        ]
+                    }
+                )
+
+        build_opener.assert_not_called()
+
+    def test_verifier_blocks_credentialed_cross_origin_redirects(self):
+        sink = _JsonServer({"/sink": {"ok": True}})
+        redirector = _JsonServer({}, redirects={"/redirect": f"{sink.url}/sink"})
+        try:
+            with patch.dict(os.environ, {"TEST_REDIRECT_TOKEN": "top-secret"}):
+                with self.assertRaisesRegex(VerifierError, "credentialed cross-origin redirect"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "redirect",
+                                    "type": "http_json",
+                                    "url": f"{redirector.url}/redirect",
+                                    "bearer_token_env": "TEST_REDIRECT_TOKEN",
+                                }
+                            ]
+                        }
+                    )
+        finally:
+            redirector.close()
+            sink.close()
+
+        self.assertEqual(sink.requests, [])
+
     def test_maildir_verifier_turns_external_email_state_into_score_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1078,9 +1178,57 @@ class VerifierAdapterTests(unittest.TestCase):
         self.assertNotIn("password", json.dumps(snapshot))
 
 
+class SafeHttpPolicyTests(unittest.TestCase):
+    def test_error_bodies_are_clipped_at_the_configured_limit(self):
+        error = urllib.error.HTTPError(
+            "https://example.test/failure",
+            500,
+            "failure",
+            {},
+            io.BytesIO(b"sensitive-error-body"),
+        )
+        with patch("flightrecorder.safe_http.urllib.request.build_opener") as build_opener:
+            build_opener.return_value.open.side_effect = error
+            with self.assertRaises(HttpStatusError) as raised:
+                bounded_http_request(
+                    "GET",
+                    "https://example.test/failure",
+                    timeout=1,
+                    max_body_bytes=64,
+                    max_error_bytes=9,
+                )
+
+        self.assertEqual(raised.exception.body, b"sensitive")
+        self.assertTrue(raised.exception.truncated)
+
+    def test_sse_reader_bounds_lines_events_and_aggregate_bytes(self):
+        cases = [
+            (
+                b"data: 123456789\n\n",
+                {"max_line_bytes": 8, "max_event_bytes": 64, "max_total_bytes": 128},
+                "line exceeded",
+            ),
+            (
+                b"data: 1234\ndata: 5678\n\n",
+                {"max_line_bytes": 32, "max_event_bytes": 12, "max_total_bytes": 128},
+                "event exceeded",
+            ),
+            (
+                b": comment-one\n: comment-two\n",
+                {"max_line_bytes": 32, "max_event_bytes": 64, "max_total_bytes": 20},
+                "aggregate exceeded",
+            ),
+        ]
+
+        for payload, limits, expected in cases:
+            with self.subTest(expected=expected), self.assertRaisesRegex(SafeHttpError, expected):
+                read_bounded_sse(io.BytesIO(payload), max_events=8, **limits)
+
+
 class _JsonServer:
-    def __init__(self, routes):
+    def __init__(self, routes, *, redirects=None):
         self.routes = routes
+        self.redirects = redirects or {}
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -1089,11 +1237,17 @@ class _JsonServer:
 
     def _handler(self):
         routes = self.routes
+        redirects = self.redirects
         requests = self.requests
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 path, _, query = self.path.partition("?")
+                if path in redirects:
+                    self.send_response(302)
+                    self.send_header("Location", redirects[path])
+                    self.end_headers()
+                    return
                 requests.append({"method": "GET", "path": path, "query": query})
                 if path not in routes:
                     self.send_response(404)

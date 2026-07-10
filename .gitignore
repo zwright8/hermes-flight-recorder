@@ -21,4 +21,5 @@ live_coven_smoke_artifacts/
 *.sensitive.json
 *.local.json
 *.local.md
+*.hfr.lock
 experiments/autonomy/

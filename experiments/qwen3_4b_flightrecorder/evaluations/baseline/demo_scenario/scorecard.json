@@ -10,6 +10,6 @@
   ],
   "passed": false,
   "scenario_id": "demo_scenario",
-  "schema_version": "hfr.scorecard.v1",
+  "schema_version": "hfr.serving_demo.scorecard.v1",
   "score": 42
 }

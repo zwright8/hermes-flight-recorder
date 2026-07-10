@@ -392,84 +392,84 @@
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "trainer_preflight",
-              "source_ref_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+              "source_ref_sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
               "source_role": "cloud_training_preflight",
               "source_schema_version": "hfr.cloud_training_preflight.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "trainer_preflight",
               "target_schema_version": "hfr.trainer_preflight.v1",
-              "target_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2"
+              "target_sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2"
             },
             {
               "id": "preflight_links_trainer_launch_check",
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "trainer_launch_check",
-              "source_ref_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+              "source_ref_sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
               "source_role": "cloud_training_preflight",
               "source_schema_version": "hfr.cloud_training_preflight.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "trainer_launch_check",
               "target_schema_version": "hfr.trainer_launch_check.v1",
-              "target_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8"
+              "target_sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8"
             },
             {
               "id": "launch_plan_links_preflight",
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "preflight",
-              "source_ref_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
+              "source_ref_sha256": "ee9362b752c4258b05a23e4f3db68c68b107b4483fc01376d6a3d5f4b7d0363f",
               "source_role": "cloud_training_launch_plan",
               "source_schema_version": "hfr.cloud_training_launch_plan.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "cloud_training_preflight",
               "target_schema_version": "hfr.cloud_training_preflight.v1",
-              "target_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241"
+              "target_sha256": "ee9362b752c4258b05a23e4f3db68c68b107b4483fc01376d6a3d5f4b7d0363f"
             },
             {
               "id": "launch_plan_links_artifact_manifest",
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "artifact_manifest",
-              "source_ref_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
+              "source_ref_sha256": "7abcbe735f99ad0ad09aca304f680078d7151c7819d23b54b4f934c8a9a7d214",
               "source_role": "cloud_training_launch_plan",
               "source_schema_version": "hfr.cloud_training_launch_plan.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "cloud_training_artifact_manifest",
               "target_schema_version": "hfr.cloud_training_artifact_manifest.v1",
-              "target_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1"
+              "target_sha256": "7abcbe735f99ad0ad09aca304f680078d7151c7819d23b54b4f934c8a9a7d214"
             },
             {
               "id": "launch_receipt_links_launch_plan",
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "launch_plan",
-              "source_ref_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582",
+              "source_ref_sha256": "36d40f1e3674d73b8156abbbf22110898e4eb719dfa7ede40d918abbd38a6a28",
               "source_role": "cloud_training_launch_receipt",
               "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "cloud_training_launch_plan",
               "target_schema_version": "hfr.cloud_training_launch_plan.v1",
-              "target_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582"
+              "target_sha256": "36d40f1e3674d73b8156abbbf22110898e4eb719dfa7ede40d918abbd38a6a28"
             },
             {
               "id": "status_receipt_links_launch_receipt",
               "passed": true,
               "source_artifact_count": 1,
               "source_ref": "launch_receipt",
-              "source_ref_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
+              "source_ref_sha256": "67ebbea6871f927aaa1462bafaad39095ae30247ca09d6493139e4efbcc9ae48",
               "source_role": "cloud_training_status_receipt",
               "source_schema_version": "hfr.cloud_training_status_receipt.v1",
               "status": "matched",
               "target_artifact_count": 1,
               "target_role": "cloud_training_launch_receipt",
               "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
-              "target_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079"
+              "target_sha256": "67ebbea6871f927aaa1462bafaad39095ae30247ca09d6493139e4efbcc9ae48"
             }
           ],
           "matched_link_count": 7,
@@ -675,84 +675,84 @@
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "trainer_preflight",
-        "source_ref_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+        "source_ref_sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
         "source_role": "cloud_training_preflight",
         "source_schema_version": "hfr.cloud_training_preflight.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "trainer_preflight",
         "target_schema_version": "hfr.trainer_preflight.v1",
-        "target_sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2"
+        "target_sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2"
       },
       {
         "id": "preflight_links_trainer_launch_check",
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "trainer_launch_check",
-        "source_ref_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+        "source_ref_sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
         "source_role": "cloud_training_preflight",
         "source_schema_version": "hfr.cloud_training_preflight.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "trainer_launch_check",
         "target_schema_version": "hfr.trainer_launch_check.v1",
-        "target_sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8"
+        "target_sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8"
       },
       {
         "id": "launch_plan_links_preflight",
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "preflight",
-        "source_ref_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
+        "source_ref_sha256": "ee9362b752c4258b05a23e4f3db68c68b107b4483fc01376d6a3d5f4b7d0363f",
         "source_role": "cloud_training_launch_plan",
         "source_schema_version": "hfr.cloud_training_launch_plan.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "cloud_training_preflight",
         "target_schema_version": "hfr.cloud_training_preflight.v1",
-        "target_sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241"
+        "target_sha256": "ee9362b752c4258b05a23e4f3db68c68b107b4483fc01376d6a3d5f4b7d0363f"
       },
       {
         "id": "launch_plan_links_artifact_manifest",
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "artifact_manifest",
-        "source_ref_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
+        "source_ref_sha256": "7abcbe735f99ad0ad09aca304f680078d7151c7819d23b54b4f934c8a9a7d214",
         "source_role": "cloud_training_launch_plan",
         "source_schema_version": "hfr.cloud_training_launch_plan.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "cloud_training_artifact_manifest",
         "target_schema_version": "hfr.cloud_training_artifact_manifest.v1",
-        "target_sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1"
+        "target_sha256": "7abcbe735f99ad0ad09aca304f680078d7151c7819d23b54b4f934c8a9a7d214"
       },
       {
         "id": "launch_receipt_links_launch_plan",
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "launch_plan",
-        "source_ref_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582",
+        "source_ref_sha256": "36d40f1e3674d73b8156abbbf22110898e4eb719dfa7ede40d918abbd38a6a28",
         "source_role": "cloud_training_launch_receipt",
         "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "cloud_training_launch_plan",
         "target_schema_version": "hfr.cloud_training_launch_plan.v1",
-        "target_sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582"
+        "target_sha256": "36d40f1e3674d73b8156abbbf22110898e4eb719dfa7ede40d918abbd38a6a28"
       },
       {
         "id": "status_receipt_links_launch_receipt",
         "passed": true,
         "source_artifact_count": 1,
         "source_ref": "launch_receipt",
-        "source_ref_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
+        "source_ref_sha256": "67ebbea6871f927aaa1462bafaad39095ae30247ca09d6493139e4efbcc9ae48",
         "source_role": "cloud_training_status_receipt",
         "source_schema_version": "hfr.cloud_training_status_receipt.v1",
         "status": "matched",
         "target_artifact_count": 1,
         "target_role": "cloud_training_launch_receipt",
         "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
-        "target_sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079"
+        "target_sha256": "67ebbea6871f927aaa1462bafaad39095ae30247ca09d6493139e4efbcc9ae48"
       }
     ],
     "matched_link_count": 7,
@@ -1313,7 +1313,7 @@
         "readiness": "ready",
         "role": "cloud_training_artifact_manifest",
         "schema_version": "hfr.cloud_training_artifact_manifest.v1",
-        "sha256": "e25c099a1b9051594f31964b7ef3bfcbecd863154a4d6f6c6bfb7fbebe249cf1",
+        "sha256": "7abcbe735f99ad0ad09aca304f680078d7151c7819d23b54b4f934c8a9a7d214",
         "size_bytes": 6840
       }
     ],
@@ -1328,7 +1328,7 @@
         "readiness": "ready_for_dry_run_launch",
         "role": "cloud_training_launch_plan",
         "schema_version": "hfr.cloud_training_launch_plan.v1",
-        "sha256": "73f7bdad318e0534f8d5638289b29974ccc2a4e50e1959df73eb58c2e2703582",
+        "sha256": "36d40f1e3674d73b8156abbbf22110898e4eb719dfa7ede40d918abbd38a6a28",
         "size_bytes": 6630
       }
     ],
@@ -1343,7 +1343,7 @@
         "readiness": "dry_run_recorded",
         "role": "cloud_training_launch_receipt",
         "schema_version": "hfr.cloud_training_launch_receipt.v1",
-        "sha256": "63da252a265cfc5ae3ea2cba5a346bbddaa256f74c5bdab1f5c55c05d24c1079",
+        "sha256": "67ebbea6871f927aaa1462bafaad39095ae30247ca09d6493139e4efbcc9ae48",
         "size_bytes": 2628
       }
     ],
@@ -1358,7 +1358,7 @@
         "readiness": "ready_for_dry_run_launch_plan",
         "role": "cloud_training_preflight",
         "schema_version": "hfr.cloud_training_preflight.v1",
-        "sha256": "d9594151e33c52424da431ca29a059b1d7ec5f4949fcb07be4d7a40ed439c241",
+        "sha256": "ee9362b752c4258b05a23e4f3db68c68b107b4483fc01376d6a3d5f4b7d0363f",
         "size_bytes": 11414
       }
     ],
@@ -1388,7 +1388,7 @@
         "readiness": "status_recorded",
         "role": "cloud_training_status_receipt",
         "schema_version": "hfr.cloud_training_status_receipt.v1",
-        "sha256": "44a76a44f0148cb875b84a2d10988a32953b696e22fb57291069431b16cae5ac",
+        "sha256": "f13227bec7fb91653b20d77d07d92c5f70dd7655fff49c4518278cb156839811",
         "size_bytes": 2698
       }
     ],
@@ -1403,7 +1403,7 @@
         "readiness": "ready_for_external_trainer_handoff",
         "role": "dataset_curation_receipt",
         "schema_version": "hfr.dataset_curation_receipt.v1",
-        "sha256": "53f68e9228d03bb7dc537e366950ca57d232662244bf8f17bae6cd4917184834",
+        "sha256": "aa078bb1a380af3e0d595faa4b651039f4718f7a15eade4ce5e8f07550ee8eb9",
         "size_bytes": 3947
       }
     ],
@@ -1418,8 +1418,8 @@
         "readiness": "",
         "role": "eval_summary",
         "schema_version": "hfr.eval_summary.v1",
-        "sha256": "9670feada999deb6fdea4a58541c39bc5653289e8825b5870467a7c8605c36dd",
-        "size_bytes": 6281
+        "sha256": "24fcfd7ae1caedf1627229201d706f0a9b5cd853c6e320e1df833aedde8c7d25",
+        "size_bytes": 11797
       }
     ],
     "evidence_bundle": [
@@ -1448,7 +1448,7 @@
         "readiness": "",
         "role": "external_eval_plan",
         "schema_version": "hfr.external_eval_adapters.v1",
-        "sha256": "fada998b85f837d43816aaebf7fe92607a67febd4340694cb5f67f98c985a481",
+        "sha256": "e1eb3463aa1c3fe160c50970a45fdefbd558c5b814cc8f206d9d5b0fd732d69b",
         "size_bytes": 2858
       }
     ],
@@ -1463,7 +1463,7 @@
         "readiness": "dry_run_recorded",
         "role": "external_eval_receipt",
         "schema_version": "hfr.external_eval_receipt.v1",
-        "sha256": "dd2994e11ec7868f5bfa6b96ea0b3f202dbef56c2713aa822faed86fdb1c7387",
+        "sha256": "82d22cd96ab57bcb186cc4a0d4a79e2b4f11e36c2d0e139eab3a1a12116a8694",
         "size_bytes": 4119
       }
     ],
@@ -1493,7 +1493,7 @@
         "readiness": "identical",
         "role": "heldout_manifest",
         "schema_version": "hfr.heldout_scenario_manifest.v1",
-        "sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9",
+        "sha256": "af37d51d3aabf7628f634a127e987a80ee7b8ce07e38f316709df5bfa989bcf5",
         "size_bytes": 2032
       }
     ],
@@ -1583,7 +1583,7 @@
         "readiness": "applied",
         "role": "promotion_alias_apply",
         "schema_version": "hfr.promotion_alias_apply.v1",
-        "sha256": "ba77066eab166e5df71b3c158f8f1d08ddbabc38482f264b3c3aff723686195e",
+        "sha256": "53768daae3069e8361813b985534cf9bdc31f178a26caea72f769a31548a6507",
         "size_bytes": 8372
       }
     ],
@@ -1593,12 +1593,12 @@
         "exists": true,
         "file_count": 8,
         "kind": "directory",
-        "passed": null,
+        "passed": true,
         "path": "promotion_governance/promotion_archive",
         "readiness": "",
         "role": "promotion_archive",
-        "schema_version": "",
-        "sha256": "eac0a7122bc9078472da8f071559e3fdec6150c4f9903959af5b03c6186cbed5",
+        "schema_version": "hfr.promotion_archive.v1",
+        "sha256": "de5f25fbad4734973b44e3faeec11d59d0bd905e5c9c01d03f846507dbdefc6c",
         "size_bytes": 86802
       }
     ],
@@ -1608,12 +1608,12 @@
         "exists": true,
         "file_count": 3,
         "kind": "directory",
-        "passed": null,
+        "passed": true,
         "path": "promotion_governance/promotion_cards",
-        "readiness": "",
+        "readiness": "ready",
         "role": "promotion_cards",
-        "schema_version": "",
-        "sha256": "33f50eb55a4fbd862889ff78bc4654eeafeb6b54e99cde3c4713d097fa2af9c0",
+        "schema_version": "hfr.promotion_cards.v1",
+        "sha256": "ee4e86cdd06c3fc21633e7b20bee4157c4a664b12c905e506f0ae68c352ede8b",
         "size_bytes": 9912
       }
     ],
@@ -1628,7 +1628,7 @@
         "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "0e59bb83827b6fd6bf7395bb2bc1822034ecb9cb0dd49f87b3e30e1dc039221d",
+        "sha256": "10c6390edb069b25a053f03e699137657235212f1487cc557ce3850b8e80d343",
         "size_bytes": 32793
       }
     ],
@@ -1658,7 +1658,7 @@
         "readiness": "ready",
         "role": "promotion_release_record",
         "schema_version": "hfr.promotion_release_record.v1",
-        "sha256": "779198b0383fdc675e2095f68eeda6c26e539c1dfe1bdde7a5ab67e3163b4e94",
+        "sha256": "5bb189fccdefaf2c4d2f36cdbeff0bafe6d9d75b9840dbaab1b505b67ea22ca4",
         "size_bytes": 19412
       }
     ],
@@ -1763,7 +1763,7 @@
         "readiness": "ready",
         "role": "trainer_launch_check",
         "schema_version": "hfr.trainer_launch_check.v1",
-        "sha256": "c294c30a19ba7646a5a3d7594e81054c156bc566b27c2cb0237bd6339a9eaea8",
+        "sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
         "size_bytes": 14354
       }
     ],
@@ -1778,7 +1778,7 @@
         "readiness": "ready",
         "role": "trainer_preflight",
         "schema_version": "hfr.trainer_preflight.v1",
-        "sha256": "45e308523f8390fb436f4a7bb0c6ff490390de03414b8a4a4c58f885334c63e2",
+        "sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
         "size_bytes": 88398
       }
     ],
@@ -1792,9 +1792,9 @@
         "path": "training_export",
         "readiness": "",
         "role": "training_export",
-        "schema_version": "",
-        "sha256": "a6bb01cba41f40d381848512b603b93400ec7d079f84b75000e39477a6239451",
-        "size_bytes": 508903
+        "schema_version": "hfr.rl.manifest.v1",
+        "sha256": "2bcbb24905b2a5f60869424f7d3224cc24aacd8c5850a1ba26268be4bad19498",
+        "size_bytes": 509486
       }
     ]
   }

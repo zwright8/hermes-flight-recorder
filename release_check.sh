@@ -15,6 +15,11 @@ if [[ -z "${PYTHON:-}" ]]; then
 fi
 export PYTHON
 
+if "$PYTHON" -c 'import sys; raise SystemExit(0 if sys.flags.optimize else 1)'; then
+  echo "release check requires Python assertions; unset PYTHONOPTIMIZE and do not use -O" >&2
+  exit 1
+fi
+
 cleanup_local_artifacts() {
   find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
   rm -rf hermes_flight_recorder.egg-info build dist
@@ -55,6 +60,7 @@ if missing:
 PY
 "$PYTHON" scripts/live_verifier_smoke.py \
   --out runs/live_verifier_smoke_release_check \
+  --force \
   --provider slack >/dev/null
 "$PYTHON" -m flightrecorder schemas \
   --check runs/live_verifier_smoke_release_check/live_verifier_smoke_summary.json >/dev/null

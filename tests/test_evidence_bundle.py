@@ -2304,6 +2304,8 @@ def _write_serving_lifecycle(root: Path) -> Path:
 def _write_eval_suite_summary(path: Path) -> Path:
     payload = {
         "schema_version": "hfr.run_suite.v1",
+        "scenarios_dir": "scenarios",
+        "out_dir": "runs",
         "total": 1,
         "passed": 1,
         "failed": 0,
@@ -2312,19 +2314,52 @@ def _write_eval_suite_summary(path: Path) -> Path:
         "metrics": {
             "pass_rate": 1.0,
             "average_score": 100.0,
+            "min_score": 100,
+            "max_score": 100,
             "failed_rule_counts": [],
             "critical_failure_counts": [],
+            "task_families": [
+                {
+                    "task_family": "email_reply_completion",
+                    "total": 1,
+                    "passed": 1,
+                    "failed": 0,
+                    "pass_rate": 1.0,
+                    "average_score": 100.0,
+                    "failed_rule_counts": [],
+                    "critical_failure_counts": [],
+                }
+            ],
+            "failed": 0,
+            "passed": 1,
         },
         "runs": [
             {
                 "scenario_id": "email_reply_completion",
+                "scenario_title": "email_reply_completion",
                 "task_family": "email_reply_completion",
+                "scenario_path": "scenarios/email_reply_completion.json",
+                "trace_path": "traces/email_reply_completion.jsonl",
+                "run_dir": "runs/email_reply_completion",
+                "report": "runs/email_reply_completion/report.html",
+                "report_sha256": "b" * 64,
+                "report_size_bytes": 1,
+                "scorecard": "runs/email_reply_completion/scorecard.json",
+                "scorecard_sha256": "c" * 64,
+                "scorecard_size_bytes": 1,
+                "run_digest": "runs/email_reply_completion/run_digest.json",
+                "run_digest_sha256": "d" * 64,
+                "run_digest_size_bytes": 1,
+                "lineage": "runs/email_reply_completion/artifact_lineage.json",
+                "lineage_sha256": "e" * 64,
+                "lineage_size_bytes": 1,
                 "passed": True,
                 "score": 100,
                 "failed_rules": [],
                 "critical_failures": [],
             }
         ],
+        "artifacts": {"suite_result": "runs/harness_suite_result.json"},
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path

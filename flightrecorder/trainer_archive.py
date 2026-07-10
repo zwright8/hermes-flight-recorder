@@ -4,20 +4,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
 import shutil
+import stat
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
+from .path_safety import assert_safe_output_directory, path_has_symlink_component
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
     TRAINER_PREFLIGHT_SCHEMA_VERSION,
 )
+from .schema_registry import SchemaRegistryError, check_schema_contract
 
 TRAINER_ARCHIVE_SCHEMA_VERSION = "hfr.trainer_archive.v1"
 _ARCHIVE_MANIFEST = "trainer_archive.json"
+_ARCHIVE_MARKER = ".hfr-trainer-archive"
+_ARCHIVE_MARKER_CONTENT = f"{TRAINER_ARCHIVE_SCHEMA_VERSION}\n"
 _TREE_HASH_ALGORITHM = TRAINER_DIRECTORY_TREE_HASH_ALGORITHM
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TrainerArchiveError(ValueError):
@@ -35,12 +44,105 @@ def build_trainer_archive(
 ) -> dict[str, Any]:
     """Copy trainer-launch evidence into a portable hash-checked directory."""
     target = Path(out_dir)
-    artifacts_dir = target / "artifacts"
-    _prepare_archive_dir(target, force)
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-
     source_preflight_path = Path(preflight_path)
-    preflight = _read_json_artifact(source_preflight_path, TRAINER_PREFLIGHT_SCHEMA_VERSION, "trainer preflight")
+    preflight, preflight_attestation = _read_json_artifact(
+        source_preflight_path,
+        TRAINER_PREFLIGHT_SCHEMA_VERSION,
+        "trainer preflight",
+    )
+    _require_schema(preflight, "trainer_preflight", "trainer preflight")
+    if launch_check_path is None:
+        raise TrainerArchiveError("trainer launch check path is required")
+    source_launch_path = Path(launch_check_path)
+    launch_check, launch_attestation = _read_json_artifact(
+        source_launch_path,
+        TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+        "trainer launch check",
+    )
+    _require_schema(launch_check, "trainer_launch_check", "trainer launch check")
+
+    reference_issues = _preflight_reference_issues(
+        preflight, source_preflight_path.parent
+    )
+    semantic_errors: list[str] = []
+    if not reference_issues:
+        semantic_errors.extend(
+            _semantic_validation_errors(
+                source_preflight_path,
+                source_launch_path,
+                preflight,
+                launch_check,
+            )
+        )
+    binding_errors = _source_binding_errors(
+        preflight,
+        launch_check,
+        source_preflight_path=source_preflight_path,
+        source_launch_path=source_launch_path,
+    )
+    readiness_errors = _readiness_errors(preflight, launch_check)
+    source_controls_passed = (
+        not reference_issues
+        and not semantic_errors
+        and not binding_errors
+        and not readiness_errors
+    )
+
+    with _archive_lock(target):
+        _prepare_archive_dir(target, force)
+        staging_dir, staging_identity = _create_private_work_directory(target, "stage")
+        published = False
+        try:
+            archive = _build_archive_contents(
+                staging_dir=staging_dir,
+                display_target=target,
+                source_preflight_path=source_preflight_path,
+                source_launch_path=source_launch_path,
+                preflight=preflight,
+                launch_check=launch_check,
+                preflight_attestation=preflight_attestation,
+                launch_attestation=launch_attestation,
+                reference_issues=reference_issues,
+                semantic_errors=semantic_errors,
+                binding_errors=binding_errors,
+                readiness_errors=readiness_errors,
+                source_controls_passed=source_controls_passed,
+                require_self_contained=require_self_contained,
+                preserve_paths=preserve_paths,
+            )
+            _validate_complete_archive(staging_dir, "staged trainer archive")
+            _fsync_archive_tree(staging_dir)
+            _publish_staged_archive(staging_dir, target, staging_identity)
+            published = True
+            return archive
+        finally:
+            if not published:
+                _remove_owned_directory(staging_dir, staging_identity)
+
+
+def _build_archive_contents(
+    *,
+    staging_dir: Path,
+    display_target: Path,
+    source_preflight_path: Path,
+    source_launch_path: Path,
+    preflight: dict[str, Any],
+    launch_check: dict[str, Any],
+    preflight_attestation: dict[str, Any],
+    launch_attestation: dict[str, Any],
+    reference_issues: dict[tuple[str, int, str], str],
+    semantic_errors: list[str],
+    binding_errors: list[str],
+    readiness_errors: list[str],
+    source_controls_passed: bool,
+    require_self_contained: bool,
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    target = staging_dir
+    artifacts_dir = target / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (target / _ARCHIVE_MARKER).write_text(_ARCHIVE_MARKER_CONTENT, encoding="utf-8")
+
     artifacts: list[dict[str, Any]] = [
         _copy_file_artifact(
             "trainer_preflight",
@@ -49,97 +151,120 @@ def build_trainer_archive(
             artifacts_dir / "trainer_preflight.json",
             target,
             preserve_paths,
+            expected=preflight_attestation,
         )
     ]
     missing: list[dict[str, Any]] = []
     relationships: list[dict[str, Any]] = []
 
-    launch_check: dict[str, Any] | None = None
-    launch_included = False
-    launch_passed = False
-    if launch_check_path is None:
-        missing.append(_missing("trainer_launch_check", 0, "launch check path was not provided"))
-    else:
-        source_launch_path = Path(launch_check_path)
-        launch_check = _read_json_artifact(source_launch_path, TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, "trainer launch check")
-        launch_record = _copy_file_artifact(
-            "trainer_launch_check",
-            "trainer_launch_check",
-            source_launch_path,
-            artifacts_dir / "trainer_launch_check.json",
-            target,
-            preserve_paths,
+    launch_record = _copy_file_artifact(
+        "trainer_launch_check",
+        "trainer_launch_check",
+        source_launch_path,
+        artifacts_dir / "trainer_launch_check.json",
+        target,
+        preserve_paths,
+        expected=launch_attestation,
+    )
+    artifacts.append(launch_record)
+    if not binding_errors:
+        relationships.append(
+            {
+                "from": "trainer_launch_check",
+                "to": "trainer_preflight",
+                "type": "validates",
+            }
         )
-        artifacts.append(launch_record)
-        relationships.append({"from": "trainer_launch_check", "to": "trainer_preflight", "type": "validates"})
-        launch_included = True
-        launch_passed = launch_check.get("passed") is True
 
-    artifacts.extend(
-        _copy_preflight_paths(
-            preflight.get("gates"),
-            role="gate",
-            base_dir=source_preflight_path.parent,
-            archive_dir=artifacts_dir / "gates",
-            archive_root=target,
-            missing=missing,
-            preserve_paths=preserve_paths,
+    if source_controls_passed:
+        artifacts.extend(
+            _copy_preflight_paths(
+                preflight.get("gates"),
+                role="gate",
+                base_dir=source_preflight_path.parent,
+                archive_dir=artifacts_dir / "gates",
+                archive_root=target,
+                missing=missing,
+                preserve_paths=preserve_paths,
+            )
         )
-    )
-    artifacts.extend(
-        _copy_preflight_paths(
-            preflight.get("validation_summaries"),
-            role="validation_summary",
-            base_dir=source_preflight_path.parent,
-            archive_dir=artifacts_dir / "validation_summaries",
-            archive_root=target,
-            missing=missing,
-            preserve_paths=preserve_paths,
+        artifacts.extend(
+            _copy_preflight_paths(
+                preflight.get("validation_summaries"),
+                role="validation_summary",
+                base_dir=source_preflight_path.parent,
+                archive_dir=artifacts_dir / "validation_summaries",
+                archive_root=target,
+                missing=missing,
+                preserve_paths=preserve_paths,
+            )
         )
-    )
-    artifacts.extend(
-        _copy_preflight_mapping(
-            preflight.get("artifacts"),
-            role="trainer_artifact",
-            base_dir=source_preflight_path.parent,
-            archive_dir=artifacts_dir / "trainer_artifacts",
-            archive_root=target,
-            missing=missing,
-            preserve_paths=preserve_paths,
+        artifacts.extend(
+            _copy_preflight_mapping(
+                preflight.get("artifacts"),
+                role="trainer_artifact",
+                base_dir=source_preflight_path.parent,
+                archive_dir=artifacts_dir / "trainer_artifacts",
+                archive_root=target,
+                missing=missing,
+                preserve_paths=preserve_paths,
+            )
         )
-    )
-    artifacts.extend(
-        _copy_preflight_mapping(
-            preflight.get("schema_contracts"),
-            role="schema_contract",
-            base_dir=source_preflight_path.parent,
-            archive_dir=artifacts_dir / "schema_contracts",
-            archive_root=target,
-            missing=missing,
-            preserve_paths=preserve_paths,
+        artifacts.extend(
+            _copy_preflight_mapping(
+                preflight.get("schema_contracts"),
+                role="schema_contract",
+                base_dir=source_preflight_path.parent,
+                archive_dir=artifacts_dir / "schema_contracts",
+                archive_root=target,
+                missing=missing,
+                preserve_paths=preserve_paths,
+            )
         )
-    )
+    else:
+        blocker = _source_control_blocker(
+            semantic_errors, binding_errors, readiness_errors
+        )
+        missing.extend(
+            _blocked_reference_records(
+                preflight,
+                base_dir=source_preflight_path.parent,
+                reference_issues=reference_issues,
+                default_reason=blocker,
+            )
+        )
 
     for index, artifact in enumerate(artifacts):
         artifact["index"] = index
 
     approved_command = _approved_command_record(launch_check)
+    if not source_controls_passed:
+        approved_command["approved"] = False
+    path_rewrites = _path_rewrites(artifacts, approved_command)
     trainer_inputs = _trainer_inputs(artifacts)
-    path_rewrites = _path_rewrites(trainer_inputs)
     portable_command = _portable_command_record(approved_command, path_rewrites)
-    consumer_contract = _consumer_contract(portable_command, trainer_inputs, path_rewrites)
+    consumer_contract = _consumer_contract(
+        portable_command, trainer_inputs, path_rewrites
+    )
     self_contained = not missing
-    ready_for_training = preflight.get("passed") is True and launch_included and launch_passed
-    passed = ready_for_training and (self_contained or not require_self_contained)
+    launch_included = True
+    launch_passed = launch_check.get("passed") is True
+    ready_for_training = preflight.get("passed") is True and launch_passed
+    effective_require_self_contained = (
+        require_self_contained or not source_controls_passed
+    )
+    passed = ready_for_training and (
+        self_contained or not effective_require_self_contained
+    )
     archive = {
         "schema_version": TRAINER_ARCHIVE_SCHEMA_VERSION,
-        "archive_path": _display_path(target, preserve_paths),
+        "archive_path": _display_path(display_target, preserve_paths),
         "manifest_path": _ARCHIVE_MANIFEST,
         "passed": passed,
         "readiness": "ready" if passed else "blocked",
         "recommendation": "handoff_ready" if passed else "block_handoff",
         "self_contained": self_contained,
-        "require_self_contained": require_self_contained,
+        "require_self_contained": effective_require_self_contained,
         "ready_for_training": ready_for_training,
         "launch_check_included": launch_included,
         "approved_command": approved_command,
@@ -150,7 +275,9 @@ def build_trainer_archive(
         "artifacts": artifacts,
         "missing": missing,
         "relationships": relationships,
-        "metrics": _metrics(artifacts, missing, trainer_inputs, path_rewrites, consumer_contract),
+        "metrics": _metrics(
+            artifacts, missing, trainer_inputs, path_rewrites, consumer_contract
+        ),
         "notes": [
             "Trainer archives copy trainer handoff evidence into a portable directory; they do not train models or execute the trainer command.",
             "The portable command is advisory: it rewrites known trainer-input paths to archive-local paths but does not include trainer code or execute anything.",
@@ -159,6 +286,312 @@ def build_trainer_archive(
     }
     _write_json(target / _ARCHIVE_MANIFEST, archive)
     return archive
+
+
+def _require_schema(value: dict[str, Any], schema_name: str, label: str) -> None:
+    try:
+        result = check_schema_contract(value, name_or_id=schema_name)
+    except SchemaRegistryError as exc:
+        raise TrainerArchiveError(f"{label} schema validation failed: {exc}") from exc
+    if result.get("passed") is True:
+        return
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    detail = "; ".join(str(error) for error in errors[:8]) or "unknown schema error"
+    raise TrainerArchiveError(f"{label} schema validation failed: {detail}")
+
+
+def _semantic_validation_errors(
+    preflight_path: Path,
+    launch_check_path: Path,
+    preflight: dict[str, Any],
+    launch_check: dict[str, Any],
+) -> list[str]:
+    # Imported lazily because validation imports this module's public schema constant.
+    from .validation import validate_trainer_launch_check, validate_trainer_preflight
+
+    errors: list[str] = []
+    for label, target in (
+        (
+            "trainer preflight",
+            validate_trainer_preflight(preflight_path, payload=preflight),
+        ),
+        (
+            "trainer launch check",
+            validate_trainer_launch_check(launch_check_path, payload=launch_check),
+        ),
+    ):
+        errors.extend(f"{label}: {error}" for error in target.errors)
+    return errors
+
+
+def _preflight_reference_issues(
+    preflight: dict[str, Any],
+    base_dir: Path,
+) -> dict[tuple[str, int, str], str]:
+    issues: dict[tuple[str, int, str], str] = {}
+    artifacts = (
+        preflight.get("artifacts")
+        if isinstance(preflight.get("artifacts"), dict)
+        else {}
+    )
+    for role, index, name, record in _iter_preflight_records(preflight):
+        path_error = _recorded_path_safety_error(record.get("path"), base_dir)
+        if path_error is not None:
+            issues[(role, index, name)] = path_error
+            continue
+        if role == "schema_contract":
+            artifact = artifacts.get(name)
+            if not isinstance(artifact, dict) or artifact.get("path") != record.get(
+                "path"
+            ):
+                issues[(role, index, name)] = (
+                    "schema contract path is not bound to its source artifact"
+                )
+    return issues
+
+
+def _iter_preflight_records(
+    preflight: dict[str, Any],
+) -> list[tuple[str, int, str, dict[str, Any]]]:
+    records: list[tuple[str, int, str, dict[str, Any]]] = []
+    for role, key in (
+        ("gate", "gates"),
+        ("validation_summary", "validation_summaries"),
+    ):
+        value = preflight.get(key)
+        if not isinstance(value, list):
+            continue
+        for index, item in enumerate(value):
+            if isinstance(item, dict):
+                records.append((role, index, _record_name(role, item, index), item))
+    for role, key in (
+        ("trainer_artifact", "artifacts"),
+        ("schema_contract", "schema_contracts"),
+    ):
+        value = preflight.get(key)
+        if not isinstance(value, dict):
+            continue
+        for index, (raw_name, item) in enumerate(sorted(value.items())):
+            if isinstance(item, dict):
+                records.append((role, index, str(raw_name or f"{role}_{index}"), item))
+    return records
+
+
+def _recorded_path_safety_error(value: Any, base_dir: Path) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.startswith("<redacted:")
+        or value.startswith("<missing-")
+    ):
+        return None
+    if _is_windows_absolute(value):
+        return f"absolute recorded path is not allowed: {value}"
+    try:
+        raw = Path(value)
+    except (OSError, ValueError) as exc:
+        return f"recorded path is invalid: {value}: {exc}"
+    if raw.is_absolute():
+        return f"absolute recorded path is not allowed: {value}"
+    if ".." in raw.parts:
+        return f"recorded path contains parent traversal: {value}"
+    candidate = base_dir / raw
+    if path_has_symlink_component(candidate, include_leaf=True):
+        return f"recorded path traverses a symlink component: {value}"
+    if not _path_resolves_inside(candidate, base_dir):
+        return f"recorded path is not bound to the preflight root: {value}"
+    return None
+
+
+def _blocked_reference_records(
+    preflight: dict[str, Any],
+    *,
+    base_dir: Path,
+    reference_issues: dict[tuple[str, int, str], str],
+    default_reason: str,
+) -> list[dict[str, Any]]:
+    blocked: list[dict[str, Any]] = []
+    for role, index, name, record in _iter_preflight_records(preflight):
+        reason = reference_issues.get((role, index, name))
+        if reason is None:
+            source_path, resolution_error = _resolve_recorded_path(
+                record.get("path"), base_dir
+            )
+            if source_path is None:
+                reason = resolution_error or default_reason
+            else:
+                reason = (
+                    _record_integrity_error(record, source_path, role) or default_reason
+                )
+        blocked.append(_missing(role, index, reason, name=name))
+    if not blocked:
+        blocked.append(
+            _missing("trainer_artifact", 0, default_reason, name="preflight_references")
+        )
+    return blocked
+
+
+def _source_control_blocker(
+    semantic_errors: list[str],
+    binding_errors: list[str],
+    readiness_errors: list[str],
+) -> str:
+    if semantic_errors:
+        return f"preflight semantic validation failed: {'; '.join(semantic_errors[:8])}"
+    if binding_errors:
+        return f"launch check is not bound to the supplied preflight: {'; '.join(binding_errors[:8])}"
+    if readiness_errors:
+        return (
+            f"trainer handoff readiness is blocked: {'; '.join(readiness_errors[:8])}"
+        )
+    return "preflight reference safety validation failed"
+
+
+def _source_binding_errors(
+    preflight: dict[str, Any],
+    launch_check: dict[str, Any],
+    *,
+    source_preflight_path: Path,
+    source_launch_path: Path,
+) -> list[str]:
+    errors: list[str] = []
+    preflight_binding = _recorded_source_binding_error(
+        preflight.get("preflight_path"),
+        source_preflight_path,
+        source_preflight_path.parent,
+    )
+    if preflight_binding is not None:
+        errors.append(f"trainer_preflight.preflight_path {preflight_binding}")
+    launch_binding = _recorded_source_binding_error(
+        launch_check.get("preflight_path"),
+        source_preflight_path,
+        source_launch_path.parent,
+    )
+    if launch_binding is not None:
+        errors.append(f"trainer_launch_check.preflight_path {launch_binding}")
+
+    gates = preflight.get("gates") if isinstance(preflight.get("gates"), list) else []
+    expected_gates = [
+        {
+            "id": gate.get("id"),
+            "path": gate.get("path"),
+            "schema_version": gate.get("schema_version"),
+            "passed": gate.get("passed"),
+        }
+        for gate in gates
+        if isinstance(gate, dict)
+    ]
+    if launch_check.get("gates") != expected_gates:
+        errors.append("gates do not match the supplied preflight")
+
+    artifacts = (
+        preflight.get("artifacts")
+        if isinstance(preflight.get("artifacts"), dict)
+        else {}
+    )
+    expected_artifacts = {
+        "count": len(artifacts),
+        "names": sorted(str(name) for name in artifacts),
+    }
+    if launch_check.get("artifacts") != expected_artifacts:
+        errors.append("artifact summary does not match the supplied preflight")
+    if launch_check.get("dataset_selection") != preflight.get("dataset_selection"):
+        errors.append("dataset selection does not match the supplied preflight")
+
+    preflight_command = (
+        preflight.get("trainer_command")
+        if isinstance(preflight.get("trainer_command"), dict)
+        else {}
+    )
+    launch_command = (
+        launch_check.get("approved_command")
+        if isinstance(launch_check.get("approved_command"), dict)
+        else {}
+    )
+    for key in ("provided", "raw", "argv", "parseable"):
+        expected = preflight_command.get(
+            key, bool(preflight_command.get("argv")) if key == "parseable" else None
+        )
+        if launch_command.get(key) != expected:
+            errors.append(
+                f"approved_command.{key} does not match the supplied preflight"
+            )
+
+    required_versions = preflight.get("required_dataset_versions")
+    launch_versions = launch_check.get("required_dataset_versions")
+    if isinstance(required_versions, list) and isinstance(launch_versions, list):
+        if not set(required_versions).issubset(launch_versions):
+            errors.append(
+                "required dataset versions do not include the preflight requirements"
+            )
+    return errors
+
+
+def _recorded_source_binding_error(
+    value: Any, source_path: Path, owner_root: Path
+) -> str | None:
+    if not isinstance(value, str) or not value:
+        return "is missing"
+    if value.startswith("<redacted:") and value.endswith(">"):
+        recorded_name = value[len("<redacted:") : -1]
+        return (
+            None
+            if recorded_name == source_path.name
+            else "does not name the supplied source artifact"
+        )
+    path_error = _recorded_path_safety_error(value, owner_root)
+    if path_error is not None:
+        return path_error
+    raw = Path(value)
+    expected = source_path.resolve(strict=False)
+    candidates = (
+        (owner_root / raw).resolve(strict=False),
+        (Path.cwd() / raw).resolve(strict=False),
+    )
+    if expected not in candidates:
+        return "does not resolve to the supplied source artifact"
+    return None
+
+
+def _readiness_errors(
+    preflight: dict[str, Any], launch_check: dict[str, Any]
+) -> list[str]:
+    errors: list[str] = []
+    for label, value in (
+        ("trainer preflight", preflight),
+        ("trainer launch check", launch_check),
+    ):
+        if value.get("passed") is not True:
+            errors.append(f"{label} did not pass")
+        if value.get("readiness") != "ready":
+            errors.append(f"{label} readiness is not ready")
+        if value.get("recommendation") != "launch_allowed":
+            errors.append(f"{label} recommendation is not launch_allowed")
+    validation = (
+        launch_check.get("validation")
+        if isinstance(launch_check.get("validation"), dict)
+        else {}
+    )
+    if validation.get("passed") is not True or validation.get("error_count") != 0:
+        errors.append(
+            "trainer launch check did not record a passing preflight validation"
+        )
+    command = (
+        launch_check.get("approved_command")
+        if isinstance(launch_check.get("approved_command"), dict)
+        else {}
+    )
+    if not (
+        command.get("approved") is True
+        and command.get("provided") is True
+        and command.get("parseable") is True
+        and isinstance(command.get("argv"), list)
+        and command.get("argv")
+    ):
+        errors.append(
+            "trainer launch check does not contain an approved parseable command"
+        )
+    return errors
 
 
 def _copy_preflight_paths(
@@ -181,23 +614,29 @@ def _copy_preflight_paths(
         name = _record_name(role, item, index)
         source_path, reason = _resolve_recorded_path(item.get("path"), base_dir)
         if source_path is None:
-            missing.append(_missing(role, index, reason or "path is unavailable", name=name))
+            missing.append(
+                _missing(role, index, reason or "path is unavailable", name=name)
+            )
             continue
-        integrity_error = _record_integrity_error(item, source_path)
+        integrity_error = _record_integrity_error(item, source_path, role)
         if integrity_error is not None:
             missing.append(_missing(role, index, integrity_error, name=name))
             continue
         try:
-            records.append(
-                _copy_path_artifact(
-                    name,
-                    role,
-                    source_path,
-                    archive_dir / f"{index:03d}_{_slug(name)}",
-                    archive_root,
-                    preserve_paths,
-                )
+            copied = _copy_path_artifact(
+                name,
+                role,
+                source_path,
+                archive_dir / f"{index:03d}_{_slug(name)}",
+                archive_root,
+                preserve_paths,
+                expected=item,
             )
+            if not preserve_paths:
+                aliases = _public_source_aliases(str(item["path"]), source_path)
+                copied["original_path"] = aliases[0]
+                copied["_source_aliases"] = aliases
+            records.append(copied)
         except TrainerArchiveError as exc:
             missing.append(_missing(role, index, str(exc), name=name))
     return records
@@ -219,27 +658,37 @@ def _copy_preflight_mapping(
     for index, (name, item) in enumerate(sorted(value.items())):
         clean_name = str(name or f"{role}_{index}")
         if not isinstance(item, dict):
-            missing.append(_missing(role, index, "preflight record is not an object", name=clean_name))
+            missing.append(
+                _missing(
+                    role, index, "preflight record is not an object", name=clean_name
+                )
+            )
             continue
         source_path, reason = _resolve_recorded_path(item.get("path"), base_dir)
         if source_path is None:
-            missing.append(_missing(role, index, reason or "path is unavailable", name=clean_name))
+            missing.append(
+                _missing(role, index, reason or "path is unavailable", name=clean_name)
+            )
             continue
-        integrity_error = _record_integrity_error(item, source_path)
+        integrity_error = _record_integrity_error(item, source_path, role)
         if integrity_error is not None:
             missing.append(_missing(role, index, integrity_error, name=clean_name))
             continue
         try:
-            records.append(
-                _copy_path_artifact(
-                    clean_name,
-                    role,
-                    source_path,
-                    archive_dir / f"{index:03d}_{_slug(clean_name)}",
-                    archive_root,
-                    preserve_paths,
-                )
+            copied = _copy_path_artifact(
+                clean_name,
+                role,
+                source_path,
+                archive_dir / f"{index:03d}_{_slug(clean_name)}",
+                archive_root,
+                preserve_paths,
+                expected=item,
             )
+            if not preserve_paths:
+                aliases = _public_source_aliases(str(item["path"]), source_path)
+                copied["original_path"] = aliases[0]
+                copied["_source_aliases"] = aliases
+            records.append(copied)
         except TrainerArchiveError as exc:
             missing.append(_missing(role, index, str(exc), name=clean_name))
     return records
@@ -252,10 +701,28 @@ def _copy_path_artifact(
     archive_path: Path,
     archive_root: Path,
     preserve_paths: bool,
+    *,
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
     if source_path.is_dir() and not source_path.is_symlink():
-        return _copy_directory_artifact(name, role, source_path, archive_path, archive_root, preserve_paths)
-    return _copy_file_artifact(name, role, source_path, archive_path.with_suffix(_suffix_for(source_path)), archive_root, preserve_paths)
+        return _copy_directory_artifact(
+            name,
+            role,
+            source_path,
+            archive_path,
+            archive_root,
+            preserve_paths,
+            expected=expected,
+        )
+    return _copy_file_artifact(
+        name,
+        role,
+        source_path,
+        archive_path.with_suffix(_suffix_for(source_path)),
+        archive_root,
+        preserve_paths,
+        expected=expected,
+    )
 
 
 def _copy_file_artifact(
@@ -265,12 +732,21 @@ def _copy_file_artifact(
     archive_path: Path,
     archive_root: Path,
     preserve_paths: bool,
+    *,
+    expected: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_error = _copyable_file_error(source_path)
     if source_error is not None:
         raise TrainerArchiveError(f"{role} source {source_error}")
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, archive_path)
+    size_bytes = archive_path.stat().st_size
+    sha256 = _sha256(archive_path)
+    if expected is not None and (
+        size_bytes != expected.get("size_bytes") or sha256 != expected.get("sha256")
+    ):
+        archive_path.unlink(missing_ok=True)
+        raise TrainerArchiveError(f"{role} source changed while being copied")
     payload = _read_json_optional(archive_path)
     return {
         "index": 0,
@@ -280,10 +756,14 @@ def _copy_file_artifact(
         "path": str(archive_path.relative_to(archive_root)),
         "original_path": _display_path(source_path, preserve_paths),
         "exists": True,
-        "schema_version": payload.get("schema_version") if isinstance(payload, dict) else None,
-        "source_passed": payload.get("passed") if isinstance(payload, dict) and isinstance(payload.get("passed"), bool) else None,
-        "size_bytes": archive_path.stat().st_size,
-        "sha256": _sha256(archive_path),
+        "schema_version": payload.get("schema_version")
+        if isinstance(payload, dict)
+        else None,
+        "source_passed": payload.get("passed")
+        if isinstance(payload, dict) and isinstance(payload.get("passed"), bool)
+        else None,
+        "size_bytes": size_bytes,
+        "sha256": sha256,
     }
 
 
@@ -294,17 +774,30 @@ def _copy_directory_artifact(
     archive_path: Path,
     archive_root: Path,
     preserve_paths: bool,
+    *,
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
     source_error = _copyable_directory_error(source_path)
     if source_error is not None:
         raise TrainerArchiveError(f"{role} source {source_error}")
     if _path_resolves_inside(archive_path, source_path):
-        raise TrainerArchiveError(f"archive path must not be inside source directory: {archive_path}")
+        raise TrainerArchiveError(
+            f"archive path must not be inside source directory: {archive_path}"
+        )
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     if archive_path.exists():
         shutil.rmtree(archive_path)
     _copy_regular_tree(source_path, archive_path)
     tree = _tree_fingerprint(archive_path)
+    entry_count = sum(1 for _ in archive_path.iterdir())
+    if (
+        entry_count != expected.get("entry_count")
+        or tree["file_count"] != expected.get("file_count")
+        or tree["size_bytes"] != expected.get("size_bytes")
+        or tree["sha256"] != expected.get("sha256")
+    ):
+        shutil.rmtree(archive_path)
+        raise TrainerArchiveError(f"{role} source changed while being copied")
     return {
         "index": 0,
         "name": name,
@@ -323,40 +816,350 @@ def _copy_directory_artifact(
 
 
 def _prepare_archive_dir(target: Path, force: bool) -> None:
+    if path_has_symlink_component(target, include_leaf=True):
+        raise TrainerArchiveError(
+            f"trainer archive output must not traverse a symlink component: {target}"
+        )
     if target.exists() and not target.is_dir():
-        raise TrainerArchiveError(f"trainer archive output is not a directory: {target}")
+        raise TrainerArchiveError(
+            f"trainer archive output is not a directory: {target}"
+        )
     if not target.exists() or not any(target.iterdir()):
         return
     if not force:
-        raise TrainerArchiveError(f"trainer archive output is not empty: {target}; pass --force to replace it")
+        raise TrainerArchiveError(
+            f"trainer archive output is not empty: {target}; pass --force to replace it"
+        )
+    try:
+        assert_safe_output_directory(target, repo_root=_REPO_ROOT)
+    except ValueError as exc:
+        raise TrainerArchiveError(str(exc)) from exc
     if not _is_existing_trainer_archive(target):
+        marker_path = target / _ARCHIVE_MARKER
+        if not marker_path.is_file() or marker_path.is_symlink():
+            raise TrainerArchiveError(
+                f"refusing to replace directory without the trainer archive command marker {_ARCHIVE_MARKER}: {target}"
+            )
         raise TrainerArchiveError(
             f"refusing to replace non-archive directory: {target}; choose an empty output directory or an existing trainer archive"
         )
-    shutil.rmtree(target)
 
 
 def _is_existing_trainer_archive(target: Path) -> bool:
+    marker_path = target / _ARCHIVE_MARKER
     manifest_path = target / _ARCHIVE_MANIFEST
-    if not manifest_path.is_file():
+    if target.is_symlink() or marker_path.is_symlink() or manifest_path.is_symlink():
+        return False
+    if not marker_path.is_file() or not manifest_path.is_file():
         return False
     try:
+        if marker_path.read_text(encoding="utf-8") != _ARCHIVE_MARKER_CONTENT:
+            return False
         value = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        schema_check = check_schema_contract(value, name_or_id="trainer_archive")
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, SchemaRegistryError):
         return False
-    return isinstance(value, dict) and value.get("schema_version") == TRAINER_ARCHIVE_SCHEMA_VERSION
+    schema_valid = (
+        isinstance(value, dict)
+        and value.get("schema_version") == TRAINER_ARCHIVE_SCHEMA_VERSION
+        and schema_check.get("passed") is True
+    )
+    if not schema_valid:
+        return False
+    try:
+        _validate_complete_archive(target, "existing trainer archive")
+    except TrainerArchiveError:
+        return False
+    return True
 
 
-def _read_json_artifact(path: Path, schema_version: str, label: str) -> dict[str, Any]:
+@contextmanager
+def _archive_lock(target: Path) -> Iterator[None]:
+    """Hold a non-blocking lock shared by every publisher for one target."""
+    if path_has_symlink_component(target, include_leaf=True):
+        raise TrainerArchiveError(
+            f"trainer archive output must not traverse a symlink component: {target}"
+        )
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise TrainerArchiveError(
+            f"trainer archive output parent could not be created: {target.parent}: {exc}"
+        ) from exc
+    if path_has_symlink_component(target.parent, include_leaf=True):
+        raise TrainerArchiveError(
+            f"trainer archive output must not traverse a symlink component: {target}"
+        )
+
+    canonical_target = target.resolve(strict=False)
+    lock_name = canonical_target.name or "archive"
+    lock_path = canonical_target.parent / f".{lock_name}.hfr-trainer-archive.lock"
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        raise TrainerArchiveError(
+            f"trainer archive publication lock is unsafe or unavailable: {lock_path}: {exc}"
+        ) from exc
+    fallback_owner: tuple[Path, tuple[int, int]] | None = None
+    flock_module: Any | None = None
+    try:
+        lock_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(lock_stat.st_mode):
+            raise TrainerArchiveError(
+                f"trainer archive publication lock is not a regular file: {lock_path}"
+            )
+        if hasattr(os, "fchmod"):
+            os.fchmod(descriptor, 0o600)
+        lock_path_stat = lock_path.stat(follow_symlinks=False)
+        if (lock_path_stat.st_dev, lock_path_stat.st_ino) != (
+            lock_stat.st_dev,
+            lock_stat.st_ino,
+        ):
+            raise TrainerArchiveError(
+                f"trainer archive publication lock changed while being opened: {lock_path}"
+            )
+        try:
+            import fcntl as flock_module
+        except (
+            ImportError
+        ):  # pragma: no cover - exercised only on platforms without fcntl
+            owner_path = lock_path.with_name(f"{lock_path.name}.owner")
+            owner_flags = (
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+            )
+            try:
+                owner_descriptor = os.open(owner_path, owner_flags, 0o600)
+            except FileExistsError as exc:
+                raise TrainerArchiveError(
+                    f"trainer archive publication is locked for target: {target}"
+                ) from exc
+            try:
+                owner_stat = os.fstat(owner_descriptor)
+                fallback_owner = (
+                    owner_path,
+                    (owner_stat.st_dev, owner_stat.st_ino),
+                )
+                os.write(owner_descriptor, f"pid={os.getpid()}\n".encode("ascii"))
+                os.fsync(owner_descriptor)
+            finally:
+                os.close(owner_descriptor)
+        else:
+            try:
+                flock_module.flock(
+                    descriptor, flock_module.LOCK_EX | flock_module.LOCK_NB
+                )
+            except (BlockingIOError, PermissionError) as exc:
+                raise TrainerArchiveError(
+                    f"trainer archive publication is locked for target: {target}"
+                ) from exc
+        yield
+    finally:
+        if flock_module is not None:
+            try:
+                flock_module.flock(descriptor, flock_module.LOCK_UN)
+            except OSError:
+                pass
+        os.close(descriptor)
+        if fallback_owner is not None:
+            _remove_owned_file(*fallback_owner)
+
+
+def _create_private_work_directory(
+    target: Path, purpose: str
+) -> tuple[Path, tuple[int, int]]:
+    name = target.name or "archive"
+    try:
+        work_dir = Path(
+            tempfile.mkdtemp(prefix=f".{name}.hfr-{purpose}-", dir=target.parent)
+        )
+        work_dir.chmod(0o700)
+        work_stat = work_dir.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise TrainerArchiveError(
+            f"could not create private trainer archive {purpose} directory: {exc}"
+        ) from exc
+    return work_dir, (work_stat.st_dev, work_stat.st_ino)
+
+
+def _validate_complete_archive(path: Path, label: str) -> None:
+    # Imported lazily because validation imports this module's public schema constant.
+    from .validation import validate_trainer_archive
+
+    marker_path = path / _ARCHIVE_MARKER
+    try:
+        marker_valid = (
+            marker_path.is_file()
+            and not marker_path.is_symlink()
+            and marker_path.read_text(encoding="utf-8") == _ARCHIVE_MARKER_CONTENT
+        )
+    except (OSError, UnicodeDecodeError):
+        marker_valid = False
+    if not marker_valid:
+        raise TrainerArchiveError(
+            f"{label} failed content validation: {_ARCHIVE_MARKER} is missing or invalid"
+        )
+    validation = validate_trainer_archive(path)
+    if not validation.errors:
+        return
+    detail = "; ".join(validation.errors[:8])
+    raise TrainerArchiveError(f"{label} failed content validation: {detail}")
+
+
+def _fsync_archive_tree(root: Path) -> None:
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        try:
+            with path.open("rb") as handle:
+                os.fsync(handle.fileno())
+        except OSError as exc:
+            raise TrainerArchiveError(
+                f"could not sync staged trainer archive file {path}: {exc}"
+            ) from exc
+    directories = [root, *(item for item in root.rglob("*") if item.is_dir())]
+    for directory in sorted(
+        directories, key=lambda item: len(item.parts), reverse=True
+    ):
+        _fsync_directory(directory)
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        # Some supported filesystems do not implement directory fsync.
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def _publish_staged_archive(
+    staging_dir: Path, target: Path, staging_identity: tuple[int, int]
+) -> None:
+    backup_dir: Path | None = None
+    backup_identity: tuple[int, int] | None = None
+    if target.exists():
+        backup_dir, placeholder_identity = _create_private_work_directory(
+            target, "backup"
+        )
+        if not _remove_owned_directory(backup_dir, placeholder_identity):
+            raise TrainerArchiveError(
+                f"could not reserve private trainer archive backup path: {backup_dir}"
+            )
+        previous_stat = target.stat(follow_symlinks=False)
+        try:
+            os.replace(target, backup_dir)
+        except OSError as exc:
+            raise TrainerArchiveError(
+                f"could not preserve previous trainer archive before publication: {exc}"
+            ) from exc
+        backup_identity = (previous_stat.st_dev, previous_stat.st_ino)
+        _fsync_directory(target.parent)
+
+    try:
+        os.replace(staging_dir, target)
+        published_identity = _path_identity(target)
+        if published_identity != staging_identity:
+            raise TrainerArchiveError(
+                "published trainer archive identity does not match the validated staging directory"
+            )
+        _fsync_directory(target.parent)
+    except (OSError, TrainerArchiveError) as exc:
+        restore_error: OSError | None = None
+        if backup_dir is not None and backup_identity is not None:
+            try:
+                if target.exists() and _path_identity(target) == staging_identity:
+                    os.replace(target, staging_dir)
+                os.replace(backup_dir, target)
+                _fsync_directory(target.parent)
+            except OSError as restore_exc:
+                restore_error = restore_exc
+        detail = f"trainer archive publication failed: {exc}"
+        if restore_error is not None:
+            detail += f"; previous archive remains at {backup_dir} because restoration failed: {restore_error}"
+        raise TrainerArchiveError(detail) from exc
+
+    if backup_dir is not None and backup_identity is not None:
+        _remove_owned_directory(backup_dir, backup_identity)
+        _fsync_directory(target.parent)
+
+
+def _path_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        path_stat = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    return path_stat.st_dev, path_stat.st_ino
+
+
+def _remove_owned_directory(path: Path, identity: tuple[int, int]) -> bool:
+    try:
+        path_stat = path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if (
+        not stat.S_ISDIR(path_stat.st_mode)
+        or (path_stat.st_dev, path_stat.st_ino) != identity
+    ):
+        return False
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        return False
+    return True
+
+
+def _remove_owned_file(path: Path, identity: tuple[int, int]) -> bool:
+    try:
+        path_stat = path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if (
+        not stat.S_ISREG(path_stat.st_mode)
+        or (path_stat.st_dev, path_stat.st_ino) != identity
+    ):
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def _read_json_artifact(
+    path: Path,
+    schema_version: str,
+    label: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     source_error = _copyable_file_error(path)
     if source_error is not None:
         raise TrainerArchiveError(f"{label} {source_error}")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        source_bytes = path.read_bytes()
+        value = json.loads(source_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TrainerArchiveError(
+            f"{label} is not readable JSON: {path}: {exc}"
+        ) from exc
     if not isinstance(value, dict):
         raise TrainerArchiveError(f"{label} must contain a JSON object: {path}")
     if value.get("schema_version") != schema_version:
-        raise TrainerArchiveError(f"{label} schema_version must be {schema_version!r}; got {value.get('schema_version')!r}")
-    return value
+        raise TrainerArchiveError(
+            f"{label} schema_version must be {schema_version!r}; got {value.get('schema_version')!r}"
+        )
+    return value, {
+        "kind": "file",
+        "size_bytes": len(source_bytes),
+        "sha256": hashlib.sha256(source_bytes).hexdigest(),
+    }
 
 
 def _read_json_optional(path: Path) -> dict[str, Any] | None:
@@ -367,11 +1170,21 @@ def _read_json_optional(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str | None]:
-    if not isinstance(value, str) or not value or value.startswith("<redacted:") or value.startswith("<missing-"):
+def _resolve_recorded_path(
+    value: Any, base_dir: Path
+) -> tuple[Path | None, str | None]:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.startswith("<redacted:")
+        or value.startswith("<missing-")
+    ):
         return None, "path is redacted or unavailable"
+    safety_error = _recorded_path_safety_error(value, base_dir)
+    if safety_error is not None:
+        return None, safety_error
     raw = Path(value)
-    candidate = raw if raw.is_absolute() or _is_windows_absolute(value) else base_dir / raw
+    candidate = base_dir / raw
     source_error = _copyable_path_error(candidate)
     if source_error is None:
         return candidate, None
@@ -380,49 +1193,59 @@ def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str
     return None, f"path could not be resolved: {value}"
 
 
-def _record_integrity_error(record: dict[str, Any], source_path: Path) -> str | None:
-    if source_path.is_symlink():
-        return None
-    if source_path.is_file():
+def _record_integrity_error(
+    record: dict[str, Any], source_path: Path, role: str
+) -> str | None:
+    if record.get("exists") is not True:
+        return "preflight record does not attest that the source exists"
+    if record.get("symlink") is True:
+        return "preflight record marks the source as a symlink"
+
+    expected_kind = (
+        "file"
+        if role in {"gate", "validation_summary", "schema_contract"}
+        else record.get("kind")
+    )
+    if expected_kind not in {"file", "directory"}:
+        return "source kind is missing or invalid in preflight record"
+    if expected_kind == "file":
+        if role != "gate" and record.get("regular_file") is not True:
+            return "preflight record does not attest a regular file"
+        if not source_path.is_file() or source_path.is_symlink():
+            return "source type does not match the recorded file type"
         expected_sha = record.get("sha256")
-        if expected_sha is not None:
-            if not _is_sha256(expected_sha):
-                return "sha256 is invalid in preflight record"
-            if _sha256(source_path) != expected_sha:
-                return "sha256 does not match preflight record"
+        if not _is_sha256(expected_sha):
+            return "sha256 is missing or invalid in preflight record"
         expected_size = record.get("size_bytes")
-        if expected_size is not None:
-            if not _is_non_negative_int(expected_size):
-                return "size_bytes is invalid in preflight record"
-            if source_path.stat().st_size != expected_size:
-                return "size_bytes does not match preflight record"
+        if not _is_non_negative_int(expected_size):
+            return "size_bytes is missing or invalid in preflight record"
+        if _sha256(source_path) != expected_sha:
+            return "sha256 does not match preflight record"
+        if source_path.stat().st_size != expected_size:
+            return "size_bytes does not match preflight record"
         return None
-    if source_path.is_dir():
-        expected_algorithm = record.get("tree_hash_algorithm")
-        if expected_algorithm is not None and expected_algorithm != _TREE_HASH_ALGORITHM:
-            return "tree_hash_algorithm is invalid in preflight record"
-        tree: dict[str, Any] | None = None
-        expected_sha = record.get("sha256")
-        if expected_sha is not None:
-            if not _is_sha256(expected_sha):
-                return "sha256 is invalid in preflight record"
-            tree = _tree_fingerprint(source_path)
-            if tree["sha256"] != expected_sha:
-                return "sha256 does not match preflight record"
-        expected_file_count = record.get("file_count")
-        if expected_file_count is not None:
-            if not _is_non_negative_int(expected_file_count):
-                return "file_count is invalid in preflight record"
-            tree = tree or _tree_fingerprint(source_path)
-            if tree["file_count"] != expected_file_count:
-                return "file_count does not match preflight record"
-        expected_size = record.get("size_bytes")
-        if expected_size is not None:
-            if not _is_non_negative_int(expected_size):
-                return "size_bytes is invalid in preflight record"
-            tree = tree or _tree_fingerprint(source_path)
-            if tree["size_bytes"] != expected_size:
-                return "size_bytes does not match preflight record"
+
+    if record.get("regular_directory") is not True:
+        return "preflight record does not attest a regular directory"
+    if not source_path.is_dir() or source_path.is_symlink():
+        return "source type does not match the recorded directory type"
+    if record.get("tree_hash_algorithm") != _TREE_HASH_ALGORITHM:
+        return "tree_hash_algorithm is missing or invalid in preflight record"
+    if not _is_non_negative_int(record.get("entry_count")):
+        return "entry_count is missing or invalid in preflight record"
+    if not _is_non_negative_int(record.get("file_count")):
+        return "file_count is missing or invalid in preflight record"
+    if not _is_non_negative_int(record.get("size_bytes")):
+        return "size_bytes is missing or invalid in preflight record"
+    if not _is_sha256(record.get("sha256")):
+        return "sha256 is missing or invalid in preflight record"
+    tree = _tree_fingerprint(source_path)
+    if tree["sha256"] != record.get("sha256"):
+        return "sha256 does not match preflight record"
+    if tree["file_count"] != record.get("file_count"):
+        return "file_count does not match preflight record"
+    if tree["size_bytes"] != record.get("size_bytes"):
+        return "size_bytes does not match preflight record"
     return None
 
 
@@ -437,6 +1260,8 @@ def _copyable_path_error(path: Path) -> str | None:
 
 
 def _copyable_file_error(path: Path) -> str | None:
+    if path_has_symlink_component(path, include_leaf=True):
+        return f"file path traverses a symlink component: {path}"
     if path.is_symlink():
         return f"file is a symlink: {path}"
     if not path.exists() or not path.is_file():
@@ -451,6 +1276,8 @@ def _copyable_file_error(path: Path) -> str | None:
 
 
 def _copyable_directory_error(path: Path) -> str | None:
+    if path_has_symlink_component(path, include_leaf=True):
+        return f"directory path traverses a symlink component: {path}"
     if path.is_symlink():
         return f"directory is a symlink: {path}"
     if not path.exists() or not path.is_dir():
@@ -499,7 +1326,11 @@ def _tree_fingerprint(root: Path) -> dict[str, Any]:
         digest.update(b"\0")
         file_count += 1
         size_bytes += size
-    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
+    return {
+        "sha256": digest.hexdigest(),
+        "file_count": file_count,
+        "size_bytes": size_bytes,
+    }
 
 
 def _record_name(role: str, item: dict[str, Any], index: int) -> str:
@@ -510,7 +1341,9 @@ def _record_name(role: str, item: dict[str, Any], index: int) -> str:
     return f"{role}_{index}"
 
 
-def _missing(role: str, index: int, reason: str, *, name: str | None = None) -> dict[str, Any]:
+def _missing(
+    role: str, index: int, reason: str, *, name: str | None = None
+) -> dict[str, Any]:
     item: dict[str, Any] = {"role": role, "index": index, "reason": reason}
     if name:
         item["name"] = name
@@ -519,10 +1352,24 @@ def _missing(role: str, index: int, reason: str, *, name: str | None = None) -> 
 
 def _approved_command_record(launch_check: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(launch_check, dict):
-        return {"approved": False, "provided": False, "raw": "", "argv": [], "parseable": False, "shell": ""}
+        return {
+            "approved": False,
+            "provided": False,
+            "raw": "",
+            "argv": [],
+            "parseable": False,
+            "shell": "",
+        }
     command = launch_check.get("approved_command")
     if not isinstance(command, dict):
-        return {"approved": False, "provided": False, "raw": "", "argv": [], "parseable": False, "shell": ""}
+        return {
+            "approved": False,
+            "provided": False,
+            "raw": "",
+            "argv": [],
+            "parseable": False,
+            "shell": "",
+        }
     argv = command.get("argv") if isinstance(command.get("argv"), list) else []
     clean_argv = [str(item) for item in argv if isinstance(item, str)]
     raw = command.get("raw") if isinstance(command.get("raw"), str) else ""
@@ -558,28 +1405,86 @@ def _trainer_inputs(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return inputs
 
 
-def _path_rewrites(trainer_inputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _public_source_aliases(recorded_path: str, source_path: Path) -> list[str]:
+    """Return portable aliases without disclosing the resolved source path."""
+    aliases = [recorded_path]
+    try:
+        cwd_relative = os.path.relpath(source_path.resolve(), Path.cwd().resolve())
+    except (OSError, ValueError):
+        return aliases
+    relative_path = Path(cwd_relative)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return aliases
+    if cwd_relative not in aliases:
+        aliases.append(cwd_relative)
+    return aliases
+
+
+def _path_rewrites(
+    artifacts: list[dict[str, Any]],
+    approved_command: dict[str, Any],
+) -> list[dict[str, Any]]:
     rewrites: list[dict[str, Any]] = []
-    for item in trainer_inputs:
-        original = item.get("original_path")
-        archive_path = item.get("archive_path")
-        if not isinstance(original, str) or not original or original.startswith("<"):
+    argv = (
+        approved_command.get("argv")
+        if isinstance(approved_command.get("argv"), list)
+        else []
+    )
+    command_argv = [item for item in argv if isinstance(item, str)]
+    for artifact in artifacts:
+        aliases = artifact.pop("_source_aliases", None)
+        if artifact.get("role") != "trainer_artifact":
             continue
+        originals = (
+            aliases if isinstance(aliases, list) else [artifact.get("original_path")]
+        )
+        archive_path = artifact.get("path")
         if not isinstance(archive_path, str) or not archive_path:
             continue
-        rewrites.append(
-            {
-                "artifact_name": str(item.get("artifact_name") or ""),
-                "kind": str(item.get("kind") or ""),
-                "original_path": original,
-                "archive_path": archive_path,
-            }
-        )
+        for alias_index, original in enumerate(originals):
+            if (
+                not isinstance(original, str)
+                or not original
+                or original.startswith("<")
+            ):
+                continue
+            if alias_index > 0 and not _command_references_path(command_argv, original):
+                continue
+            rewrites.append(
+                {
+                    "artifact_name": str(artifact.get("name") or ""),
+                    "kind": str(artifact.get("kind") or ""),
+                    "original_path": original,
+                    "archive_path": archive_path,
+                }
+            )
     return rewrites
 
 
-def _portable_command_record(approved_command: dict[str, Any], path_rewrites: list[dict[str, Any]]) -> dict[str, Any]:
-    argv = approved_command.get("argv") if isinstance(approved_command.get("argv"), list) else []
+def _command_references_path(argv: list[str], path: str) -> bool:
+    prefix = path.rstrip("/\\")
+    for token in argv:
+        values = [token]
+        if "=" in token:
+            values.append(token.split("=", 1)[1])
+        for value in values:
+            if (
+                value == path
+                or value.startswith(prefix + "/")
+                or value.startswith(prefix + "\\")
+            ):
+                return True
+    return False
+
+
+def _portable_command_record(
+    approved_command: dict[str, Any], path_rewrites: list[dict[str, Any]]
+) -> dict[str, Any]:
+    argv = (
+        approved_command.get("argv")
+        if isinstance(approved_command.get("argv"), list)
+        else []
+    )
     clean_argv = [item for item in argv if isinstance(item, str)]
     rewritten_argv, rewrite_count = _rewrite_command_argv(clean_argv, path_rewrites)
     return {
@@ -601,8 +1506,14 @@ def _consumer_contract(
     trainer_inputs: list[dict[str, Any]],
     path_rewrites: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    argv = portable_command.get("argv") if isinstance(portable_command.get("argv"), list) else []
-    external_paths = _external_command_paths([item for item in argv if isinstance(item, str)], trainer_inputs)
+    argv = (
+        portable_command.get("argv")
+        if isinstance(portable_command.get("argv"), list)
+        else []
+    )
+    external_paths = _external_command_paths(
+        [item for item in argv if isinstance(item, str)], trainer_inputs
+    )
     return {
         "execution_cwd": "archive_root",
         "command_kind": "advisory_portable_command",
@@ -621,18 +1532,38 @@ def _consumer_contract(
     }
 
 
-def _external_command_paths(argv: list[str], trainer_inputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _external_command_paths(
+    argv: list[str], trainer_inputs: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     external: list[dict[str, Any]] = []
-    archive_paths = [str(item.get("archive_path") or "") for item in trainer_inputs if isinstance(item.get("archive_path"), str)]
+    archive_paths = [
+        str(item.get("archive_path") or "")
+        for item in trainer_inputs
+        if isinstance(item.get("archive_path"), str)
+    ]
     for index, token in enumerate(argv):
         if not token or token.startswith("-"):
             if "=" in token:
                 key, value = token.split("=", 1)
                 if _is_external_command_path(value, archive_paths):
-                    external.append({"argv_index": index, "token": token, "path": value, "reason": f"{key} references a path outside archive inputs"})
+                    external.append(
+                        {
+                            "argv_index": index,
+                            "token": token,
+                            "path": value,
+                            "reason": f"{key} references a path outside archive inputs",
+                        }
+                    )
             continue
         if _is_external_command_path(token, archive_paths):
-            external.append({"argv_index": index, "token": token, "path": token, "reason": "path-like token is not one of the copied trainer inputs"})
+            external.append(
+                {
+                    "argv_index": index,
+                    "token": token,
+                    "path": token,
+                    "reason": "path-like token is not one of the copied trainer inputs",
+                }
+            )
     return external
 
 
@@ -671,10 +1602,16 @@ def _looks_like_path(value: str) -> bool:
     }
 
 
-def _rewrite_command_argv(argv: list[str], path_rewrites: list[dict[str, Any]]) -> tuple[list[str], int]:
+def _rewrite_command_argv(
+    argv: list[str], path_rewrites: list[dict[str, Any]]
+) -> tuple[list[str], int]:
     rewritten: list[str] = []
     rewrite_count = 0
-    ordered = sorted(path_rewrites, key=lambda item: len(str(item.get("original_path") or "")), reverse=True)
+    ordered = sorted(
+        path_rewrites,
+        key=lambda item: len(str(item.get("original_path") or "")),
+        reverse=True,
+    )
     for token in argv:
         new_token = _rewrite_command_token(token, ordered)
         if new_token != token:
@@ -722,16 +1659,30 @@ def _metrics(
     missing_role_counts = _count_rows(record.get("role") for record in missing)
     return {
         "artifact_count": len(artifacts),
-        "file_artifact_count": sum(1 for record in artifacts if record.get("kind") == "file"),
-        "directory_artifact_count": sum(1 for record in artifacts if record.get("kind") == "directory"),
+        "file_artifact_count": sum(
+            1 for record in artifacts if record.get("kind") == "file"
+        ),
+        "directory_artifact_count": sum(
+            1 for record in artifacts if record.get("kind") == "directory"
+        ),
         "trainer_input_count": len(trainer_inputs),
         "path_rewrite_count": len(path_rewrites),
-        "external_command_path_count": _int_value(consumer_contract.get("external_command_path_count")),
+        "external_command_path_count": _int_value(
+            consumer_contract.get("external_command_path_count")
+        ),
         "missing_count": len(missing),
-        "total_size_bytes": sum(_int_value(record.get("size_bytes")) for record in artifacts),
+        "total_size_bytes": sum(
+            _int_value(record.get("size_bytes")) for record in artifacts
+        ),
         "role_counts": role_counts,
         "missing_role_counts": missing_role_counts,
-        "unique_sha256_count": len({record.get("sha256") for record in artifacts if isinstance(record.get("sha256"), str)}),
+        "unique_sha256_count": len(
+            {
+                record.get("sha256")
+                for record in artifacts
+                if isinstance(record.get("sha256"), str)
+            }
+        ),
     }
 
 
@@ -745,7 +1696,10 @@ def _count_rows(values: Any) -> list[dict[str, Any]]:
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -757,7 +1711,11 @@ def _sha256(path: Path) -> str:
 
 
 def _is_sha256(value: Any) -> bool:
-    return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in value)
+    )
 
 
 def _is_non_negative_int(value: Any) -> bool:
@@ -799,12 +1757,18 @@ def _slug(value: str) -> str:
 
 
 def _int_value(value: Any) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else 0
+    )
 
 
 def _is_windows_absolute(value: str) -> bool:
     normalized = value.replace("/", "\\")
-    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+    return (
+        len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()
+    ) or normalized.startswith("\\\\")
 
 
 def _basename(value: str) -> str:

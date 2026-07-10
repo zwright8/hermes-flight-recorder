@@ -33,7 +33,12 @@ from .agentic_training_flow import (
     FLOW_BLOCK_RECOMMENDATION,
     FLOW_READY_RECOMMENDATION,
 )
-from .agentic_training_runtime import AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION
+from .agentic_training_runtime import (
+    AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
+    PLAN_READY_RECOMMENDATION,
+    RUNTIME_BLOCK_RECOMMENDATION,
+    RUNTIME_READY_RECOMMENDATION,
+)
 from .agentic_training_loop_plan import (
     AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
@@ -75,13 +80,13 @@ from .cloud_training import (
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
     PROVIDER_ADAPTER_RECEIPT_TYPES,
 )
-from .schema_registry import SchemaRegistryError, check_schema_file
+from .schema_registry import SchemaRegistryError, check_schema_contract, check_schema_file
 from .compare_gate import compare_movement_summary
 from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
-from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
+from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION, LabeledPath, _suite_arm
 from .external_eval import (
     ADAPTERS,
     EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION,
@@ -298,6 +303,7 @@ def validate_artifacts(
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
     agentic_training_plan_paths: list[str | Path] | None = None,
+    agentic_training_runtime_preflight_paths: list[str | Path] | None = None,
     agentic_training_flow_paths: list[str | Path] | None = None,
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
@@ -425,6 +431,8 @@ def validate_artifacts(
         targets.append(validate_training_plan(training_plan_path))
     for agentic_training_plan_path in agentic_training_plan_paths or []:
         targets.append(validate_agentic_training_plan(agentic_training_plan_path))
+    for agentic_training_runtime_preflight_path in agentic_training_runtime_preflight_paths or []:
+        targets.append(validate_agentic_training_runtime_preflight(agentic_training_runtime_preflight_path))
     for agentic_training_flow_path in agentic_training_flow_paths or []:
         targets.append(validate_agentic_training_flow(agentic_training_flow_path))
     for agentic_training_result_path in agentic_training_result_paths or []:
@@ -987,6 +995,13 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_suite_summary_payload_consistency(summary: dict[str, Any]) -> ValidationTarget:
+    """Validate suite record and aggregate consistency without resolving source files."""
+    target = ValidationTarget("suite_summary", "<in-memory>")
+    _validate_suite_summary(summary, target, validate_sources=False)
+    return target
+
+
 def validate_eval_suite_manifest(path: str | Path) -> ValidationTarget:
     """Validate one eval suite manifest artifact."""
     manifest_path = Path(path)
@@ -1157,6 +1172,13 @@ def validate_improvement_ledger(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_improvement_ledger_payload_consistency(ledger: dict[str, Any]) -> ValidationTarget:
+    """Validate improvement-ledger semantics without resolving recorded source files."""
+    target = ValidationTarget("improvement_ledger", "<in-memory>")
+    _validate_improvement_ledger(ledger, target, Path("."), validate_sources=False)
+    return target
+
+
 def validate_improvement_ledger_gate(path: str | Path) -> ValidationTarget:
     """Validate an improvement-ledger gate artifact."""
     gate_path = Path(path)
@@ -1174,6 +1196,13 @@ def validate_action_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "action_ledger.json")
     if ledger is not None:
         _validate_action_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_action_ledger_payload_consistency(ledger: dict[str, Any]) -> ValidationTarget:
+    """Validate action-ledger semantics without resolving recorded source files."""
+    target = ValidationTarget("action_ledger", "<in-memory>")
+    _validate_action_ledger(ledger, target, Path("."), validate_sources=False)
     return target
 
 
@@ -1204,6 +1233,13 @@ def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "promotion_ledger.json")
     if ledger is not None:
         _validate_promotion_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_promotion_ledger_payload_consistency(ledger: dict[str, Any]) -> ValidationTarget:
+    """Validate promotion-ledger semantics without resolving recorded source files."""
+    target = ValidationTarget("promotion_ledger", "<in-memory>")
+    _validate_promotion_ledger(ledger, target, Path("."), validate_sources=False)
     return target
 
 
@@ -1290,21 +1326,29 @@ def validate_promotion_archive(path: str | Path) -> ValidationTarget:
     return target
 
 
-def validate_trainer_preflight(path: str | Path) -> ValidationTarget:
+def validate_trainer_preflight(
+    path: str | Path,
+    *,
+    payload: dict[str, Any] | None = None,
+) -> ValidationTarget:
     """Validate a trainer-preflight launch guard artifact."""
     preflight_path = Path(path)
     target = ValidationTarget("trainer_preflight", str(preflight_path))
-    preflight = _read_object(preflight_path, target, "trainer_preflight.json")
+    preflight = payload if isinstance(payload, dict) else _read_object(preflight_path, target, "trainer_preflight.json")
     if preflight is not None:
         _validate_trainer_preflight(preflight, target, preflight_path)
     return target
 
 
-def validate_trainer_launch_check(path: str | Path) -> ValidationTarget:
+def validate_trainer_launch_check(
+    path: str | Path,
+    *,
+    payload: dict[str, Any] | None = None,
+) -> ValidationTarget:
     """Validate a trainer launch-check consumer artifact."""
     launch_check_path = Path(path)
     target = ValidationTarget("trainer_launch_check", str(launch_check_path))
-    launch_check = _read_object(launch_check_path, target, "trainer_launch_check.json")
+    launch_check = payload if isinstance(payload, dict) else _read_object(launch_check_path, target, "trainer_launch_check.json")
     if launch_check is not None:
         _validate_trainer_launch_check(launch_check, target)
     return target
@@ -1439,6 +1483,22 @@ def validate_agentic_training_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "agentic_training_plan.json")
     if plan is not None:
         _validate_agentic_training_plan(plan, target, plan_path)
+    return target
+
+
+def validate_agentic_training_runtime_preflight(path: str | Path) -> ValidationTarget:
+    """Validate a side-effect-free agentic trainer runtime preflight."""
+    preflight_path = Path(path)
+    target = ValidationTarget("agentic_training_runtime_preflight", str(preflight_path))
+    preflight = _read_object(preflight_path, target, "agentic_training_runtime_preflight.json")
+    if preflight is None:
+        return target
+    schema_check = check_schema_contract(preflight, name_or_id="agentic_training_runtime_preflight")
+    target.errors.extend(
+        f"agentic_training_runtime_preflight schema: {error}"
+        for error in schema_check.get("errors", [])
+    )
+    _validate_agentic_training_runtime_preflight(preflight, target, preflight_path)
     return target
 
 
@@ -3376,6 +3436,259 @@ def _is_nested_string_list(value: Any) -> bool:
     return isinstance(value, list) and all(_is_string_list(item) for item in value)
 
 
+def _validate_agentic_training_runtime_preflight(
+    preflight: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    from .agentic_training_runtime import (
+        _blocked_reasons,
+        _json_schema_record,
+        _mode_contract_check,
+        _read_json_object,
+        _view_checks,
+    )
+
+    _require_equal(
+        preflight,
+        "schema_version",
+        AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
+        target,
+        prefix="agentic_training_runtime_preflight.",
+    )
+    plan_path = _resolve_runtime_preflight_plan_path(preflight.get("plan_path"), source_path)
+    if plan_path is None:
+        plan_payload: dict[str, Any] = {}
+        plan_read_errors = ["plan_path is missing or invalid"]
+        plan_schema = {"passed": False, "error_count": 1, "errors": plan_read_errors}
+        expected_view_checks: list[dict[str, Any]] = []
+    elif plan_path.is_symlink() or _path_has_symlink_component(plan_path, include_leaf=False):
+        plan_payload = {}
+        plan_read_errors = ["plan path traverses a symlink component"]
+        plan_schema = {"passed": False, "error_count": 1, "errors": plan_read_errors}
+        expected_view_checks = []
+    else:
+        plan_payload, plan_read_errors = _read_json_object(plan_path)
+        plan_schema = _json_schema_record(plan_path, "agentic_training_plan")
+        expected_view_checks = _view_checks(plan_payload, plan_path) if not plan_read_errors else []
+
+    plan_semantic_errors: list[str] = []
+    if plan_path is not None and plan_path.is_file() and not plan_read_errors:
+        plan_semantic_errors = validate_agentic_training_plan(plan_path).errors
+    trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
+    expected_mode = str(plan_payload.get("mode") or "")
+    expected_backend = str(trainer_plan.get("backend") or "external")
+    expected_mode_contract = _mode_contract_check(plan_payload, expected_mode)
+    plan_ready = (
+        not plan_read_errors
+        and plan_schema.get("passed") is True
+        and not plan_semantic_errors
+        and plan_payload.get("passed") is True
+        and plan_payload.get("recommendation") == PLAN_READY_RECOMMENDATION
+    )
+
+    if preflight.get("plan_mode") != expected_mode:
+        target.errors.append(
+            f"agentic_training_runtime_preflight.plan_mode expected {expected_mode!r}, got {preflight.get('plan_mode')!r}."
+        )
+    if preflight.get("backend") != expected_backend:
+        target.errors.append(
+            f"agentic_training_runtime_preflight.backend expected {expected_backend!r}, got {preflight.get('backend')!r}."
+        )
+    if plan_path is not None and plan_path.is_file() and preflight.get("plan_sha256") != _sha256(plan_path):
+        target.errors.append("agentic_training_runtime_preflight.plan_sha256 does not match the current plan file.")
+
+    plan_check = preflight.get("plan_check") if isinstance(preflight.get("plan_check"), dict) else {}
+    expected_plan_check = {
+        "exists": bool(plan_path and plan_path.exists()),
+        "regular_file": bool(plan_path and plan_path.is_file()),
+        "schema_passed": plan_schema.get("passed") is True,
+        "error_count": plan_schema.get("error_count"),
+        "errors": plan_schema.get("errors"),
+        "required_recommendation": PLAN_READY_RECOMMENDATION,
+        "observed_recommendation": plan_payload.get("recommendation"),
+        "observed_passed": plan_payload.get("passed"),
+    }
+    for field_name, expected_value in expected_plan_check.items():
+        if plan_check.get(field_name) != expected_value:
+            target.errors.append(
+                "agentic_training_runtime_preflight.plan_check."
+                f"{field_name} expected {expected_value!r}, got {plan_check.get(field_name)!r}."
+            )
+
+    view_checks = preflight.get("view_checks")
+    if view_checks != expected_view_checks:
+        target.errors.append(
+            "agentic_training_runtime_preflight.view_checks do not match the current plan-selected trainer views."
+        )
+        view_checks = view_checks if isinstance(view_checks, list) else []
+    mode_contract = preflight.get("mode_contract_check")
+    if mode_contract != expected_mode_contract:
+        target.errors.append(
+            "agentic_training_runtime_preflight.mode_contract_check does not match the source plan mode contract."
+        )
+
+    dependency_checks = preflight.get("dependency_checks")
+    if not isinstance(dependency_checks, list):
+        target.errors.append("agentic_training_runtime_preflight.dependency_checks must be a list.")
+        dependency_checks = []
+    for index, check in enumerate(dependency_checks):
+        if not isinstance(check, dict):
+            target.errors.append(f"agentic_training_runtime_preflight.dependency_checks[{index}] must be an object.")
+            continue
+        expected_passed = check.get("available") is True if check.get("required") is True else True
+        if check.get("passed") is not expected_passed:
+            target.errors.append(
+                f"agentic_training_runtime_preflight.dependency_checks[{index}].passed must match availability."
+            )
+
+    expected_check_states = {
+        "plan_json_readable": not plan_read_errors,
+        "plan_schema_passed": plan_schema.get("passed") is True,
+        "plan_recommendation_ready": plan_ready,
+        "selected_views_schema_passed": bool(expected_view_checks)
+        and all(view.get("passed") is True for view in expected_view_checks),
+        "mode_contract_ready": expected_mode_contract.get("passed") is True,
+        "runtime_dependencies_available": all(
+            isinstance(check, dict) and check.get("passed") is True for check in dependency_checks
+        ),
+        "flight_recorder_did_not_launch_training": True,
+        "model_downloads_not_started": True,
+    }
+    checks = preflight.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_training_runtime_preflight.checks must be a list.")
+        checks = []
+    failed_check_count = _validate_gate_like_checks(
+        checks,
+        target,
+        "agentic_training_runtime_preflight.checks",
+    )
+    checks_by_id = {
+        check.get("id"): check
+        for check in checks
+        if isinstance(check, dict) and isinstance(check.get("id"), str)
+    }
+    if len(checks_by_id) != len(checks):
+        target.errors.append("agentic_training_runtime_preflight.checks must have unique string ids.")
+    if set(checks_by_id) != set(expected_check_states):
+        target.errors.append("agentic_training_runtime_preflight.checks must contain the canonical runtime check ids.")
+    for check_id, expected_passed in expected_check_states.items():
+        check = checks_by_id.get(check_id)
+        if isinstance(check, dict) and check.get("passed") is not expected_passed:
+            target.errors.append(
+                f"agentic_training_runtime_preflight.checks[{check_id!r}].passed expected {expected_passed!r}."
+            )
+
+    expected_passed = all(expected_check_states.values())
+    if preflight.get("check_count") != len(checks):
+        target.errors.append(
+            f"agentic_training_runtime_preflight.check_count expected {len(checks)}, got {preflight.get('check_count')!r}."
+        )
+    if preflight.get("failed_check_count") != failed_check_count:
+        target.errors.append(
+            "agentic_training_runtime_preflight.failed_check_count must match failed checks."
+        )
+    if preflight.get("passed") is not expected_passed:
+        target.errors.append("agentic_training_runtime_preflight.passed must match recomputed runtime readiness.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = RUNTIME_READY_RECOMMENDATION if expected_passed else RUNTIME_BLOCK_RECOMMENDATION
+    if preflight.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"agentic_training_runtime_preflight.readiness expected {expected_readiness!r}."
+        )
+    if preflight.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_training_runtime_preflight.recommendation expected {expected_recommendation!r}."
+        )
+
+    blocked_reasons = preflight.get("blocked_reasons")
+    expected_blocked_reasons = _blocked_reasons(
+        [check for check in checks if isinstance(check, dict) and check.get("passed") is False],
+        [check for check in dependency_checks if isinstance(check, dict)],
+        [check for check in view_checks if isinstance(check, dict)],
+        expected_mode_contract,
+    )
+    if blocked_reasons != expected_blocked_reasons:
+        target.errors.append(
+            "agentic_training_runtime_preflight.blocked_reasons must match failed checks and source readiness."
+        )
+
+    _validate_runtime_preflight_side_effect_boundary(preflight.get("execution_boundary"), target)
+    _validate_runtime_preflight_handoff(preflight.get("handoff_contract"), target)
+    if not _is_string_list(preflight.get("notes")):
+        target.errors.append("agentic_training_runtime_preflight.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": preflight.get("passed"),
+            "readiness": preflight.get("readiness"),
+            "backend": preflight.get("backend"),
+            "check_count": len(checks),
+        }
+    )
+
+
+def _resolve_runtime_preflight_plan_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    recorded = Path(value)
+    if recorded.is_absolute():
+        return recorded
+    candidates = (source_path.parent / recorded, Path.cwd() / recorded)
+    return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+
+
+def _validate_runtime_preflight_side_effect_boundary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_runtime_preflight.execution_boundary must be an object.")
+        return
+    expected = {
+        "dry_run_preflight_only": True,
+        "flight_recorder_launched_training": False,
+        "training_started": False,
+        "model_downloads_started": False,
+        "cloud_jobs_started": False,
+        "paid_model_grader_calls_started": False,
+        "weights_updated": False,
+        "trainer_modules_imported": False,
+        "dependency_resolution_method": "importlib.util.find_spec",
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                "agentic_training_runtime_preflight.execution_boundary."
+                f"{field_name} expected {expected_value!r}."
+            )
+
+
+def _validate_runtime_preflight_handoff(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_runtime_preflight.handoff_contract must be an object.")
+        return
+    expected = {
+        "runner_owns_execution": True,
+        "runner_must_require_recommendation": RUNTIME_READY_RECOMMENDATION,
+        "requires_registered_inputs": True,
+        "requires_registered_model": True,
+        "requires_registered_dataset": True,
+        "requires_mode_contract": True,
+        "requires_mode_contract_ready": True,
+        "requires_known_license_status": True,
+        "requires_redacted_dataset": True,
+        "disallow_unredacted_traces": True,
+        "flight_recorder_launched_training": False,
+        "model_downloads_started": False,
+        "flight_recorder_started_cloud_provider": False,
+        "paid_model_grader_calls_started": False,
+        "weights_updated_by_flight_recorder": False,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"agentic_training_runtime_preflight.handoff_contract.{field_name} expected {expected_value!r}."
+            )
+
+
 _AGENTIC_TRAINING_FLOW_KEYS = {
     "schema_version",
     "created_at",
@@ -4990,7 +5303,7 @@ def _validate_agentic_training_loop_cloud_training(
         target.errors.append(f"{label} must be an object.")
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_TRAINING_KEYS, target, label)
-    present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if _agentic_loop_role_count(source_artifacts, role) > 0]
+    present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if _agentic_loop_role_ready(source_artifacts, role)]
     missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
     expected = {
         "required_artifacts": list(AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
@@ -6564,6 +6877,11 @@ def _validate_agentic_loop_ledger_cloud_training_lineage(
 def _agentic_loop_role_count(source_artifacts: dict[str, Any], role: str) -> int:
     rows = source_artifacts.get(role)
     return len(rows) if isinstance(rows, list) else 0
+
+
+def _agentic_loop_role_ready(source_artifacts: dict[str, Any], role: str) -> bool:
+    rows = source_artifacts.get(role)
+    return bool(rows) and all(isinstance(row, dict) and row.get("exists") is True for row in rows)
 
 
 def _agentic_loop_count_map(value: Any, key_name: str) -> dict[str, int]:
@@ -11226,6 +11544,33 @@ def _validate_state_diff(diff: Any, target: ValidationTarget, label: str) -> Non
     if not isinstance(truncated, bool):
         target.errors.append(f"{label}.truncated must be a boolean.")
         truncated = False
+    comparison_truncated = diff.get("comparison_truncated", False)
+    if not isinstance(comparison_truncated, bool):
+        target.errors.append(f"{label}.comparison_truncated must be a boolean when present.")
+        comparison_truncated = False
+    comparison_complete = diff.get("comparison_complete", not comparison_truncated)
+    if not isinstance(comparison_complete, bool):
+        target.errors.append(f"{label}.comparison_complete must be a boolean when present.")
+    elif comparison_complete == comparison_truncated:
+        target.errors.append(f"{label}.comparison_complete must be the inverse of comparison_truncated.")
+    expected_change_status = "changed" if bool(change_count) else "unknown" if comparison_truncated else "unchanged"
+    change_status = diff.get("change_status", expected_change_status)
+    if change_status != expected_change_status:
+        target.errors.append(
+            f"{label}.change_status expected {expected_change_status!r}, got {change_status!r}."
+        )
+    if comparison_truncated:
+        if diff.get("change_count_exact") is not False:
+            target.errors.append(f"{label}.change_count_exact must be false when comparison_truncated is true.")
+        if diff.get("truncation_reason") not in {
+            "incomplete_snapshot",
+            "max_changes",
+            "max_depth",
+            "max_nodes",
+        }:
+            target.errors.append(f"{label}.truncation_reason must identify why comparison stopped.")
+    elif "truncation_reason" in diff:
+        target.errors.append(f"{label}.truncation_reason is only valid for an incomplete comparison.")
     changes = diff.get("changes")
     if not isinstance(changes, list):
         target.errors.append(f"{label}.changes must be a list.")
@@ -11235,7 +11580,7 @@ def _validate_state_diff(diff: Any, target: ValidationTarget, label: str) -> Non
     if isinstance(change_count, int) and isinstance(max_changes, int):
         if len(changes) > max_changes:
             target.errors.append(f"{label}.changes length must not exceed max_changes.")
-        expected_truncated = change_count > len(changes)
+        expected_truncated = change_count > len(changes) or comparison_truncated
         if truncated != expected_truncated:
             target.errors.append(f"{label}.truncated must match whether change_count exceeds emitted changes.")
         if not truncated and len(changes) != change_count:
@@ -11273,6 +11618,20 @@ def _validate_state_diff_summary(summary: Any, target: ValidationTarget, label: 
         target.errors.append(f"{label}.change_count must be a non-negative integer.")
     if not isinstance(summary.get("truncated"), bool):
         target.errors.append(f"{label}.truncated must be a boolean.")
+    comparison_complete = summary.get("comparison_complete")
+    if comparison_complete is not True:
+        target.errors.append(f"{label}.comparison_complete must be true for training artifacts.")
+    expected_status = (
+        "unavailable"
+        if summary.get("available") is False
+        else "changed"
+        if summary.get("changed") is True
+        else "unchanged"
+    )
+    if summary.get("change_status") != expected_status:
+        target.errors.append(
+            f"{label}.change_status expected {expected_status!r}, got {summary.get('change_status')!r}."
+        )
     if not isinstance(summary.get("summary"), str):
         target.errors.append(f"{label}.summary must be a string.")
     changes = summary.get("changes")
@@ -14850,7 +15209,13 @@ def _expected_curriculum_priority_band(priority_score: int) -> str:
     return "low"
 
 
-def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
+def _validate_suite_summary(
+    summary: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path | None = None,
+    *,
+    validate_sources: bool = True,
+) -> None:
     _require_equal(summary, "schema_version", RUN_SUITE_SCHEMA_VERSION, target)
     runs = summary.get("runs")
     if not isinstance(runs, list):
@@ -14892,8 +15257,9 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget, s
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
         for field_name in ("scenario_path", "trace_path", "run_dir", "report", "scorecard", "run_digest", "lineage"):
             _warn_absolute_public_path(target, f"suite_summary.runs[{index}].{field_name}", run.get(field_name))
-        for field_name in ("report", "scorecard", "run_digest", "lineage"):
-            _validate_suite_run_artifact_ref(run, field_name, target, f"suite_summary.runs[{index}]", source_path)
+        if validate_sources:
+            for field_name in ("report", "scorecard", "run_digest", "lineage"):
+                _validate_suite_run_artifact_ref(run, field_name, target, f"suite_summary.runs[{index}]", source_path)
         if not isinstance(run.get("passed"), bool):
             target.errors.append(f"suite_summary.runs[{index}].passed must be a boolean.")
         if not _is_int_between(run.get("score"), 0, 100):
@@ -16149,6 +16515,7 @@ def _validate_eval_summary_arm(
         if not isinstance(arm.get(field_name), str) or not arm.get(field_name):
             target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-empty string.")
     _validate_eval_summary_source_file_ref(arm, "path", "sha256", "size_bytes", target, label, source_dir)
+    _validate_eval_summary_suite_source_schema(arm, target, label, source_dir)
     for field_name in ("scenario_count", "total", "passed", "failed", "error_count"):
         if not _is_non_negative_int(arm.get(field_name)):
             target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-negative integer.")
@@ -16168,6 +16535,64 @@ def _validate_eval_summary_arm(
             target,
             serving_required=serving_required,
             source_dir=source_dir,
+        )
+
+
+def _validate_eval_summary_suite_source_schema(
+    arm: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> None:
+    raw_path = arm.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return
+    suite_path = _resolve_eval_summary_source_path(raw_path, source_dir)
+    if (
+        suite_path is None
+        or not suite_path.exists()
+        or not suite_path.is_file()
+        or _path_has_symlink_component(suite_path, include_leaf=True)
+    ):
+        return
+    try:
+        schema_check = check_schema_file(suite_path, "run_suite")
+    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError) as exc:
+        target.errors.append(f"{label}.path could not be checked against the run_suite schema: {exc}")
+        return
+    if schema_check.get("passed") is not True:
+        target.errors.append(f"{label}.path must satisfy the run_suite schema.")
+        return
+    try:
+        expected = _suite_arm(
+            LabeledPath(label=str(arm.get("label") or ""), path=suite_path),
+            preserve_paths=True,
+            display_base_dir=None,
+            serving_preflight=None,
+            require_serving_preflight=False,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        target.errors.append(f"{label}.path could not be replayed as a run_suite source: {exc}")
+        return
+    derived_fields = (
+        "schema_version",
+        "scenario_count",
+        "scenario_ids",
+        "total",
+        "passed",
+        "failed",
+        "error_count",
+        "pass_rate",
+        "average_score",
+        "failed_rule_counts",
+        "critical_failure_counts",
+        "operational_metrics",
+        "validation",
+    )
+    mismatched = [field for field in derived_fields if arm.get(field) != expected.get(field)]
+    if mismatched:
+        target.errors.append(
+            f"{label} does not match the referenced run_suite source for: {', '.join(mismatched)}."
         )
 
 
@@ -17514,7 +17939,8 @@ def _heldout_manifest_source_from_suite_summary(summary: dict[str, Any]) -> dict
             scenario_fingerprints[scenario_id] = scenario_sha
     unique_scenarios = sorted(set(scenario_ids))
     blocking_reasons: list[str] = []
-    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION:
+    schema_check = check_schema_contract(summary, name_or_id="run_suite")
+    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION or schema_check["passed"] is not True:
         blocking_reasons.append("invalid_suite_summary_schema")
     if not unique_scenarios:
         blocking_reasons.append("empty_suite_summary")
@@ -17590,7 +18016,11 @@ def _validate_eval_suite_manifest(manifest: dict[str, Any], target: ValidationTa
     )
 
 
-def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:
+def _validate_suite_metrics(
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+    runs: list[dict[str, Any]],
+) -> None:
     scores = [_score_value(run.get("score")) for run in runs]
     passed = sum(1 for run in runs if run.get("passed") is True)
     failed = len(runs) - passed
@@ -18511,7 +18941,13 @@ def _validate_improvement_decision(
         target.errors.append("improvement_plan.decision.top_work_items must contain at most five items.")
 
 
-def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+def _validate_improvement_ledger(
+    ledger: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    *,
+    validate_sources: bool = True,
+) -> None:
     _require_equal(ledger, "schema_version", IMPROVEMENT_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("improvement_ledger.ledger_path must be a string.")
@@ -18536,7 +18972,14 @@ def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarge
         target.errors.append("improvement_ledger.notes must be a list of strings when present.")
 
     for index, plan in enumerate(plans):
-        _validate_improvement_ledger_plan(plan, target, f"improvement_ledger.plans[{index}]", index, source_path)
+        _validate_improvement_ledger_plan(
+            plan,
+            target,
+            f"improvement_ledger.plans[{index}]",
+            index,
+            source_path,
+            validate_sources=validate_sources,
+        )
     latest_index = len(plans) - 1
     totals: dict[str, Any] = {
         "work_item_count": 0,
@@ -18603,6 +19046,8 @@ def _validate_improvement_ledger_plan(
     label: str,
     expected_index: int,
     source_path: Path,
+    *,
+    validate_sources: bool = True,
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
@@ -18632,6 +19077,8 @@ def _validate_improvement_ledger_plan(
         size_bytes = value.get("size_bytes")
         if not _is_non_negative_int(size_bytes):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        if not validate_sources:
+            return
         plan_path = _resolve_gate_source_path(value.get("path"), source_path)
         if plan_path is None or not plan_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing source improvement plan.")
@@ -18879,7 +19326,13 @@ def _expected_improvement_ledger_status(plan_indexes: list[int], latest_index: i
     return "resolved"
 
 
-def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+def _validate_action_ledger(
+    ledger: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    *,
+    validate_sources: bool = True,
+) -> None:
     _require_equal(ledger, "schema_version", ACTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("action_ledger.ledger_path must be a string.")
@@ -18965,7 +19418,8 @@ def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget, so
     _validate_action_ledger_count_rows(metrics.get("priority_counts"), priority_counts, target, "action_ledger.metrics.priority_counts")
     _validate_action_ledger_count_rows(metrics.get("artifact_counts"), artifact_counts, target, "action_ledger.metrics.artifact_counts")
     _validate_action_ledger_bundle_action_counts(metrics.get("bundle_action_counts"), bundles, target)
-    _validate_action_ledger_bundle_linkage(bundles, entries, target, source_path)
+    if validate_sources:
+        _validate_action_ledger_bundle_linkage(bundles, entries, target, source_path)
     target.details.update(
         {
             "bundle_count": len(bundles),
@@ -21415,7 +21869,13 @@ def _validate_promotion_decision_alias_update(
         )
 
 
-def _validate_promotion_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+def _validate_promotion_ledger(
+    ledger: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    *,
+    validate_sources: bool = True,
+) -> None:
     _require_equal(ledger, "schema_version", PROMOTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("promotion_ledger.ledger_path must be a string.")
@@ -21435,7 +21895,14 @@ def _validate_promotion_ledger(ledger: dict[str, Any], target: ValidationTarget,
         target.errors.append("promotion_ledger.notes must be a list of strings.")
 
     for index, record in enumerate(records):
-        _validate_promotion_ledger_record(record, target, f"promotion_ledger.records[{index}]", index, source_path)
+        _validate_promotion_ledger_record(
+            record,
+            target,
+            f"promotion_ledger.records[{index}]",
+            index,
+            source_path,
+            validate_sources=validate_sources,
+        )
 
     if ledger.get("decision_count") != len(records):
         target.errors.append(f"promotion_ledger.decision_count expected {len(records)}, got {ledger.get('decision_count')!r}.")
@@ -21485,6 +21952,8 @@ def _validate_promotion_ledger_record(
     label: str,
     expected_index: int,
     source_path: Path,
+    *,
+    validate_sources: bool = True,
 ) -> None:
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
@@ -21509,7 +21978,7 @@ def _validate_promotion_ledger_record(
     if _is_non_negative_int(record.get("check_count")) and _is_non_negative_int(record.get("failed_check_count")):
         if record["failed_check_count"] > record["check_count"]:
             target.errors.append(f"{label}.failed_check_count must be less than or equal to check_count.")
-    if record.get("exists") is True:
+    if record.get("exists") is True and validate_sources:
         _validate_promotion_ledger_record_file_hash(record, target, label, source_path)
     if record.get("recommendation") not in {"allow_promotion", "block_promotion"}:
         target.errors.append(f"{label}.recommendation must be allow_promotion or block_promotion.")
@@ -21523,7 +21992,8 @@ def _validate_promotion_ledger_record(
         target.errors.append(f"{label}.source must be an object.")
         source = {}
     _validate_promotion_ledger_source(source, target, f"{label}.source")
-    _validate_promotion_ledger_record_matches_gate(record, source, target, label, source_path)
+    if validate_sources:
+        _validate_promotion_ledger_record_matches_gate(record, source, target, label, source_path)
 
 
 def _validate_promotion_ledger_source(source: dict[str, Any], target: ValidationTarget, label: str) -> None:
@@ -22595,16 +23065,7 @@ def _validate_trainer_archive_metrics(
         "file_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "file"),
         "directory_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "directory"),
         "trainer_input_count": sum(1 for artifact in valid_artifacts if artifact.get("role") == "trainer_artifact"),
-        "path_rewrite_count": len(
-            [
-                artifact
-                for artifact in valid_artifacts
-                if artifact.get("role") == "trainer_artifact"
-                and isinstance(artifact.get("original_path"), str)
-                and artifact.get("original_path")
-                and not str(artifact.get("original_path")).startswith("<")
-            ]
-        ),
+        "path_rewrite_count": consumer_contract.get("path_rewrite_count", 0) if isinstance(consumer_contract, dict) else 0,
         "external_command_path_count": consumer_contract.get("external_command_path_count", 0) if isinstance(consumer_contract, dict) else 0,
         "missing_count": len(missing),
         "total_size_bytes": sum(artifact.get("size_bytes", 0) for artifact in valid_artifacts if _is_non_negative_int(artifact.get("size_bytes"))),
@@ -22660,8 +23121,12 @@ def _validate_trainer_archive_rewrites(value: Any, inputs: Any, target: Validati
         target.errors.append("trainer_archive.path_rewrites must be a list.")
         return
     expected = _expected_trainer_archive_rewrites(inputs if isinstance(inputs, list) else [])
-    if len(value) != len(expected):
-        target.errors.append(f"trainer_archive.path_rewrites expected {len(expected)} item(s), got {len(value)}.")
+    expected_by_binding = {
+        (item["artifact_name"], item["kind"], item["archive_path"]): item
+        for item in expected
+    }
+    seen: set[tuple[str, str]] = set()
+    canonical_rewrites: set[tuple[str, str, str, str]] = set()
     for index, item in enumerate(value):
         label = f"trainer_archive.path_rewrites[{index}]"
         if not isinstance(item, dict):
@@ -22672,10 +23137,42 @@ def _validate_trainer_archive_rewrites(value: Any, inputs: Any, target: Validati
             if not isinstance(item.get(field_name), str) or not item.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         _warn_absolute_public_path(target, f"{label}.original_path", item.get("original_path"))
-        if index < len(expected):
-            for field_name, expected_value in expected[index].items():
-                if item.get(field_name) != expected_value:
-                    target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
+        binding = (item.get("artifact_name"), item.get("kind"), item.get("archive_path"))
+        source = expected_by_binding.get(binding)
+        if source is None:
+            target.errors.append(f"{label} is not bound to a trainer input.")
+            continue
+        original = item.get("original_path")
+        canonical = source["original_path"]
+        if original != canonical and not _trainer_archive_alias_matches(original, canonical):
+            target.errors.append(f"{label}.original_path is not a suffix-bound alias of {canonical!r}.")
+        identity = (str(original), str(item.get("archive_path")))
+        if identity in seen:
+            target.errors.append(f"{label} duplicates an existing path rewrite.")
+        seen.add(identity)
+        canonical_rewrites.add(
+            (str(item.get("artifact_name")), str(item.get("kind")), str(original), str(item.get("archive_path")))
+        )
+    for expected_item in expected:
+        identity = (
+            expected_item["artifact_name"],
+            expected_item["kind"],
+            expected_item["original_path"],
+            expected_item["archive_path"],
+        )
+        if identity not in canonical_rewrites:
+            target.errors.append(
+                "trainer_archive.path_rewrites is missing the canonical rewrite for "
+                f"{expected_item['artifact_name']!r}."
+            )
+
+
+def _trainer_archive_alias_matches(alias: Any, canonical: str) -> bool:
+    if not isinstance(alias, str) or not alias:
+        return False
+    normalized_alias = alias.replace("\\", "/").rstrip("/")
+    normalized_canonical = canonical.replace("\\", "/").strip("/")
+    return bool(normalized_canonical) and normalized_alias.endswith("/" + normalized_canonical)
 
 
 def _validate_trainer_archive_commands(

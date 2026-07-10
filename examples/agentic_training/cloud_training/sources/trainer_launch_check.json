@@ -185,7 +185,7 @@
       "id": "required_dataset_version_selected",
       "passed": true,
       "scope": {
-        "dataset_version": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "required_dataset_version_selected: passed=True"
     }
@@ -193,7 +193,7 @@
   "dataset_selection": [
     {
       "artifact": "training_export",
-      "dataset_version": "hfrds-55eb38b250844a57",
+      "dataset_version": "hfrds-1c35263a4f5fcd7e",
       "heldout_scenario_exclusive": true,
       "heldout_scenario_ids": [
         "prompt_injection_bad",
@@ -201,16 +201,16 @@
         "subagent_claim_bad"
       ],
       "manifest_path": "training_export/manifest.json",
-      "manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "matches_required": true,
       "redaction_passed": true,
-      "registry_dataset_version": "hfrds-55eb38b250844a57",
-      "registry_manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "registry_dataset_version": "hfrds-1c35263a4f5fcd7e",
+      "registry_manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "registry_path": "training_export/dataset_registry.json",
-      "registry_selection_key": "hfrds-55eb38b250844a57",
-      "registry_sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "registry_selection_key": "hfrds-1c35263a4f5fcd7e",
+      "registry_sha256": "729b2d212c110d45b7a62932727caaec2772576dda211f3be25db289dc448b7d",
       "required_dataset_versions": [
-        "hfrds-55eb38b250844a57"
+        "hfrds-1c35263a4f5fcd7e"
       ],
       "root": "training_export",
       "trainer_modes": [
@@ -437,7 +437,7 @@
   "readiness": "ready",
   "recommendation": "launch_allowed",
   "required_dataset_versions": [
-    "hfrds-55eb38b250844a57"
+    "hfrds-1c35263a4f5fcd7e"
   ],
   "required_gates": [
     "training_gate"

@@ -12,6 +12,11 @@ include scripts/live_openclaw_smoke.py
 include scripts/live_coven_smoke.py
 include scripts/external_verification_smoke.py
 include scripts/live_verifier_smoke.py
+include scripts/hermes_harness.py
+include scripts/check_openai_serving.py
+include scripts/manage_openai_serving.py
+include scripts/mock_openai_server.py
+include scripts/build_serving_demo_report.py
 include scripts/plan_agentic_training.py
 include scripts/preflight_agentic_training_runtime.py
 include scripts/archive_agentic_training_result.py

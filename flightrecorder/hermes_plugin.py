@@ -6,6 +6,7 @@ plugin adapter without changing Hermes runtime behavior.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -97,5 +98,9 @@ def _max_chars() -> int:
 
 
 def _safe_name(value: str) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)[:120]
-    return safe.strip("._") or "session"
+    stem = "".join(
+        ch if ch.isascii() and (ch.isalnum() or ch in {"-", "_", "."}) else "_" for ch in value
+    )[:96]
+    stem = stem.strip("._") or "session"
+    digest = hashlib.sha256(value.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return f"{stem}-{digest}"

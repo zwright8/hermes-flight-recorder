@@ -129,7 +129,10 @@ def normalize_trajectory_jsonl(path: Path) -> dict[str, Any]:
         model = entry.get("model") or model
         completed = entry.get("completed", completed)
         api_calls = entry.get("api_calls", api_calls)
-        current_session = entry.get("session_id") or f"{path.stem}-{entry_index + 1}"
+        declared_session = entry.get("session_id")
+        current_session = str(declared_session) if declared_session else f"{path.stem}-{entry_index + 1}"
+        if declared_session and session_id == path.stem:
+            session_id = current_session
         conversations = entry.get("conversations") or []
         if not isinstance(conversations, list):
             continue

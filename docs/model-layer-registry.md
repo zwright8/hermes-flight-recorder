@@ -34,6 +34,10 @@ or launch GPU work.
   embedded refs that traverse symlinked parent directories before trusting
   their fingerprints.
 - Schema contracts reject embedded refs that omit required byte-size evidence.
+- Registry mutation commands serialize through an adjacent lock file, compare
+  the starting registry SHA-256, fsync a same-directory temporary file, and use
+  atomic replacement. Concurrent changes and symlinked registry paths are
+  rejected rather than overwritten.
 
 ## Command Sequence
 

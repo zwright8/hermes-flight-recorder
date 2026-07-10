@@ -539,7 +539,23 @@ def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
     runs = [
         {
             "scenario_id": scenario_id,
+            "scenario_title": scenario_id,
             "task_family": scenario_id,
+            "scenario_path": f"scenarios/{scenario_id}.json",
+            "trace_path": f"traces/{scenario_id}.jsonl",
+            "run_dir": f"runs/{scenario_id}",
+            "report": f"runs/{scenario_id}/report.html",
+            "report_sha256": "b" * 64,
+            "report_size_bytes": 1,
+            "scorecard": f"runs/{scenario_id}/scorecard.json",
+            "scorecard_sha256": "c" * 64,
+            "scorecard_size_bytes": 1,
+            "run_digest": f"runs/{scenario_id}/run_digest.json",
+            "run_digest_sha256": "d" * 64,
+            "run_digest_size_bytes": 1,
+            "lineage": f"runs/{scenario_id}/artifact_lineage.json",
+            "lineage_sha256": "e" * 64,
+            "lineage_size_bytes": 1,
             "passed": True,
             "score": 100,
             "failed_rules": [],
@@ -549,6 +565,8 @@ def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
     ]
     payload = {
         "schema_version": "hfr.run_suite.v1",
+        "scenarios_dir": "scenarios",
+        "out_dir": "runs",
         "total": len(runs),
         "passed": len(runs),
         "failed": 0,
@@ -557,10 +575,16 @@ def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
         "metrics": {
             "pass_rate": 1.0 if runs else 0.0,
             "average_score": 100.0 if runs else 0.0,
+            "min_score": 100 if runs else None,
+            "max_score": 100 if runs else None,
             "failed_rule_counts": [],
             "critical_failure_counts": [],
+            "task_families": [],
+            "failed": 0,
+            "passed": len(runs),
         },
         "runs": runs,
+        "artifacts": {"suite_result": "runs/harness_suite_result.json"},
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path

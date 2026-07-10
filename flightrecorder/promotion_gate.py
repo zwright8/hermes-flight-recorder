@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
+from .schema_registry import check_schema_contract
 
 PROMOTION_LEDGER_GATE_SCHEMA_VERSION = "hfr.promotion_ledger_gate.v1"
 PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION = "hfr.promotion_ledger_gate.policy.v1"
@@ -121,6 +122,16 @@ def evaluate_promotion_ledger_gate(
         raise PromotionLedgerGateError("Promotion-ledger gate input metrics must be a JSON object.")
     if not isinstance(ledger.get("records"), list):
         raise PromotionLedgerGateError("Promotion-ledger gate input records must be a JSON array.")
+    schema_check = check_schema_contract(ledger, name_or_id="promotion_ledger")
+    if schema_check["passed"] is not True:
+        details = "; ".join(str(error) for error in schema_check["errors"][:5])
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input failed promotion_ledger schema: {details}")
+    from .validation import validate_promotion_ledger_payload_consistency
+
+    semantic_check = validate_promotion_ledger_payload_consistency(ledger)
+    if semantic_check.errors:
+        details = "; ".join(semantic_check.errors[:5])
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input failed semantic validation: {details}")
 
     metrics = ledger["metrics"]
     records = [record for record in ledger["records"] if isinstance(record, dict)]

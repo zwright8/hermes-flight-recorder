@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts, _safe_run_id, cmd_replay
 from flightrecorder.lineage import REPLAY_BUNDLE_SCHEMA_VERSION
+from flightrecorder.path_safety import json_marker_has_schema_version, replace_owned_output_directory
 from flightrecorder.schema import load_scenario
 
 
@@ -39,6 +40,7 @@ DEFAULT_TOOL_POLICY = {
     "denied_tools": [],
     "network": {"mode": "disabled", "allowed_hosts": []},
 }
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def build_harness_manifest(
@@ -102,7 +104,7 @@ def publish_harness_artifacts(
     process: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     force: bool = False,
-    preserve_paths: bool = True,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Write harness_manifest.json and harness_result.json for an existing run."""
     run_dir = Path(run_dir).expanduser().resolve()
@@ -197,12 +199,11 @@ def publish_trace_run(
     base_url: str | None = None,
     tool_policy: dict[str, Any] | None = None,
     force: bool = False,
-    preserve_paths: bool = True,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Publish a recorded trace as common harness manifest/result artifacts."""
     run_dir = Path(out_dir).expanduser().resolve()
-    if force and run_dir.exists():
-        shutil.rmtree(run_dir)
+    _prepare_harness_output(run_dir, force=force, suite=False)
     run_dir.mkdir(parents=True, exist_ok=True)
     resolved_trace = Path(trace_path).expanduser().resolve()
     resolved_scenario = Path(scenario_path).expanduser().resolve()
@@ -265,7 +266,7 @@ def publish_trace_run(
     )
 
 
-def run_scenario(manifest: dict[str, Any] | str | Path, *, preserve_paths: bool = True) -> dict[str, Any]:
+def run_scenario(manifest: dict[str, Any] | str | Path, *, preserve_paths: bool = False) -> dict[str, Any]:
     """Run a single scenario through a supported harness runner."""
     resolved = _load_manifest(manifest)
     if resolved.get("runner") != "mock":
@@ -285,15 +286,14 @@ def run_suite(
     base_url: str | None = None,
     mock_response: str | None = None,
     force: bool = False,
-    preserve_paths: bool = True,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Run a directory of scenarios through the mock harness runner."""
     scenario_paths = _discover_scenario_paths(scenarios_dir, pattern=pattern, recursive=recursive)
     if not scenario_paths:
         raise ValueError(f"no scenarios matched {pattern!r} under {Path(scenarios_dir)}")
     suite_dir = Path(out_dir).expanduser().resolve()
-    if force and suite_dir.exists():
-        shutil.rmtree(suite_dir)
+    _prepare_harness_output(suite_dir, force=force, suite=True)
     suite_dir.mkdir(parents=True, exist_ok=True)
 
     runs: list[dict[str, Any]] = []
@@ -359,7 +359,7 @@ def probe_model(
     base_url: str | None = None,
     allow_network: bool = False,
     tool_policy: dict[str, Any] | None = None,
-    preserve_paths: bool = True,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Write a no-network harness probe receipt for a model endpoint selection."""
     probe_dir = Path(out_dir).expanduser().resolve()
@@ -427,7 +427,7 @@ def replay_trace(
     out_dir: str | Path,
     *,
     trace_format: str = "auto",
-    preserve_paths: bool = True,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Replay a lineage artifact and write harness_replay_result.json."""
     out_dir = Path(out_dir).expanduser().resolve()
@@ -478,10 +478,9 @@ def write_fake_secret_canaries(home_dir: str | Path) -> list[str]:
     return [str(secret_path)]
 
 
-def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = True) -> dict[str, Any]:
+def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = False) -> dict[str, Any]:
     run_dir = Path(manifest["outputs"]["run_dir"])
-    if bool(manifest.get("force")) and run_dir.exists():
-        shutil.rmtree(run_dir)
+    _prepare_harness_output(run_dir, force=bool(manifest.get("force")), suite=False)
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_json(run_dir / "harness_manifest.json", manifest)
 
@@ -546,6 +545,19 @@ def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = True)
         metadata={"source": "scripts/hermes_harness.py"},
         force=bool(manifest.get("force")),
         preserve_paths=preserve_paths,
+    )
+
+
+def _prepare_harness_output(path: Path, *, force: bool, suite: bool) -> None:
+    marker_name = "harness_suite_result.json" if suite else "harness_result.json"
+    schema_version = HARNESS_SUITE_RESULT_SCHEMA_VERSION if suite else HARNESS_RUN_RESULT_SCHEMA_VERSION
+    label = "harness suite output" if suite else "harness run output"
+    replace_owned_output_directory(
+        path,
+        repo_root=_REPO_ROOT,
+        force=force,
+        label=label,
+        is_owned=lambda target: json_marker_has_schema_version(target, marker_name, schema_version),
     )
 
 
@@ -1095,7 +1107,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         run.add_argument("--base-url")
         run.add_argument("--mock-response")
         run.add_argument("--force", action="store_true")
-        run.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the run or repo root")
+        _add_path_mode_arguments(run)
     suite = subparsers.add_parser("run-suite", help="Run a scenario directory through the mock harness runner")
     suite.add_argument("--scenarios", required=True)
     suite.add_argument("--out", required=True)
@@ -1108,7 +1120,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     suite.add_argument("--mock-response")
     suite.add_argument("--force", action="store_true")
     suite.add_argument("--fail-on-failed", action="store_true")
-    suite.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the suite or repo root")
+    _add_path_mode_arguments(suite)
     probe = subparsers.add_parser("probe-model", help="Write a no-network harness model probe receipt")
     probe.add_argument("--out", required=True)
     probe.add_argument("--runner", default="mock")
@@ -1116,7 +1128,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     probe.add_argument("--model", default="hfr-mock")
     probe.add_argument("--base-url")
     probe.add_argument("--allow-network", action="store_true")
-    probe.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the probe output root")
+    _add_path_mode_arguments(probe)
     publish = subparsers.add_parser("publish-trace", help="Publish a recorded trace as harness artifacts")
     publish.add_argument("--scenario", required=True)
     publish.add_argument("--trace", required=True)
@@ -1127,17 +1139,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     publish.add_argument("--model")
     publish.add_argument("--base-url")
     publish.add_argument("--force", action="store_true")
-    publish.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the run or repo root")
+    _add_path_mode_arguments(publish)
     replay = subparsers.add_parser("replay-trace", help="Replay a run from artifact lineage")
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
     replay.add_argument("--format", default="auto")
-    replay.add_argument(
+    _add_path_mode_arguments(replay)
+    return parser.parse_args(argv)
+
+
+def _add_path_mode_arguments(parser: argparse.ArgumentParser) -> None:
+    path_mode = parser.add_mutually_exclusive_group()
+    path_mode.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Opt in to absolute machine paths in generated artifacts",
+    )
+    path_mode.add_argument(
         "--relative-paths",
         action="store_true",
-        help="Write replay result paths relative to the current checkout",
+        help="Write relative/redacted paths (the default; retained for compatibility)",
     )
-    return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1160,7 +1182,7 @@ def main(argv: list[str] | None = None) -> int:
                 mock_response=args.mock_response,
                 force=args.force,
             )
-        result = run_scenario(manifest, preserve_paths=not args.relative_paths)
+        result = run_scenario(manifest, preserve_paths=bool(args.preserve_paths))
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
     if args.command == "run-suite":
@@ -1175,7 +1197,7 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             mock_response=args.mock_response,
             force=bool(args.force),
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         if result["error_count"]:
@@ -1191,7 +1213,7 @@ def main(argv: list[str] | None = None) -> int:
             runner=args.runner,
             base_url=args.base_url,
             allow_network=bool(args.allow_network),
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["passed"] else 1
@@ -1206,7 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model,
             base_url=args.base_url,
             force=bool(args.force),
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
@@ -1215,7 +1237,7 @@ def main(argv: list[str] | None = None) -> int:
             args.lineage,
             args.out,
             trace_format=args.format,
-            preserve_paths=not args.relative_paths,
+            preserve_paths=bool(args.preserve_paths),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if int(result.get("exit_code") or 0) == 0 and result.get("passed") is True else 1

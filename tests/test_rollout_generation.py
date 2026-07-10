@@ -37,6 +37,78 @@ def copy_rollout_inputs(root: Path, *scenario_sources: Path) -> tuple[list[Path]
 
 
 class RolloutGenerationTests(unittest.TestCase):
+    def test_rollout_plan_rejects_untrusted_scenario_and_verifier_contracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario = root / "scenario.json"
+            verifier = root / "verifier.json"
+            scenario.write_text('{"schema_version":"hfr.scenario.contract.v1"}\n', encoding="utf-8")
+            verifier.write_text('{"schema_version":"hfr.verifier_config.v1"}\n', encoding="utf-8")
+
+            plan = build_agentic_rollout_plan(
+                out_path=root / "plan.json",
+                iteration_id="untrusted-inputs",
+                scenario_paths=[scenario],
+                verifier_paths=[verifier],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "blocked")
+            self.assertFalse(plan["scenarios"][0]["exists"])
+            self.assertFalse(plan["environment"]["external_state_verifiers"][0]["exists"])
+
+    def test_rollout_plan_rejects_symlinked_scenario_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario = root / "scenario.json"
+            shutil.copyfile(SCENARIO, scenario)
+            linked = root / "linked.json"
+            try:
+                linked.symlink_to(scenario.name)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            plan = build_agentic_rollout_plan(
+                out_path=root / "plan.json",
+                iteration_id="symlinked-input",
+                scenario_paths=[linked],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertFalse(plan["scenarios"][0]["exists"])
+
+    def test_rollout_receipt_rejects_schema_invalid_source_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root)
+            plan_path = root / "plan.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="invalid-source-plan",
+                scenario_paths=scenarios,
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            plan.pop("notes")
+            write_agentic_rollout_plan(plan_path, plan)
+
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=root / "receipt.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["readiness"], "blocked")
+            self.assertFalse(receipt["source_plan"]["exists"])
+
     def test_committed_example_rollout_plan_is_public_safe_and_valid(self):
         plan_path = ROOT / "examples" / "rollout_generation" / "rollout_plan.json"
         payload = json.loads(plan_path.read_text(encoding="utf-8"))

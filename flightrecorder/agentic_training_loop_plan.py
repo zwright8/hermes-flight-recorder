@@ -12,10 +12,9 @@ from typing import Any
 
 from .cloud_training import build_cloud_training_launch_receipt, build_cloud_training_status_receipt
 from .external_eval import ExternalEvalPlanError, build_external_eval_receipt
-from .schema_registry import SchemaRegistryError, check_schema_contract
+from .source_contract import inspect_artifact_source
 
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
-EVAL_SUMMARY_SCHEMA_VERSION = "hfr.eval_summary.v1"
 
 CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
     {
@@ -297,27 +296,26 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "rollout_receipt_required_before_review",
-        "agentic_rollout_plan" in refs and "agentic_rollout_receipt" in refs,
+        _role_ready(refs, "agentic_rollout_plan") and _role_ready(refs, "agentic_rollout_receipt"),
         {
-            "agentic_rollout_plan_present": "agentic_rollout_plan" in refs,
-            "agentic_rollout_receipt_present": "agentic_rollout_receipt" in refs,
+            "agentic_rollout_plan_present": _role_ready(refs, "agentic_rollout_plan"),
+            "agentic_rollout_receipt_present": _role_ready(refs, "agentic_rollout_receipt"),
         },
         {"agentic_rollout_plan_present": True, "agentic_rollout_receipt_present": True},
     )
     _add_check(
         checks,
         "uncalibrated_labels_block_training_data",
-        "rubric_spec" in refs
-        and "model_grader_gate" in refs
-        and "review_calibration" in refs
-        and "reviewed_gate" in refs
-        and "rejection_sampling_gate" in refs,
+        all(
+            _role_ready(refs, role)
+            for role in ("rubric_spec", "model_grader_gate", "review_calibration", "reviewed_gate", "rejection_sampling_gate")
+        ),
         {
-            "rubric_spec_present": "rubric_spec" in refs,
-            "model_grader_gate_present": "model_grader_gate" in refs,
-            "review_calibration_present": "review_calibration" in refs,
-            "reviewed_gate_present": "reviewed_gate" in refs,
-            "rejection_sampling_gate_present": "rejection_sampling_gate" in refs,
+            "rubric_spec_present": _role_ready(refs, "rubric_spec"),
+            "model_grader_gate_present": _role_ready(refs, "model_grader_gate"),
+            "review_calibration_present": _role_ready(refs, "review_calibration"),
+            "reviewed_gate_present": _role_ready(refs, "reviewed_gate"),
+            "rejection_sampling_gate_present": _role_ready(refs, "rejection_sampling_gate"),
         },
         {
             "rubric_spec_present": True,
@@ -330,22 +328,22 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "dataset_curation_receipt_required_for_trainer_handoff",
-        "rejection_sampling_gate" in refs and "dataset_curation_receipt" in refs and "training_export" in refs,
+        all(_role_ready(refs, role) for role in ("rejection_sampling_gate", "dataset_curation_receipt", "training_export")),
         {
-            "rejection_sampling_gate_present": "rejection_sampling_gate" in refs,
-            "dataset_curation_receipt_present": "dataset_curation_receipt" in refs,
-            "training_export_present": "training_export" in refs,
+            "rejection_sampling_gate_present": _role_ready(refs, "rejection_sampling_gate"),
+            "dataset_curation_receipt_present": _role_ready(refs, "dataset_curation_receipt"),
+            "training_export_present": _role_ready(refs, "training_export"),
         },
         {"rejection_sampling_gate_present": True, "dataset_curation_receipt_present": True, "training_export_present": True},
     )
     _add_check(
         checks,
         "external_trainer_handoff_is_preflighted",
-        "agentic_training_plan" in refs and "trainer_preflight" in refs and "trainer_launch_check" in refs,
+        all(_role_ready(refs, role) for role in ("agentic_training_plan", "trainer_preflight", "trainer_launch_check")),
         {
-            "agentic_training_plan_present": "agentic_training_plan" in refs,
-            "trainer_preflight_present": "trainer_preflight" in refs,
-            "trainer_launch_check_present": "trainer_launch_check" in refs,
+            "agentic_training_plan_present": _role_ready(refs, "agentic_training_plan"),
+            "trainer_preflight_present": _role_ready(refs, "trainer_preflight"),
+            "trainer_launch_check_present": _role_ready(refs, "trainer_launch_check"),
         },
         {
             "agentic_training_plan_present": True,
@@ -391,19 +389,19 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "heldout_eval_is_fail_closed",
-        "heldout_manifest" in refs
-        and "external_eval_plan" in refs
-        and "external_eval_receipt" in refs
-        and "eval_summary" in refs
+        _role_ready(refs, "heldout_manifest")
+        and _role_ready(refs, "external_eval_plan")
+        and _role_ready(refs, "external_eval_receipt")
+        and _role_ready(refs, "eval_summary")
         and eval_summary_state["valid"]
         and eval_summary_state["passed"]
         and external_eval_receipt_state["receipts_passed"]
         and external_eval_receipt_state["fail_closed"],
         {
-            "heldout_manifest_present": "heldout_manifest" in refs,
-            "external_eval_plan_present": "external_eval_plan" in refs,
-            "external_eval_receipt_present": "external_eval_receipt" in refs,
-            "eval_summary_present": "eval_summary" in refs,
+            "heldout_manifest_present": _role_ready(refs, "heldout_manifest"),
+            "external_eval_plan_present": _role_ready(refs, "external_eval_plan"),
+            "external_eval_receipt_present": _role_ready(refs, "external_eval_receipt"),
+            "eval_summary_present": _role_ready(refs, "eval_summary"),
             "eval_summary_valid": eval_summary_state["valid"],
             "eval_summary_passed": eval_summary_state["passed"],
             "external_eval_receipts_passed": external_eval_receipt_state["receipts_passed"],
@@ -548,12 +546,13 @@ def _artifact_refs(
 
 
 def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
-    exists = path.exists()
-    is_file = path.is_file()
-    is_dir = path.is_dir()
-    directory_fingerprint = _directory_tree_fingerprint(path) if is_dir else {}
-    directory_contains_symlinks = _directory_contains_symlink(path) if is_dir else None
-    payload = _read_json(path) if is_file and path.suffix == ".json" else {}
+    source = inspect_artifact_source(path, role)
+    exists = source.get("ready") is True
+    is_file = exists and source.get("regular_file") is True
+    is_dir = source.get("regular_directory") is True
+    directory_fingerprint = _directory_tree_fingerprint(path) if exists and is_dir else {}
+    directory_contains_symlinks = _directory_contains_symlink(path) if exists and is_dir else None
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
     return {
         "role": role,
         "path": _display_source_path(path, output_path, preserve_paths),
@@ -571,7 +570,7 @@ def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path
 
 def _phase_row(spec: dict[str, Any], refs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     required = list(spec["required"])
-    present = [role for role in required if role in refs and refs[role]]
+    present = [role for role in required if _role_ready(refs, role)]
     missing = [role for role in required if role not in present]
     status = "ready" if required and not missing else "planned"
     if missing and required:
@@ -617,6 +616,11 @@ def _role_counts(refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
     return [{"role": role, "count": counter[role]} for role in sorted(counter)]
 
 
+def _role_ready(refs: dict[str, list[dict[str, Any]]], role: str) -> bool:
+    rows = refs.get(role)
+    return bool(rows) and all(isinstance(row, dict) and row.get("exists") is True for row in rows)
+
+
 def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state: dict[str, Any]) -> dict[str, Any]:
     required = [
         "cloud_training_provider_registry",
@@ -626,7 +630,7 @@ def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state
         "cloud_training_launch_receipt",
         "cloud_training_status_receipt",
     ]
-    present = [role for role in required if refs.get(role)]
+    present = [role for role in required if _role_ready(refs, role)]
     missing = [role for role in required if role not in present]
     return {
         "required_artifacts": required,
@@ -692,12 +696,12 @@ def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict
         and cost_incurred_usd == 0
     )
     launch_receipt_passed = bool(launch_records) and all(
-        record["payload"].get("passed") is True
+        record["ready"] is True
         and _cloud_training_launch_receipt_semantic_passed(record["path"], record["payload"])
         for record in launch_records
     )
     status_receipt_passed = bool(status_records) and all(
-        record["payload"].get("passed") is True
+        record["ready"] is True
         and _cloud_training_status_receipt_semantic_passed(record["path"], record["payload"])
         for record in status_records
     )
@@ -773,7 +777,7 @@ def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[
     receipt_passed_count = sum(
         1
         for record in records
-        if record["payload"].get("passed") is True
+        if record["ready"] is True
         and _external_eval_receipt_semantic_passed(record["path"], record["payload"])
     )
     fail_closed = (
@@ -809,12 +813,8 @@ def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[
 
 def _eval_summary_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
     records = _payload_records(artifact_paths, "eval_summary")
-    valid_count = sum(1 for record in records if _eval_summary_schema_valid(record["payload"]))
-    passed_count = sum(
-        1
-        for record in records
-        if _eval_summary_schema_valid(record["payload"]) and record["payload"].get("passed") is True
-    )
+    valid_count = sum(1 for record in records if record["schema_valid"] is True)
+    passed_count = sum(1 for record in records if record["ready"] is True)
     return {
         "summary_count": len(records),
         "valid_count": valid_count,
@@ -824,34 +824,19 @@ def _eval_summary_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]
     }
 
 
-def _eval_summary_schema_valid(payload: dict[str, Any]) -> bool:
-    if payload.get("schema_version") != EVAL_SUMMARY_SCHEMA_VERSION:
-        return False
-    try:
-        return bool(check_schema_contract(payload, name_or_id="eval_summary").get("passed"))
-    except (SchemaRegistryError, TypeError, ValueError):
-        return False
-
-
 def _promotion_governance_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
     decision_records = _payload_records(artifact_paths, "promotion_decision")
     ledger_records = _payload_records(artifact_paths, "promotion_ledger")
-    decision_payloads = [record["payload"] for record in decision_records]
-    ledger_payloads = [record["payload"] for record in ledger_records]
-    decision_schema_valid = bool(decision_payloads) and all(
-        payload.get("schema_version") == "hfr.promotion_decision.v1" for payload in decision_payloads
-    )
-    decision_passed = bool(decision_payloads) and all(payload.get("passed") is True for payload in decision_payloads)
-    ledger_schema_valid = bool(ledger_payloads) and all(
-        payload.get("schema_version") == "hfr.promotion_ledger.v1" for payload in ledger_payloads
-    )
+    decision_schema_valid = bool(decision_records) and all(record["schema_valid"] is True for record in decision_records)
+    decision_passed = bool(decision_records) and all(record["ready"] is True for record in decision_records)
+    ledger_schema_valid = bool(ledger_records) and all(record["schema_valid"] is True for record in ledger_records)
     return {
-        "promotion_decision_present": bool(decision_payloads),
-        "promotion_decision_count": len(decision_payloads),
+        "promotion_decision_present": bool(decision_records),
+        "promotion_decision_count": len(decision_records),
         "promotion_decision_schema_valid": decision_schema_valid,
         "promotion_decision_passed": decision_passed,
-        "promotion_ledger_present": bool(ledger_payloads),
-        "promotion_ledger_count": len(ledger_payloads),
+        "promotion_ledger_present": bool(ledger_records),
+        "promotion_ledger_count": len(ledger_records),
         "promotion_ledger_schema_valid": ledger_schema_valid,
         "passed": decision_schema_valid and decision_passed and ledger_schema_valid,
     }
@@ -1003,20 +988,24 @@ def _first_ref(refs: dict[str, list[dict[str, Any]]], role: str) -> dict[str, An
 
 
 def _first_payload(artifact_paths: dict[str, list[Path]], role: str) -> dict[str, Any]:
-    paths = artifact_paths.get(role)
-    return _read_json(paths[0]) if paths else {}
-
-
-def _payloads(artifact_paths: dict[str, list[Path]], role: str) -> list[dict[str, Any]]:
-    return [record["payload"] for record in _payload_records(artifact_paths, role)]
+    records = _payload_records(artifact_paths, role)
+    return records[0]["payload"] if records else {}
 
 
 def _payload_records(artifact_paths: dict[str, list[Path]], role: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for path in artifact_paths.get(role, []):
-        payload = _read_json(path)
-        if payload:
-            records.append({"path": path, "payload": payload})
+        source = inspect_artifact_source(path, role)
+        payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+        if source.get("parse_valid") is True:
+            records.append(
+                {
+                    "path": path,
+                    "payload": payload,
+                    "schema_valid": source.get("schema_valid") is True,
+                    "ready": source.get("ready") is True,
+                }
+            )
     return records
 
 

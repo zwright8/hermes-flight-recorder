@@ -40,7 +40,7 @@
       "execution_contract": {
         "boundary": "Function/tool-calling suites must use the same held-out scenario manifest and declared tool schema set.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+        "scenario_manifest_sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec"
       },
       "full_name": "Berkeley Function Calling Leaderboard",
       "id": "bfcl",
@@ -99,7 +99,7 @@
       "execution_contract": {
         "boundary": "Inspect tasks must be mapped to held-out scenario IDs and run under an explicit sandbox policy.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+        "scenario_manifest_sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec"
       },
       "full_name": "Inspect AI",
       "id": "inspect_ai",
@@ -159,7 +159,7 @@
       "execution_contract": {
         "boundary": "Language-model harness tasks must be tied back to the held-out scenario manifest before comparison.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+        "scenario_manifest_sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec"
       },
       "full_name": "EleutherAI lm-evaluation-harness",
       "id": "lm_eval_harness",
@@ -211,7 +211,7 @@
       "execution_contract": {
         "boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+        "scenario_manifest_sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec"
       },
       "full_name": "Flight Recorder local mock external eval",
       "id": "local_mock",
@@ -270,7 +270,7 @@
       "execution_contract": {
         "boundary": "Repository tasks must be selected from a declared held-out task set and run under an explicit sandbox policy.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+        "scenario_manifest_sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec"
       },
       "full_name": "SWE-bench",
       "id": "swe_bench",
@@ -303,7 +303,7 @@
     "missing_swe_bench_task_set",
     "missing_tool_schema_set"
   ],
-  "generated_at": "2026-07-04T17:41:05.937549+00:00",
+  "generated_at": "2026-07-09T23:16:54.221079+00:00",
   "governance_handoff": {
     "external_eval_claims_allowed": false,
     "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",
@@ -321,8 +321,8 @@
       "ready": true,
       "scenario_count": 1,
       "schema_version": "hfr.heldout_scenario_manifest.v1",
-      "sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5",
-      "size_bytes": 153
+      "sha256": "0b60789874369ee6053e4ad68b977fc86c1329316752a45077db9d0a2dd143ec",
+      "size_bytes": 1089
     },
     "swe_bench_task_set": null,
     "tool_schema_set": null

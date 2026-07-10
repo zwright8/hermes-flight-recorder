@@ -5,8 +5,10 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from flightrecorder.cli import main
+from flightrecorder.promotion_archive import PromotionArchiveError, _prepare_archive_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1712,6 +1714,45 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
             self.assertTrue(protected_file.exists())
             self.assertFalse((protected_dir / "promotion_archive.json").exists())
+
+    def test_promotion_archive_force_applies_shared_destructive_target_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "promotion_archive"
+            target.mkdir()
+            (target / "promotion_archive.json").write_text("{}\n", encoding="utf-8")
+
+            with (
+                patch(
+                    "flightrecorder.promotion_archive.assert_safe_output_directory",
+                    side_effect=ValueError("protected output directory"),
+                ) as guard,
+                patch(
+                    "flightrecorder.promotion_archive._is_existing_promotion_archive",
+                    return_value=True,
+                ),
+                patch("flightrecorder.promotion_archive.shutil.rmtree") as remove,
+            ):
+                with self.assertRaisesRegex(PromotionArchiveError, "protected output directory"):
+                    _prepare_archive_dir(target, force=True)
+
+            guard.assert_called_once()
+            remove.assert_not_called()
+
+    def test_promotion_archive_rejects_empty_symlink_output_before_early_return(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            target.mkdir()
+            link = root / "archive-link"
+            try:
+                link.symlink_to(target, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            with self.assertRaisesRegex(PromotionArchiveError, "symlink"):
+                _prepare_archive_dir(link, force=False)
+
+            self.assertEqual(list(target.iterdir()), [])
 
     def test_promotion_archive_missing_source_indexes_reference_decision_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

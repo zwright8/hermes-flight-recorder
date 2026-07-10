@@ -11,22 +11,40 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from check_openai_serving import DEFAULT_MODEL, check_endpoint  # noqa: E402
+from check_openai_serving import (  # noqa: E402
+    DEFAULT_MODEL,
+    check_endpoint,
+    public_path_replacements,
+    sanitize_public_artifact,
+    sensitive_url_values,
+)
+from flightrecorder.redaction import is_secret_key  # noqa: E402
+from flightrecorder.safe_http import (  # noqa: E402
+    DEFAULT_MAX_BODY_BYTES,
+    DEFAULT_MAX_ERROR_BYTES,
+    HttpStatusError,
+    SafeHttpError,
+    bounded_http_request,
+)
 
 
 SCHEMA_LIFECYCLE = "hfr.serving_lifecycle.v1"
+_MAX_LOG_LINE_CHARS = 64 * 1024
+_OVERSIZED_LOG_LINE_MARKER = "[REDACTED: oversized log line]"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -74,6 +92,13 @@ def main(argv: list[str] | None = None) -> int:
     stdout_path = out_dir / "server.stdout.log"
     stderr_path = out_dir / "server.stderr.log"
     lifecycle_path = out_dir / "serving_lifecycle.json"
+    stdout_path.unlink(missing_ok=True)
+    stderr_path.unlink(missing_ok=True)
+    private_logs = tempfile.TemporaryDirectory(prefix="hfr-serving-logs-")
+    private_log_dir = Path(private_logs.name)
+    private_log_dir.chmod(0o700)
+    private_stdout_path = private_log_dir / stdout_path.name
+    private_stderr_path = private_log_dir / stderr_path.name
 
     base_url = args.base_url or f"http://{args.host}:{int(args.port)}/v1"
     command = _launch_command(args)
@@ -81,6 +106,20 @@ def main(argv: list[str] | None = None) -> int:
     adapter_strategy = _adapter_strategy(args)
     env = _process_env(args.env)
     cwd = Path(args.cwd).expanduser().resolve()
+    api_key = _api_key(args, base_url)
+    secret_values = [
+        api_key,
+        *sensitive_url_values(base_url),
+        *_env_values(args.env),
+        *_environment_secret_values(env),
+        *_command_secret_values(command),
+    ]
+    path_replacements = {
+        **public_path_replacements(out_dir, label="."),
+        **public_path_replacements(cwd, label="."),
+        **public_path_replacements(args.adapter, label=Path(args.adapter).name or "adapter"),
+        **public_path_replacements(args.model, label=Path(args.model).name or "model"),
+    }
     generated_at = _utc_now()
     started_monotonic = time.monotonic()
     process: subprocess.Popen[Any] | None = None
@@ -91,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
 
     lifecycle = _base_lifecycle(args, command, base_url, engine, cwd, generated_at, out_dir, adapter_strategy)
     try:
-        with stdout_path.open("wb") as stdout_handle, stderr_path.open("wb") as stderr_handle:
+        with private_stdout_path.open("wb") as stdout_handle, private_stderr_path.open("wb") as stderr_handle:
+            private_stdout_path.chmod(0o600)
+            private_stderr_path.chmod(0o600)
             process = subprocess.Popen(
                 command,
                 cwd=str(cwd),
@@ -101,7 +142,13 @@ def main(argv: list[str] | None = None) -> int:
                 start_new_session=(os.name != "nt"),
             )
             lifecycle["process"] = {"pid": process.pid, "started": True}
-            readiness = _wait_until_ready(process, base_url, timeout=float(args.startup_timeout), poll_interval=float(args.poll_interval), api_key=_api_key(args, base_url))
+            readiness = _wait_until_ready(
+                process,
+                base_url,
+                timeout=float(args.startup_timeout),
+                poll_interval=float(args.poll_interval),
+                api_key=api_key,
+            )
             if readiness["ready"]:
                 profile, compatibility, report = check_endpoint(
                     base_url=base_url,
@@ -110,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                     arm=args.arm,
                     engine=engine if engine != "mock" else "openai_compatible",
                     adapter=args.adapter,
-                    api_key=_api_key(args, base_url),
+                    api_key=api_key,
                     timeout=float(args.check_timeout),
                     out_dir=preflight_dir,
                     require_streaming=bool(args.require_streaming),
@@ -120,6 +167,21 @@ def main(argv: list[str] | None = None) -> int:
                 profile["adapter_strategy"] = adapter_strategy
                 profile.setdefault("model_identity", {})["adapter_strategy"] = adapter_strategy
                 report["adapter_strategy"] = adapter_strategy
+                profile = sanitize_public_artifact(
+                    profile,
+                    secret_values=secret_values,
+                    path_replacements=path_replacements,
+                )
+                compatibility = sanitize_public_artifact(
+                    compatibility,
+                    secret_values=secret_values,
+                    path_replacements=path_replacements,
+                )
+                report = sanitize_public_artifact(
+                    report,
+                    secret_values=secret_values,
+                    path_replacements=path_replacements,
+                )
                 _write_json(preflight_dir / "serving_profile.json", profile)
                 _write_json(preflight_dir / "compatibility_report.json", compatibility)
                 _write_json(preflight_dir / "serving_check.json", report)
@@ -138,7 +200,34 @@ def main(argv: list[str] | None = None) -> int:
         if process is not None:
             teardown = _teardown_process(process, grace_period=float(args.grace_period))
 
-    passed = bool(readiness.get("ready") and smoke.get("passed") and teardown.get("clean"))
+    logs_published = True
+    for private_path, public_path in (
+        (private_stdout_path, stdout_path),
+        (private_stderr_path, stderr_path),
+    ):
+        try:
+            _sanitize_log_file(
+                private_path,
+                public_path=public_path,
+                secret_values=secret_values,
+                path_replacements=path_replacements,
+            )
+        except Exception as exc:  # pragma: no cover - exercised with injected sanitizer failures.
+            public_path.unlink(missing_ok=True)
+            logs_published = False
+            errors.append(f"{public_path.name} publication failed: {type(exc).__name__}: {exc}")
+    private_logs.cleanup()
+
+    passed = bool(
+        readiness.get("ready")
+        and smoke.get("passed")
+        and teardown.get("clean")
+        and logs_published
+    )
+    log_artifacts = {
+        **({"stdout_log": "server.stdout.log"} if stdout_path.exists() else {}),
+        **({"stderr_log": "server.stderr.log"} if stderr_path.exists() else {}),
+    }
     lifecycle.update(
         {
             "finished_at": _utc_now(),
@@ -152,8 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             "errors": errors,
             "artifacts": {
                 "serving_lifecycle": "serving_lifecycle.json",
-                "stdout_log": "server.stdout.log",
-                "stderr_log": "server.stderr.log",
+                **log_artifacts,
                 **(_preflight_artifacts(out_dir) if smoke.get("attempted") else {}),
             },
             "logs": {
@@ -164,8 +252,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     if process is not None:
         lifecycle["process"]["exit_code"] = process.poll()
+    lifecycle = sanitize_public_artifact(
+        lifecycle,
+        secret_values=secret_values,
+        path_replacements=path_replacements,
+    )
     _write_json(lifecycle_path, lifecycle)
-    print(json.dumps({"passed": passed, "readiness": lifecycle["readiness"], "out": str(out_dir), "failed_checks": smoke.get("failed_checks", [])}, indent=2))
+    print(
+        json.dumps(
+            {
+                "passed": passed,
+                "readiness": lifecycle["readiness"],
+                "out": out_dir.name,
+                "failed_checks": smoke.get("failed_checks", []),
+            },
+            indent=2,
+        )
+    )
     return 0 if passed else 1
 
 
@@ -372,26 +475,32 @@ def _kill(process: subprocess.Popen[Any]) -> None:
 
 
 def _request_json(method: str, url: str, *, api_key: str, timeout: float) -> dict[str, Any]:
-    request = urllib.request.Request(url, method=method)
-    request.add_header("accept", "application/json")
+    headers = {"accept": "application/json"}
     if api_key:
-        request.add_header("authorization", f"Bearer {api_key}")
+        headers["authorization"] = f"Bearer {api_key}"
     started = time.time()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            text = response.read().decode("utf-8", "replace")
-            return {
-                "ok": 200 <= int(response.status) < 300,
-                "status_code": int(response.status),
-                "url": url,
-                "elapsed_ms": int((time.time() - started) * 1000),
-                "json": json.loads(text) if text else {},
-            }
+        status_code, body = bounded_http_request(
+            method,
+            url,
+            headers=headers,
+            timeout=timeout,
+            max_body_bytes=DEFAULT_MAX_BODY_BYTES,
+            max_error_bytes=DEFAULT_MAX_ERROR_BYTES,
+        )
+        text = body.decode("utf-8", "replace")
+        return {
+            "ok": 200 <= status_code < 300,
+            "status_code": status_code,
+            "url": url,
+            "elapsed_ms": int((time.time() - started) * 1000),
+            "json": json.loads(text) if text else {},
+        }
     except json.JSONDecodeError as exc:
         return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": f"invalid_json: {exc.msg}"}
-    except urllib.error.HTTPError as exc:
-        return {"ok": False, "status_code": int(exc.code), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": exc.read().decode("utf-8", "replace")}
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except HttpStatusError as exc:
+        return {"ok": False, "status_code": exc.status_code, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": str(exc)}
+    except SafeHttpError as exc:
         return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": str(exc)}
 
 
@@ -401,6 +510,38 @@ def _process_env(items: list[str]) -> dict[str, str]:
         key, value = _split_env(item)
         env[key] = value
     return env
+
+
+def _env_values(items: list[str]) -> list[str]:
+    return [value for _key, value in (_split_env(item) for item in items) if value]
+
+
+def _environment_secret_values(env: dict[str, str]) -> list[str]:
+    return [value for key, value in env.items() if value and _is_secret_flag(key)]
+
+
+def _command_secret_values(command: list[str]) -> list[str]:
+    values: list[str] = []
+    for index, item in enumerate(command):
+        if item.startswith(("http://", "https://")):
+            values.extend(sensitive_url_values(item))
+        if not item.startswith("-"):
+            if item.lower() == "bearer" and index + 1 < len(command):
+                values.append(command[index + 1])
+            continue
+        flag, separator, inline_value = item.partition("=")
+        if not _is_secret_flag(flag):
+            continue
+        if separator and inline_value:
+            values.append(inline_value)
+        elif index + 1 < len(command):
+            values.append(command[index + 1])
+    return [value for value in values if value]
+
+
+def _is_secret_flag(flag: str) -> bool:
+    normalized = flag.lstrip("-").lower().replace("-", "_")
+    return is_secret_key(normalized)
 
 
 def _env_keys(items: list[str]) -> set[str]:
@@ -453,6 +594,64 @@ def _read_tail(path: Path, limit: int = 4096) -> str:
         size = handle.tell()
         handle.seek(max(0, size - limit), os.SEEK_SET)
         return handle.read().decode("utf-8", "replace")
+
+
+def _sanitize_log_file(
+    path: Path,
+    *,
+    public_path: Path | None = None,
+    secret_values: list[str],
+    path_replacements: dict[str, str],
+) -> None:
+    destination_path = public_path or path
+    publishing_from_private_source = destination_path != path
+    if publishing_from_private_source:
+        destination_path.unlink(missing_ok=True)
+    if not path.exists():
+        return
+    source_mode = path.stat().st_mode & 0o7777
+    temporary_fd, temporary_name = tempfile.mkstemp(
+        dir=destination_path.parent,
+        prefix=f".{destination_path.name}.",
+        suffix=".sanitizing",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with (
+            path.open("r", encoding="utf-8", errors="replace", newline="") as source,
+            os.fdopen(temporary_fd, "w", encoding="utf-8", newline="") as destination,
+        ):
+            temporary_fd = -1
+            while line := source.readline(_MAX_LOG_LINE_CHARS + 1):
+                if len(line) > _MAX_LOG_LINE_CHARS and not line.endswith(("\r", "\n")):
+                    line_ending = _discard_oversized_log_line(source)
+                    destination.write(f"{_OVERSIZED_LOG_LINE_MARKER}{line_ending}")
+                    continue
+                public_text = sanitize_public_artifact(
+                    line,
+                    secret_values=secret_values,
+                    path_replacements=path_replacements,
+                )
+                destination.write(public_text)
+            destination.flush()
+            os.fsync(destination.fileno())
+        temporary_path.chmod(source_mode)
+        os.replace(temporary_path, destination_path)
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        temporary_path.unlink(missing_ok=True)
+
+
+def _discard_oversized_log_line(source: TextIO) -> str:
+    while remainder := source.readline(_MAX_LOG_LINE_CHARS + 1):
+        if remainder.endswith("\r\n"):
+            return "\r\n"
+        if remainder.endswith(("\r", "\n")):
+            return remainder[-1]
+        if len(remainder) <= _MAX_LOG_LINE_CHARS:
+            break
+    return ""
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:

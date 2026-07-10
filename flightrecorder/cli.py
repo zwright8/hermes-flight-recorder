@@ -46,6 +46,7 @@ from .artifacts import (
     write_suite_compare_report,
     write_suite_trend_report,
 )
+from .atomic_json import AtomicJsonError, atomic_write_json_cas, json_file_sha256
 from .bundle import (
     HARNESS_RUN_MANIFEST_SCHEMA_VERSION,
     HARNESS_RUN_RESULT_SCHEMA_VERSION,
@@ -100,7 +101,7 @@ from .external_eval import (
     write_external_eval_receipt,
 )
 from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, write_heldout_manifest
-from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
+from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .model_registry import (
     ALIAS_NAMES,
     MODEL_ADAPTER_MANIFEST_STATUSES,
@@ -128,6 +129,7 @@ from .model_grader import (
 )
 from .agentic_training_flow import AgenticTrainingFlowError, build_agentic_training_flow, write_agentic_training_flow
 from .next_iteration_schedule import NextIterationScheduleError, build_next_iteration_schedule, write_next_iteration_schedule
+from .path_safety import assert_safe_output_directory, path_has_symlink_component
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -184,7 +186,7 @@ from .state_validators import (
     build_state_validator_assertions,
     render_monitor_catalog_markdown,
 )
-from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
+from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGateError, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
 from .trainer_archive_check import TrainerArchiveCheckError, build_trainer_archive_check
@@ -216,6 +218,13 @@ TRACE_FORMAT_CHOICES = [
     "atif_json",
     "normalized_json",
 ]
+_OPTIONAL_RUN_ARTIFACTS = (
+    "before_state_snapshot.json",
+    "state_snapshot.json",
+    "state_diff.json",
+    "regression_scenario.json",
+    "raw_trace.sensitive.json",
+)
 
 
 class ReplayError(ValueError):
@@ -234,8 +243,10 @@ def main(argv: list[str] | None = None) -> int:
         StateCaptureError,
         StateValidatorError,
         VerifierError,
+        AtomicJsonError,
         StateDiffError,
         StateSnapshotError,
+        SuiteGateError,
         SuiteGatePolicyError,
         ReviewExportError,
         ReviewedGatePolicyError,
@@ -488,12 +499,15 @@ def cmd_replay_bundle(args: argparse.Namespace) -> int:
         _verify_replay_input("source_state_snapshot", state_path, fingerprints)
 
     out_dir = Path(args.out)
-    if out_dir.exists() and not out_dir.is_dir():
-        raise ReplayError(f"replay bundle output is not a directory: {out_dir}")
-    if out_dir.exists() and any(out_dir.iterdir()) and not args.force:
-        raise ReplayError(f"replay bundle output is not empty: {out_dir}; pass --force to replace it")
-    if out_dir.exists() and args.force:
-        shutil.rmtree(out_dir)
+    _prepare_owned_output_directory(
+        out_dir,
+        force=bool(args.force),
+        label="replay bundle",
+        manifest_name="replay_bundle.json",
+        schema_version=REPLAY_BUNDLE_SCHEMA_VERSION,
+        error_type=ReplayError,
+        replay_bundle=True,
+    )
     inputs_dir = out_dir / "inputs"
     inputs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -529,6 +543,68 @@ def cmd_replay_bundle(args: argparse.Namespace) -> int:
     _write_json(manifest_path, manifest)
     print(f"wrote replay bundle {out_dir}")
     return 0
+
+
+def _prepare_owned_output_directory(
+    target: Path,
+    *,
+    force: bool,
+    label: str,
+    manifest_name: str,
+    schema_version: str,
+    error_type: type[ValueError],
+    schema_name: str | None = None,
+    replay_bundle: bool = False,
+) -> None:
+    try:
+        assert_safe_output_directory(target, repo_root=Path(__file__).resolve().parents[1])
+    except ValueError as exc:
+        raise error_type(str(exc)) from exc
+    if target.exists() and not target.is_dir():
+        raise error_type(f"{label} output is not a directory: {target}")
+    if not target.exists() or not any(target.iterdir()):
+        return
+    if not force:
+        raise error_type(f"{label} output is not empty: {target}; pass --force to replace it")
+    if not _owned_output_manifest_is_valid(
+        target,
+        manifest_name=manifest_name,
+        schema_version=schema_version,
+        schema_name=schema_name,
+        replay_bundle=replay_bundle,
+    ):
+        raise error_type(
+            f"refusing to replace non-{label} directory: {target}; "
+            f"choose an empty output directory or an existing valid {label}"
+        )
+    shutil.rmtree(target)
+
+
+def _owned_output_manifest_is_valid(
+    target: Path,
+    *,
+    manifest_name: str,
+    schema_version: str,
+    schema_name: str | None,
+    replay_bundle: bool,
+) -> bool:
+    manifest_path = target / manifest_name
+    if not manifest_path.is_file() or path_has_symlink_component(manifest_path, include_leaf=True):
+        return False
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict) or payload.get("schema_version") != schema_version:
+        return False
+    if schema_name is not None:
+        try:
+            return check_schema_file(manifest_path, schema_name).get("passed") is True
+        except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError):
+            return False
+    if replay_bundle:
+        return validate_artifacts(replay_bundle_paths=[target], strict=False).get("passed") is True
+    return True
 
 
 def _scenario_paths_from_suite_manifest(scenario_paths: list[Path], manifest_path: Path) -> list[Path]:
@@ -804,12 +880,15 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
 
 def cmd_goal3_handoff(args: argparse.Namespace) -> int:
     target = Path(args.out)
-    if target.exists() and not target.is_dir():
-        raise ArtifactError(f"goal3 handoff output is not a directory: {target}")
-    if target.exists() and any(target.iterdir()):
-        if not args.force:
-            raise ArtifactError(f"goal3 handoff output is not empty: {target}; pass --force to replace it")
-        shutil.rmtree(target)
+    _prepare_owned_output_directory(
+        target,
+        force=bool(args.force),
+        label="goal3 handoff",
+        manifest_name="goal3_handoff.json",
+        schema_version=GOAL3_HANDOFF_SCHEMA_VERSION,
+        error_type=ArtifactError,
+        schema_name="goal3_handoff",
+    )
     target.mkdir(parents=True, exist_ok=True)
 
     metadata = _metadata_options(args.metadata)
@@ -1124,6 +1203,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
         agentic_training_plan_paths=args.agentic_training_plan,
+        agentic_training_runtime_preflight_paths=args.agentic_training_runtime_preflight,
         agentic_training_flow_paths=args.agentic_training_flow,
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
@@ -1235,10 +1315,11 @@ def cmd_model_registry_validate(args: argparse.Namespace) -> int:
 
 def cmd_model_registry_register(args: argparse.Namespace) -> int:
     registry_path = Path(args.registry)
+    registry_sha256 = json_file_sha256(registry_path)
     registry = load_model_registry(registry_path)
     candidate = _read_json(Path(args.candidate))
     registry = register_model_candidate(registry, candidate, status=args.status)
-    _write_json(registry_path, registry)
+    atomic_write_json_cas(registry_path, registry, expected_sha256=registry_sha256)
     entry = registry["entries"][candidate["candidate_id"]]
     if args.entry_out:
         _write_json(Path(args.entry_out), entry)
@@ -1273,6 +1354,7 @@ def cmd_model_registry_list(args: argparse.Namespace) -> int:
 
 def cmd_model_registry_alias(args: argparse.Namespace) -> int:
     registry_path = Path(args.registry)
+    registry_sha256 = json_file_sha256(registry_path)
     registry = load_model_registry(registry_path)
     registry = move_model_alias(
         registry,
@@ -1281,13 +1363,14 @@ def cmd_model_registry_alias(args: argparse.Namespace) -> int:
         rollback_target=args.rollback_target,
         reason=args.reason or "",
     )
-    _write_json(registry_path, registry)
+    atomic_write_json_cas(registry_path, registry, expected_sha256=registry_sha256)
     print(f"moved {args.alias} -> {args.target} in {registry_path}")
     return 0
 
 
 def cmd_model_registry_link(args: argparse.Namespace) -> int:
     registry_path = Path(args.registry)
+    registry_sha256 = json_file_sha256(registry_path)
     registry = load_model_registry(registry_path)
     registry = link_model_registry_artifact(
         registry,
@@ -1301,7 +1384,7 @@ def cmd_model_registry_link(args: argparse.Namespace) -> int:
         metadata=_metadata_options(args.metadata),
         preserve_paths=args.preserve_paths,
     )
-    _write_json(registry_path, registry)
+    atomic_write_json_cas(registry_path, registry, expected_sha256=registry_sha256)
     if args.entry_out:
         _write_json(Path(args.entry_out), registry["entries"][args.entry])
     print(f"linked {args.collection}:{args.artifact_id} to {args.entry} in {registry_path}")
@@ -1310,6 +1393,7 @@ def cmd_model_registry_link(args: argparse.Namespace) -> int:
 
 def cmd_model_registry_serving_probe_receipt(args: argparse.Namespace) -> int:
     registry_path = Path(args.registry)
+    registry_sha256 = json_file_sha256(registry_path)
     registry = load_model_registry(registry_path)
     compatibility_report = _read_json(Path(args.compatibility_report)) if args.compatibility_report else None
     receipt = build_model_serving_probe_receipt(
@@ -1345,7 +1429,7 @@ def cmd_model_registry_serving_probe_receipt(args: argparse.Namespace) -> int:
             },
             preserve_paths=args.preserve_paths,
         )
-        _write_json(registry_path, registry)
+        atomic_write_json_cas(registry_path, registry, expected_sha256=registry_sha256)
         if args.entry_out:
             _write_json(Path(args.entry_out), registry["entries"][receipt["entry_id"]])
     print(f"wrote {args.out}")
@@ -1354,6 +1438,7 @@ def cmd_model_registry_serving_probe_receipt(args: argparse.Namespace) -> int:
 
 def cmd_model_registry_adapter_manifest(args: argparse.Namespace) -> int:
     registry_path = Path(args.registry)
+    registry_sha256 = json_file_sha256(registry_path)
     registry = load_model_registry(registry_path)
     training_plan = _read_json(Path(args.training_plan))
     manifest = build_model_adapter_manifest(
@@ -1387,7 +1472,7 @@ def cmd_model_registry_adapter_manifest(args: argparse.Namespace) -> int:
             },
             preserve_paths=args.preserve_paths,
         )
-        _write_json(registry_path, registry)
+        atomic_write_json_cas(registry_path, registry, expected_sha256=registry_sha256)
         if args.entry_out:
             _write_json(Path(args.entry_out), registry["entries"][manifest["base_model"]["entry_id"]])
     print(f"wrote {args.out}")
@@ -3186,6 +3271,12 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Validate one agentic_training_plan.json dry-run trainer handoff contract; may be repeated",
+    )
+    validate.add_argument(
+        "--agentic-training-runtime-preflight",
+        action="append",
+        default=[],
+        help="Validate one agentic_training_runtime_preflight.json receipt; may be repeated",
     )
     validate.add_argument(
         "--agentic-training-flow",
@@ -5605,6 +5696,43 @@ def _default_digest_out(args: argparse.Namespace) -> Path | None:
     return Path(args.run) / "run_digest.json" if args.run else None
 
 
+def _remove_stale_optional_run_artifacts(run_dir: Path) -> None:
+    stale_paths = [
+        run_dir / name
+        for name in _OPTIONAL_RUN_ARTIFACTS
+        if (run_dir / name).exists() or (run_dir / name).is_symlink()
+    ]
+    if not stale_paths:
+        return
+    if not _is_owned_run_directory(run_dir):
+        raise ArtifactError(
+            f"refusing to remove optional artifacts from an unrecognized run directory: {run_dir}"
+        )
+    for path in stale_paths:
+        if path.is_dir() and not path.is_symlink():
+            raise ArtifactError(f"optional run artifact is unexpectedly a directory: {path}")
+        path.unlink()
+
+
+def _is_owned_run_directory(run_dir: Path) -> bool:
+    lineage_path = run_dir / "artifact_lineage.json"
+    if not lineage_path.is_file() or path_has_symlink_component(lineage_path, include_leaf=True):
+        return False
+    try:
+        lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    minimally_shaped = (
+        isinstance(lineage, dict)
+        and lineage.get("schema_version") == LINEAGE_SCHEMA_VERSION
+        and isinstance(lineage.get("scenario"), dict)
+        and isinstance(lineage.get("outputs"), list)
+    )
+    if not minimally_shaped:
+        return False
+    return validate_artifacts(run_dirs=[run_dir], strict=False).get("passed") is True
+
+
 def _run_scenario_artifacts(
     scenario_path: str | Path,
     out_dir: str | Path,
@@ -5623,6 +5751,8 @@ def _run_scenario_artifacts(
     before_state_path = resolve_before_state_snapshot_path(scenario, before_state_override)
     state_path = resolve_state_snapshot_path(scenario, state_override)
     run_dir = Path(out_dir)
+    if path_has_symlink_component(run_dir, include_leaf=True):
+        raise ArtifactError(f"run output must not contain symlink components: {run_dir}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
     raw_trace = normalize_trace(trace_path, trace_format)
@@ -5660,6 +5790,7 @@ def _run_scenario_artifacts(
     run_digest_path = run_dir / "run_digest.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
+    _remove_stale_optional_run_artifacts(run_dir)
     _write_json(normalized_path, trace)
     if before_state_snapshot_path is not None:
         _write_json(before_state_snapshot_path, before_state_snapshot)

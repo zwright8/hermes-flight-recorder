@@ -4,7 +4,7 @@ This card summarizes a Flight Recorder training export. It is generated from the
 
 ## Summary
 
-- Dataset version: `hfrds-55eb38b250844a57`
+- Dataset version: `hfrds-1c35263a4f5fcd7e`
 - Source runs: `examples/agentic_training/training_runs`
 - Reward scale: `score`
 - Episodes: 7 (2 passed, 5 failed)

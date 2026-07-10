@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .source_contract import inspect_artifact_source
+
 DATASET_CURATION_RECEIPT_SCHEMA_VERSION = "hfr.dataset_curation_receipt.v1"
 
 
@@ -121,10 +123,21 @@ def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, outpu
     path = Path(path_value)
     manifest_path = path / "manifest.json" if path.is_dir() else path
     displayed_path = _display_path(path, preserve_paths, output_dir)
-    exists = _is_public_dataset_curation_ref_path(displayed_path) and path.exists()
+    public_path = _is_public_dataset_curation_ref_path(displayed_path)
+    source = inspect_artifact_source(path, role) if public_path else {"payload": {}, "ready": False, "schema_valid": False}
+    if role == "training_export":
+        exists = public_path and source.get("ready") is True
+    else:
+        exists = public_path and source.get("regular_file") is True and source.get("schema_valid") is True
     manifest_displayed_path = _display_path(manifest_path, preserve_paths, output_dir)
-    manifest_exists = _is_public_dataset_curation_ref_path(manifest_displayed_path) and manifest_path.exists() and manifest_path.is_file()
-    payload = _read_json(manifest_path) if manifest_exists else {}
+    manifest_source = source.get("manifest") if isinstance(source.get("manifest"), dict) else source
+    manifest_exists = (
+        _is_public_dataset_curation_ref_path(manifest_displayed_path)
+        and manifest_source.get("regular_file") is True
+        and manifest_source.get("schema_valid") is True
+        and (role != "training_export" or manifest_source.get("semantic_valid") is True)
+    )
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
     ref = {
         "role": role,
         "path": displayed_path,
@@ -161,14 +174,6 @@ def _all_present_ready(refs: list[dict[str, Any]], schema_version: str, readines
 
 def _passing_ref_count(refs: list[dict[str, Any]]) -> int:
     return sum(1 for ref in refs if ref.get("exists") is True and ref.get("passed") is True)
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:

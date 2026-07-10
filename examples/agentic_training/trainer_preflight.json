@@ -16,8 +16,8 @@
       "kind": "directory",
       "path": "training_export",
       "regular_directory": true,
-      "sha256": "a6bb01cba41f40d381848512b603b93400ec7d079f84b75000e39477a6239451",
-      "size_bytes": 508903,
+      "sha256": "2bcbb24905b2a5f60869424f7d3224cc24aacd8c5850a1ba26268be4bad19498",
+      "size_bytes": 509486,
       "symlink": false,
       "tree_hash_algorithm": "sha256(sorted-relative-path-size-file-sha256)"
     },
@@ -26,8 +26,8 @@
       "kind": "file",
       "path": "training_export/curriculum.json",
       "regular_file": true,
-      "sha256": "44951f9ab69297ae46e1bb497a9187562206ff1014dc562729981bfe7dfd3bcc",
-      "size_bytes": 19581,
+      "sha256": "64d8e964deb70075a5a82a7557bdea3fec5e67b3bc97ea3e358248228608b598",
+      "size_bytes": 19500,
       "symlink": false
     },
     "training_export_dataset_card_md": {
@@ -35,7 +35,7 @@
       "kind": "file",
       "path": "training_export/DATASET_CARD.md",
       "regular_file": true,
-      "sha256": "4924147e523d1452271c1039026590c3056470853ea5e3a6bb925631c16eb4f4",
+      "sha256": "416c0f8609b87aeda1fa4be086eff142a69c2e991e6a42b0aaf06444d7cad0ea",
       "size_bytes": 3349,
       "symlink": false
     },
@@ -53,7 +53,7 @@
       "kind": "file",
       "path": "training_export/dataset_registry.json",
       "regular_file": true,
-      "sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "sha256": "729b2d212c110d45b7a62932727caaec2772576dda211f3be25db289dc448b7d",
       "size_bytes": 23269,
       "symlink": false
     },
@@ -80,8 +80,8 @@
       "kind": "file",
       "path": "training_export/episodes.jsonl",
       "regular_file": true,
-      "sha256": "6929cd02bbe035c3255de8e00bd0a094008df08be4b6c4600d99e2049b81f52c",
-      "size_bytes": 54717,
+      "sha256": "e8eb774a88a24378ceb3d53ab65326ea9b47a550128bb417dc0497aba69e41cb",
+      "size_bytes": 55138,
       "symlink": false
     },
     "training_export_failure_modes_jsonl": {
@@ -89,8 +89,8 @@
       "kind": "file",
       "path": "training_export/failure_modes.jsonl",
       "regular_file": true,
-      "sha256": "0073257e53db681f7ff0afc09fa1a3f1e2c0700cab406fd4a4d1c98db36e4ae7",
-      "size_bytes": 30651,
+      "sha256": "72ed6e83d3eb74357ee0e15553d4d50560cfb631863d9635f6bfed6513d7a098",
+      "size_bytes": 30501,
       "symlink": false
     },
     "training_export_manifest_json": {
@@ -98,7 +98,7 @@
       "kind": "file",
       "path": "training_export/manifest.json",
       "regular_file": true,
-      "sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "size_bytes": 22973,
       "symlink": false
     },
@@ -107,8 +107,8 @@
       "kind": "file",
       "path": "training_export/preferences.jsonl",
       "regular_file": true,
-      "sha256": "d29c6adc0d7acb86a1d914893f603f643a9fe09485394bc1585de41189f88b38",
-      "size_bytes": 29006,
+      "sha256": "68f345b2d6aea2ab3f6b449800f7e0324b854c817012db6a52066f50e5c67566",
+      "size_bytes": 29244,
       "symlink": false
     },
     "training_export_reward_model_jsonl": {
@@ -125,8 +125,8 @@
       "kind": "file",
       "path": "training_export/rewards.jsonl",
       "regular_file": true,
-      "sha256": "840a0661126910d8944b459e975bb74916ebccc8a38797e010686deb5138ad7a",
-      "size_bytes": 38470,
+      "sha256": "98788ffaee797d49e0a3ccbc2384a5c588ec80dd0516ce01a8e12412eb26a6c4",
+      "size_bytes": 38320,
       "symlink": false
     },
     "training_export_sft_jsonl": {
@@ -152,8 +152,8 @@
       "kind": "file",
       "path": "training_export/splits/test/episodes.jsonl",
       "regular_file": true,
-      "sha256": "0cb3ace33e598b466367f4a40cc3e8ef6c07fcd5483af01330937a0445fcc5ce",
-      "size_bytes": 4420,
+      "sha256": "48154c718ebd5be6091442a9968d1b4d4b160f3d64e421497138b1e3e02ae236",
+      "size_bytes": 4481,
       "symlink": false
     },
     "training_export_splits_test_failure_modes_jsonl": {
@@ -224,8 +224,8 @@
       "kind": "file",
       "path": "training_export/splits/train/episodes.jsonl",
       "regular_file": true,
-      "sha256": "57f8a5b58e9c0149caf854da10a167663e2601d56e65054a69d010d76a452837",
-      "size_bytes": 39945,
+      "sha256": "509b2cf67947c6026d0f202c1632d1eef2762ffb5b8e99a2c4846fd9a04cb348",
+      "size_bytes": 40183,
       "symlink": false
     },
     "training_export_splits_train_failure_modes_jsonl": {
@@ -242,8 +242,8 @@
       "kind": "file",
       "path": "training_export/splits/train/preferences.jsonl",
       "regular_file": true,
-      "sha256": "115120d9720c88a7ffce44c817d7e80634f3004aa131ae68edab28ec68acfde9",
-      "size_bytes": 19618,
+      "sha256": "69fadbac3748749aa4402a499084f6152398a6a9425eae8c6bb58f45f14984c4",
+      "size_bytes": 19734,
       "symlink": false
     },
     "training_export_splits_train_reward_model_jsonl": {
@@ -296,8 +296,8 @@
       "kind": "file",
       "path": "training_export/splits/validation/episodes.jsonl",
       "regular_file": true,
-      "sha256": "ec86b1040f9737a6e16a05b126d8e5fa2433974d5c6e49392cbbff51bbb47aec",
-      "size_bytes": 10352,
+      "sha256": "de80eb1edd3302661224bcd62a39e12d66c8c9db4e404ccb682f47219f4fb202",
+      "size_bytes": 10474,
       "symlink": false
     },
     "training_export_splits_validation_failure_modes_jsonl": {
@@ -305,8 +305,8 @@
       "kind": "file",
       "path": "training_export/splits/validation/failure_modes.jsonl",
       "regular_file": true,
-      "sha256": "a61f193ef6d85d500a9055ab3dd61f932072103d7a86284a7fd0ded4f2aa70fe",
-      "size_bytes": 9567,
+      "sha256": "6fff519bac6650a489e5070d4f11ddf97e3e54d05e42ed181eb27e1f090ed39a",
+      "size_bytes": 9417,
       "symlink": false
     },
     "training_export_splits_validation_preferences_jsonl": {
@@ -314,8 +314,8 @@
       "kind": "file",
       "path": "training_export/splits/validation/preferences.jsonl",
       "regular_file": true,
-      "sha256": "cb610285f998ca7174a2d8d7cec2c12ac16750b05b74beb51ec52fcd6556e4f2",
-      "size_bytes": 9388,
+      "sha256": "7153cdeeea8bd83986dc3b6917859d96f9fbc67019687a5983db5901b50ed855",
+      "size_bytes": 9510,
       "symlink": false
     },
     "training_export_splits_validation_reward_model_jsonl": {
@@ -332,8 +332,8 @@
       "kind": "file",
       "path": "training_export/splits/validation/rewards.jsonl",
       "regular_file": true,
-      "sha256": "ecc3228352c8ff3dc4b75d0a0d1cf035e4ecd718b7369a356bcadfc7beeca310",
-      "size_bytes": 11219,
+      "sha256": "f90c9758cae19db32c4d1335e63bd605c301fb41c658f2c5154cb95ff85a68bc",
+      "size_bytes": 11069,
       "symlink": false
     },
     "training_export_splits_validation_sft_jsonl": {
@@ -350,8 +350,8 @@
       "kind": "file",
       "path": "training_export/splits/validation/step_rewards.jsonl",
       "regular_file": true,
-      "sha256": "a6e79ca2b9ff06f76ec4af592c153ddce4b51e2850b121cfd0eda6e0d81eb479",
-      "size_bytes": 13081,
+      "sha256": "543e97f0fedf809b0711fea802bc983135742da7b1bd20a03db21d4d07d6234b",
+      "size_bytes": 13054,
       "symlink": false
     },
     "training_export_step_rewards_jsonl": {
@@ -359,8 +359,8 @@
       "kind": "file",
       "path": "training_export/step_rewards.jsonl",
       "regular_file": true,
-      "sha256": "0b99d75cd2b79b431984611efff73493525f8b173ceb5b931e96501d784c2dd2",
-      "size_bytes": 31402,
+      "sha256": "8f9583016853c830bb4efc0634a601f36adfd6f0b68c3635877fe3e15057816c",
+      "size_bytes": 31375,
       "symlink": false
     }
   },
@@ -2196,8 +2196,8 @@
       "passed": true,
       "scope": {
         "artifact": "training_export",
-        "dataset_version": "hfrds-55eb38b250844a57",
-        "required": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e",
+        "required": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "dataset_version_matches_required: passed=True"
     },
@@ -2226,7 +2226,7 @@
       "passed": true,
       "scope": {
         "artifact": "training_export",
-        "dataset_version": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "dataset_registry_version_matches_manifest: passed=True"
     },
@@ -2241,7 +2241,7 @@
       "passed": true,
       "scope": {
         "artifact": "training_export",
-        "dataset_version": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "dataset_registry_manifest_hash_matches: passed=True"
     },
@@ -2256,7 +2256,7 @@
       "passed": true,
       "scope": {
         "artifact": "training_export",
-        "dataset_version": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "dataset_redaction_passed: passed=True"
     },
@@ -2271,7 +2271,7 @@
       "passed": true,
       "scope": {
         "artifact": "training_export",
-        "dataset_version": "hfrds-55eb38b250844a57"
+        "dataset_version": "hfrds-1c35263a4f5fcd7e"
       },
       "summary": "dataset_heldout_scenario_exclusive: passed=True"
     },
@@ -2323,7 +2323,7 @@
   "dataset_selection": [
     {
       "artifact": "training_export",
-      "dataset_version": "hfrds-55eb38b250844a57",
+      "dataset_version": "hfrds-1c35263a4f5fcd7e",
       "heldout_scenario_exclusive": true,
       "heldout_scenario_ids": [
         "prompt_injection_bad",
@@ -2331,16 +2331,16 @@
         "subagent_claim_bad"
       ],
       "manifest_path": "training_export/manifest.json",
-      "manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "matches_required": true,
       "redaction_passed": true,
-      "registry_dataset_version": "hfrds-55eb38b250844a57",
-      "registry_manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "registry_dataset_version": "hfrds-1c35263a4f5fcd7e",
+      "registry_manifest_sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "registry_path": "training_export/dataset_registry.json",
-      "registry_selection_key": "hfrds-55eb38b250844a57",
-      "registry_sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "registry_selection_key": "hfrds-1c35263a4f5fcd7e",
+      "registry_sha256": "729b2d212c110d45b7a62932727caaec2772576dda211f3be25db289dc448b7d",
       "required_dataset_versions": [
-        "hfrds-55eb38b250844a57"
+        "hfrds-1c35263a4f5fcd7e"
       ],
       "root": "training_export",
       "trainer_modes": [
@@ -2580,7 +2580,7 @@
   "readiness": "ready",
   "recommendation": "launch_allowed",
   "required_dataset_versions": [
-    "hfrds-55eb38b250844a57"
+    "hfrds-1c35263a4f5fcd7e"
   ],
   "required_gates": [
     "training_gate"
@@ -2608,8 +2608,8 @@
       "path": "training_export/curriculum.json",
       "regular_file": true,
       "schema_name": "rl_curriculum",
-      "sha256": "44951f9ab69297ae46e1bb497a9187562206ff1014dc562729981bfe7dfd3bcc",
-      "size_bytes": 19581,
+      "sha256": "64d8e964deb70075a5a82a7557bdea3fec5e67b3bc97ea3e358248228608b598",
+      "size_bytes": 19500,
       "symlink": false
     },
     "training_export_dataset_metrics_json": {
@@ -2634,7 +2634,7 @@
       "path": "training_export/dataset_registry.json",
       "regular_file": true,
       "schema_name": "dataset_registry",
-      "sha256": "ac5ec8d41c9148c31dc34b08a66ba830f7f8f5a2cc0aff98871dbbbff4c3ec01",
+      "sha256": "729b2d212c110d45b7a62932727caaec2772576dda211f3be25db289dc448b7d",
       "size_bytes": 23269,
       "symlink": false
     },
@@ -2687,8 +2687,8 @@
         }
       ],
       "schema_name": "rl_episode",
-      "sha256": "6929cd02bbe035c3255de8e00bd0a094008df08be4b6c4600d99e2049b81f52c",
-      "size_bytes": 54717,
+      "sha256": "e8eb774a88a24378ceb3d53ab65326ea9b47a550128bb417dc0497aba69e41cb",
+      "size_bytes": 55138,
       "symlink": false
     },
     "training_export_failure_modes_jsonl": {
@@ -2707,8 +2707,8 @@
         }
       ],
       "schema_name": "rl_failure_mode",
-      "sha256": "0073257e53db681f7ff0afc09fa1a3f1e2c0700cab406fd4a4d1c98db36e4ae7",
-      "size_bytes": 30651,
+      "sha256": "72ed6e83d3eb74357ee0e15553d4d50560cfb631863d9635f6bfed6513d7a098",
+      "size_bytes": 30501,
       "symlink": false
     },
     "training_export_manifest_json": {
@@ -2720,7 +2720,7 @@
       "path": "training_export/manifest.json",
       "regular_file": true,
       "schema_name": "training_manifest",
-      "sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+      "sha256": "f68a6fa6e13bcd287ad4ea4afa9b7ac3417537bb45950faa7774ec437e1336de",
       "size_bytes": 22973,
       "symlink": false
     },
@@ -2740,8 +2740,8 @@
         }
       ],
       "schema_name": "rl_preference",
-      "sha256": "d29c6adc0d7acb86a1d914893f603f643a9fe09485394bc1585de41189f88b38",
-      "size_bytes": 29006,
+      "sha256": "68f345b2d6aea2ab3f6b449800f7e0324b854c817012db6a52066f50e5c67566",
+      "size_bytes": 29244,
       "symlink": false
     },
     "training_export_reward_model_jsonl": {
@@ -2780,8 +2780,8 @@
         }
       ],
       "schema_name": "rl_reward",
-      "sha256": "840a0661126910d8944b459e975bb74916ebccc8a38797e010686deb5138ad7a",
-      "size_bytes": 38470,
+      "sha256": "98788ffaee797d49e0a3ccbc2384a5c588ec80dd0516ce01a8e12412eb26a6c4",
+      "size_bytes": 38320,
       "symlink": false
     },
     "training_export_sft_jsonl": {
@@ -2835,8 +2835,8 @@
         }
       ],
       "schema_name": "rl_episode",
-      "sha256": "0cb3ace33e598b466367f4a40cc3e8ef6c07fcd5483af01330937a0445fcc5ce",
-      "size_bytes": 4420,
+      "sha256": "48154c718ebd5be6091442a9968d1b4d4b160f3d64e421497138b1e3e02ae236",
+      "size_bytes": 4481,
       "symlink": false
     },
     "training_export_splits_test_failure_modes_jsonl": {
@@ -2985,8 +2985,8 @@
         }
       ],
       "schema_name": "rl_episode",
-      "sha256": "57f8a5b58e9c0149caf854da10a167663e2601d56e65054a69d010d76a452837",
-      "size_bytes": 39945,
+      "sha256": "509b2cf67947c6026d0f202c1632d1eef2762ffb5b8e99a2c4846fd9a04cb348",
+      "size_bytes": 40183,
       "symlink": false
     },
     "training_export_splits_train_failure_modes_jsonl": {
@@ -3025,8 +3025,8 @@
         }
       ],
       "schema_name": "rl_preference",
-      "sha256": "115120d9720c88a7ffce44c817d7e80634f3004aa131ae68edab28ec68acfde9",
-      "size_bytes": 19618,
+      "sha256": "69fadbac3748749aa4402a499084f6152398a6a9425eae8c6bb58f45f14984c4",
+      "size_bytes": 19734,
       "symlink": false
     },
     "training_export_splits_train_reward_model_jsonl": {
@@ -3145,8 +3145,8 @@
         }
       ],
       "schema_name": "rl_episode",
-      "sha256": "ec86b1040f9737a6e16a05b126d8e5fa2433974d5c6e49392cbbff51bbb47aec",
-      "size_bytes": 10352,
+      "sha256": "de80eb1edd3302661224bcd62a39e12d66c8c9db4e404ccb682f47219f4fb202",
+      "size_bytes": 10474,
       "symlink": false
     },
     "training_export_splits_validation_failure_modes_jsonl": {
@@ -3165,8 +3165,8 @@
         }
       ],
       "schema_name": "rl_failure_mode",
-      "sha256": "a61f193ef6d85d500a9055ab3dd61f932072103d7a86284a7fd0ded4f2aa70fe",
-      "size_bytes": 9567,
+      "sha256": "6fff519bac6650a489e5070d4f11ddf97e3e54d05e42ed181eb27e1f090ed39a",
+      "size_bytes": 9417,
       "symlink": false
     },
     "training_export_splits_validation_preferences_jsonl": {
@@ -3185,8 +3185,8 @@
         }
       ],
       "schema_name": "rl_preference",
-      "sha256": "cb610285f998ca7174a2d8d7cec2c12ac16750b05b74beb51ec52fcd6556e4f2",
-      "size_bytes": 9388,
+      "sha256": "7153cdeeea8bd83986dc3b6917859d96f9fbc67019687a5983db5901b50ed855",
+      "size_bytes": 9510,
       "symlink": false
     },
     "training_export_splits_validation_reward_model_jsonl": {
@@ -3225,8 +3225,8 @@
         }
       ],
       "schema_name": "rl_reward",
-      "sha256": "ecc3228352c8ff3dc4b75d0a0d1cf035e4ecd718b7369a356bcadfc7beeca310",
-      "size_bytes": 11219,
+      "sha256": "f90c9758cae19db32c4d1335e63bd605c301fb41c658f2c5154cb95ff85a68bc",
+      "size_bytes": 11069,
       "symlink": false
     },
     "training_export_splits_validation_sft_jsonl": {
@@ -3265,8 +3265,8 @@
         }
       ],
       "schema_name": "rl_step_reward",
-      "sha256": "a6e79ca2b9ff06f76ec4af592c153ddce4b51e2850b121cfd0eda6e0d81eb479",
-      "size_bytes": 13081,
+      "sha256": "543e97f0fedf809b0711fea802bc983135742da7b1bd20a03db21d4d07d6234b",
+      "size_bytes": 13054,
       "symlink": false
     },
     "training_export_step_rewards_jsonl": {
@@ -3285,8 +3285,8 @@
         }
       ],
       "schema_name": "rl_step_reward",
-      "sha256": "0b99d75cd2b79b431984611efff73493525f8b173ceb5b931e96501d784c2dd2",
-      "size_bytes": 31402,
+      "sha256": "8f9583016853c830bb4efc0634a601f36adfd6f0b68c3635877fe3e15057816c",
+      "size_bytes": 31375,
       "symlink": false
     }
   },

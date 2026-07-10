@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .source_contract import inspect_artifact_source
+
 NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION = "hfr.next_iteration_schedule.v1"
 
 
@@ -152,10 +154,10 @@ def write_next_iteration_schedule(path: str | Path, schedule: dict[str, Any]) ->
 
 
 def _artifact_ref(path: Path, role: str, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
-    payload = _read_json(path)
-    exists = path.exists() and path.is_file()
     display_path, replayable = _source_display_path(path, output_path, preserve_paths)
-    public_exists = exists and replayable
+    source = inspect_artifact_source(path, role) if replayable else {"payload": {}, "ready": False}
+    public_exists = replayable and source.get("ready") is True
+    payload = source["payload"] if public_exists and isinstance(source.get("payload"), dict) else {}
     ref: dict[str, Any] = {
         "role": role,
         "path": display_path,
@@ -237,14 +239,6 @@ def _default_next_iteration_id(latest_iteration_id: str) -> str:
 
 def _ref_matches(ref: dict[str, Any], schema_version: str) -> bool:
     return ref.get("exists") is True and ref.get("schema_version") == schema_version and ref.get("passed") is True
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

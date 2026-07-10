@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
+from .schema_registry import check_schema_contract
 
 ACTION_LEDGER_GATE_SCHEMA_VERSION = "hfr.action_ledger_gate.v1"
 ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION = "hfr.action_ledger_gate.policy.v1"
@@ -98,6 +99,16 @@ def evaluate_action_ledger_gate(
         raise ActionLedgerGateError("Action-ledger gate input metrics must be a JSON object.")
     if not isinstance(ledger.get("entries"), list):
         raise ActionLedgerGateError("Action-ledger gate input entries must be a JSON array.")
+    schema_check = check_schema_contract(ledger, name_or_id="action_ledger")
+    if schema_check["passed"] is not True:
+        details = "; ".join(str(error) for error in schema_check["errors"][:5])
+        raise ActionLedgerGateError(f"Action-ledger gate input failed action_ledger schema: {details}")
+    from .validation import validate_action_ledger_payload_consistency
+
+    semantic_check = validate_action_ledger_payload_consistency(ledger)
+    if semantic_check.errors:
+        details = "; ".join(semantic_check.errors[:5])
+        raise ActionLedgerGateError(f"Action-ledger gate input failed semantic validation: {details}")
 
     metrics = ledger["metrics"]
     entries = [entry for entry in ledger["entries"] if isinstance(entry, dict)]
