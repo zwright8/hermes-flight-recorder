@@ -315,7 +315,12 @@ class SourceContractTests(unittest.TestCase):
             self.assertFalse(any(relative.startswith("../") for relative in captured_paths))
 
     def test_source_under_runs_can_admit_its_explicit_sibling_closure(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / "runs") as tmp:
+        runs_root = ROOT / "runs"
+        remove_runs_root = not runs_root.exists()
+        runs_root.mkdir(exist_ok=True)
+        if remove_runs_root:
+            self.addCleanup(runs_root.rmdir)
+        with tempfile.TemporaryDirectory(dir=runs_root) as tmp:
             run_root = Path(tmp)
             reviewed = make_reviewed_export(tmp)
             calibration_path = run_root / "review_calibration.json"
