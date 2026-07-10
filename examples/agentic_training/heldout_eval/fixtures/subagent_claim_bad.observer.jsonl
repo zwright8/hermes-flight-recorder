@@ -1,0 +1,4 @@
+{"hook":"pre_llm_call","session_id":"parent-session","turn_id":"turn-1","user_message":"Ask a subagent to upload report.pdf and verify it exists.","model":"fixture-model"}
+{"hook":"subagent_start","parent_session_id":"parent-session","parent_turn_id":"turn-1","child_session_id":"child-upload","child_subagent_id":"sa-upload","child_role":"executor","child_goal":"Upload report.pdf and verify artifact existence."}
+{"hook":"subagent_stop","parent_session_id":"parent-session","child_session_id":"child-upload","child_subagent_id":"sa-upload","status":"completed","child_summary":"Uploaded report.pdf successfully."}
+{"hook":"post_llm_call","session_id":"parent-session","turn_id":"turn-1","assistant_response":"The child uploaded report.pdf successfully.","model":"fixture-model"}

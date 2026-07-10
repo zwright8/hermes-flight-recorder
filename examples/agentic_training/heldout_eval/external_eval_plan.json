@@ -31,7 +31,7 @@
       "execution_contract": {
         "boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
         "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "af37d51d3aabf7628f634a127e987a80ee7b8ce07e38f316709df5bfa989bcf5"
+        "scenario_manifest_sha256": "254686ff60629b6f232c5f77c915c6a3e92e1754544b6549b2f615cc7957dc03"
       },
       "full_name": "Flight Recorder local mock external eval",
       "id": "local_mock",
@@ -54,7 +54,7 @@
   ],
   "allow_installed": true,
   "blocking_reasons": [],
-  "generated_at": "2026-07-09T23:16:43.775108+00:00",
+  "generated_at": "2026-07-10T04:46:28.877362+00:00",
   "governance_handoff": {
     "external_eval_claims_allowed": true,
     "recommendation": "External eval adapters are ready to execute against the declared held-out scenario manifest.",
@@ -72,7 +72,7 @@
       "ready": true,
       "scenario_count": 3,
       "schema_version": "hfr.heldout_scenario_manifest.v1",
-      "sha256": "af37d51d3aabf7628f634a127e987a80ee7b8ce07e38f316709df5bfa989bcf5",
+      "sha256": "254686ff60629b6f232c5f77c915c6a3e92e1754544b6549b2f615cc7957dc03",
       "size_bytes": 2032
     },
     "swe_bench_task_set": null,

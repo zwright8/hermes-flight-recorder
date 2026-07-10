@@ -293,7 +293,7 @@ class SourceContractTests(unittest.TestCase):
                 self.assertFalse(any(relative.startswith(".omx/") for relative in captured_paths))
                 self.assertFalse(any("__pycache__" in Path(relative).parts for relative in captured_paths))
 
-    def test_fixture_nested_refs_expand_only_to_fixture_root(self):
+    def test_fixture_nested_refs_expand_only_to_examples_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             copy_valid_loop_artifacts(root)
@@ -309,9 +309,9 @@ class SourceContractTests(unittest.TestCase):
                 source["payload"],
             )
             self.assertIsNotNone(snapshot)
-            self.assertEqual(snapshot.boundary_path, fixture_root)
+            self.assertEqual(snapshot.boundary_path, fixture_root / "examples")
             captured_paths = {relative for relative, _attestation in snapshot.tree.files}
-            self.assertIn("examples/promotion_policy.demo.json", captured_paths)
+            self.assertIn("promotion_policy.demo.json", captured_paths)
             self.assertFalse(any(relative.startswith("../") for relative in captured_paths))
 
     def test_source_under_runs_can_admit_its_explicit_sibling_closure(self):

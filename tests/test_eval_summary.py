@@ -21,6 +21,172 @@ def run_cli(args):
 
 
 class EvalSummaryTests(unittest.TestCase):
+    def test_eval_summary_accepts_helper_suite_with_semantic_source_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+
+            self.assertEqual(run_cli(["validate", "--suite-summary", str(suite), "--strict"]), 0)
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
+                0,
+            )
+            self.assertTrue(check_schema_file(out)["passed"])
+
+            arm = _read_json(out)["arms"][0]
+            self.assertIsNone(arm["validation"])
+            self.assertTrue(arm["source_validation"]["passed"])
+            self.assertEqual(arm["source_validation"]["error_count"], 0)
+            self.assertEqual(arm["source_validation"]["warning_count"], 0)
+
+    def test_eval_summary_preserves_and_blocks_recorded_suite_validation_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            payload = _read_json(suite)
+            payload["validation"] = {
+                "passed": False,
+                "target_count": 1,
+                "error_count": 1,
+                "warning_count": 0,
+                "targets": [{"passed": False}],
+            }
+            suite.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            out = root / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertTrue(check_schema_file(out)["passed"])
+            arm = summary["arms"][0]
+            self.assertFalse(summary["governance_ready"])
+            self.assertEqual(
+                arm["validation"],
+                {"passed": False, "target_count": 1, "error_count": 1, "warning_count": 0},
+            )
+            self.assertTrue(arm["source_validation"]["passed"])
+            self.assertIn("suite_summary_validation_failed", arm["blocking_reasons"])
+
+    def test_eval_summary_treats_source_validation_warnings_as_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            absolute_scenario = root / "absolute" / "email_reply_completion.json"
+            suite = _suite_summary(
+                root / "candidate_suite.json",
+                ["email_reply_completion"],
+                run_overrides=[{"scenario_path": str(absolute_scenario)}],
+            )
+            out = root / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            arm = _read_json(out)["arms"][0]
+            self.assertIsNone(arm["validation"])
+            self.assertFalse(arm["source_validation"]["passed"])
+            self.assertEqual(arm["source_validation"]["error_count"], 0)
+            self.assertGreater(arm["source_validation"]["warning_count"], 0)
+            self.assertIn("suite_summary_semantic_validation_failed", arm["blocking_reasons"])
+
+    def test_eval_summary_blocks_missing_scenario_and_trace_sources(self):
+        for field_name in ("scenario_path", "trace_path"):
+            with self.subTest(field_name=field_name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+                payload = _read_json(suite)
+                source_path = root / payload["runs"][0][field_name]
+                self.assertTrue(source_path.is_file())
+                source_path.unlink()
+                out = root / "eval_summary.json"
+
+                code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+                self.assertEqual(code, 1)
+                arm = _read_json(out)["arms"][0]
+                self.assertFalse(arm["source_validation"]["passed"])
+                self.assertGreater(arm["source_validation"]["error_count"], 0)
+                self.assertIn("suite_summary_semantic_validation_failed", arm["blocking_reasons"])
+
+    def test_validate_eval_summary_rejects_removed_recorded_validation_blocker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            payload = _read_json(suite)
+            payload["validation"] = {
+                "passed": False,
+                "target_count": 1,
+                "error_count": 1,
+                "warning_count": 0,
+            }
+            suite.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
+                1,
+            )
+            summary = _read_json(out)
+            summary["arms"][0]["blocking_reasons"] = []
+            summary["risks"] = []
+            summary["passed"] = True
+            summary["governance_ready"] = True
+            summary["conclusion"] = {
+                "status": "ready",
+                "recommendation": "approve",
+                "risk_count": 0,
+            }
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error for target in _read_json(validation)["targets"] for error in target["errors"]
+            )
+            self.assertIn("blocking_reasons", errors)
+
+    def test_eval_summary_blocks_suite_with_missing_referenced_run_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            missing_report = root / "runs" / "email_reply_completion" / "report.html"
+            self.assertTrue(missing_report.is_file())
+            missing_report.unlink()
+            out = root / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            summary = _read_json(out)
+            self.assertFalse(summary["governance_ready"])
+            self.assertIn("suite_summary_semantic_validation_failed", summary["arms"][0]["blocking_reasons"])
+            self.assertIsNone(summary["arms"][0]["validation"])
+            self.assertFalse(summary["arms"][0]["source_validation"]["passed"])
+
+    def test_validate_eval_summary_replays_referenced_run_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
+                0,
+            )
+            report = root / "runs" / "email_reply_completion" / "report.html"
+            self.assertTrue(report.is_file())
+            report.unlink()
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error for target in _read_json(validation)["targets"] for error in target["errors"]
+            )
+            self.assertIn("does not match the referenced run_suite source", errors)
+
     def test_eval_summary_blocks_schema_valid_suite_with_forged_aggregates(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -176,6 +342,30 @@ class EvalSummaryTests(unittest.TestCase):
         self.assertIn("- Governance ready: yes", report)
         self.assertNotIn("dependencies_missing", report)
         self.assertEqual(run_cli(["validate", "--eval-summary", str(summary_path), "--strict"]), 0)
+
+    def test_committed_agentic_training_heldout_summaries_are_self_contained(self):
+        source = ROOT / "examples" / "agentic_training" / "heldout_eval"
+        original_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            portable = root / "heldout_eval"
+            shutil.copytree(source, portable)
+            try:
+                os.chdir(root)
+                code = run_cli(
+                    [
+                        "validate",
+                        "--suite-summary",
+                        str(portable / "baseline_suite_summary.json"),
+                        "--suite-summary",
+                        str(portable / "candidate_suite_summary.json"),
+                        "--strict",
+                    ]
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0)
 
     def test_eval_summary_allows_claims_for_identical_heldout_scenarios(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -948,17 +1138,9 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
             "trace_path": f"traces/{scenario_id}.jsonl",
             "run_dir": f"runs/{scenario_id}",
             "report": f"runs/{scenario_id}/report.html",
-            "report_sha256": "b" * 64,
-            "report_size_bytes": 1,
             "scorecard": f"runs/{scenario_id}/scorecard.json",
-            "scorecard_sha256": "c" * 64,
-            "scorecard_size_bytes": 1,
             "run_digest": f"runs/{scenario_id}/run_digest.json",
-            "run_digest_sha256": "d" * 64,
-            "run_digest_size_bytes": 1,
             "lineage": f"runs/{scenario_id}/artifact_lineage.json",
-            "lineage_sha256": "e" * 64,
-            "lineage_size_bytes": 1,
             "passed": True,
             "score": 100,
             "failed_rules": [],
@@ -966,7 +1148,91 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
         }
         for index, scenario_id in enumerate(scenario_ids)
     ]
-    for index, override in enumerate(run_overrides or []):
+    overrides = list(run_overrides or [])
+    source_path_fields = {
+        "scenario_path",
+        "trace_path",
+        "run_dir",
+        "report",
+        "scorecard",
+        "run_digest",
+        "lineage",
+    }
+    for index, override in enumerate(overrides):
+        if index < len(runs):
+            runs[index].update({key: value for key, value in override.items() if key in source_path_fields})
+    for run in runs:
+        scenario_id = str(run["scenario_id"])
+        scenario_content = (
+            json.dumps(
+                {
+                    "id": scenario_id,
+                    "policy": {},
+                    "prompt": f"Complete the {scenario_id} test task.",
+                    "title": scenario_id,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        trace_content = (
+            json.dumps(
+                {
+                    "hook": "pre_llm_call",
+                    "payload": {
+                        "model": "fixture-model",
+                        "session_id": f"{scenario_id}-session",
+                        "user_message": f"Complete the {scenario_id} test task.",
+                    },
+                },
+                sort_keys=True,
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "hook": "post_llm_call",
+                    "payload": {
+                        "assistant_response": "Task complete.",
+                        "session_id": f"{scenario_id}-session",
+                    },
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        for field_name, content in (
+            ("scenario_path", scenario_content),
+            ("trace_path", trace_content),
+        ):
+            artifact_path = path.parent / run[field_name]
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact_path.write_bytes(content)
+            run[f"{field_name.removesuffix('_path')}_sha256"] = hashlib.sha256(content).hexdigest()
+        scenario_path = path.parent / run["scenario_path"]
+        trace_path = path.parent / run["trace_path"]
+        run_dir = path.parent / run["run_dir"]
+        code = run_cli(
+            [
+                "run",
+                "--scenario",
+                str(scenario_path),
+                "--trace",
+                str(trace_path),
+                "--format",
+                "observer_jsonl",
+                "--out",
+                str(run_dir),
+            ]
+        )
+        if code != 0:
+            raise AssertionError(f"failed to generate semantic run fixture for {scenario_id}: exit {code}")
+        for field_name in ("report", "scorecard", "run_digest", "lineage"):
+            artifact_path = path.parent / run[field_name]
+            content = artifact_path.read_bytes()
+            run[f"{field_name}_sha256"] = hashlib.sha256(content).hexdigest()
+            run[f"{field_name}_size_bytes"] = len(content)
+    for index, override in enumerate(overrides):
         if index < len(runs):
             runs[index].update(override)
     payload = {

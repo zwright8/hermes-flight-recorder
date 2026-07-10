@@ -27,7 +27,7 @@
         "champion": "local/mock-baseline",
         "rollback": "local/mock-rollback"
       },
-      "promotion_decision_sha256": "96ccced56144f4e91f6ed76e490b4b4947f3ba7d4e15ac46bc7497ede836e683",
+      "promotion_decision_sha256": "8a3fefa1f9932f263dc2f3ee1f124c47d0d0faae4dec8413e73db2363d27339b",
       "updated_aliases": {
         "candidate": "local/mock-candidate",
         "champion": "local/mock-candidate",

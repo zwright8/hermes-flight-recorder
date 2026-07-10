@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -19,6 +21,33 @@ def run_cli(args):
 
 def write_jsonl(path: Path, rows):
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def run_single_suite(root: Path, scenario_name: str = "prompt_injection_good.json") -> Path:
+    runs = root / "runs"
+    code = run_cli(
+        [
+            "run-suite",
+            "--scenarios",
+            str(ROOT / "scenarios"),
+            "--pattern",
+            scenario_name,
+            "--out",
+            str(runs),
+            "--preserve-paths",
+        ]
+    )
+    if code != 0:
+        raise AssertionError(f"run-suite failed with exit code {code}")
+    return runs / "suite_summary.json"
 
 
 class ValidationTests(unittest.TestCase):
@@ -842,6 +871,292 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("suite_summary.runs[0].report_sha256 does not match the current file", errors)
             self.assertIn("suite_summary.runs[0].scorecard_size_bytes does not match the current file", errors)
+
+    def test_validate_suite_summary_does_not_resolve_relative_inputs_from_process_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            shadow_dir = root / "cwd-shadow"
+            shadow_dir.mkdir()
+            shadow_scenario = shadow_dir / "scenario.json"
+            shadow_scenario.write_bytes((ROOT / "scenarios" / "prompt_injection_good.json").read_bytes())
+            suite["runs"][0]["scenario_path"] = shadow_scenario.name
+            suite["runs"][0]["scenario_sha256"] = sha256_file(shadow_scenario)
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation_path = root / "validation.json"
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(shadow_dir)
+                code = run_cli(
+                    [
+                        "validate",
+                        "--suite-summary",
+                        str(suite_path),
+                        "--out",
+                        str(validation_path),
+                    ]
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].scenario_path must resolve to an existing file", errors)
+
+    def test_validate_suite_summary_rejects_missing_or_tampered_run_inputs(self):
+        cases = (
+            ("scenario_path", "scenario_sha256", "missing"),
+            ("scenario_path", "scenario_sha256", "tampered"),
+            ("trace_path", "trace_sha256", "missing"),
+            ("trace_path", "trace_sha256", "tampered"),
+        )
+        for path_field, sha_field, mode in cases:
+            with self.subTest(path_field=path_field, mode=mode), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite_path = run_single_suite(root)
+                suite = json.loads(suite_path.read_text(encoding="utf-8"))
+                row = suite["runs"][0]
+                original_path = Path(row[path_field])
+                local_path = suite_path.parent / f"{path_field}.source"
+                if mode == "missing":
+                    row[path_field] = local_path.name
+                else:
+                    local_path.write_bytes(original_path.read_bytes())
+                    row[path_field] = local_path.name
+                    local_path.write_bytes(local_path.read_bytes() + b"\n")
+                suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                validation_path = root / "validation.json"
+
+                code = run_cli(
+                    [
+                        "validate",
+                        "--suite-summary",
+                        str(suite_path),
+                        "--out",
+                        str(validation_path),
+                    ]
+                )
+
+                self.assertEqual(code, 1)
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                expected = (
+                    f"suite_summary.runs[0].{path_field} must resolve to an existing file"
+                    if mode == "missing"
+                    else f"suite_summary.runs[0].{sha_field} does not match the current file"
+                )
+                self.assertIn(expected, errors)
+
+    def test_validate_suite_summary_rejects_symlinked_run_inputs(self):
+        for path_field in ("scenario_path", "trace_path"):
+            with self.subTest(path_field=path_field), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite_path = run_single_suite(root)
+                suite = json.loads(suite_path.read_text(encoding="utf-8"))
+                row = suite["runs"][0]
+                linked_input = suite_path.parent / f"linked-{path_field}"
+                try:
+                    linked_input.symlink_to(Path(row[path_field]))
+                except (NotImplementedError, OSError) as exc:
+                    self.skipTest(f"symlink unavailable: {exc}")
+                row[path_field] = linked_input.name
+                suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                validation_path = root / "validation.json"
+
+                code = run_cli(
+                    ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+                )
+
+                self.assertEqual(code, 1)
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                self.assertIn(
+                    f"suite_summary.runs[0].{path_field} must resolve to a regular non-symlink file",
+                    errors,
+                )
+
+    def test_validate_suite_summary_binds_input_hashes_to_run_lineage(self):
+        cases = (
+            ("scenario_path", "scenario_sha256", "scenario"),
+            ("trace_path", "trace_sha256", "source_trace"),
+        )
+        for path_field, sha_field, lineage_name in cases:
+            with self.subTest(path_field=path_field), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite_path = run_single_suite(root)
+                suite = json.loads(suite_path.read_text(encoding="utf-8"))
+                row = suite["runs"][0]
+                local_input = suite_path.parent / f"changed-{path_field}"
+                local_input.write_bytes(Path(row[path_field]).read_bytes() + b"\n")
+                row[path_field] = local_input.name
+                row[sha_field] = sha256_file(local_input)
+                suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                validation_path = root / "validation.json"
+
+                code = run_cli(
+                    ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+                )
+
+                self.assertEqual(code, 1)
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                self.assertIn(
+                    f"suite_summary.runs[0].{sha_field} must match run artifact_lineage.inputs.{lineage_name}.sha256",
+                    errors,
+                )
+
+    def test_validate_suite_summary_propagates_invalid_run_artifact_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            row = suite["runs"][0]
+            scorecard_path = Path(row["scorecard"])
+            scorecard_path.write_text("not-json\n", encoding="utf-8")
+            row["scorecard_sha256"] = sha256_file(scorecard_path)
+            row["scorecard_size_bytes"] = scorecard_path.stat().st_size
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation_path = root / "validation.json"
+
+            code = run_cli(
+                ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+            )
+
+            self.assertEqual(code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].run_dir: scorecard.json contains invalid JSON", errors)
+
+    def test_validate_suite_summary_reconciles_row_identity_and_outcome_with_run_scorecard(self):
+        mutations = {
+            "scenario_id": "forged-scenario-id",
+            "passed": False,
+            "score": 0,
+            "failed_rules": ["forged-rule"],
+            "critical_failures": ["forged-critical-rule"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            original = json.loads(suite_path.read_text(encoding="utf-8"))
+            validation_path = root / "validation.json"
+
+            for field_name, forged_value in mutations.items():
+                with self.subTest(field_name=field_name):
+                    suite = json.loads(json.dumps(original))
+                    suite["runs"][0][field_name] = forged_value
+                    suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                    code = run_cli(
+                        ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+                    )
+
+                    self.assertEqual(code, 1)
+                    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                    errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+                    self.assertIn(
+                        f"suite_summary.runs[0].{field_name} must match run scorecard",
+                        errors,
+                    )
+
+    def test_validate_suite_summary_requires_artifact_refs_to_belong_to_run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            row = suite["runs"][0]
+            outside_report = suite_path.parent / "outside-report.html"
+            outside_report.write_bytes(Path(row["report"]).read_bytes())
+            row["report"] = outside_report.name
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation_path = root / "validation.json"
+
+            code = run_cli(
+                ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+            )
+
+            self.assertEqual(code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].report must resolve to report.html inside run_dir", errors)
+
+    def test_validate_suite_summary_rejects_symlinked_run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            run_dir = Path(suite["runs"][0]["run_dir"])
+            linked_run = suite_path.parent / "linked-run"
+            try:
+                linked_run.symlink_to(run_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            suite["runs"][0]["run_dir"] = linked_run.name
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation_path = root / "validation.json"
+
+            code = run_cli(
+                ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+            )
+
+            self.assertEqual(code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].run_dir must resolve to a regular non-symlink directory", errors)
+
+    def test_validate_suite_summary_propagates_run_warnings_with_row_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root, "prompt_injection_bad.json")
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            regression_path = Path(suite["runs"][0]["run_dir"]) / "regression_scenario.json"
+            self.assertTrue(regression_path.is_file())
+            regression_path.unlink()
+            validation_path = root / "validation.json"
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(suite_path),
+                    "--strict",
+                    "--out",
+                    str(validation_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn(
+                "suite_summary.runs[0].run_dir: failing run is missing regression_scenario.json",
+                warnings,
+            )
+
+    def test_validate_suite_summary_keeps_redacted_run_refs_opaque(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = run_single_suite(root)
+            validation_path = root / "validation.json"
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            row = suite["runs"][0]
+            for field_name in ("scenario_path", "trace_path", "run_dir", "report", "scorecard", "run_digest", "lineage"):
+                row[field_name] = f"<redacted:{Path(row[field_name]).name}>"
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                ["validate", "--suite-summary", str(suite_path), "--out", str(validation_path)]
+            )
+            strict_code = run_cli(["validate", "--suite-summary", str(suite_path), "--strict"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("is redacted and could not be source-validated", warnings)
 
     def test_validate_rejects_symlinked_suite_summary_run_artifact_parent(self):
         with tempfile.TemporaryDirectory() as tmp:

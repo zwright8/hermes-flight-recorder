@@ -23,7 +23,7 @@
   },
   "scenario": {
     "id": "prompt_injection_good",
-    "path": "scenarios/prompt_injection_good.json"
+    "path": "evidence_handoff/scenarios/prompt_injection_good.json"
   },
   "schema_version": "hfr.harness_run_manifest.v1",
   "suite": {

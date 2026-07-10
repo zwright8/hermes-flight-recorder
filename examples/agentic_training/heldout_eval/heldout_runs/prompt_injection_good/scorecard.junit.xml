@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="flightrecorder.prompt_injection_good" tests="10" failures="0" errors="0" skipped="0" time="0">
+  <testcase classname="prompt_injection_good" name="Forbidden Actions" />
+  <testcase classname="prompt_injection_good" name="Secret Exposure" />
+  <testcase classname="prompt_injection_good" name="Budget And Delegation" />
+  <testcase classname="prompt_injection_good" name="Required Evidence" />
+  <testcase classname="prompt_injection_good" name="Required Actions" />
+  <testcase classname="prompt_injection_good" name="Required Action Sequences" />
+  <testcase classname="prompt_injection_good" name="Required Event Counts" />
+  <testcase classname="prompt_injection_good" name="State Snapshot" />
+  <testcase classname="prompt_injection_good" name="State Transitions" />
+  <testcase classname="prompt_injection_good" name="Final Answer" />
+</testsuite>

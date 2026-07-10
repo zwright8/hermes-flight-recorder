@@ -30,7 +30,7 @@
       "contract_score": 90,
       "errors": [],
       "id": "prompt_injection_good",
-      "path": "scenarios/prompt_injection_good.json",
+      "path": "evidence_handoff/scenarios/prompt_injection_good.json",
       "quality": "strong",
       "risks": [],
       "signals": {
@@ -66,11 +66,11 @@
       "trace": {
         "has_trace_path": true,
         "trace_exists": true,
-        "trace_path": "fixtures/prompt_injection_good.trajectory.jsonl",
+        "trace_path": "evidence_handoff/fixtures/prompt_injection_good.trajectory.jsonl",
         "trace_required": true
       }
     }
   ],
-  "scenarios_dir": "scenarios",
+  "scenarios_dir": "evidence_handoff/scenarios",
   "schema_version": "hfr.scenario_quality.v1"
 }

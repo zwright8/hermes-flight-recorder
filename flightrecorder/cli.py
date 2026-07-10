@@ -692,6 +692,11 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     if args.suite_manifest:
         scenario_paths = _scenario_paths_from_suite_manifest(scenario_paths, Path(args.suite_manifest))
     out_dir = Path(args.out)
+    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
+
+    def summary_ref(path: Path) -> str:
+        return _display_path_for_output_source(path, summary_path, args.preserve_paths)
+
     metadata = _metadata_options(args.metadata)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -724,26 +729,26 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "scenario_id": result["scenario"]["id"],
                     "scenario_title": result["scenario"].get("title", result["scenario"]["id"]),
                     "task_family": _task_family(str(result["scenario"]["id"])),
-                    "scenario_path": _display_path(scenario_path, args.preserve_paths),
+                    "scenario_path": summary_ref(scenario_path),
                     "scenario_sha256": _lineage_input_hash(result["lineage"], "scenario"),
-                    "trace_path": _display_path(result["trace_path"], args.preserve_paths),
+                    "trace_path": summary_ref(result["trace_path"]),
                     "trace_sha256": _lineage_input_hash(result["lineage"], "source_trace"),
                     "before_state_path": (
-                        _display_path(result["before_state_path"], args.preserve_paths)
+                        summary_ref(result["before_state_path"])
                         if result.get("before_state_path")
                         else None
                     ),
                     "before_state_sha256": _lineage_input_hash(result["lineage"], "source_before_state_snapshot"),
-                    "state_path": _display_path(result["state_path"], args.preserve_paths) if result.get("state_path") else None,
+                    "state_path": summary_ref(result["state_path"]) if result.get("state_path") else None,
                     "state_sha256": _lineage_input_hash(result["lineage"], "source_state_snapshot"),
-                    "run_dir": _display_path(run_dir, args.preserve_paths),
-                    "report": _display_path(result["paths"]["report"], args.preserve_paths),
+                    "run_dir": summary_ref(run_dir),
+                    "report": summary_ref(result["paths"]["report"]),
                     **_run_suite_artifact_fingerprint("report", result["paths"]["report"]),
-                    "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
+                    "scorecard": summary_ref(result["paths"]["scorecard"]),
                     **_run_suite_artifact_fingerprint("scorecard", result["paths"]["scorecard"]),
-                    "run_digest": _display_path(result["paths"]["run_digest"], args.preserve_paths),
+                    "run_digest": summary_ref(result["paths"]["run_digest"]),
                     **_run_suite_artifact_fingerprint("run_digest", result["paths"]["run_digest"]),
-                    "lineage": _display_path(result["paths"]["lineage"], args.preserve_paths),
+                    "lineage": summary_ref(result["paths"]["lineage"]),
                     **_run_suite_artifact_fingerprint("lineage", result["paths"]["lineage"]),
                     "passed": bool(scorecard["passed"]),
                     "score": scorecard["score"],
@@ -756,7 +761,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 f"{result['scenario']['id']} score={scorecard['score']} report={result['paths']['report']}"
             )
         except (AdapterError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
-            errors.append({"scenario_path": _display_path(scenario_path, args.preserve_paths), "error": str(exc)})
+            errors.append({"scenario_path": summary_ref(scenario_path), "error": str(exc)})
             print(f"ERROR {scenario_path}: {exc}")
 
     artifacts: dict[str, str] = {}
@@ -764,7 +769,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     if not args.no_index:
         completed_run_dirs = [out_dir / _safe_run_id(str(run["scenario_id"])) for run in runs]
         write_index(completed_run_dirs, index_path, artifacts_dir=out_dir)
-        artifacts["index"] = _display_path(index_path, args.preserve_paths)
+        artifacts["index"] = summary_ref(index_path)
 
     training_manifest: dict[str, Any] | None = None
     training_out = Path(args.training_export_out) if args.training_export_out else out_dir / "training_export"
@@ -779,17 +784,16 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 preserve_paths=args.preserve_paths,
                 metadata=metadata,
             )
-            artifacts["training_export"] = _display_path(training_out, args.preserve_paths)
+            artifacts["training_export"] = summary_ref(training_out)
         else:
             errors.append(
                 {
-                    "scenario_path": _display_path(Path(args.scenarios), args.preserve_paths),
+                    "scenario_path": summary_ref(Path(args.scenarios)),
                     "error": "Cannot export RL artifacts because no scenario runs completed.",
                 }
             )
 
     validation_path = Path(args.validation_out) if args.validation_out else out_dir / "validation.json"
-    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
     handoff_paths: dict[str, Path] = {}
     handoff_bundle: dict[str, Any] | None = None
     if args.evidence_handoff:
@@ -809,41 +813,42 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 preserve_paths=args.preserve_paths,
             )
             _write_json(handoff_paths["scenario_quality"], scenario_quality)
-            artifacts["scenario_quality"] = _display_path(handoff_paths["scenario_quality"], args.preserve_paths)
+            artifacts["scenario_quality"] = summary_ref(handoff_paths["scenario_quality"])
 
             evidence_coverage = build_evidence_coverage(out_dir, preserve_paths=args.preserve_paths)
             _write_json(handoff_paths["evidence_coverage"], evidence_coverage)
-            artifacts["evidence_coverage"] = _display_path(handoff_paths["evidence_coverage"], args.preserve_paths)
+            artifacts["evidence_coverage"] = summary_ref(handoff_paths["evidence_coverage"])
 
             trace_observability = build_trace_observability(out_dir, preserve_paths=args.preserve_paths)
             _write_json(handoff_paths["trace_observability"], trace_observability)
-            artifacts["trace_observability"] = _display_path(handoff_paths["trace_observability"], args.preserve_paths)
+            artifacts["trace_observability"] = summary_ref(handoff_paths["trace_observability"])
 
             repair_queue = build_repair_queue(out_dir, preserve_paths=args.preserve_paths, output_path=handoff_paths["repair_queue"])
             _write_json(handoff_paths["repair_queue"], repair_queue)
-            artifacts["repair_queue"] = _display_path(handoff_paths["repair_queue"], args.preserve_paths)
+            artifacts["repair_queue"] = summary_ref(handoff_paths["repair_queue"])
 
             harness_paths = _write_run_suite_harness_handoff(out_dir, runs, summary_path=summary_path)
             if harness_paths:
                 handoff_paths.update(harness_paths)
-                artifacts["harness_manifest"] = _display_path(harness_paths["harness_manifest"], args.preserve_paths)
-                artifacts["harness_result"] = _display_path(harness_paths["harness_result"], args.preserve_paths)
-            artifacts["evidence_bundle"] = _display_path(handoff_paths["evidence_bundle"], args.preserve_paths)
+                artifacts["harness_manifest"] = summary_ref(harness_paths["harness_manifest"])
+                artifacts["harness_result"] = summary_ref(harness_paths["harness_result"])
+            artifacts["evidence_bundle"] = summary_ref(handoff_paths["evidence_bundle"])
         else:
             errors.append(
                 {
-                    "scenario_path": _display_path(Path(args.scenarios), args.preserve_paths),
+                    "scenario_path": summary_ref(Path(args.scenarios)),
                     "error": "Cannot build evidence handoff because no scenario runs completed.",
                 }
             )
 
     validation_summary: dict[str, Any] | None = None
     if args.validate:
-        artifacts["validation"] = _display_path(validation_path, args.preserve_paths)
+        artifacts["validation"] = summary_ref(validation_path)
 
     summary = _run_suite_summary(
         scenarios_dir=Path(args.scenarios),
         out_dir=out_dir,
+        summary_path=summary_path,
         runs=runs,
         errors=errors,
         artifacts=artifacts,
@@ -880,6 +885,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     summary = _run_suite_summary(
         scenarios_dir=Path(args.scenarios),
         out_dir=out_dir,
+        summary_path=summary_path,
         runs=runs,
         errors=errors,
         artifacts=artifacts,
@@ -7068,6 +7074,7 @@ def _run_suite_summary(
     *,
     scenarios_dir: Path,
     out_dir: Path,
+    summary_path: Path,
     runs: list[dict[str, Any]],
     errors: list[dict[str, str]],
     artifacts: dict[str, str],
@@ -7080,8 +7087,8 @@ def _run_suite_summary(
     failed = len(runs) - passed
     summary: dict[str, Any] = {
         "schema_version": RUN_SUITE_SCHEMA_VERSION,
-        "scenarios_dir": _display_path(scenarios_dir, preserve_paths),
-        "out_dir": _display_path(out_dir, preserve_paths),
+        "scenarios_dir": _display_path_for_output_source(scenarios_dir, summary_path, preserve_paths),
+        "out_dir": _display_path_for_output_source(out_dir, summary_path, preserve_paths),
         "total": len(runs),
         "passed": passed,
         "failed": failed,

@@ -48,7 +48,7 @@
     {
       "exists": true,
       "name": "scenario",
-      "path": "scenarios/prompt_injection_good.json",
+      "path": "evidence_handoff/scenarios/prompt_injection_good.json",
       "role": "input",
       "sensitive": false,
       "sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
@@ -57,7 +57,7 @@
     {
       "exists": true,
       "name": "source_trace",
-      "path": "fixtures/prompt_injection_good.trajectory.jsonl",
+      "path": "evidence_handoff/fixtures/prompt_injection_good.trajectory.jsonl",
       "role": "input",
       "sensitive": false,
       "sha256": "a5cc1317cfbec6eef09509681dff7f971ab68426ce72ef03ed935246e2849373",
@@ -68,7 +68,7 @@
     {
       "exists": true,
       "name": "normalized_trace",
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/normalized_trace.json",
+      "path": "evidence_handoff/prompt_injection_good/normalized_trace.json",
       "role": "output",
       "sensitive": false,
       "sha256": "14db87bc48ecad02fa793e91ab88c750ae1e4e8f2e4ac5159026de1e5156e3eb",
@@ -77,7 +77,7 @@
     {
       "exists": true,
       "name": "scorecard",
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/scorecard.json",
+      "path": "evidence_handoff/prompt_injection_good/scorecard.json",
       "role": "output",
       "sensitive": false,
       "sha256": "bd538fa82d86c0d8fedbd49830cd133b099a94bac44daf175d724ce41cdf4cbf",
@@ -86,7 +86,7 @@
     {
       "exists": true,
       "name": "task_completion",
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/task_completion.json",
+      "path": "evidence_handoff/prompt_injection_good/task_completion.json",
       "role": "output",
       "sensitive": false,
       "sha256": "a47e28b5d463996479806d077824027681a5b635b9079c649c1a58d263e0f37f",
@@ -95,7 +95,7 @@
     {
       "exists": true,
       "name": "run_digest",
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/run_digest.json",
+      "path": "evidence_handoff/prompt_injection_good/run_digest.json",
       "role": "output",
       "sensitive": false,
       "sha256": "e425812713a90a3940e085288edf6afd3552a7027f25c67046581ac4b8241abb",
@@ -104,11 +104,11 @@
     {
       "exists": true,
       "name": "report",
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good/report.html",
+      "path": "evidence_handoff/prompt_injection_good/report.html",
       "role": "output",
       "sensitive": false,
-      "sha256": "dc78d27b6780f20fdd954f05cf47835d948ebba95812203972fc4b1c919a36f8",
-      "size_bytes": 9527
+      "sha256": "30be1c5ad2a9be7071eabcb1d860468ab72dbd41ab4d9c608926891d3a24c56e",
+      "size_bytes": 9544
     }
   ],
   "replay": {
@@ -118,23 +118,23 @@
       "flightrecorder",
       "run",
       "--scenario",
-      "scenarios/prompt_injection_good.json",
+      "evidence_handoff/scenarios/prompt_injection_good.json",
       "--trace",
-      "fixtures/prompt_injection_good.trajectory.jsonl",
+      "evidence_handoff/fixtures/prompt_injection_good.trajectory.jsonl",
       "--out",
-      "examples/agentic_training/evidence_handoff/prompt_injection_good"
+      "evidence_handoff/prompt_injection_good"
     ],
-    "command": "python -m flightrecorder run --scenario scenarios/prompt_injection_good.json --trace fixtures/prompt_injection_good.trajectory.jsonl --out examples/agentic_training/evidence_handoff/prompt_injection_good",
+    "command": "python -m flightrecorder run --scenario evidence_handoff/scenarios/prompt_injection_good.json --trace evidence_handoff/fixtures/prompt_injection_good.trajectory.jsonl --out evidence_handoff/prompt_injection_good",
     "input_fingerprints": {
       "scenario": {
         "exists": true,
-        "path": "scenarios/prompt_injection_good.json",
+        "path": "evidence_handoff/scenarios/prompt_injection_good.json",
         "sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
         "size_bytes": 939
       },
       "source_trace": {
         "exists": true,
-        "path": "fixtures/prompt_injection_good.trajectory.jsonl",
+        "path": "evidence_handoff/fixtures/prompt_injection_good.trajectory.jsonl",
         "sha256": "a5cc1317cfbec6eef09509681dff7f971ab68426ce72ef03ed935246e2849373",
         "size_bytes": 1071
       }

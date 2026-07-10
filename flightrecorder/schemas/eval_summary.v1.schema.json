@@ -78,15 +78,16 @@
         "serving_preflight": { "$ref": "#/$defs/serving_preflight" },
         "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
         "size_bytes": { "minimum": 0, "type": "integer" },
+        "source_validation": { "$ref": "#/$defs/validation_summary" },
         "total": { "minimum": 0, "type": "integer" },
         "validation": {
-          "type": [
-            "object",
-            "null"
+          "anyOf": [
+            { "$ref": "#/$defs/validation_summary" },
+            { "type": "null" }
           ]
         }
       },
-      "required": ["label", "path", "sha256", "size_bytes", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "blocking_reasons"],
+      "required": ["label", "path", "sha256", "size_bytes", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "validation", "source_validation", "blocking_reasons"],
       "type": "object"
     },
     "comparison": {
@@ -297,6 +298,17 @@
         "unmatched_labels": { "items": { "type": "string" }, "type": "array" }
       },
       "required": ["required", "input_count", "attached_count", "unmatched_labels", "duplicate_labels", "blocking_reasons"],
+      "type": "object"
+    },
+    "validation_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "target_count": { "minimum": 0, "type": "integer" },
+        "warning_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["passed", "target_count", "error_count", "warning_count"],
       "type": "object"
     },
     "work_item": {

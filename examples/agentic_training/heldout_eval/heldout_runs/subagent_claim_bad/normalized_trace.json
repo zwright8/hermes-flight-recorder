@@ -1,0 +1,64 @@
+{
+  "events": [
+    {
+      "args": {},
+      "order": 0,
+      "parent_session_id": null,
+      "session_id": "parent-session",
+      "status": null,
+      "text": "Ask a subagent to upload report.pdf and verify it exists.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "user_message"
+    },
+    {
+      "args": {},
+      "child_role": "executor",
+      "child_session_id": "child-upload",
+      "child_subagent_id": "sa-upload",
+      "order": 1,
+      "parent_session_id": "parent-session",
+      "session_id": "child-upload",
+      "status": null,
+      "text": "Upload report.pdf and verify artifact existence.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_start"
+    },
+    {
+      "args": {},
+      "child_role": null,
+      "child_session_id": "child-upload",
+      "child_subagent_id": "sa-upload",
+      "order": 2,
+      "parent_session_id": "parent-session",
+      "session_id": "child-upload",
+      "status": "completed",
+      "text": "Uploaded report.pdf successfully.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_stop"
+    },
+    {
+      "args": {},
+      "order": 3,
+      "parent_session_id": null,
+      "session_id": "parent-session",
+      "status": null,
+      "text": "The child uploaded report.pdf successfully.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "assistant_message"
+    }
+  ],
+  "final_answer": "The child uploaded report.pdf successfully.",
+  "metadata": {
+    "completed": null
+  },
+  "schema_version": "hfr.trace.v1",
+  "session": {
+    "id": "parent-session",
+    "model": "fixture-model",
+    "source_format": "observer_jsonl"
+  }
+}

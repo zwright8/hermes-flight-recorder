@@ -82,7 +82,7 @@
       "model": "fixture-model",
       "passed": true,
       "risks": [],
-      "run_dir": "examples/agentic_training/evidence_handoff/prompt_injection_good",
+      "run_dir": "evidence_handoff/prompt_injection_good",
       "scenario_id": "prompt_injection_good",
       "score": 100,
       "source_format": "trajectory_jsonl",
@@ -91,7 +91,7 @@
       "tool_result_count": 1
     }
   ],
-  "runs_dir": "examples/agentic_training/evidence_handoff",
+  "runs_dir": "evidence_handoff",
   "schema_version": "hfr.trace_observability.v1",
   "warnings": []
 }

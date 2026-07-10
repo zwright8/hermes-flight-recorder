@@ -15415,9 +15415,6 @@ def _validate_suite_summary(
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
         for field_name in ("scenario_path", "trace_path", "run_dir", "report", "scorecard", "run_digest", "lineage"):
             _warn_absolute_public_path(target, f"suite_summary.runs[{index}].{field_name}", run.get(field_name))
-        if validate_sources:
-            for field_name in ("report", "scorecard", "run_digest", "lineage"):
-                _validate_suite_run_artifact_ref(run, field_name, target, f"suite_summary.runs[{index}]", source_path)
         if not isinstance(run.get("passed"), bool):
             target.errors.append(f"suite_summary.runs[{index}].passed must be a boolean.")
         if not _is_int_between(run.get("score"), 0, 100):
@@ -15429,6 +15426,13 @@ def _validate_suite_summary(
         for field_name in ("scenario_sha256", "trace_sha256"):
             if field_name in run and run.get(field_name) is not None and not _is_sha256(run.get(field_name)):
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a SHA-256 hex string or null.")
+        if validate_sources:
+            label = f"suite_summary.runs[{index}]"
+            _validate_suite_run_input_ref(run, "scenario_path", "scenario_sha256", target, label, source_path)
+            _validate_suite_run_input_ref(run, "trace_path", "trace_sha256", target, label, source_path)
+            for field_name in ("report", "scorecard", "run_digest", "lineage"):
+                _validate_suite_run_artifact_ref(run, field_name, target, label, source_path)
+            _validate_suite_run_dir(run, target, label, source_path)
 
     metrics = summary.get("metrics")
     if not isinstance(metrics, dict):
@@ -15452,6 +15456,38 @@ def _validate_suite_summary(
     )
 
 
+def _validate_suite_run_input_ref(
+    run: dict[str, Any],
+    path_field: str,
+    sha_field: str,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+) -> None:
+    raw_path = run.get(path_field)
+    if not isinstance(raw_path, str) or not raw_path:
+        return
+    if _is_redacted_placeholder(raw_path):
+        target.warnings.append(f"{label}.{path_field} is redacted and could not be source-validated.")
+        return
+    expected_sha = run.get(sha_field)
+    if not _is_sha256(expected_sha):
+        if expected_sha is None:
+            target.errors.append(f"{label}.{sha_field} must be a SHA-256 hex string for an unredacted input.")
+        return
+    path = _resolve_suite_summary_ref_path(raw_path, source_path)
+    if path is None:
+        return
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label}.{path_field} must resolve to a regular non-symlink file.")
+        return
+    if not path.is_file():
+        target.errors.append(f"{label}.{path_field} must resolve to an existing file.")
+        return
+    if _sha256(path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+
+
 def _validate_suite_run_artifact_ref(
     run: dict[str, Any],
     field_name: str,
@@ -15461,6 +15497,9 @@ def _validate_suite_run_artifact_ref(
 ) -> None:
     sha_field = f"{field_name}_sha256"
     size_field = f"{field_name}_size_bytes"
+    raw_path = run.get(field_name)
+    if isinstance(raw_path, str) and _is_redacted_placeholder(raw_path):
+        target.warnings.append(f"{label}.{field_name} is redacted and could not be source-validated.")
     expected_sha = run.get(sha_field)
     expected_size = run.get(size_field)
     if not _is_sha256(expected_sha):
@@ -15482,16 +15521,127 @@ def _validate_suite_run_artifact_ref(
         target.errors.append(f"{label}.{sha_field} does not match the current file.")
 
 
+def _validate_suite_run_dir(
+    run: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+) -> None:
+    raw_run_dir = run.get("run_dir")
+    if isinstance(raw_run_dir, str) and _is_redacted_placeholder(raw_run_dir):
+        target.warnings.append(f"{label}.run_dir is redacted and could not be source-validated.")
+        return
+    run_dir = _resolve_suite_summary_ref_path(run.get("run_dir"), source_path)
+    if run_dir is None:
+        return
+    if _path_has_symlink_component(run_dir, include_leaf=True):
+        target.errors.append(f"{label}.run_dir must resolve to a regular non-symlink directory.")
+        return
+    if not run_dir.is_dir():
+        target.errors.append(f"{label}.run_dir must resolve to an existing directory.")
+        return
+
+    expected_artifacts = {
+        "report": "report.html",
+        "scorecard": "scorecard.json",
+        "run_digest": "run_digest.json",
+        "lineage": "artifact_lineage.json",
+    }
+    for field_name, basename in expected_artifacts.items():
+        artifact_path = _resolve_suite_summary_ref_path(run.get(field_name), source_path)
+        if artifact_path is None:
+            continue
+        expected_path = run_dir / basename
+        try:
+            matches = artifact_path.resolve(strict=False) == expected_path.resolve(strict=False)
+        except OSError:
+            matches = False
+        if not matches:
+            target.errors.append(f"{label}.{field_name} must resolve to {basename} inside run_dir.")
+
+    nested = validate_run_dir(run_dir)
+    target.errors.extend(f"{label}.run_dir: {error}" for error in nested.errors)
+    target.warnings.extend(f"{label}.run_dir: {warning}" for warning in nested.warnings)
+    _validate_suite_run_scorecard_consistency(run, run_dir, target, label)
+    _validate_suite_run_input_lineage_consistency(run, run_dir, target, label)
+
+
+def _validate_suite_run_scorecard_consistency(
+    run: dict[str, Any],
+    run_dir: Path,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    scorecard_path = run_dir / "scorecard.json"
+    if _path_has_symlink_component(scorecard_path, include_leaf=True) or not scorecard_path.is_file():
+        return
+    try:
+        scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return
+    if not isinstance(scorecard, dict):
+        return
+    failed_rules = [
+        str(rule.get("id"))
+        for rule in scorecard.get("rules", [])
+        if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
+    ]
+    expected_fields = {
+        "scenario_id": scorecard.get("scenario_id"),
+        "passed": scorecard.get("passed"),
+        "score": scorecard.get("score"),
+        "failed_rules": failed_rules,
+        "critical_failures": scorecard.get("critical_failures"),
+    }
+    for field_name, expected in expected_fields.items():
+        if run.get(field_name) != expected:
+            target.errors.append(
+                f"{label}.{field_name} must match run scorecard.{field_name}: "
+                f"expected {expected!r}, got {run.get(field_name)!r}."
+            )
+
+
+def _validate_suite_run_input_lineage_consistency(
+    run: dict[str, Any],
+    run_dir: Path,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    lineage_path = run_dir / "artifact_lineage.json"
+    if _path_has_symlink_component(lineage_path, include_leaf=True) or not lineage_path.is_file():
+        return
+    try:
+        lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return
+    if not isinstance(lineage, dict) or not isinstance(lineage.get("inputs"), list):
+        return
+    input_hashes = {
+        record.get("name"): record.get("sha256")
+        for record in lineage["inputs"]
+        if isinstance(record, dict) and isinstance(record.get("name"), str)
+    }
+    for sha_field, lineage_name in (
+        ("scenario_sha256", "scenario"),
+        ("trace_sha256", "source_trace"),
+    ):
+        expected = input_hashes.get(lineage_name)
+        if _is_sha256(run.get(sha_field)) and _is_sha256(expected) and run[sha_field] != expected:
+            target.errors.append(
+                f"{label}.{sha_field} must match run artifact_lineage.inputs.{lineage_name}.sha256: "
+                f"expected {expected!r}, got {run.get(sha_field)!r}."
+            )
+
+
 def _resolve_suite_summary_ref_path(value: Any, source_path: Path | None) -> Path | None:
-    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+    if not isinstance(value, str) or not value or _is_redacted_placeholder(value):
         return None
     path = Path(value)
     if path.is_absolute():
         return path
-    candidates = [path]
     if source_path is not None:
-        candidates.append(source_path.parent / path)
-    return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+        return source_path.parent / path
+    return path
 
 
 _SERVING_PROFILE_KEYS = {
@@ -16426,6 +16576,7 @@ _EVAL_SUMMARY_ARM_KEYS = {
     "operational_metrics",
     "serving_preflight",
     "validation",
+    "source_validation",
     "blocking_reasons",
 }
 _EVAL_SUMMARY_OPERATIONAL_KEYS = {"cost", "latency", "tokens", "task_completion"}
@@ -16790,13 +16941,16 @@ def _validate_eval_summary_suite_source_schema(
     if schema_check.get("passed") is not True:
         target.errors.append(f"{label}.path must satisfy the run_suite schema.")
         return
+    serving_preflight = arm.get("serving_preflight")
+    if not isinstance(serving_preflight, dict):
+        serving_preflight = None
     try:
         expected = _suite_arm(
             LabeledPath(label=str(arm.get("label") or ""), path=suite_path),
             preserve_paths=True,
             display_base_dir=None,
-            serving_preflight=None,
-            require_serving_preflight=False,
+            serving_preflight=serving_preflight,
+            require_serving_preflight=bool(serving_preflight and serving_preflight.get("required") is True),
         )
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
         target.errors.append(f"{label}.path could not be replayed as a run_suite source: {exc}")
@@ -16815,6 +16969,8 @@ def _validate_eval_summary_suite_source_schema(
         "critical_failure_counts",
         "operational_metrics",
         "validation",
+        "source_validation",
+        "blocking_reasons",
     )
     mismatched = [field for field in derived_fields if arm.get(field) != expected.get(field)]
     if mismatched:

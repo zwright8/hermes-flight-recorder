@@ -150,18 +150,19 @@ def _suite_arm(
     scenario_ids = sorted({str(run.get("scenario_id")) for run in runs if isinstance(run, dict) and run.get("scenario_id")})
     duplicate_count = len([run for run in runs if isinstance(run, dict) and run.get("scenario_id")]) - len(scenario_ids)
     metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
-    validation = summary.get("validation") if isinstance(summary.get("validation"), dict) else None
+    recorded_validation = _validation_summary(summary.get("validation"))
+    source_validation = _suite_summary_validation(spec.path)
     blocking_reasons: list[str] = []
     schema_check = check_schema_contract(summary, name_or_id="run_suite")
     if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION or schema_check["passed"] is not True:
         blocking_reasons.append("invalid_suite_summary_schema")
-    elif not _suite_summary_semantics_valid(summary):
+    elif source_validation["passed"] is not True:
         blocking_reasons.append("suite_summary_semantic_validation_failed")
     if not scenario_ids:
         blocking_reasons.append("empty_suite_summary")
     if int(summary.get("error_count", 0) or 0) > 0:
         blocking_reasons.append("suite_summary_errors")
-    if validation is not None and validation.get("passed") is not True:
+    if recorded_validation is not None and recorded_validation.get("passed") is not True:
         blocking_reasons.append("suite_summary_validation_failed")
     if duplicate_count > 0:
         blocking_reasons.append("duplicate_scenario_ids")
@@ -185,19 +186,30 @@ def _suite_arm(
         "critical_failure_counts": _count_rows(metrics.get("critical_failure_counts")),
         "operational_metrics": operational_metrics,
         "serving_preflight": serving,
-        "validation": _validation_summary(validation),
+        "validation": recorded_validation,
+        "source_validation": source_validation,
         "blocking_reasons": blocking_reasons,
     }
 
 
-def _suite_summary_semantics_valid(summary: dict[str, Any]) -> bool:
+def _suite_summary_validation(path: Path) -> dict[str, Any]:
     try:
-        from .validation import validate_suite_summary_payload_consistency
+        from .validation import validate_suite_summary
 
-        result = validate_suite_summary_payload_consistency(summary)
-    except (ImportError, IndexError, KeyError, TypeError, ValueError):
-        return False
-    return not result.errors
+        result = validate_suite_summary(path)
+    except (ImportError, IndexError, KeyError, OSError, TypeError, UnicodeError, ValueError):
+        return {
+            "passed": False,
+            "target_count": 1,
+            "error_count": 1,
+            "warning_count": 0,
+        }
+    return {
+        "passed": not result.errors and not result.warnings,
+        "target_count": 1,
+        "error_count": len(result.errors),
+        "warning_count": len(result.warnings),
+    }
 
 
 def _serving_preflight_inputs(

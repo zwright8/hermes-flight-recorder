@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 import threading
@@ -1126,6 +1127,62 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(families["prompt_injection"]["total"], 2)
             self.assertEqual(families["prompt_injection"]["average_score"], 50.0)
             self.assertIn("critical_failure_counts", families["prompt_injection"])
+
+    def test_run_suite_paths_are_relative_to_explicit_nested_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            caller = root / "caller"
+            caller.mkdir()
+            out = root / "generated" / "nested" / "runs"
+            summary_path = root / "published" / "nested" / "suite_summary.json"
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(caller)
+                code = run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--suite-manifest",
+                        str(ROOT / "eval_suites" / "red_team_prompt_injection.json"),
+                        "--out",
+                        str(out),
+                        "--summary-out",
+                        str(summary_path),
+                        "--export-rl",
+                        "--validate",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+            def resolve_reference(value: str) -> Path:
+                self.assertFalse(value.startswith("<redacted:"), value)
+                self.assertFalse(Path(value).is_absolute(), value)
+                return (summary_path.parent / value).resolve()
+
+            self.assertEqual(resolve_reference(summary["scenarios_dir"]), (ROOT / "scenarios").resolve())
+            self.assertEqual(resolve_reference(summary["out_dir"]), out.resolve())
+            for run in summary["runs"]:
+                for field_name in (
+                    "scenario_path",
+                    "trace_path",
+                    "before_state_path",
+                    "state_path",
+                    "run_dir",
+                    "report",
+                    "scorecard",
+                    "run_digest",
+                    "lineage",
+                ):
+                    value = run.get(field_name)
+                    if value is not None:
+                        self.assertTrue(resolve_reference(value).exists(), f"{field_name}: {value}")
+            for artifact_name, value in summary["artifacts"].items():
+                self.assertTrue(resolve_reference(value).exists(), f"{artifact_name}: {value}")
 
     def test_run_suite_can_fail_nonzero_for_ci_failures(self):
         with tempfile.TemporaryDirectory() as tmp:

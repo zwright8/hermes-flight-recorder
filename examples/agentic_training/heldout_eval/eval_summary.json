@@ -104,10 +104,21 @@
         "schema_version": null,
         "served_model_id": ""
       },
-      "sha256": "5889506de0193c6a15bf630b2db071b9f3e55adc8c14694d79dd7cee0d088580",
-      "size_bytes": 7503,
+      "sha256": "657ca78fc466f7f0d0681b7a20f3ae59fcbacbe0102d98f61fcf51f2cd25bfa4",
+      "size_bytes": 7529,
+      "source_validation": {
+        "error_count": 0,
+        "passed": true,
+        "target_count": 1,
+        "warning_count": 0
+      },
       "total": 3,
-      "validation": null
+      "validation": {
+        "error_count": 0,
+        "passed": true,
+        "target_count": 4,
+        "warning_count": 0
+      }
     },
     {
       "average_score": 56.67,
@@ -212,10 +223,21 @@
         "schema_version": null,
         "served_model_id": ""
       },
-      "sha256": "5889506de0193c6a15bf630b2db071b9f3e55adc8c14694d79dd7cee0d088580",
-      "size_bytes": 7503,
+      "sha256": "657ca78fc466f7f0d0681b7a20f3ae59fcbacbe0102d98f61fcf51f2cd25bfa4",
+      "size_bytes": 7529,
+      "source_validation": {
+        "error_count": 0,
+        "passed": true,
+        "target_count": 1,
+        "warning_count": 0
+      },
       "total": 3,
-      "validation": null
+      "validation": {
+        "error_count": 0,
+        "passed": true,
+        "target_count": 4,
+        "warning_count": 0
+      }
     }
   ],
   "compare_gates": [],
@@ -235,12 +257,12 @@
       "ready": true,
       "ready_adapter_count": 1,
       "schema_version": "hfr.external_eval_adapters.v1",
-      "sha256": "e1eb3463aa1c3fe160c50970a45fdefbd558c5b814cc8f206d9d5b0fd732d69b",
+      "sha256": "4a59b06ad386a5abb5496fb91642de6f2d0eee0805863a005bcf3b3b88a06809",
       "size_bytes": 2858
     }
   ],
   "gate_count": 0,
-  "generated_at": "2026-07-09T23:16:43.927635+00:00",
+  "generated_at": "2026-07-10T04:46:29.123387+00:00",
   "governance_ready": true,
   "heldout_scenarios": {
     "arms": [

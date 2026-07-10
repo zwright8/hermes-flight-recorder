@@ -51,8 +51,8 @@
       "path": "../evidence_handoff/evidence_bundle.json",
       "role": "evidence_bundle",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "e5273af298b386aee506b262d81d7f11cc8d27d051ec0f137e37400d6a9fcc08",
-      "size_bytes": 16431
+      "sha256": "ecf543fef5e32e4f6b1656ae626733d8171383d35fd8566edb8b0bb3d4512913",
+      "size_bytes": 16328
     },
     "license_review": {
       "exists": true,

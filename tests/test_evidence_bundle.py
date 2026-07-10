@@ -2302,6 +2302,99 @@ def _write_serving_lifecycle(root: Path) -> Path:
 
 
 def _write_eval_suite_summary(path: Path) -> Path:
+    scenario_id = "email_reply_completion"
+    scenario_path = path.parent / "scenarios" / f"{scenario_id}.json"
+    trace_path = path.parent / "traces" / f"{scenario_id}.jsonl"
+    run_dir = path.parent / "runs" / scenario_id
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    scenario_path.write_text(
+        json.dumps(
+            {
+                "id": scenario_id,
+                "policy": {},
+                "prompt": "Complete the email reply task.",
+                "title": scenario_id,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trace_path.write_text(
+        json.dumps(
+            {
+                "hook": "pre_llm_call",
+                "payload": {
+                    "model": "fixture-model",
+                    "session_id": f"{scenario_id}-session",
+                    "user_message": "Complete the email reply task.",
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "hook": "post_llm_call",
+                "payload": {
+                    "assistant_response": "Task complete.",
+                    "session_id": f"{scenario_id}-session",
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    code = run_cli(
+        [
+            "run",
+            "--scenario",
+            str(scenario_path),
+            "--trace",
+            str(trace_path),
+            "--format",
+            "observer_jsonl",
+            "--out",
+            str(run_dir),
+        ]
+    )
+    if code != 0:
+        raise AssertionError(f"failed to generate semantic run fixture for {scenario_id}: exit {code}")
+
+    scorecard = json.loads((run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    failed_rules = [
+        str(rule["id"])
+        for rule in scorecard.get("rules", [])
+        if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
+    ]
+    run = {
+        "scenario_id": scenario_id,
+        "scenario_title": scenario_id,
+        "task_family": scenario_id,
+        "scenario_path": scenario_path.relative_to(path.parent).as_posix(),
+        "scenario_sha256": _sha256_file(scenario_path),
+        "trace_path": trace_path.relative_to(path.parent).as_posix(),
+        "trace_sha256": _sha256_file(trace_path),
+        "run_dir": run_dir.relative_to(path.parent).as_posix(),
+        "passed": scorecard["passed"],
+        "score": scorecard["score"],
+        "failed_rules": failed_rules,
+        "critical_failures": scorecard.get("critical_failures", []),
+    }
+    for field_name, filename in (
+        ("report", "report.html"),
+        ("scorecard", "scorecard.json"),
+        ("run_digest", "run_digest.json"),
+        ("lineage", "artifact_lineage.json"),
+    ):
+        artifact_path = run_dir / filename
+        run[field_name] = artifact_path.relative_to(path.parent).as_posix()
+        run[f"{field_name}_sha256"] = _sha256_file(artifact_path)
+        run[f"{field_name}_size_bytes"] = artifact_path.stat().st_size
+
     payload = {
         "schema_version": "hfr.run_suite.v1",
         "scenarios_dir": "scenarios",
@@ -2333,33 +2426,8 @@ def _write_eval_suite_summary(path: Path) -> Path:
             "failed": 0,
             "passed": 1,
         },
-        "runs": [
-            {
-                "scenario_id": "email_reply_completion",
-                "scenario_title": "email_reply_completion",
-                "task_family": "email_reply_completion",
-                "scenario_path": "scenarios/email_reply_completion.json",
-                "trace_path": "traces/email_reply_completion.jsonl",
-                "run_dir": "runs/email_reply_completion",
-                "report": "runs/email_reply_completion/report.html",
-                "report_sha256": "b" * 64,
-                "report_size_bytes": 1,
-                "scorecard": "runs/email_reply_completion/scorecard.json",
-                "scorecard_sha256": "c" * 64,
-                "scorecard_size_bytes": 1,
-                "run_digest": "runs/email_reply_completion/run_digest.json",
-                "run_digest_sha256": "d" * 64,
-                "run_digest_size_bytes": 1,
-                "lineage": "runs/email_reply_completion/artifact_lineage.json",
-                "lineage_sha256": "e" * 64,
-                "lineage_size_bytes": 1,
-                "passed": True,
-                "score": 100,
-                "failed_rules": [],
-                "critical_failures": [],
-            }
-        ],
-        "artifacts": {"suite_result": "runs/harness_suite_result.json"},
+        "runs": [run],
+        "artifacts": {},
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path

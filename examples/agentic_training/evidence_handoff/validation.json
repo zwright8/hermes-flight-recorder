@@ -14,7 +14,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/prompt_injection_good",
+      "path": "evidence_handoff/prompt_injection_good",
       "type": "run",
       "warnings": []
     },
@@ -26,7 +26,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/evidence_coverage.json",
+      "path": "evidence_handoff/evidence_coverage.json",
       "type": "evidence_coverage",
       "warnings": []
     },
@@ -38,7 +38,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/repair_queue.json",
+      "path": "evidence_handoff/repair_queue.json",
       "type": "repair_queue",
       "warnings": []
     },
@@ -51,7 +51,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/trace_observability.json",
+      "path": "evidence_handoff/trace_observability.json",
       "type": "trace_observability",
       "warnings": []
     },
@@ -63,7 +63,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/scenario_quality.json",
+      "path": "evidence_handoff/scenario_quality.json",
       "type": "scenario_quality",
       "warnings": []
     },
@@ -76,7 +76,7 @@
       },
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/suite_summary.json",
+      "path": "evidence_handoff/suite_summary.json",
       "type": "suite_summary",
       "warnings": []
     },
@@ -84,7 +84,7 @@
       "details": {},
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/harness_handoff/harness_manifest.json",
+      "path": "evidence_handoff/harness_handoff/harness_manifest.json",
       "type": "harness_run_manifest",
       "warnings": []
     },
@@ -92,7 +92,7 @@
       "details": {},
       "errors": [],
       "passed": true,
-      "path": "examples/agentic_training/evidence_handoff/harness_handoff/harness_result.json",
+      "path": "evidence_handoff/harness_handoff/harness_result.json",
       "type": "harness_run_result",
       "warnings": []
     }

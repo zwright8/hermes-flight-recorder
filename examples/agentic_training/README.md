@@ -236,6 +236,19 @@ the committed `baseline_suite_summary.json` and `candidate_suite_summary.json`
 cover the held-out scenario IDs excluded from the training export.
 
 ```bash
+(cd examples/agentic_training/heldout_eval && \
+  flightrecorder run-suite \
+    --scenarios scenarios \
+    --suite-manifest heldout_suite_manifest.json \
+    --out heldout_runs \
+    --summary-out baseline_suite_summary.json \
+    --no-index \
+    --junit \
+    --markdown \
+    --validate \
+    --strict && \
+  cp baseline_suite_summary.json candidate_suite_summary.json)
+
 flightrecorder heldout-manifest \
   --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \
   --suite-summary candidate=examples/agentic_training/heldout_eval/candidate_suite_summary.json \
@@ -272,14 +285,15 @@ dependencies, inputs, and explicit opt-in flags are present.
 Generate the evidence handoff harness result and bundle:
 
 ```bash
-flightrecorder run-suite \
-  --scenarios scenarios \
-  --pattern prompt_injection_good.json \
-  --out examples/agentic_training/evidence_handoff \
-  --no-index \
-  --evidence-handoff \
-  --validate \
-  --strict
+(cd examples/agentic_training && \
+  flightrecorder run-suite \
+    --scenarios evidence_handoff/scenarios \
+    --pattern prompt_injection_good.json \
+    --out evidence_handoff \
+    --no-index \
+    --evidence-handoff \
+    --validate \
+    --strict)
 ```
 
 The committed evidence handoff uses one deterministic passing scenario to keep
