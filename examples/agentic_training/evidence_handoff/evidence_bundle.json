@@ -6,7 +6,7 @@
       "passed": true,
       "path": "../heldout_eval/eval_summary.json",
       "schema_version": "hfr.eval_summary.v1",
-      "sha256": "397b10bcd00495b68d03fa08d3c649bed182765613afd1c3d915e61f84debfdb",
+      "sha256": "0dd16fc4a058d3ac5353262d82a0d02604418d2c675c78c0812da9a106f260ca",
       "size_bytes": 13218
     },
     "evidence_coverage": {

@@ -484,7 +484,7 @@
     {
       "artifact": "heldout_manifest",
       "artifact_schema_version": "hfr.heldout_scenario_manifest.v1",
-      "description": "Held-out scenario manifest emitted by heldout-manifest.",
+      "description": "Held-out scenario identity and replayed content-fingerprint manifest emitted by heldout-manifest.",
       "filename": "heldout_manifest.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/heldout_manifest.v1.schema.json",
       "name": "heldout_manifest"

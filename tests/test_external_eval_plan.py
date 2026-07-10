@@ -15,6 +15,7 @@ from flightrecorder.external_eval import (
     build_external_eval_plan,
     write_external_eval_plan,
 )
+from flightrecorder.heldout_manifest import build_heldout_manifest, write_heldout_manifest
 from flightrecorder.schema_registry import check_schema_file
 from flightrecorder.validation import validate_artifacts
 
@@ -212,6 +213,47 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(adapter["dependency_status"], {"available": True, "commands": {}, "imports": {}})
             self.assertFalse(adapter["adapter_contract"]["live_benchmark_supported"])
             self.assertFalse(adapter["adapter_contract"]["provider_api_called_by_flight_recorder"])
+
+    def test_external_eval_plan_replays_heldout_semantics_instead_of_trusting_ready_bit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            scenario = root / "scenario_sources" / "email_reply_completion.json"
+            scenario.write_text('{"id":"email_reply_completion","prompt":"mutated"}\n', encoding="utf-8")
+            out = root / "external_eval_plan.json"
+
+            code = run_cli(
+                [
+                    "external-eval-plan",
+                    "--adapter",
+                    "local_mock",
+                    "--scenario-manifest",
+                    str(manifest),
+                    "--model-endpoint",
+                    "local/mock-candidate",
+                    "--model",
+                    "local/mock-candidate",
+                    "--allow-installed",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            plan = _read_json(out)
+            self.assertFalse(plan["ready"])
+            self.assertFalse(plan["inputs"]["scenario_manifest"]["ready"])
+            self.assertIn("scenario_manifest_not_ready", plan["adapters"][0]["blocking_reasons"])
+
+            plan["inputs"]["scenario_manifest"]["ready"] = True
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(external_eval_plan_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("scenario_manifest.ready must match the current file", errors)
 
     def test_preserve_paths_keeps_plan_manifest_output_relative(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -673,8 +715,89 @@ class ExternalEvalPlanTests(unittest.TestCase):
 
 
 def _scenario_manifest(path: Path, *, scenario_ids: list[str] | None = None) -> Path:
-    payload = {"schema_version": "hfr.heldout_scenario_manifest.v1", "scenario_ids": scenario_ids or ["email_reply_completion"]}
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    scenario_ids = scenario_ids or ["email_reply_completion"]
+    runs = []
+    for scenario_id in scenario_ids:
+        scenario_relative = Path("scenario_sources") / f"{scenario_id}.json"
+        scenario_path = path.parent / scenario_relative
+        scenario_path.parent.mkdir(parents=True, exist_ok=True)
+        scenario_bytes = (
+            json.dumps(
+                {
+                    "id": scenario_id,
+                    "policy": {},
+                    "prompt": f"Complete the {scenario_id} external-eval task.",
+                    "title": scenario_id,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        scenario_path.write_bytes(scenario_bytes)
+        runs.append(
+            {
+                "scenario_id": scenario_id,
+                "scenario_title": scenario_id,
+                "scenario_sha256": hashlib.sha256(scenario_bytes).hexdigest(),
+                "task_family": "external_eval_test",
+                "scenario_path": scenario_relative.as_posix(),
+                "trace_path": f"traces/{scenario_id}.jsonl",
+                "run_dir": f"runs/{scenario_id}",
+                "report": f"runs/{scenario_id}/report.html",
+                "report_sha256": "a" * 64,
+                "report_size_bytes": 1,
+                "scorecard": f"runs/{scenario_id}/scorecard.json",
+                "scorecard_sha256": "b" * 64,
+                "scorecard_size_bytes": 1,
+                "run_digest": f"runs/{scenario_id}/run_digest.json",
+                "run_digest_sha256": "c" * 64,
+                "run_digest_size_bytes": 1,
+                "lineage": f"runs/{scenario_id}/artifact_lineage.json",
+                "lineage_sha256": "d" * 64,
+                "lineage_size_bytes": 1,
+                "passed": True,
+                "score": 100,
+                "failed_rules": [],
+                "critical_failures": [],
+            }
+        )
+    suite_path = path.with_name(f"{path.stem}_suite_summary.json")
+    suite_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.run_suite.v1",
+                "scenarios_dir": "scenario_sources",
+                "out_dir": "runs",
+                "total": len(runs),
+                "passed": len(runs),
+                "failed": 0,
+                "error_count": 0,
+                "errors": [],
+                "metrics": {
+                    "pass_rate": 1.0,
+                    "average_score": 100.0,
+                    "min_score": 100,
+                    "max_score": 100,
+                    "failed_rule_counts": [],
+                    "critical_failure_counts": [],
+                    "task_families": [],
+                    "failed": 0,
+                    "passed": len(runs),
+                },
+                "runs": runs,
+                "artifacts": {},
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    write_heldout_manifest(
+        build_heldout_manifest(suite_summary_specs=[f"source={suite_path}"]),
+        path,
+    )
     return path
 
 

@@ -5,9 +5,10 @@ raw comparison movement into promotion evidence by accident.
 
 ## Held-Out Scenario Invariant
 
-Cross-arm claims are valid only when every evaluated arm provides the identical
-held-out scenario list. A candidate win, task-completion improvement, or rule fix
-from a comparison export remains raw movement until the scenario-set check passes.
+Cross-arm claims are valid only when distinct evaluated arms provide the same
+held-out scenario IDs and the same replayed scenario-content SHA-256 values. A
+candidate win, task-completion improvement, or rule fix from a comparison export
+remains raw movement until both the source-identity and content-identity checks pass.
 
 `flightrecorder eval-summary` enforces that boundary:
 
@@ -26,7 +27,7 @@ flightrecorder eval-summary \
 The summary reports:
 
 - per-arm suite status and scenario IDs,
-- whether held-out scenario lists are identical,
+- whether held-out scenario IDs and replayed content fingerprints are identical,
 - raw compare-export movement,
 - governance claims with candidate improvements suppressed when claims are not
   allowed,
@@ -57,9 +58,18 @@ flightrecorder heldout-manifest \
 ```
 
 A single suite source can seed external adapter planning. Cross-arm claims are
-allowed only when two or more suite summaries prove the exact same scenario IDs.
-Mismatched manifests validate as honest blocked artifacts, return nonzero from
-the CLI, and block external adapter readiness when used as `--scenario-manifest`.
+allowed only when two or more distinctly labeled, distinctly sourced suite
+summaries prove the exact same scenario IDs and scenario-file SHA-256 values.
+The suite-summary files must also have distinct content fingerprints, so a copy
+or hard link of one arm cannot impersonate an independent arm. Missing hashes,
+stale hashes, duplicate arm sources, and mismatched content all produce honest
+blocked artifacts. External adapter planning replays the held-out manifest
+semantically instead of trusting its stored `ready` field.
+
+Migration note: historical `hfr.heldout_scenario_manifest.v1` files whose source
+rows omit `scenario_fingerprints` must be regenerated before they can be used as
+readiness evidence. Blocked mismatch rows now include explicit fingerprint
+differences so reviewers can distinguish ID-set drift from content drift.
 
 ## Red-Team Suite Manifests
 

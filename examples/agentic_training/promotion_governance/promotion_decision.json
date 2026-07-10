@@ -51,7 +51,7 @@
       "path": "../heldout_eval/eval_summary.json",
       "role": "eval_summary",
       "schema_version": "hfr.eval_summary.v1",
-      "sha256": "397b10bcd00495b68d03fa08d3c649bed182765613afd1c3d915e61f84debfdb",
+      "sha256": "0dd16fc4a058d3ac5353262d82a0d02604418d2c675c78c0812da9a106f260ca",
       "size_bytes": 13218
     },
     "evidence_bundle": {
@@ -60,7 +60,7 @@
       "path": "../evidence_handoff/evidence_bundle.json",
       "role": "evidence_bundle",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "aea6a6ba5ff01d666b5672a3e90f2963216eae1f5fe9b6e2bb7a72fb0652c544",
+      "sha256": "2efa183c446de49dafda5a7cf7b603b3eb66711be854252684f6779836700d26",
       "size_bytes": 19147
     },
     "license_review": {

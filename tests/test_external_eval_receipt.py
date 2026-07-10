@@ -9,6 +9,7 @@ from unittest.mock import patch
 from flightrecorder.cli import main
 from flightrecorder.external_eval import adapter_choices, build_external_eval_plan, write_external_eval_plan
 from flightrecorder.schema_registry import check_schema_file
+from tests.test_external_eval_plan import _scenario_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -494,17 +495,6 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             )
             self.assertIn("external_eval_receipt.launch contains unknown field(s): ['benchmark_url'].", errors)
             self.assertIn("external_eval_receipt.execution_boundary contains unknown field(s): ['live_side_effects'].", errors)
-
-
-def _scenario_manifest(path: Path) -> Path:
-    payload = {
-        "schema_version": "hfr.heldout_scenario_manifest.v1",
-        "ready": True,
-        "scenario_count": 1,
-        "scenario_ids": ["email_reply_completion"],
-    }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return path
 
 
 def _read_json(path: Path):

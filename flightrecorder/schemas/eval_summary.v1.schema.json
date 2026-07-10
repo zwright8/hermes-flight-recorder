@@ -198,7 +198,7 @@
         "scenario_count": { "minimum": 0, "type": "integer" },
         "scenario_ids": { "items": { "type": "string" }, "type": "array" },
         "status": {
-          "enum": ["missing_suite_summaries", "single_arm", "identical", "mismatched", "empty"],
+          "enum": ["missing_suite_summaries", "single_arm", "identical", "mismatched", "empty", "blocked"],
           "type": "string"
         }
       },

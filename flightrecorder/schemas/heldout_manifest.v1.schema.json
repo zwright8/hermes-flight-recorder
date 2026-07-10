@@ -2,7 +2,7 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/heldout_manifest.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Held-out scenario manifest proving scenario-set readiness for eval and external-adapter handoffs.",
+  "description": "Held-out scenario manifest proving replayed scenario-ID and content-fingerprint readiness for eval and external-adapter handoffs.",
   "properties": {
     "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
     "cross_arm_claims_allowed": { "type": "boolean" },
@@ -23,6 +23,29 @@
         "additionalProperties": false,
         "properties": {
           "extra_in_source": { "items": { "type": "string" }, "type": "array" },
+          "fingerprint_mismatches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "reference_sha256": {
+                  "anyOf": [
+                    { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+                    { "type": "null" }
+                  ]
+                },
+                "scenario_id": { "minLength": 1, "type": "string" },
+                "source_sha256": {
+                  "anyOf": [
+                    { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+                    { "type": "null" }
+                  ]
+                }
+              },
+              "required": ["scenario_id", "reference_sha256", "source_sha256"],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "label": { "minLength": 1, "type": "string" },
           "missing_from_source": { "items": { "type": "string" }, "type": "array" }
         },

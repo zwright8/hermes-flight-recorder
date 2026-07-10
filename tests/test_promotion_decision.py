@@ -5426,6 +5426,11 @@ def write_promotion_eval_lineage(
         "external_eval_runner.json",
     ):
         shutil.copyfile(example_root / filename, lineage_root / filename)
+    shutil.copytree(
+        example_root / "scenarios",
+        lineage_root / "scenarios",
+        dirs_exist_ok=True,
+    )
 
     heldout_path = lineage_root / "heldout_manifest.json"
     plan_path = lineage_root / "external_eval_plan.json"

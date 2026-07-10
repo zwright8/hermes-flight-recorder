@@ -917,6 +917,24 @@ def _write_suite(path: Path, runs: list[dict]) -> Path:
                 **run,
             }
         )
+        scenario_bytes = (
+            json.dumps(
+                {
+                    "id": scenario_id,
+                    "policy": {},
+                    "prompt": f"Complete the {scenario_id} external-eval task.",
+                    "title": scenario_id,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        scenario_path = path.parent / normalized_runs[-1]["scenario_path"]
+        scenario_path.parent.mkdir(parents=True, exist_ok=True)
+        scenario_path.write_bytes(scenario_bytes)
+        if "scenario_sha256" not in run:
+            normalized_runs[-1]["scenario_sha256"] = hashlib.sha256(scenario_bytes).hexdigest()
         if "scenario_id" not in run:
             normalized_runs[-1].pop("scenario_id")
     passed = sum(row.get("passed") is True for row in normalized_runs)

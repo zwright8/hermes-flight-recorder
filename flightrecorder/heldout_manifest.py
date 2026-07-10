@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .schema_registry import check_schema_contract
 
 HELDOUT_MANIFEST_SCHEMA_VERSION = "hfr.heldout_scenario_manifest.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+MAX_SCENARIO_BYTES = 4 * 1024 * 1024
 
 
 class HeldoutManifestError(ValueError):
@@ -38,6 +40,10 @@ def build_heldout_manifest(
     status, scenario_ids, mismatches, blocking_reasons = _manifest_status(sources)
     ready = bool(scenario_ids) and not blocking_reasons
     identical = status == "identical"
+    public_sources = [
+        {key: value for key, value in source.items() if not key.startswith("_")}
+        for source in sources
+    ]
     return {
         "schema_version": HELDOUT_MANIFEST_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -48,7 +54,7 @@ def build_heldout_manifest(
         "source_count": len(sources),
         "scenario_count": len(scenario_ids),
         "scenario_ids": scenario_ids,
-        "sources": sources,
+        "sources": public_sources,
         "mismatches": mismatches,
         "blocking_reasons": blocking_reasons,
         "governance_handoff": {
@@ -72,6 +78,21 @@ def write_heldout_manifest(manifest: dict[str, Any], out_path: str | Path) -> No
 
 def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
     summary = _read_object(spec.path, "suite summary")
+    return {
+        "label": spec.label,
+        "path": _display_path(spec.path, preserve_paths),
+        "_source_identity": str(spec.path.resolve(strict=False)),
+        "_source_content_identity": _sha256_file(spec.path),
+        **_source_fields_from_suite_summary(summary, source_path=spec.path),
+    }
+
+
+def _source_fields_from_suite_summary(
+    summary: dict[str, Any],
+    *,
+    source_path: Path | None = None,
+) -> dict[str, Any]:
+    """Derive the canonical held-out identity projection for a suite summary."""
     runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
     seen: set[str] = set()
     duplicates: set[str] = set()
@@ -88,7 +109,7 @@ def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[
         seen.add(scenario_id)
         scenario_ids.append(scenario_id)
         scenario_sha = run.get("scenario_sha256")
-        if isinstance(scenario_sha, str) and scenario_sha:
+        if _is_lowercase_sha256(scenario_sha):
             scenario_fingerprints[scenario_id] = scenario_sha
     unique_scenarios = sorted(set(scenario_ids))
     blocking_reasons: list[str] = []
@@ -97,13 +118,16 @@ def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[
         blocking_reasons.append("invalid_suite_summary_schema")
     if not unique_scenarios:
         blocking_reasons.append("empty_suite_summary")
-    if int(summary.get("error_count", 0) or 0) > 0:
+    error_count = summary.get("error_count", 0)
+    if isinstance(error_count, int) and not isinstance(error_count, bool) and error_count > 0:
         blocking_reasons.append("suite_summary_errors")
     if duplicates:
         blocking_reasons.append("duplicate_scenario_ids")
+    if set(scenario_fingerprints) != set(unique_scenarios):
+        blocking_reasons.append("missing_scenario_fingerprints")
+    if unique_scenarios and not _scenario_fingerprints_replay(summary, source_path):
+        blocking_reasons.append("scenario_fingerprint_replay_failed")
     return {
-        "label": spec.label,
-        "path": _display_path(spec.path, preserve_paths),
         "schema_version": summary.get("schema_version"),
         "scenario_count": len(unique_scenarios),
         "scenario_ids": unique_scenarios,
@@ -115,16 +139,41 @@ def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[
 
 def _manifest_status(sources: list[dict[str, Any]]) -> tuple[str, list[str], list[dict[str, Any]], list[str]]:
     blocking_reasons = sorted({reason for source in sources for reason in source["blocking_reasons"]})
+    labels = [source["label"] for source in sources]
+    paths = [source.get("_source_identity", source["path"]) for source in sources]
+    content_identities = [source.get("_source_content_identity") for source in sources]
+    if len(set(labels)) != len(labels):
+        blocking_reasons.append("duplicate_heldout_source_labels")
+    if len(set(paths)) != len(paths):
+        blocking_reasons.append("duplicate_heldout_source_paths")
+    if (
+        all(isinstance(identity, str) and identity for identity in content_identities)
+        and len(set(content_identities)) != len(content_identities)
+    ):
+        blocking_reasons.append("duplicate_heldout_source_content")
+    blocking_reasons = sorted(set(blocking_reasons))
     reference = sources[0]["scenario_ids"] if sources else []
+    reference_fingerprints = sources[0]["scenario_fingerprints"] if sources else {}
     mismatches: list[dict[str, Any]] = []
     for source in sources[1:]:
         current = source["scenario_ids"]
-        if current != reference:
+        current_fingerprints = source["scenario_fingerprints"]
+        fingerprint_mismatches = [
+            {
+                "scenario_id": scenario_id,
+                "reference_sha256": reference_fingerprints.get(scenario_id),
+                "source_sha256": current_fingerprints.get(scenario_id),
+            }
+            for scenario_id in sorted(set(reference) & set(current))
+            if reference_fingerprints.get(scenario_id) != current_fingerprints.get(scenario_id)
+        ]
+        if current != reference or fingerprint_mismatches:
             mismatches.append(
                 {
                     "label": source["label"],
                     "missing_from_source": sorted(set(reference) - set(current)),
                     "extra_in_source": sorted(set(current) - set(reference)),
+                    "fingerprint_mismatches": fingerprint_mismatches,
                 }
             )
     if not reference or any(not source["scenario_ids"] for source in sources):
@@ -134,7 +183,12 @@ def _manifest_status(sources: list[dict[str, Any]]) -> tuple[str, list[str], lis
     if len(sources) == 1:
         return "single_source", reference, [], []
     if mismatches:
-        return "mismatched", reference, mismatches, ["heldout_scenario_set_mismatch"]
+        mismatch_reasons: list[str] = []
+        if any(row["missing_from_source"] or row["extra_in_source"] for row in mismatches):
+            mismatch_reasons.append("heldout_scenario_set_mismatch")
+        if any(row["fingerprint_mismatches"] for row in mismatches):
+            mismatch_reasons.append("heldout_scenario_fingerprint_mismatch")
+        return "mismatched", reference, mismatches, mismatch_reasons
     return "identical", reference, [], []
 
 
@@ -144,8 +198,75 @@ def _recommendation(status: str, ready: bool) -> str:
     if ready:
         return "Manifest can seed external adapter planning, but cross-arm claims still need another arm with the identical scenario set."
     if status == "mismatched":
-        return "Do not use this manifest for promotion or external adapter claims until scenario sets match exactly."
+        return "Do not use this manifest for promotion or external adapter claims until scenario sets and content fingerprints match exactly."
     return "Resolve manifest blockers before using this held-out scenario set."
+
+
+def _is_lowercase_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _scenario_fingerprints_replay(summary: dict[str, Any], source_path: Path | None) -> bool:
+    if source_path is None:
+        return False
+    runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
+    for run in runs:
+        if not isinstance(run, dict) or not isinstance(run.get("scenario_id"), str) or not run.get("scenario_id"):
+            continue
+        raw_path = run.get("scenario_path")
+        expected_sha = run.get("scenario_sha256")
+        if not isinstance(raw_path, str) or not raw_path or not _is_lowercase_sha256(expected_sha):
+            return False
+        if raw_path.startswith("<redacted:"):
+            return False
+        relative_path = Path(raw_path)
+        windows_path = PureWindowsPath(raw_path)
+        if (
+            relative_path.is_absolute()
+            or windows_path.is_absolute()
+            or bool(windows_path.drive)
+            or ".." in relative_path.parts
+            or ".." in windows_path.parts
+            or "\\" in raw_path
+        ):
+            return False
+        scenario_path = source_path.parent / relative_path
+        if _path_has_symlink_component(scenario_path, root=source_path.parent) or not scenario_path.is_file():
+            return False
+        try:
+            if scenario_path.stat().st_size > MAX_SCENARIO_BYTES:
+                return False
+            actual_sha = _sha256_file(scenario_path)
+        except OSError:
+            return False
+        if actual_sha != expected_sha:
+            return False
+    return True
+
+
+def _path_has_symlink_component(path: Path, *, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+        current = root
+        for part in relative.parts:
+            current /= part
+            if current.is_symlink():
+                return True
+        return False
+    except (OSError, ValueError):
+        return True
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _labeled_path(spec: str | Path) -> LabeledPath:

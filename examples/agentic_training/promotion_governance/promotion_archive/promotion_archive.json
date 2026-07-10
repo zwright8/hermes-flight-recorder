@@ -42,7 +42,7 @@
       "path": "artifacts/decision_gate_001.json",
       "role": "decision_gate",
       "schema_version": "hfr.decision_gate.v1",
-      "sha256": "4dcf373f9c5a7d8f8d86e13a40b15db898640b8ebb76bf6c72e8992f6eec1eb1",
+      "sha256": "a0efe05d07db2049bc1e38e3fb3fefe7ac8627790d0997ff95ef4d77ba346dd2",
       "size_bytes": 2370
     },
     {
@@ -64,7 +64,7 @@
       "path": "artifacts/source_artifact_001.json",
       "role": "source_artifact",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
+      "sha256": "f0f1e78265e6172c15bb817cd6acf20070b90a04a657809c823be78e2a14e236",
       "size_bytes": 46528
     },
     {
@@ -75,7 +75,7 @@
       "path": "artifacts/promotion_release_record_000.json",
       "role": "promotion_release_record",
       "schema_version": "hfr.promotion_release_record.v1",
-      "sha256": "afbf2a29378f9a659362731f4a31841433ea09cc0874163baf69f47918f56e2d",
+      "sha256": "f6f79be58a27258e8596d6c98b3bb70f285741ea0e18e77637136ccdd48cef96",
       "size_bytes": 19454
     }
   ],

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .heldout_manifest import _is_lowercase_sha256
 from .schema_registry import check_schema_contract
 from .source_contract import inspect_artifact_source
 
@@ -20,7 +21,16 @@ COMPARE_GATE_SCHEMA_VERSION = "hfr.compare_gate.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 SERVING_ENDPOINT_CHECK_SCHEMA_VERSION = "hfr.serving_endpoint_check.v1"
 
-_SCENARIO_BLOCKING_STATUSES = {"missing_suite_summaries", "mismatched", "empty"}
+_SCENARIO_BLOCKING_STATUSES = {"missing_suite_summaries", "mismatched", "empty", "blocked"}
+_ARM_IDENTITY_BLOCKERS = {
+    "invalid_suite_summary_schema",
+    "suite_summary_semantic_validation_failed",
+    "empty_suite_summary",
+    "suite_summary_errors",
+    "suite_summary_validation_failed",
+    "duplicate_scenario_ids",
+    "missing_scenario_fingerprints",
+}
 
 
 class EvalSummaryError(ValueError):
@@ -97,6 +107,10 @@ def build_eval_summary(
         serving_preflight,
     )
     passed = not risks
+    public_arms = [
+        {key: value for key, value in arm.items() if not key.startswith("_")}
+        for arm in arms
+    ]
     return {
         "schema_version": EVAL_SUMMARY_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -108,7 +122,7 @@ def build_eval_summary(
         "external_adapter_plan_count": len(external_adapters),
         "external_adapter_result_count": len(external_results),
         "heldout_scenarios": heldout,
-        "arms": arms,
+        "arms": public_arms,
         "comparisons": comparisons,
         "compare_gates": gates,
         "external_adapter_plans": external_adapters,
@@ -164,6 +178,13 @@ def _suite_arm(
     summary = _read_object(spec.path, "suite summary")
     runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
     scenario_ids = sorted({str(run.get("scenario_id")) for run in runs if isinstance(run, dict) and run.get("scenario_id")})
+    scenario_fingerprints = {
+        str(run.get("scenario_id")): str(run.get("scenario_sha256"))
+        for run in runs
+        if isinstance(run, dict)
+        and run.get("scenario_id")
+        and _is_lowercase_sha256(run.get("scenario_sha256"))
+    }
     duplicate_count = len([run for run in runs if isinstance(run, dict) and run.get("scenario_id")]) - len(scenario_ids)
     metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
     recorded_validation = _validation_summary(summary.get("validation"))
@@ -176,26 +197,32 @@ def _suite_arm(
         blocking_reasons.append("suite_summary_semantic_validation_failed")
     if not scenario_ids:
         blocking_reasons.append("empty_suite_summary")
-    if int(summary.get("error_count", 0) or 0) > 0:
+    if _int_value(summary.get("error_count")) > 0:
         blocking_reasons.append("suite_summary_errors")
     if recorded_validation is not None and recorded_validation.get("passed") is not True:
         blocking_reasons.append("suite_summary_validation_failed")
     if duplicate_count > 0:
         blocking_reasons.append("duplicate_scenario_ids")
+    if set(scenario_fingerprints) != set(scenario_ids):
+        blocking_reasons.append("missing_scenario_fingerprints")
     serving = serving_preflight or _missing_serving_preflight(required=require_serving_preflight)
     blocking_reasons.extend(serving["blocking_reasons"])
     operational_metrics = _operational_metrics(summary, runs)
+    file_fingerprint = _file_fingerprint(spec.path)
     return {
         "label": spec.label,
         "path": _display_path(spec.path, preserve_paths, display_base_dir),
-        **_file_fingerprint(spec.path),
+        **file_fingerprint,
         "schema_version": summary.get("schema_version"),
         "scenario_count": len(scenario_ids),
         "scenario_ids": scenario_ids,
-        "total": int(summary.get("total", len(runs)) or 0),
-        "passed": int(summary.get("passed", 0) or 0),
-        "failed": int(summary.get("failed", 0) or 0),
-        "error_count": int(summary.get("error_count", 0) or 0),
+        "_scenario_fingerprints": dict(sorted(scenario_fingerprints.items())),
+        "_source_identity": str(spec.path.resolve(strict=False)),
+        "_source_content_identity": file_fingerprint["sha256"],
+        "total": _int_value(summary.get("total", len(runs))),
+        "passed": _int_value(summary.get("passed")),
+        "failed": _int_value(summary.get("failed")),
+        "error_count": _int_value(summary.get("error_count")),
         "pass_rate": metrics.get("pass_rate"),
         "average_score": metrics.get("average_score"),
         "failed_rule_counts": _count_rows(metrics.get("failed_rule_counts")),
@@ -335,10 +362,16 @@ def _heldout_scenario_summary(arms: list[dict[str, Any]]) -> dict[str, Any]:
 
     by_arm = [{"label": arm["label"], "scenario_ids": arm["scenario_ids"], "scenario_count": arm["scenario_count"]} for arm in arms]
     reference = arms[0]["scenario_ids"]
+    reference_fingerprints = arms[0].get("_scenario_fingerprints", {})
     mismatches = []
     for arm in arms[1:]:
         current = arm["scenario_ids"]
-        if current != reference:
+        current_fingerprints = arm.get("_scenario_fingerprints", {})
+        fingerprint_mismatch = any(
+            reference_fingerprints.get(scenario_id) != current_fingerprints.get(scenario_id)
+            for scenario_id in set(reference) & set(current)
+        )
+        if current != reference or fingerprint_mismatch:
             mismatches.append(
                 {
                     "label": arm["label"],
@@ -347,10 +380,42 @@ def _heldout_scenario_summary(arms: list[dict[str, Any]]) -> dict[str, Any]:
                 }
             )
     empty = any(not arm["scenario_ids"] for arm in arms)
-    identical = len(arms) > 1 and not empty and not mismatches
+    incomplete_fingerprints = any(
+        set(arm.get("_scenario_fingerprints", {})) != set(arm["scenario_ids"])
+        for arm in arms
+    )
+    identity_blockers = sorted(
+        {
+            reason
+            for arm in arms
+            for reason in arm.get("blocking_reasons", [])
+            if reason in _ARM_IDENTITY_BLOCKERS
+        }
+    )
+    if len({arm.get("label") for arm in arms}) != len(arms):
+        identity_blockers.append("duplicate_heldout_arm_labels")
+    if (
+        len({arm.get("_source_identity") for arm in arms}) != len(arms)
+        or len({arm.get("_source_content_identity") for arm in arms}) != len(arms)
+    ):
+        identity_blockers.append("duplicate_heldout_arm_sources")
+    identity_blockers = sorted(set(identity_blockers))
+    identical = (
+        len(arms) > 1
+        and not empty
+        and not incomplete_fingerprints
+        and not identity_blockers
+        and not mismatches
+    )
     if empty:
         status = "empty"
         blocking_reasons = ["empty_heldout_scenario_set"]
+    elif incomplete_fingerprints:
+        status = "blocked"
+        blocking_reasons = ["missing_scenario_fingerprints"]
+    elif identity_blockers:
+        status = "blocked"
+        blocking_reasons = identity_blockers
     elif len(arms) == 1:
         status = "single_arm"
         blocking_reasons = []
@@ -359,7 +424,16 @@ def _heldout_scenario_summary(arms: list[dict[str, Any]]) -> dict[str, Any]:
         blocking_reasons = []
     else:
         status = "mismatched"
-        blocking_reasons = ["heldout_scenario_set_mismatch"]
+        blocking_reasons = []
+        if any(row["missing_from_arm"] or row["extra_in_arm"] for row in mismatches):
+            blocking_reasons.append("heldout_scenario_set_mismatch")
+        if any(
+            arms[0].get("_scenario_fingerprints", {}).get(scenario_id)
+            != arm.get("_scenario_fingerprints", {}).get(scenario_id)
+            for arm in arms[1:]
+            for scenario_id in set(arms[0]["scenario_ids"]) & set(arm["scenario_ids"])
+        ):
+            blocking_reasons.append("heldout_scenario_fingerprint_mismatch")
     return {
         "status": status,
         "identical": identical,
@@ -869,6 +943,10 @@ def _value_count_rows(values: Any) -> list[dict[str, Any]]:
 def _blocking_reason_priority(reason: str) -> str:
     if reason in {
         "heldout_scenario_set_mismatch",
+        "heldout_scenario_fingerprint_mismatch",
+        "missing_scenario_fingerprints",
+        "duplicate_heldout_arm_labels",
+        "duplicate_heldout_arm_sources",
         "compare_manifest_scenario_set_mismatch",
         "empty_heldout_scenario_set",
         "missing_suite_summaries",
@@ -911,7 +989,11 @@ def _risks(
     for arm in arms:
         for reason in arm["blocking_reasons"]:
             risks.append({"source": _risk_source(reason), "label": arm["label"], "reason": reason})
-    if comparisons and heldout["status"] in _SCENARIO_BLOCKING_STATUSES:
+    has_duplicate_arm_identity = any(
+        reason in {"duplicate_heldout_arm_labels", "duplicate_heldout_arm_sources"}
+        for reason in heldout.get("blocking_reasons", [])
+    )
+    if (comparisons or has_duplicate_arm_identity) and heldout["status"] in _SCENARIO_BLOCKING_STATUSES:
         for reason in heldout["blocking_reasons"]:
             risks.append({"source": "heldout_scenarios", "reason": reason})
     for comparison in comparisons:
@@ -1212,6 +1294,21 @@ def _heldout_blocker(heldout: dict[str, Any]) -> str:
         return "single_arm_no_cross_arm_claims"
     if status == "empty":
         return "empty_heldout_scenario_set"
+    blockers = _string_list(heldout.get("blocking_reasons"))
+    for blocker in (
+        "missing_scenario_fingerprints",
+        "heldout_scenario_fingerprint_mismatch",
+        "heldout_scenario_set_mismatch",
+        "duplicate_heldout_arm_labels",
+        "duplicate_heldout_arm_sources",
+        "invalid_suite_summary_schema",
+        "suite_summary_semantic_validation_failed",
+        "suite_summary_errors",
+        "suite_summary_validation_failed",
+        "duplicate_scenario_ids",
+    ):
+        if blocker in blockers:
+            return blocker
     return "heldout_scenario_set_mismatch"
 
 

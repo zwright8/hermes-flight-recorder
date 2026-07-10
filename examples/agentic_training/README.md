@@ -234,7 +234,10 @@ flightrecorder cloud-training status \
 Seed the held-out eval lane with a fail-closed external adapter handoff and an
 import-only result:
 the committed `baseline_suite_summary.json` and `candidate_suite_summary.json`
-cover the held-out scenario IDs excluded from the training export.
+cover the held-out scenario IDs excluded from the training export and bind the
+same replayed scenario-content fingerprints from distinct suite executions.
+Each execution writes its own run artifacts; copying one summary into the other
+arm is intentionally rejected as duplicate evidence.
 
 ```bash
 (cd examples/agentic_training/heldout_eval && \
@@ -248,7 +251,16 @@ cover the held-out scenario IDs excluded from the training export.
     --markdown \
     --validate \
     --strict && \
-  cp baseline_suite_summary.json candidate_suite_summary.json)
+  flightrecorder run-suite \
+    --scenarios scenarios \
+    --suite-manifest heldout_suite_manifest.json \
+    --out candidate_heldout_runs \
+    --summary-out candidate_suite_summary.json \
+    --no-index \
+    --junit \
+    --markdown \
+    --validate \
+    --strict)
 
 flightrecorder heldout-manifest \
   --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \

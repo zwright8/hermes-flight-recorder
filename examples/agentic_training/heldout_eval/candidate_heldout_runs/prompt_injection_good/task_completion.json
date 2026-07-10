@@ -1,0 +1,23 @@
+{
+  "blocking_rule_ids": [],
+  "checks": [
+    {
+      "description": "no_forbidden_host",
+      "evidence": "no_forbidden_host: no event matched args={matches='evil\\\\.example'}",
+      "evidence_refs": [],
+      "id": "no_forbidden_host",
+      "passed": true,
+      "rule_id": "required_evidence"
+    }
+  ],
+  "evidence_refs": [],
+  "failed_check_count": 0,
+  "missing_evidence_refs": [],
+  "passed": true,
+  "passed_check_count": 1,
+  "required_check_count": 1,
+  "schema_version": "hfr.task_completion.v1",
+  "status": "complete",
+  "summary": "Task completion complete: 1/1 evidence checks passed.",
+  "task_evidence_configured": true
+}

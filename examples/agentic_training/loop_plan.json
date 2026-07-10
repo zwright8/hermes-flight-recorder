@@ -1541,7 +1541,7 @@
         "readiness": "",
         "role": "eval_summary",
         "schema_version": "hfr.eval_summary.v1",
-        "sha256": "397b10bcd00495b68d03fa08d3c649bed182765613afd1c3d915e61f84debfdb",
+        "sha256": "0dd16fc4a058d3ac5353262d82a0d02604418d2c675c78c0812da9a106f260ca",
         "size_bytes": 13218
       }
     ],
@@ -1556,7 +1556,7 @@
         "readiness": "ready",
         "role": "evidence_bundle",
         "schema_version": "hfr.evidence_bundle.v1",
-        "sha256": "aea6a6ba5ff01d666b5672a3e90f2963216eae1f5fe9b6e2bb7a72fb0652c544",
+        "sha256": "2efa183c446de49dafda5a7cf7b603b3eb66711be854252684f6779836700d26",
         "size_bytes": 19147
       }
     ],
@@ -1721,7 +1721,7 @@
         "readiness": "applied",
         "role": "promotion_alias_apply",
         "schema_version": "hfr.promotion_alias_apply.v1",
-        "sha256": "f2f1580e9a95fa9e2424076a3ce24e94c70f126629af15fede18be953575f3aa",
+        "sha256": "e246d1d7c19968b6009354f7e73fd19e74514ab60e9d9459bf64911064a4dfdd",
         "size_bytes": 9965
       }
     ],
@@ -1736,7 +1736,7 @@
         "readiness": "",
         "role": "promotion_archive",
         "schema_version": "hfr.promotion_archive.v1",
-        "sha256": "8411dfe2c620b51e0fc7bec7bf7e062e002a5ab2b30397d6a97be5b14e791f8f",
+        "sha256": "d693832684eff56817b11c185133bddd25ada081b13707eae21f9c241a7348ab",
         "size_bytes": 100618
       }
     ],
@@ -1751,7 +1751,7 @@
         "readiness": "ready",
         "role": "promotion_cards",
         "schema_version": "hfr.promotion_cards.v1",
-        "sha256": "4fa08008939b5e5ea500f4896932cc52b0d20a0b5ebf06a89d5738bda3dd20b8",
+        "sha256": "7843921fed2078f62e7c27ca16ae31cb5f0b42860e0b159eb188b1baf83c3818",
         "size_bytes": 9912
       }
     ],
@@ -1766,7 +1766,7 @@
         "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
+        "sha256": "f0f1e78265e6172c15bb817cd6acf20070b90a04a657809c823be78e2a14e236",
         "size_bytes": 46528
       }
     ],
@@ -1796,7 +1796,7 @@
         "readiness": "ready",
         "role": "promotion_release_record",
         "schema_version": "hfr.promotion_release_record.v1",
-        "sha256": "afbf2a29378f9a659362731f4a31841433ea09cc0874163baf69f47918f56e2d",
+        "sha256": "f6f79be58a27258e8596d6c98b3bb70f285741ea0e18e77637136ccdd48cef96",
         "size_bytes": 19454
       }
     ],

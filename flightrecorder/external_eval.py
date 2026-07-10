@@ -12,6 +12,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .dependency_probe import module_available_without_import
+from .source_contract import inspect_artifact_source
 
 EXTERNAL_EVAL_PLAN_SCHEMA_VERSION = "hfr.external_eval_adapters.v1"
 EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION = "hfr.external_eval_receipt.v1"
@@ -459,7 +460,8 @@ def _manifest_metadata(path: Path) -> dict[str, Any]:
         return {"schema_version": None, "ready": False, "scenario_count": None}
     if not isinstance(payload, dict):
         return {"schema_version": None, "ready": False, "scenario_count": None}
-    ready = payload.get("ready") if isinstance(payload.get("ready"), bool) else None
+    inspection = inspect_artifact_source(path, "heldout_manifest")
+    ready = inspection.get("ready") is True
     scenario_count = payload.get("scenario_count") if isinstance(payload.get("scenario_count"), int) else None
     return {
         "schema_version": payload.get("schema_version") if isinstance(payload.get("schema_version"), str) else None,

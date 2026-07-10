@@ -11,6 +11,7 @@ from pathlib import Path
 from flightrecorder.cli import main
 from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
 from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -316,7 +317,7 @@ class EvalSummaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
-            missing_report = root / "runs" / "email_reply_completion" / "report.html"
+            missing_report = root / _read_json(suite)["runs"][0]["report"]
             self.assertTrue(missing_report.is_file())
             missing_report.unlink()
             out = root / "eval_summary.json"
@@ -340,7 +341,7 @@ class EvalSummaryTests(unittest.TestCase):
                 run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)]),
                 0,
             )
-            report = root / "runs" / "email_reply_completion" / "report.html"
+            report = root / _read_json(suite)["runs"][0]["report"]
             self.assertTrue(report.is_file())
             report.unlink()
 
@@ -605,6 +606,223 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertEqual(comparison["governance_claims"]["candidate_win_scenarios"], [])
             self.assertTrue(comparison["governance_claims"]["suppressed_raw_claims"])
             self.assertIn("heldout_scenario_set_mismatch", comparison["governance_claims"]["suppression_reasons"])
+
+    def test_eval_summary_suppresses_claims_for_heldout_fingerprint_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline, candidate = _fingerprint_mismatched_suite_summaries(root)
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            out = root / "eval_summary.json"
+
+            self.assertNotEqual(
+                _read_json(baseline)["runs"][0]["scenario_sha256"],
+                _read_json(candidate)["runs"][0]["scenario_sha256"],
+            )
+            self.assertEqual(run_cli(["validate", "--suite-summary", str(baseline), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--suite-summary", str(candidate), "--strict"]), 0)
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            comparison = summary["comparisons"][0]
+            self.assertFalse(summary["passed"])
+            self.assertEqual(summary["heldout_scenarios"]["status"], "mismatched")
+            self.assertFalse(summary["heldout_scenarios"]["cross_arm_claims_allowed"])
+            self.assertIn(
+                "heldout_scenario_fingerprint_mismatch",
+                summary["heldout_scenarios"]["blocking_reasons"],
+            )
+            self.assertFalse(comparison["claims_allowed"])
+            self.assertEqual(comparison["raw_movement"]["candidate_win_count"], 1)
+            self.assertEqual(comparison["governance_claims"]["candidate_win_count"], 0)
+            self.assertTrue(comparison["governance_claims"]["suppressed_raw_claims"])
+            self.assertIn(
+                "heldout_scenario_fingerprint_mismatch",
+                comparison["governance_claims"]["suppression_reasons"],
+            )
+            fingerprint_repairs = [
+                item
+                for item in summary["repair_curriculum"]["items"]
+                if item["reason"] == "heldout_scenario_fingerprint_mismatch"
+            ]
+            self.assertTrue(fingerprint_repairs)
+            self.assertTrue(all(item["priority"] == "critical" for item in fingerprint_repairs))
+
+    def test_eval_summary_suppresses_claims_for_semantically_invalid_arm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(
+                root / "baseline" / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            candidate = _suite_summary(
+                root / "candidate" / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            candidate_payload = _read_json(candidate)
+            candidate_scenario = candidate.parent / candidate_payload["runs"][0]["scenario_path"]
+            candidate_scenario.write_text('{"id":"email_reply_completion","prompt":"mutated"}\n', encoding="utf-8")
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            self.assertEqual(summary["heldout_scenarios"]["status"], "blocked")
+            self.assertFalse(summary["heldout_scenarios"]["cross_arm_claims_allowed"])
+            self.assertIn(
+                "suite_summary_semantic_validation_failed",
+                summary["heldout_scenarios"]["blocking_reasons"],
+            )
+            comparison = summary["comparisons"][0]
+            self.assertFalse(comparison["claims_allowed"])
+            self.assertEqual(comparison["governance_claims"]["candidate_win_count"], 0)
+
+    def test_eval_summary_blocks_one_suite_from_impersonating_two_arms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "suite_summary.json", ["email_reply_completion"])
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={suite}",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            self.assertFalse(summary["passed"])
+            self.assertEqual(summary["heldout_scenarios"]["status"], "blocked")
+            self.assertIn(
+                "duplicate_heldout_arm_sources",
+                summary["heldout_scenarios"]["blocking_reasons"],
+            )
+            self.assertFalse(summary["comparisons"][0]["claims_allowed"])
+            self.assertEqual(
+                summary["comparisons"][0]["governance_claims"]["candidate_win_count"],
+                0,
+            )
+
+    def test_eval_summary_blocks_content_aliased_suite_arms(self):
+        for alias_kind in ("hardlink", "copy"):
+            with self.subTest(alias_kind=alias_kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+                candidate = root / "candidate_suite.json"
+                if alias_kind == "hardlink":
+                    os.link(baseline, candidate)
+                else:
+                    shutil.copyfile(baseline, candidate)
+                compare_export = _compare_export(
+                    root / "compare_rl",
+                    candidate_wins=["email_reply_completion"],
+                )
+                out = root / "eval_summary.json"
+
+                code = run_cli(
+                    [
+                        "eval-summary",
+                        "--suite-summary",
+                        f"baseline={baseline}",
+                        "--suite-summary",
+                        f"candidate={candidate}",
+                        "--compare-export",
+                        f"candidate={compare_export}",
+                        "--out",
+                        str(out),
+                    ]
+                )
+                validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+                self.assertEqual(code, 1)
+                self.assertEqual(validate_code, 0)
+                summary = _read_json(out)
+                self.assertFalse(summary["passed"])
+                self.assertEqual(summary["heldout_scenarios"]["status"], "blocked")
+                self.assertIn(
+                    "duplicate_heldout_arm_sources",
+                    summary["heldout_scenarios"]["blocking_reasons"],
+                )
+                self.assertFalse(summary["comparisons"][0]["claims_allowed"])
+
+    def test_strict_validate_rejects_forged_identical_eval_fingerprint_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline, candidate = _fingerprint_mismatched_suite_summaries(root)
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            out = root / "eval_summary.json"
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["heldout_scenarios"].update(
+                {
+                    "status": "identical",
+                    "identical": True,
+                    "cross_arm_claims_allowed": True,
+                    "mismatches": [],
+                    "blocking_reasons": [],
+                }
+            )
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(eval_summary_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("fingerprint", errors.lower())
 
     def test_eval_summary_writes_markdown_report_without_approving_raw_movement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1102,6 +1320,53 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("eval_summary.serving_preflight.attached_count expected 1", errors)
             self.assertIn("eval_summary.serving_preflight.input_count expected at least 1", errors)
 
+    def test_validate_malformed_eval_heldout_status_returns_errors_instead_of_crashing(self):
+        for value in ({}, [], [{}]):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+                out = root / "eval_summary.json"
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+                summary = _read_json(out)
+                summary["heldout_scenarios"]["status"] = value
+                out.write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                validation = validate_artifacts(eval_summary_paths=[out], strict=True)
+
+                self.assertFalse(validation["passed"], validation)
+                errors = "\n".join(
+                    error for target in validation["targets"] for error in target["errors"]
+                )
+                self.assertIn("heldout_scenarios.status", errors)
+
+    def test_validate_malformed_eval_arm_paths_returns_errors_instead_of_crashing(self):
+        for value in ("\x00", "x" * 5000):
+            with (
+                self.subTest(path_kind="nul" if value == "\x00" else "overlong"),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                root = Path(tmp)
+                suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+                out = root / "eval_summary.json"
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+                summary = _read_json(out)
+                summary["arms"][0]["path"] = value
+                out.write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                validation = validate_artifacts(eval_summary_paths=[out], strict=True)
+
+                self.assertFalse(validation["passed"], validation)
+                errors = "\n".join(
+                    error for target in validation["targets"] for error in target["errors"]
+                )
+                self.assertIn("eval_summary.arms[0].path", errors)
+
     def test_validate_rejects_eval_summary_with_unexplained_blocked_serving_preflight(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1293,7 +1558,8 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("eval_summary.risks[0] contains unknown field(s): ['live_receipt_url']", errors)
 
 
-def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> Path:
+def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None, scenario_overrides=None) -> Path:
+    run_root = f"{path.stem}_runs"
     runs = [
         {
             "scenario_id": scenario_id,
@@ -1301,11 +1567,11 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
             "task_family": scenario_id,
             "scenario_path": f"scenarios/{scenario_id}.json",
             "trace_path": f"traces/{scenario_id}.jsonl",
-            "run_dir": f"runs/{scenario_id}",
-            "report": f"runs/{scenario_id}/report.html",
-            "scorecard": f"runs/{scenario_id}/scorecard.json",
-            "run_digest": f"runs/{scenario_id}/run_digest.json",
-            "lineage": f"runs/{scenario_id}/artifact_lineage.json",
+            "run_dir": f"{run_root}/{scenario_id}",
+            "report": f"{run_root}/{scenario_id}/report.html",
+            "scorecard": f"{run_root}/{scenario_id}/scorecard.json",
+            "run_digest": f"{run_root}/{scenario_id}/run_digest.json",
+            "lineage": f"{run_root}/{scenario_id}/artifact_lineage.json",
             "passed": True,
             "score": 100,
             "failed_rules": [],
@@ -1314,6 +1580,7 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
         for index, scenario_id in enumerate(scenario_ids)
     ]
     overrides = list(run_overrides or [])
+    scenario_overrides = list(scenario_overrides or [])
     source_path_fields = {
         "scenario_path",
         "trace_path",
@@ -1326,19 +1593,18 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
     for index, override in enumerate(overrides):
         if index < len(runs):
             runs[index].update({key: value for key, value in override.items() if key in source_path_fields})
-    for run in runs:
+    for index, run in enumerate(runs):
         scenario_id = str(run["scenario_id"])
+        scenario_payload = {
+            "id": scenario_id,
+            "policy": {},
+            "prompt": f"Complete the {scenario_id} test task.",
+            "title": scenario_id,
+        }
+        if index < len(scenario_overrides):
+            scenario_payload.update(scenario_overrides[index])
         scenario_content = (
-            json.dumps(
-                {
-                    "id": scenario_id,
-                    "policy": {},
-                    "prompt": f"Complete the {scenario_id} test task.",
-                    "title": scenario_id,
-                },
-                indent=2,
-                sort_keys=True,
-            )
+            json.dumps(scenario_payload, indent=2, sort_keys=True)
             + "\n"
         ).encode("utf-8")
         trace_content = (
@@ -1403,7 +1669,7 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
     payload = {
         "schema_version": "hfr.run_suite.v1",
         "scenarios_dir": "scenarios",
-        "out_dir": "runs",
+        "out_dir": run_root,
         "total": len(runs),
         "passed": len(runs),
         "failed": 0,
@@ -1421,10 +1687,24 @@ def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> P
             "passed": len(runs),
         },
         "runs": runs,
-        "artifacts": {"suite_result": "runs/harness_suite_result.json"},
+        "artifacts": {"suite_result": f"{run_root}/harness_suite_result.json"},
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def _fingerprint_mismatched_suite_summaries(root: Path) -> tuple[Path, Path]:
+    baseline = _suite_summary(
+        root / "baseline" / "suite_summary.json",
+        ["email_reply_completion"],
+        scenario_overrides=[{"prompt": "Complete the baseline held-out task."}],
+    )
+    candidate = _suite_summary(
+        root / "candidate" / "suite_summary.json",
+        ["email_reply_completion"],
+        scenario_overrides=[{"prompt": "Complete the candidate held-out task."}],
+    )
+    return baseline, candidate
 
 
 def _suite_task_families(runs: list[dict]) -> list[dict]:

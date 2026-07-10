@@ -617,9 +617,12 @@ endpoint call or managed process and are not persisted in those artifacts.
 
 ## Eval And Governance
 
-Held-out eval claims are valid only when compared arms share identical scenario
-sets. Raw score movement stays separate from governance claims until that
-invariant passes.
+Held-out eval claims are valid only when distinct compared arms share identical
+scenario IDs and replayed scenario-content SHA-256 values. Raw score movement
+stays separate from governance claims until that invariant passes, and external
+adapter plans replay the manifest rather than trusting a stored readiness bit.
+The arm suite summaries must also have distinct file fingerprints: copying or
+hard-linking one summary under a second label is blocked as duplicate evidence.
 
 ```bash
 flightrecorder heldout-manifest \

@@ -478,15 +478,31 @@ test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
 test -f runs/compare_gate.json
 "$PYTHON" -m flightrecorder schemas --check runs/compare_gate.json >/dev/null
 test -f examples/compare_gate_policy.demo.json
+heldout_manifest_status=0
 "$PYTHON" -m flightrecorder heldout-manifest \
   --suite-summary baseline=runs/suite_summary.json \
   --suite-summary candidate=runs/suite_summary.json \
-  --out runs/heldout_scenarios.json >/dev/null
+  --out runs/heldout_scenarios.json >/dev/null || heldout_manifest_status=$?
+if [[ "$heldout_manifest_status" -ne 1 ]]; then
+  echo "heldout-manifest did not fail closed for duplicate arm evidence" >&2
+  exit 1
+fi
 test -f runs/heldout_scenarios.json
 "$PYTHON" -m flightrecorder validate \
   --heldout-manifest runs/heldout_scenarios.json \
   --strict >/dev/null
 "$PYTHON" -m flightrecorder schemas --check runs/heldout_scenarios.json >/dev/null
+"$PYTHON" - <<'PY'
+import json
+from pathlib import Path
+
+manifest = json.loads(Path("runs/heldout_scenarios.json").read_text(encoding="utf-8"))
+assert manifest["ready"] is False
+assert manifest["status"] == "blocked"
+assert manifest["cross_arm_claims_allowed"] is False
+assert "duplicate_heldout_source_paths" in manifest["blocking_reasons"]
+assert "duplicate_heldout_source_content" in manifest["blocking_reasons"]
+PY
 external_eval_plan_status=0
 "$PYTHON" -m flightrecorder external-eval-plan \
   --scenario-manifest runs/heldout_scenarios.json \

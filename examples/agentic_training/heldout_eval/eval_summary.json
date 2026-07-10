@@ -223,8 +223,8 @@
         "schema_version": null,
         "served_model_id": ""
       },
-      "sha256": "657ca78fc466f7f0d0681b7a20f3ae59fcbacbe0102d98f61fcf51f2cd25bfa4",
-      "size_bytes": 7529,
+      "sha256": "4f52a0e34e9f4bc11aa636adbc6003957b12c6ae4b98bc63b6972d0b4a8adfaa",
+      "size_bytes": 7699,
       "source_validation": {
         "error_count": 0,
         "passed": true,
@@ -286,7 +286,7 @@
     }
   ],
   "gate_count": 0,
-  "generated_at": "2026-07-10T06:17:30.852066+00:00",
+  "generated_at": "2026-07-10T13:52:22.193754+00:00",
   "governance_ready": true,
   "heldout_scenarios": {
     "arms": [

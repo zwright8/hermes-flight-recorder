@@ -821,9 +821,11 @@ card, and dataset card decisions.
 - External-eval strict validation now warns on absolute heldout-manifest and
   source-plan refs before adapter plans or dry-run receipts become public
   governance evidence.
-- Heldout-manifest validation replays source suite summaries from the manifest
-  location, rejecting stale scenario sets or fingerprints while strict
-  validation warns on absolute source refs.
+- Heldout-manifest validation replays source suite summaries and scenario bytes
+  from the manifest location, rejects stale or incomplete fingerprints and
+  duplicate arm sources, while strict validation warns on absolute source refs.
+- External-eval planning revalidates held-out semantics instead of trusting a
+  copied readiness flag, so forged or stale manifests cannot unlock adapters.
 - Rollout-receipt strict validation now warns on absolute source-plan refs
   before mock rollout evidence is admitted to rejection-sampling gates.
 - Rollout-plan strict validation now warns on absolute plan, scenario, and
