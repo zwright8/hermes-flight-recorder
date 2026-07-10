@@ -384,9 +384,13 @@ recomputes source metrics and check actuals, and verifies persisted policy
 requirements still have corresponding gate checks from the gate file location.
 Decision-gate validation reopens the referenced source artifact from the gate
 file's directory, so cwd-relative lookalikes, deleted sources, stale hashes, and
-rewritten source decisions cannot validate as promotion-ready evidence.
+rewritten source decisions cannot validate as promotion-ready evidence. Gate
+creation and validation also require a registered decision-bearing source type
+that satisfies its bundled JSON Schema; arbitrary or wrong-type JSON cannot
+authorize promotion.
 Promotion-ledger validation applies the same file-relative rule to recorded
-decision gates before trusting ledger metrics or longitudinal gate decisions.
+decision gates and revalidates each gate's current source contract before
+trusting ledger metrics or longitudinal gate decisions.
 Promotion-decision validation additionally replays the referenced evidence
 bundle, eval summary, and external result set before trusting persisted lineage
 checks or alias authorization.

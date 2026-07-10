@@ -2814,13 +2814,15 @@ def cmd_gate_improvement_ledger(args: argparse.Namespace) -> int:
 
 
 def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
-    ledger = _read_json(Path(args.promotion_ledger))
+    promotion_ledger_path = Path(args.promotion_ledger)
+    ledger = _read_json(promotion_ledger_path)
     options = _promotion_ledger_gate_options(args)
     output_path = Path(args.out) if args.out else None
     result = evaluate_promotion_ledger_gate(
         ledger,
-        promotion_ledger_path=_display_path_for_output_source(
-            Path(args.promotion_ledger),
+        promotion_ledger_path=promotion_ledger_path,
+        promotion_ledger_display_path=_display_path_for_output_source(
+            promotion_ledger_path,
             output_path,
             args.preserve_paths,
         ),
@@ -4543,7 +4545,11 @@ def _parser() -> argparse.ArgumentParser:
         "gate-decision",
         help="Gate a Flight Recorder decision recommendation for CI promotion",
     )
-    gate_decision.add_argument("--artifact", required=True, help="Flight Recorder JSON artifact with a decision block")
+    gate_decision.add_argument(
+        "--artifact",
+        required=True,
+        help="Supported registered Flight Recorder decision artifact satisfying its bundled schema",
+    )
     gate_decision.add_argument("--expect-recommendation", required=True, help="Required decision.recommendation value")
     gate_decision.add_argument("--expect-readiness", help="Optional required decision.readiness value")
     gate_decision.add_argument("--require-passed", action="store_true", help="Also require the source artifact root passed field to be true")

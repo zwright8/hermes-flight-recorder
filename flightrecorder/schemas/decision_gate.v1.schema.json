@@ -2,7 +2,7 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/decision_gate.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
-  "description": "Side-effect-free gate over a source artifact decision recommendation.",
+  "description": "Side-effect-free gate over a supported registered, schema-valid source artifact decision recommendation.",
   "properties": {
     "artifact": { "minLength": 1, "type": "string" },
     "check_count": { "minimum": 0, "type": "integer" },
@@ -76,7 +76,24 @@
         "passed": { "type": ["boolean", "null"] },
         "readiness": { "type": "string" },
         "recommendation": { "type": "string" },
-        "schema_version": { "type": "string" },
+        "schema_version": {
+          "enum": [
+            "hfr.action_ledger_gate.v1",
+            "hfr.agentic_loop_governance_receipt.v1",
+            "hfr.agentic_loop_ledger.v1",
+            "hfr.compare_gate.v1",
+            "hfr.evidence_bundle.v1",
+            "hfr.improvement_ledger.v1",
+            "hfr.improvement_ledger_gate.v1",
+            "hfr.improvement_plan.v1",
+            "hfr.promotion_decision.v1",
+            "hfr.promotion_ledger_gate.v1",
+            "hfr.reviewed_gate.v1",
+            "hfr.suite_gate.v1",
+            "hfr.training_gate.v1"
+          ],
+          "type": "string"
+        },
         "summary": { "type": "string" }
       },
       "required": [

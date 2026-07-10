@@ -387,6 +387,11 @@ flightrecorder gate-compare-export \
   --policy examples/compare_gate_policy.demo.json \
   --out examples/agentic_training/promotion_governance/compare_gate.json
 
+`gate-decision` accepts only registered decision-bearing artifact types that
+satisfy their bundled JSON Schema. Decision-gate and promotion-ledger
+validation reopen the current source and recheck that contract before trusting
+the recorded recommendation.
+
 flightrecorder gate-decision \
   --artifact examples/agentic_training/promotion_governance/compare_gate.json \
   --expect-recommendation promote_iteration \

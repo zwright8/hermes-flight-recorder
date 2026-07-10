@@ -9,7 +9,6 @@ from flightrecorder.external_eval import build_external_eval_plan, write_externa
 from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
 from flightrecorder.governance import build_promotion_decision
 from flightrecorder.model_grader import build_model_grader_override_receipt
-from flightrecorder.promotion_ledger import build_promotion_ledger
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,41 +49,6 @@ def write_eval_summary(root: Path) -> Path:
     path = root / "eval_summary.json"
     path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
-
-
-def write_valid_promotion_ledger(root: Path) -> Path:
-    decision_gate = root / "decision_gate.json"
-    decision_gate.write_text(
-        json.dumps(
-            {
-                "schema_version": "hfr.decision_gate.v1",
-                "passed": True,
-                "readiness": "ready",
-                "recommendation": "allow_promotion",
-                "expected_recommendation": "promote_iteration",
-                "expected_readiness": "ready",
-                "require_passed": True,
-                "check_count": 1,
-                "failed_check_count": 0,
-                "source_decision": {
-                    "schema_version": "hfr.action_ledger_gate.v1",
-                    "passed": True,
-                    "readiness": "ready",
-                    "recommendation": "promote_iteration",
-                    "blocking_check_count": 0,
-                },
-                "source_artifact": {},
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    ledger_path = root / "promotion_ledger.json"
-    ledger = build_promotion_ledger([decision_gate], out_path=ledger_path)
-    ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return ledger_path
 
 
 def write_valid_promotion_decision(root: Path) -> Path:

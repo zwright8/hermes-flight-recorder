@@ -7,8 +7,26 @@ from pathlib import Path
 from typing import Any
 
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .schema_registry import SchemaRegistryError, check_schema_contract
 
 DECISION_GATE_SCHEMA_VERSION = "hfr.decision_gate.v1"
+DECISION_GATE_SOURCE_SCHEMAS = {
+    "hfr.action_ledger_gate.v1": "action_ledger_gate",
+    "hfr.agentic_loop_governance_receipt.v1": "agentic_loop_governance_receipt",
+    "hfr.agentic_loop_ledger.v1": "agentic_loop_ledger",
+    "hfr.compare_gate.v1": "compare_gate",
+    "hfr.evidence_bundle.v1": "evidence_bundle",
+    "hfr.improvement_ledger.v1": "improvement_ledger",
+    "hfr.improvement_ledger_gate.v1": "improvement_ledger_gate",
+    "hfr.improvement_plan.v1": "improvement_plan",
+    "hfr.promotion_decision.v1": "promotion_decision",
+    "hfr.promotion_ledger_gate.v1": "promotion_ledger_gate",
+    "hfr.reviewed_gate.v1": "reviewed_gate",
+    "hfr.suite_gate.v1": "suite_gate",
+    "hfr.training_gate.v1": "training_gate",
+}
+_SOURCE_CONTRACT_ERROR_LIMIT = 8
+_SOURCE_CONTRACT_ERROR_LENGTH = 320
 
 
 class DecisionGateError(ValueError):
@@ -30,6 +48,9 @@ def evaluate_decision_gate(
         raise DecisionGateError("Decision gate input must be a JSON object.")
     if not expect_recommendation:
         raise DecisionGateError("--expect-recommendation must be non-empty.")
+    source_contract_errors = decision_gate_source_contract_errors(artifact)
+    if source_contract_errors:
+        raise DecisionGateError("Decision gate source artifact is not eligible: " + "; ".join(source_contract_errors))
     reject_symlinked_decision_artifact_input(Path(artifact_path))
     source_artifact = _source_artifact_record(Path(artifact_path), preserve_paths, artifact_display_path)
     decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
@@ -96,6 +117,38 @@ def evaluate_decision_gate(
             "They do not rerun evals, repair failures, train models, or mutate the source artifact.",
         ],
     }
+
+
+def decision_gate_source_contract_errors(artifact: Any) -> list[str]:
+    """Return bounded errors when an artifact is not an eligible gate source."""
+    if not isinstance(artifact, dict):
+        return ["source artifact must be a JSON object"]
+    schema_version = artifact.get("schema_version")
+    if not isinstance(schema_version, str) or not schema_version.strip():
+        return ["source artifact must declare a supported non-empty schema_version"]
+    schema_name = DECISION_GATE_SOURCE_SCHEMAS.get(schema_version)
+    if schema_name is None:
+        supported = ", ".join(sorted(DECISION_GATE_SOURCE_SCHEMAS))
+        displayed_version = _bounded_error(repr(schema_version))
+        return [f"source artifact schema_version {displayed_version} is not supported; expected one of: {supported}"]
+    try:
+        result = check_schema_contract(artifact, name_or_id=schema_name)
+    except SchemaRegistryError as exc:
+        return [f"source artifact schema contract could not be resolved: {_bounded_error(str(exc))}"]
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    bounded = [
+        f"source artifact does not satisfy {schema_version!r}: {_bounded_error(str(error))}"
+        for error in errors[:_SOURCE_CONTRACT_ERROR_LIMIT]
+    ]
+    if len(errors) > _SOURCE_CONTRACT_ERROR_LIMIT:
+        bounded.append(f"source artifact has {len(errors) - _SOURCE_CONTRACT_ERROR_LIMIT} additional schema error(s)")
+    return bounded
+
+
+def _bounded_error(message: str) -> str:
+    if len(message) <= _SOURCE_CONTRACT_ERROR_LENGTH:
+        return message
+    return message[: _SOURCE_CONTRACT_ERROR_LENGTH - 3] + "..."
 
 
 def _source_artifact_record(path: Path, preserve_paths: bool, display_path: str | None = None) -> dict[str, Any]:
