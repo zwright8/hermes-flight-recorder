@@ -143,6 +143,7 @@ from .model_grader import (
 from .agentic_training_flow import AgenticTrainingFlowError, build_agentic_training_flow, write_agentic_training_flow
 from .next_iteration_schedule import NextIterationScheduleError, build_next_iteration_schedule, write_next_iteration_schedule
 from .path_safety import (
+    assert_output_does_not_alias_sources,
     locked_owned_output_directory,
     output_directory_lock_is_held,
     path_has_symlink_component,
@@ -2038,12 +2039,21 @@ def cmd_model_grader_gate(args: argparse.Namespace) -> int:
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
+    output_path = Path(args.out) if args.out else None
+    expected_output_sha256 = (
+        json_file_sha256(output_path) if output_path is not None else None
+    )
     manifest = build_heldout_manifest(
         suite_summary_specs=args.suite_summary,
         preserve_paths=args.preserve_paths,
+        out_path=output_path,
     )
-    if args.out:
-        write_heldout_manifest(manifest, args.out)
+    if output_path is not None:
+        write_heldout_manifest(
+            manifest,
+            output_path,
+            expected_sha256=expected_output_sha256,
+        )
         print(f"wrote {args.out}")
     else:
         print(json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False))
@@ -2852,9 +2862,21 @@ def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
 
 def cmd_gate_decision(args: argparse.Namespace) -> int:
     artifact_path = Path(args.artifact)
+    output_path = Path(args.out) if args.out else None
+    if output_path is not None:
+        try:
+            assert_output_does_not_alias_sources(
+                output_path,
+                [artifact_path],
+                label="decision gate",
+            )
+        except ValueError as exc:
+            raise DecisionGateError(str(exc)) from exc
+    expected_output_sha256 = (
+        json_file_sha256(output_path) if output_path is not None else None
+    )
     reject_symlinked_decision_artifact_input(artifact_path)
     artifact = _read_json(artifact_path)
-    output_path = Path(args.out) if args.out else None
     result = evaluate_decision_gate(
         artifact,
         artifact_path=artifact_path,
@@ -2868,12 +2890,16 @@ def cmd_gate_decision(args: argparse.Namespace) -> int:
         require_passed=args.require_passed,
         preserve_paths=args.preserve_paths,
     )
-    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(rendered, encoding="utf-8")
+    if output_path is not None:
+        atomic_write_json_cas(
+            output_path,
+            result,
+            expected_sha256=expected_output_sha256,
+            new_file_mode=0o666,
+        )
         print(f"wrote {args.out}")
     else:
+        rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
         print(rendered, end="")
     return 0 if result["passed"] else 1
 

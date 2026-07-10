@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -24,26 +25,76 @@ _ACTIVE_OUTPUT_LOCKS: ContextVar[tuple[str, ...]] = ContextVar(
     "hfr_active_output_locks",
     default=(),
 )
+_MACOS_SYSTEM_ROOT_SYMLINKS = {
+    Path("/etc"): Path("/private/etc"),
+    Path("/tmp"): Path("/private/tmp"),
+    Path("/var"): Path("/private/var"),
+}
 
 
 def path_has_symlink_component(path: Path, *, include_leaf: bool) -> bool:
     """Return true when a path traverses a non-root symlink component."""
+    if "\x00" in os.fspath(path):
+        return True
     parts = [part for part in path.parts if part not in {"", "."}]
     if not parts:
         return False
     current = Path(path.anchor) if path.is_absolute() else Path.cwd()
     walk_parts = parts[1:] if path.is_absolute() else parts
-    for index, part in enumerate(walk_parts):
-        if not include_leaf and index == len(walk_parts) - 1:
-            break
-        current = current.parent if part == ".." else current / part
-        if current.is_symlink():
-            if _is_root_level_path(current):
-                # macOS commonly exposes /var as a root-level symlink to /private/var.
-                current = current.resolve(strict=False)
-                continue
-            return True
+    try:
+        for index, part in enumerate(walk_parts):
+            if not include_leaf and index == len(walk_parts) - 1:
+                break
+            current = current.parent if part == ".." else current / part
+            if current.is_symlink():
+                if _is_allowed_system_root_symlink(current):
+                    # macOS exposes these fixed system paths through /private.
+                    current = current.resolve(strict=False)
+                    continue
+                return True
+    except (OSError, ValueError, RuntimeError):
+        return True
     return False
+
+
+def assert_output_does_not_alias_sources(
+    output: Path,
+    sources: list[Path],
+    *,
+    label: str,
+) -> None:
+    """Reject an output that is or resolves to one of its source files."""
+    working_directory = Path.cwd()
+    output_path = output if output.is_absolute() else working_directory / output
+    if path_has_symlink_component(output_path, include_leaf=True):
+        raise ValueError(f"{label} output must not contain symlink components: {output}")
+    try:
+        output_resolved = output_path.resolve(strict=False)
+        output_identity = _existing_file_identity(output_path)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ValueError(f"could not verify {label} output identity at {output}: {exc}") from exc
+
+    for source in sources:
+        source_path = source if source.is_absolute() else working_directory / source
+        try:
+            source_resolved = source_path.resolve(strict=False)
+            source_identity = _existing_file_identity(source_path)
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise ValueError(f"could not verify {label} source identity at {source}: {exc}") from exc
+        if output_resolved == source_resolved or (
+            output_identity is not None
+            and source_identity is not None
+            and output_identity == source_identity
+        ):
+            raise ValueError(f"{label} output must not alias source file: {source}")
+
+
+def _existing_file_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        path_stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return path_stat.st_dev, path_stat.st_ino
 
 
 def resolve_artifact_reference_path(value: str, source_path: Path) -> Path:
@@ -564,8 +615,16 @@ def _canonical_output_path(path: Path, *, cwd: Path | None) -> Path:
     return lexical_path.resolve(strict=False)
 
 
-def _is_root_level_path(path: Path) -> bool:
-    return path.is_absolute() and path.parent == Path(path.anchor)
+def _is_allowed_system_root_symlink(path: Path) -> bool:
+    if sys.platform != "darwin":
+        return False
+    expected = _MACOS_SYSTEM_ROOT_SYMLINKS.get(path)
+    if expected is None:
+        return False
+    try:
+        return path.resolve(strict=True) == expected
+    except OSError:
+        return False
 
 
 def _is_same_or_ancestor(candidate: Path, protected_path: Path) -> bool:

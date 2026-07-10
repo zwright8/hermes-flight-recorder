@@ -10,11 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .atomic_json import atomic_write_json_cas, json_file_sha256
+from .path_safety import assert_output_does_not_alias_sources
 from .schema_registry import check_schema_contract
 
 HELDOUT_MANIFEST_SCHEMA_VERSION = "hfr.heldout_scenario_manifest.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 MAX_SCENARIO_BYTES = 4 * 1024 * 1024
+_EXPECTED_SHA256_UNSET = object()
 
 
 class HeldoutManifestError(ValueError):
@@ -27,16 +30,58 @@ class LabeledPath:
     path: Path
 
 
+@dataclass(frozen=True)
+class _HeldoutSourceSnapshot:
+    suite_path: Path
+    suite_identity: tuple[int, int]
+    suite_sha256: str
+    scenarios: tuple["_HeldoutPathSnapshot", ...]
+
+
+@dataclass(frozen=True)
+class _HeldoutPathSnapshot:
+    path: Path
+    identity: tuple[int, int] | None
+    kind: int | None
+    size_bytes: int | None
+    modified_at_ns: int | None
+    changed_at_ns: int | None
+
+
+class _BuiltHeldoutManifest(dict[str, Any]):
+    """Manifest mapping carrying non-serialized build-time source provenance."""
+
+    def __init__(
+        self,
+        payload: dict[str, Any] | None = None,
+        *,
+        source_snapshots: tuple[_HeldoutSourceSnapshot, ...] = (),
+        source_projection_sha256: str = "",
+    ) -> None:
+        super().__init__(payload or {})
+        self._source_snapshots = source_snapshots
+        self._source_projection_sha256 = source_projection_sha256
+
+
 def build_heldout_manifest(
     *,
     suite_summary_specs: list[str | Path],
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a manifest of held-out scenario IDs from one or more suite summaries."""
     specs = [_labeled_path(spec) for spec in suite_summary_specs]
     if not specs:
         raise HeldoutManifestError("At least one --suite-summary is required")
-    sources = [_source_from_suite_summary(spec, preserve_paths) for spec in specs]
+    output_path = Path(out_path) if out_path is not None else None
+    if output_path is not None:
+        _reject_output_aliases(output_path, [spec.path for spec in specs])
+    source_results = [
+        _source_from_suite_summary(spec, preserve_paths, output_path)
+        for spec in specs
+    ]
+    sources = [source for source, _snapshot in source_results]
+    source_snapshots = tuple(snapshot for _source, snapshot in source_results)
     status, scenario_ids, mismatches, blocking_reasons = _manifest_status(sources)
     ready = bool(scenario_ids) and not blocking_reasons
     identical = status == "identical"
@@ -44,7 +89,7 @@ def build_heldout_manifest(
         {key: value for key, value in source.items() if not key.startswith("_")}
         for source in sources
     ]
-    return {
+    payload = {
         "schema_version": HELDOUT_MANIFEST_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "ready": ready,
@@ -63,28 +108,103 @@ def build_heldout_manifest(
             "recommendation": _recommendation(status, ready),
         },
     }
+    return _BuiltHeldoutManifest(
+        payload,
+        source_snapshots=source_snapshots,
+        source_projection_sha256=_json_value_sha256(public_sources),
+    )
 
 
-def write_heldout_manifest(manifest: dict[str, Any], out_path: str | Path) -> None:
-    """Write a held-out manifest as stable JSON."""
+def write_heldout_manifest(
+    manifest: dict[str, Any],
+    out_path: str | Path,
+    *,
+    expected_sha256: str | None | object = _EXPECTED_SHA256_UNSET,
+) -> None:
+    """Publish a freshly built held-out manifest as stable JSON."""
     path = Path(out_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if expected_sha256 is _EXPECTED_SHA256_UNSET:
+        effective_expected_sha256 = json_file_sha256(path)
+    elif expected_sha256 is None or isinstance(expected_sha256, str):
+        effective_expected_sha256 = expected_sha256
+    else:
+        raise HeldoutManifestError("expected_sha256 must be a SHA-256 string or null")
+    source_snapshots = _bound_source_snapshots(manifest)
+    _verify_source_snapshots(source_snapshots)
+    suite_paths = [snapshot.suite_path for snapshot in source_snapshots]
+    scenario_paths = [
+        scenario.path
+        for snapshot in source_snapshots
+        for scenario in snapshot.scenarios
+    ]
+    _reject_output_aliases(path, suite_paths)
+    _reject_output_aliases(path, scenario_paths)
+    _reject_public_projection_aliases(path, manifest)
     payload = json.loads(json.dumps(manifest))
-    for source in payload.get("sources", []):
-        if isinstance(source, dict) and isinstance(source.get("path"), str):
-            source["path"] = _output_relative_path(source.get("path"), path.parent)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    for source, snapshot in zip(
+        payload.get("sources", []),
+        source_snapshots,
+        strict=True,
+    ):
+        if isinstance(source, dict):
+            source["path"] = _output_relative_path(
+                os.fspath(snapshot.suite_path),
+                path.parent,
+            )
+    _verify_source_snapshots(source_snapshots)
+    _reject_output_aliases(path, suite_paths)
+    _reject_output_aliases(path, scenario_paths)
+    _reject_public_projection_aliases(path, manifest)
+    atomic_write_json_cas(
+        path,
+        payload,
+        expected_sha256=effective_expected_sha256,
+        new_file_mode=0o666,
+    )
 
 
-def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
-    summary = _read_object(spec.path, "suite summary")
-    return {
+def _source_from_suite_summary(
+    spec: LabeledPath,
+    preserve_paths: bool,
+    output_path: Path | None = None,
+) -> tuple[dict[str, Any], _HeldoutSourceSnapshot]:
+    source_lexical = spec.path if spec.path.is_absolute() else Path.cwd() / spec.path
+    try:
+        source_path = source_lexical.resolve(strict=True)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HeldoutManifestError(
+            f"could not resolve suite summary source {spec.path}: {exc}"
+        ) from exc
+    summary, source_sha256, source_identity = _read_object_snapshot(
+        source_path,
+        "suite summary",
+    )
+    scenarios = tuple(
+        _snapshot_reference_path(path)
+        for path in _scenario_reference_paths(summary, source_path)
+    )
+    if output_path is not None:
+        _reject_output_aliases(
+            output_path,
+            [scenario.path for scenario in scenarios],
+        )
+    source = {
         "label": spec.label,
         "path": _display_path(spec.path, preserve_paths),
-        "_source_identity": str(spec.path.resolve(strict=False)),
-        "_source_content_identity": _sha256_file(spec.path),
-        **_source_fields_from_suite_summary(summary, source_path=spec.path),
+        "_source_identity": str(source_path.resolve(strict=False)),
+        "_source_content_identity": source_sha256,
+        **_source_fields_from_suite_summary(
+            summary,
+            source_path=source_path,
+        ),
     }
+    snapshot = _HeldoutSourceSnapshot(
+        suite_path=source_path,
+        suite_identity=source_identity,
+        suite_sha256=source_sha256,
+        scenarios=scenarios,
+    )
+    return source, snapshot
 
 
 def _source_fields_from_suite_summary(
@@ -125,7 +245,10 @@ def _source_fields_from_suite_summary(
         blocking_reasons.append("duplicate_scenario_ids")
     if set(scenario_fingerprints) != set(unique_scenarios):
         blocking_reasons.append("missing_scenario_fingerprints")
-    if unique_scenarios and not _scenario_fingerprints_replay(summary, source_path):
+    if unique_scenarios and not _scenario_fingerprints_replay(
+        summary,
+        source_path,
+    ):
         blocking_reasons.append("scenario_fingerprint_replay_failed")
     return {
         "schema_version": summary.get("schema_version"),
@@ -210,7 +333,10 @@ def _is_lowercase_sha256(value: Any) -> bool:
     )
 
 
-def _scenario_fingerprints_replay(summary: dict[str, Any], source_path: Path | None) -> bool:
+def _scenario_fingerprints_replay(
+    summary: dict[str, Any],
+    source_path: Path | None,
+) -> bool:
     if source_path is None:
         return False
     runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
@@ -219,7 +345,7 @@ def _scenario_fingerprints_replay(summary: dict[str, Any], source_path: Path | N
             continue
         raw_path = run.get("scenario_path")
         expected_sha = run.get("scenario_sha256")
-        if not isinstance(raw_path, str) or not raw_path or not _is_lowercase_sha256(expected_sha):
+        if not isinstance(raw_path, str) or not raw_path:
             return False
         if raw_path.startswith("<redacted:"):
             return False
@@ -235,6 +361,8 @@ def _scenario_fingerprints_replay(summary: dict[str, Any], source_path: Path | N
         ):
             return False
         scenario_path = source_path.parent / relative_path
+        if not _is_lowercase_sha256(expected_sha):
+            return False
         if _path_has_symlink_component(scenario_path, root=source_path.parent) or not scenario_path.is_file():
             return False
         try:
@@ -246,6 +374,159 @@ def _scenario_fingerprints_replay(summary: dict[str, Any], source_path: Path | N
         if actual_sha != expected_sha:
             return False
     return True
+
+
+def _scenario_reference_paths(
+    summary: dict[str, Any],
+    source_path: Path,
+) -> list[Path]:
+    """Collect every local scenario reference before semantic processing."""
+    references: list[Path] = []
+    for collection_name in ("runs", "errors"):
+        rows = summary.get(collection_name)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            raw_path = row.get("scenario_path")
+            if not isinstance(raw_path, str) or not raw_path:
+                continue
+            path = Path(raw_path)
+            references.append(path if path.is_absolute() else source_path.parent / path)
+    return references
+
+
+def _bound_source_snapshots(
+    manifest: dict[str, Any],
+) -> tuple[_HeldoutSourceSnapshot, ...]:
+    if not isinstance(manifest, _BuiltHeldoutManifest) or not manifest._source_snapshots:
+        raise HeldoutManifestError(
+            "write_heldout_manifest requires the manifest returned directly by "
+            "build_heldout_manifest so source provenance remains bound"
+        )
+    if _json_value_sha256(manifest.get("sources")) != manifest._source_projection_sha256:
+        raise HeldoutManifestError(
+            "heldout manifest sources changed after manifest build"
+        )
+    return manifest._source_snapshots
+
+
+def _verify_source_snapshots(
+    snapshots: tuple[_HeldoutSourceSnapshot, ...],
+) -> None:
+    for snapshot in snapshots:
+        _summary, current_sha256, current_identity = _read_object_snapshot(
+            snapshot.suite_path,
+            "heldout manifest source suite summary",
+        )
+        if (
+            current_identity != snapshot.suite_identity
+            or current_sha256 != snapshot.suite_sha256
+        ):
+            raise HeldoutManifestError(
+                f"heldout manifest source changed after manifest build: {snapshot.suite_path}"
+            )
+        for scenario in snapshot.scenarios:
+            if _snapshot_reference_path(scenario.path) != scenario:
+                raise HeldoutManifestError(
+                    "heldout manifest scenario source changed after manifest build: "
+                    f"{scenario.path}"
+                )
+
+
+def _snapshot_reference_path(path: Path) -> _HeldoutPathSnapshot:
+    try:
+        canonical = path.resolve(strict=False)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HeldoutManifestError(
+            f"could not resolve heldout scenario source {path}: {exc}"
+        ) from exc
+    try:
+        path_stat = canonical.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return _HeldoutPathSnapshot(
+            path=canonical,
+            identity=None,
+            kind=None,
+            size_bytes=None,
+            modified_at_ns=None,
+            changed_at_ns=None,
+        )
+    except OSError as exc:
+        raise HeldoutManifestError(
+            f"could not attest heldout scenario source {canonical}: {exc}"
+        ) from exc
+    return _HeldoutPathSnapshot(
+        path=canonical,
+        identity=(path_stat.st_dev, path_stat.st_ino),
+        kind=path_stat.st_mode & 0o170000,
+        size_bytes=path_stat.st_size,
+        modified_at_ns=path_stat.st_mtime_ns,
+        changed_at_ns=path_stat.st_ctime_ns,
+    )
+
+
+def _reject_public_projection_aliases(
+    output_path: Path,
+    manifest: dict[str, Any],
+) -> None:
+    sources = manifest.get("sources")
+    if not isinstance(sources, list):
+        raise HeldoutManifestError(
+            "heldout manifest sources must remain a list before publication"
+        )
+    working_directory = Path.cwd()
+    output_lexical = (
+        output_path if output_path.is_absolute() else working_directory / output_path
+    )
+    candidates: dict[str, Path] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        raw_path = source.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            continue
+        public_path = Path(raw_path)
+        possible = [public_path] if public_path.is_absolute() else [
+            working_directory / public_path,
+            output_lexical.parent / public_path,
+        ]
+        for candidate in possible:
+            canonical = candidate.resolve(strict=False)
+            if canonical.is_file():
+                candidates[os.fspath(canonical)] = canonical
+    candidate_paths = list(candidates.values())
+    _reject_output_aliases(output_path, candidate_paths)
+    scenario_paths: list[Path] = []
+    for candidate in candidate_paths:
+        summary = _read_object(candidate, "possible heldout manifest source suite summary")
+        scenario_paths.extend(
+            reference.resolve(strict=False)
+            for reference in _scenario_reference_paths(summary, candidate)
+        )
+    _reject_output_aliases(output_path, scenario_paths)
+
+
+def _json_value_sha256(value: Any) -> str:
+    rendered = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(rendered).hexdigest()
+
+
+def _reject_output_aliases(output_path: Path, source_paths: list[Path]) -> None:
+    try:
+        assert_output_does_not_alias_sources(
+            output_path,
+            source_paths,
+            label="heldout manifest",
+        )
+    except ValueError as exc:
+        raise HeldoutManifestError(str(exc)) from exc
 
 
 def _path_has_symlink_component(path: Path, *, root: Path) -> bool:
@@ -286,15 +567,52 @@ def _default_label(path: Path) -> str:
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:
+    payload, _sha256, _identity = _read_object_snapshot(path, label)
+    return payload
+
+
+def _read_object_snapshot(
+    path: Path,
+    label: str,
+) -> tuple[dict[str, Any], str, tuple[int, int]]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        with path.open("rb") as handle:
+            before = os.fstat(handle.fileno())
+            raw_payload = handle.read()
+            after = os.fstat(handle.fileno())
     except FileNotFoundError as exc:
         raise HeldoutManifestError(f"{label} not found: {path}") from exc
+    except OSError as exc:
+        raise HeldoutManifestError(f"Unable to read {label} {path}: {exc}") from exc
+    before_attestation = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    )
+    after_attestation = (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    )
+    if before_attestation != after_attestation or len(raw_payload) != after.st_size:
+        raise HeldoutManifestError(f"{label} changed while it was read: {path}")
+    try:
+        payload = json.loads(raw_payload.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise HeldoutManifestError(f"Invalid UTF-8 in {label} {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise HeldoutManifestError(f"Invalid JSON in {label} {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise HeldoutManifestError(f"{label} must be a JSON object: {path}")
-    return payload
+    return (
+        payload,
+        hashlib.sha256(raw_payload).hexdigest(),
+        (after.st_dev, after.st_ino),
+    )
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

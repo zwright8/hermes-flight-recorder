@@ -6,15 +6,35 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from flightrecorder.cli import main
-from flightrecorder.decision_gate import DECISION_GATE_SOURCE_SCHEMAS, decision_gate_source_contract_errors
+from flightrecorder.decision_gate import (
+    DECISION_GATE_SOURCE_SCHEMAS,
+    decision_gate_source_contract_errors,
+    evaluate_decision_gate,
+)
 from flightrecorder.schema_registry import check_schema_file, load_schema
 
 
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
         return main(args)
+
+
+def _gate_decision_args(source, output):
+    return [
+        "gate-decision",
+        "--artifact",
+        str(source),
+        "--expect-recommendation",
+        "promote_iteration",
+        "--expect-readiness",
+        "ready",
+        "--require-passed",
+        "--out",
+        str(output),
+    ]
 
 
 def _write_source_decision(path, *, passed=True, recommendation="promote_iteration", readiness="ready"):
@@ -406,6 +426,110 @@ class DecisionGateTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(decision_gate.exists())
+
+    def test_gate_decision_rejects_source_as_output_without_modifying_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "action_ledger_gate.json"
+            _write_source_decision(source)
+            source_before = source.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(_gate_decision_args(source, source))
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(source.read_bytes(), source_before)
+
+    def test_gate_decision_rejects_hardlink_output_without_modifying_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            output = root / "decision_gate.json"
+            _write_source_decision(source)
+            try:
+                os.link(source, output)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"hardlinks unavailable: {exc}")
+            source_before = source.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(_gate_decision_args(source, output))
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(source.read_bytes(), source_before)
+            self.assertEqual(output.read_bytes(), source_before)
+            self.assertEqual(source.stat().st_ino, output.stat().st_ino)
+
+    def test_gate_decision_rejects_leaf_output_symlink_without_modifying_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            target = root / "existing.json"
+            output = root / "decision_gate.json"
+            _write_source_decision(source)
+            target.write_bytes(b'{"owner":"competing-writer"}\n')
+            try:
+                output.symlink_to(target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            source_before = source.read_bytes()
+            target_before = target.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(_gate_decision_args(source, output))
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(source.read_bytes(), source_before)
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertTrue(output.is_symlink())
+
+    def test_gate_decision_rejects_symlinked_output_parent_without_modifying_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            real_parent = root / "real-output"
+            linked_parent = root / "linked-output"
+            real_parent.mkdir()
+            target = real_parent / "decision_gate.json"
+            output = linked_parent / target.name
+            _write_source_decision(source)
+            target.write_bytes(b'{"owner":"competing-writer"}\n')
+            try:
+                linked_parent.symlink_to(real_parent, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            source_before = source.read_bytes()
+            target_before = target.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(_gate_decision_args(source, output))
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(source.read_bytes(), source_before)
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertTrue(linked_parent.is_symlink())
+
+    def test_gate_decision_rejects_output_changed_after_initial_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            output = root / "decision_gate.json"
+            _write_source_decision(source)
+            output.write_bytes(b'{"generation":"initial"}\n')
+            competing_bytes = b'{"generation":"competing"}\n'
+
+            def mutate_output_then_evaluate(*args, **kwargs):
+                output.write_bytes(competing_bytes)
+                return evaluate_decision_gate(*args, **kwargs)
+
+            with patch(
+                "flightrecorder.cli.evaluate_decision_gate",
+                side_effect=mutate_output_then_evaluate,
+            ):
+                with self.assertRaises(SystemExit) as raised:
+                    run_cli(_gate_decision_args(source, output))
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(output.read_bytes(), competing_bytes)
 
     def test_validate_rejects_decision_gate_missing_source_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
