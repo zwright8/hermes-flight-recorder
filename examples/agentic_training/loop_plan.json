@@ -1556,8 +1556,8 @@
         "readiness": "ready",
         "role": "evidence_bundle",
         "schema_version": "hfr.evidence_bundle.v1",
-        "sha256": "ecf543fef5e32e4f6b1656ae626733d8171383d35fd8566edb8b0bb3d4512913",
-        "size_bytes": 16328
+        "sha256": "aea6a6ba5ff01d666b5672a3e90f2963216eae1f5fe9b6e2bb7a72fb0652c544",
+        "size_bytes": 19147
       }
     ],
     "external_eval_plan": [
@@ -1721,8 +1721,8 @@
         "readiness": "applied",
         "role": "promotion_alias_apply",
         "schema_version": "hfr.promotion_alias_apply.v1",
-        "sha256": "6ea44209ae4df50eca0f2320441d2459d93135217acda5745438e4e9a944be5d",
-        "size_bytes": 8374
+        "sha256": "f2f1580e9a95fa9e2424076a3ce24e94c70f126629af15fede18be953575f3aa",
+        "size_bytes": 9965
       }
     ],
     "promotion_archive": [
@@ -1736,8 +1736,8 @@
         "readiness": "",
         "role": "promotion_archive",
         "schema_version": "hfr.promotion_archive.v1",
-        "sha256": "e174ffee2c014e5f16a664d1ec290f9eacb77280671423378c1d914cb42de9c2",
-        "size_bytes": 86802
+        "sha256": "8411dfe2c620b51e0fc7bec7bf7e062e002a5ab2b30397d6a97be5b14e791f8f",
+        "size_bytes": 100618
       }
     ],
     "promotion_cards": [
@@ -1751,7 +1751,7 @@
         "readiness": "ready",
         "role": "promotion_cards",
         "schema_version": "hfr.promotion_cards.v1",
-        "sha256": "0170afbd60f25c6116c1f46ccaf434ed46a14114a8b20bb226c4145d025e46e2",
+        "sha256": "4fa08008939b5e5ea500f4896932cc52b0d20a0b5ebf06a89d5738bda3dd20b8",
         "size_bytes": 9912
       }
     ],
@@ -1766,8 +1766,8 @@
         "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "8a3fefa1f9932f263dc2f3ee1f124c47d0d0faae4dec8413e73db2363d27339b",
-        "size_bytes": 32793
+        "sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
+        "size_bytes": 46528
       }
     ],
     "promotion_ledger": [
@@ -1796,8 +1796,8 @@
         "readiness": "ready",
         "role": "promotion_release_record",
         "schema_version": "hfr.promotion_release_record.v1",
-        "sha256": "e2a150982a18e47e2c0fbe5d10005a92f3b25d82e5507b3bf4842038053bb193",
-        "size_bytes": 19412
+        "sha256": "afbf2a29378f9a659362731f4a31841433ea09cc0874163baf69f47918f56e2d",
+        "size_bytes": 19454
       }
     ],
     "promotion_rollback_receipt": [
@@ -1811,7 +1811,7 @@
         "readiness": "ready",
         "role": "promotion_rollback_receipt",
         "schema_version": "hfr.promotion_rollback_receipt.v1",
-        "sha256": "56fc3ad7961e307a70fed2f22f2c57581b05bc20359644a9011b670ca8b2ec5f",
+        "sha256": "a0f117986f3f47023239ea9e9b02df5501724f8ff2da942b090d7a81ddece605",
         "size_bytes": 4610
       }
     ],

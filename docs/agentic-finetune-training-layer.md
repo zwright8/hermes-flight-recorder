@@ -137,6 +137,12 @@ its ancestor directories, and the dataset manifest location. The preflight does
 not search the process CWD, so moved plans cannot pass by accidentally finding a
 same-named local JSONL file.
 
+The plan reference is rendered relative to the output artifact or to their
+shared repository root. If plan and output share only a broad filesystem root,
+the command refuses to serialize a replay path because it would expose the
+private home-directory layout. `--preserve-paths` is an explicit escape hatch
+for local-only receipts; artifacts produced with it must not be published.
+
 By default the checker uses backend-specific dependency probes for common
 external runners such as `axolotl`, `llama_factory`, `unsloth`, and process
 reward wrappers. Use `--skip-default-modules` plus one or more
@@ -262,7 +268,7 @@ python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/age
 python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force
 python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight-schema --force
 python3 -m flightrecorder schemas --name agentic_training_result --write-dir /tmp/hfr-agentic-training-result-schema --force
-python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --out /tmp/hfr-agentic-runtime-preflight/ready.json
+python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --out examples/agentic_training/runtime_preflight/ready.json
 python3 -m unittest tests.test_agentic_training_result
 python3 -m unittest tests.test_trainer_preflight.TrainerPreflightTests.test_trainer_preflight_archives_agentic_training_plan
 ```

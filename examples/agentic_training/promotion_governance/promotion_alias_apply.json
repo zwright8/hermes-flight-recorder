@@ -5,7 +5,7 @@
       "champion": "local/mock-baseline",
       "rollback": "local/mock-rollback"
     },
-    "promotion_decision_sha256": "8a3fefa1f9932f263dc2f3ee1f124c47d0d0faae4dec8413e73db2363d27339b",
+    "promotion_decision_sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
     "updated_aliases": {
       "candidate": "local/mock-candidate",
       "champion": "local/mock-candidate",
@@ -19,8 +19,8 @@
       "path": "promotion_decision.json",
       "role": "promotion_decision",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "8a3fefa1f9932f263dc2f3ee1f124c47d0d0faae4dec8413e73db2363d27339b",
-      "size_bytes": 32793
+      "sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
+      "size_bytes": 46528
     },
     "registry": {
       "exists": true,
@@ -28,11 +28,11 @@
       "path": "model_registry.json",
       "role": "registry",
       "schema_version": "hfr.model_registry.v1",
-      "sha256": "ab71d6dbdcf8e8f745215e2c172124964cad9f20bef4e35e3e068faf47bb3c96",
+      "sha256": "d4fe568de7ae6c9ef00fcaea4c25c316b6ab8f075056cdc8da85fb7e0cc02c78",
       "size_bytes": 12148
     }
   },
-  "check_count": 15,
+  "check_count": 19,
   "checks": [
     {
       "actual": {
@@ -61,6 +61,36 @@
         "artifact_role": "registry"
       },
       "summary": "model registry uses the expected schema version"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "expected": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "id": "registry_validated",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "model registry snapshot passes strict semantic validation"
+    },
+    {
+      "actual": {
+        "stable": true
+      },
+      "expected": {
+        "stable": true
+      },
+      "id": "registry_stable_before_update",
+      "passed": true,
+      "scope": {
+        "artifact_role": "registry"
+      },
+      "summary": "registry bytes used for alias updates match the CAS fingerprint"
     },
     {
       "actual": {
@@ -129,6 +159,20 @@
         "artifact_role": "promotion_decision"
       },
       "summary": "promotion decision validation passed immediately before alias movement"
+    },
+    {
+      "actual": {
+        "stable": true
+      },
+      "expected": {
+        "stable": true
+      },
+      "id": "promotion_decision_stable_during_validation",
+      "passed": true,
+      "scope": {
+        "artifact_role": "promotion_decision"
+      },
+      "summary": "promotion decision bytes remain unchanged across validation and use"
     },
     {
       "actual": {
@@ -236,6 +280,23 @@
       "summary": "model registry aliases are stored as an object"
     },
     {
+      "actual": {
+        "candidate_id": "local/mock-candidate",
+        "decision_entry_fingerprint_matches": true,
+        "decision_entry_present": true,
+        "registry_entry_matches": true
+      },
+      "expected": {
+        "same_candidate_entry": true
+      },
+      "id": "registry_candidate_entry_matches_decision_artifact",
+      "passed": true,
+      "scope": {
+        "artifact_role": "model_registry_entry"
+      },
+      "summary": "registry candidate entry exactly matches the promotion decision artifact"
+    },
+    {
       "actual": "list",
       "expected": {
         "type": "list_or_missing"
@@ -254,7 +315,7 @@
     "alias_count_before": 3,
     "alias_history_count_after": 4,
     "alias_history_count_before": 3,
-    "check_count": 15,
+    "check_count": 19,
     "failed_check_count": 0,
     "registered_model_count": 3
   },
@@ -268,8 +329,8 @@
     "champion_previous_target": "local/mock-baseline",
     "path": "promotion_decision.json",
     "rollback_id": "local/mock-baseline",
-    "sha256": "8a3fefa1f9932f263dc2f3ee1f124c47d0d0faae4dec8413e73db2363d27339b",
-    "size_bytes": 32793
+    "sha256": "81c2be1c29fa08e6194d29e0a314db005bce18932cfcc4a2dd873d828ef29574",
+    "size_bytes": 46528
   },
   "promotion_decision_validation": {
     "error_count": 0,
@@ -295,7 +356,7 @@
       "rollback": "local/mock-baseline"
     },
     "path": "model_registry.json",
-    "sha256": "ab71d6dbdcf8e8f745215e2c172124964cad9f20bef4e35e3e068faf47bb3c96",
+    "sha256": "d4fe568de7ae6c9ef00fcaea4c25c316b6ab8f075056cdc8da85fb7e0cc02c78",
     "size_bytes": 12148
   },
   "registry_before": {

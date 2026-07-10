@@ -1,7 +1,7 @@
 # Model Card
 
 - Candidate model: `local/mock-candidate`
-- Source: `examples/agentic_training/completed_result.json`
+- Source: `examples/agentic_training/promotion_result.json`
 - License status: `known`
 - Promotion-card readiness: `ready`
 

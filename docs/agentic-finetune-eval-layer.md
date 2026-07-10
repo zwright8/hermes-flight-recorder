@@ -215,9 +215,14 @@ enforce the safer boundary: `hfr.external_eval_adapters.v1` plans always keep
 claims disabled, `hfr.eval_summary.v1` requires matching imported results when
 external adapter plans are included, and
 `hfr.agentic_training_loop_plan.v1` separates plan readiness, execution
-completion, and governance readiness. Regenerate older beta v1 artifacts that
-treated a plan or dry-run receipt as completion evidence; they now fail closed
-instead of being grandfathered into governance readiness.
+completion, and governance readiness. `hfr.promotion_decision.v1` now requires
+the direct eval summary, its exact positive external-result set, candidate-model
+binding, and the evidence bundle's matching summary fingerprint. Regenerate
+older beta v1 eval summaries, evidence bundles, promotion policies, loop plans,
+promotion decisions, promotion alias receipts, and promotion release records
+that treated a plan, dry-run receipt, stored pass summary, or unbound source as
+completion evidence; they now fail closed instead of being grandfathered into
+governance readiness, alias authorization, or release readiness.
 
 ## Closed-Loop State Boundary
 
@@ -271,6 +276,20 @@ The bundle stores compact eval-summary metrics and validation recomputes them
 from the referenced `eval_summary.json` when that file is available, so stale
 or forged bundle counts cannot hide held-out eval blockers.
 
+Pass that same summary directly to `promotion-decision` with `--eval-summary`,
+and repeat `--external-eval-result` once for every result named by the summary.
+Promotion requires a positive, unique result set: the supplied result hashes
+and projections must exactly match the summary, every result `model_id` must
+match `--candidate-id`, and the evidence bundle must fingerprint the same
+summary by hash and size. Each result must also be completed, passed,
+coverage-complete, and ready for review.
+
+`validate --promotion-decision` resolves those recorded sources relative to the
+decision, rehashes them, reruns semantic validation for the evidence bundle,
+eval summary, and every external result, then rebuilds the external-eval
+lineage and required checks. Missing, replaced, or mutated sources therefore
+block validation even when the persisted decision still says it passed.
+
 ## Blocking Conditions
 
 Governance claims are suppressed when any of these hold:
@@ -287,7 +306,10 @@ Governance claims are suppressed when any of these hold:
 - missing, duplicate, unexpected, or plan-mismatched external eval results;
 - incomplete or failed external runner execution;
 - aggregate-only results or non-exact held-out case coverage;
-- eval summaries whose external result set differs from the loop result set.
+- eval summaries whose external result set differs from the loop or promotion
+  result set;
+- promotion results for a different candidate, or an evidence bundle that
+  fingerprints a different eval summary.
 
 The artifact may still show raw movement, but `governance_claims` stays empty and
 `passed` is false until the blockers are resolved.
@@ -355,6 +377,9 @@ file's directory, so cwd-relative lookalikes, deleted sources, stale hashes, and
 rewritten source decisions cannot validate as promotion-ready evidence.
 Promotion-ledger validation applies the same file-relative rule to recorded
 decision gates before trusting ledger metrics or longitudinal gate decisions.
+Promotion-decision validation additionally replays the referenced evidence
+bundle, eval summary, and external result set before trusting persisted lineage
+checks or alias authorization.
 Trainer-preflight validation applies the same file-relative rule to recorded
 gates, validation summaries, schema contracts, and trainer artifacts before
 trainer launch or archive handoff evidence can pass.

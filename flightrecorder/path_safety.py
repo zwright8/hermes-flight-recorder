@@ -46,6 +46,30 @@ def path_has_symlink_component(path: Path, *, include_leaf: bool) -> bool:
     return False
 
 
+def resolve_artifact_reference_path(value: str, source_path: Path) -> Path:
+    """Resolve a local reference beside its artifact, then from its repo root."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    source_relative = source_path.parent / path
+    if source_relative.exists():
+        return source_relative
+    repository_root = artifact_repository_root(source_path)
+    if repository_root is not None:
+        repo_relative = repository_root / path
+        if repo_relative.exists():
+            return repo_relative
+    return source_relative
+
+
+def artifact_repository_root(source_path: Path) -> Path | None:
+    """Return the nearest repository marker root containing an artifact."""
+    for root in source_path.resolve().parents:
+        if (root / ".git").exists() or (root / "pyproject.toml").exists():
+            return root
+    return None
+
+
 def assert_safe_output_directory(path: Path, *, repo_root: Path, cwd: Path | None = None) -> None:
     """Reject a directory target that is unsafe to remove recursively."""
     working_directory = (cwd or Path.cwd()).resolve(strict=False)

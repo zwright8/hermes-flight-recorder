@@ -48,6 +48,7 @@
   "require_supported_cards": true,
   "required_artifacts": [
     "evidence_bundle",
+    "eval_summary",
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",

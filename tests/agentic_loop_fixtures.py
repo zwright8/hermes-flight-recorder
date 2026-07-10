@@ -1,20 +1,26 @@
+import hashlib
 import json
 import shutil
 from pathlib import Path
 
+from flightrecorder.bundle import build_evidence_bundle
 from flightrecorder.eval_summary import build_eval_summary
+from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
+from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
 from flightrecorder.governance import build_promotion_decision
 from flightrecorder.model_grader import build_model_grader_override_receipt
 from flightrecorder.promotion_ledger import build_promotion_ledger
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROMOTION_CANDIDATE_ID = "local/mock-candidate"
 
 
 def copy_valid_loop_artifacts(root: Path) -> dict[str, list[Path]]:
     """Copy the complete schema-valid closed-loop example into an isolated fixture tree."""
     fixture_examples = root / "loop_fixture" / "examples"
     shutil.copytree(ROOT / "examples", fixture_examples)
+    shutil.copyfile(ROOT / "pyproject.toml", fixture_examples.parent / "pyproject.toml")
     fixture_root = fixture_examples / "agentic_training"
     plan = json.loads((fixture_root / "loop_plan.json").read_text(encoding="utf-8"))
     artifacts = {
@@ -87,11 +93,13 @@ def write_valid_promotion_decision(root: Path) -> Path:
     artifacts = _write_promotion_decision_sources(sources)
     decision_path = root / "promotion_decision.json"
     decision = build_promotion_decision(
-        candidate_id="candidate-v2",
+        candidate_id=PROMOTION_CANDIDATE_ID,
         champion_id="champion-v1",
         rollback_id="champion-v1",
         out_path=decision_path,
         evidence_bundle_path=artifacts["evidence_bundle"],
+        eval_summary_path=artifacts["eval_summary"],
+        external_eval_result_paths=artifacts["external_eval_results"],
         promotion_ledger_gate_path=artifacts["promotion_ledger_gate"],
         compare_gate_path=artifacts["compare_gate"],
         trainer_launch_check_path=artifacts["trainer_launch_check"],
@@ -174,45 +182,188 @@ def _write_suite_summary(path: Path) -> Path:
     return path
 
 
-def _write_promotion_decision_sources(root: Path) -> dict[str, Path]:
+def _write_promotion_decision_sources(root: Path) -> dict[str, Path | list[Path]]:
+    eval_lineage = _write_promotion_eval_lineage(root / "promotion_eval")
+    evidence_root = root / "evidence"
+    evidence_root.mkdir(exist_ok=True)
+    evidence_bundle_path = evidence_root / "evidence_bundle.json"
+    evidence_bundle = build_evidence_bundle(
+        out_path=evidence_bundle_path,
+        eval_summary_path=eval_lineage["eval_summary"],
+    )
+    evidence_bundle_path.write_text(
+        json.dumps(evidence_bundle, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    example_root = ROOT / "examples" / "agentic_training"
+    for filename in ("promotion_ledger.json", "promotion_history_decision_gate.json"):
+        shutil.copyfile(
+            example_root / "promotion_governance" / filename,
+            root / filename,
+        )
+    registry_entry_payload = _read_json_object(
+        example_root / "promotion_governance" / "model_registry_entry.json"
+    )
     payloads = {
-        "evidence_bundle": {"schema_version": "hfr.evidence_bundle.v1", "passed": True},
-        "promotion_ledger_gate": {"schema_version": "hfr.promotion_ledger_gate.v1", "passed": True},
-        "compare_gate": {
-            "schema_version": "hfr.compare_gate.v1",
-            "passed": True,
-            "metrics": {
-                "baseline_win_count": 0,
-                "contract_drift_count": 0,
-                "new_critical_failure_counts": {},
-                "regressed_rule_counts": {},
-                "task_completion_regression_count": 0,
-                "unverified_contract_count": 0,
-            },
-        },
-        "trainer_launch_check": {"schema_version": "hfr.trainer_launch_check.v1", "passed": True},
-        "model_registry_entry": {
-            "schema_version": "hfr.model_registry_entry.v1",
-            "candidate_id": "candidate-v2",
-            "entry_id": "candidate-v2",
-        },
-        "agentic_training_result": {"schema_version": "hfr.agentic_training_result.v1", "passed": True},
+        "promotion_ledger_gate": _read_json_object(
+            example_root / "promotion_governance" / "promotion_ledger_gate.json"
+        ),
+        "compare_gate": _read_json_object(
+            example_root / "promotion_governance" / "compare_gate.json"
+        ),
+        "trainer_launch_check": _read_json_object(
+            example_root / "trainer_launch_check.json"
+        ),
         "rollback_metadata": {"available": True, "rollback_id": "champion-v1"},
         "license_review": {"passed": True, "license_status": "known", "accepted_terms": True},
         "redaction_check": {"passed": True},
         "safety_gate": {"passed": True},
-        "serving_profile": {
-            "schema_version": "hfr.serving_profile.v1",
-            "eval_preflight": {"ready": True, "readiness": "ready", "failed_checks": []},
-        },
+        "serving_profile": _read_json_object(
+            example_root
+            / "serving_lifecycle"
+            / "managed_mock"
+            / "preflight"
+            / "serving_profile.json"
+        ),
         "serving_report": {"passed": True},
     }
     paths = {role: _write_source_json(root / f"{role}.json", payload) for role, payload in payloads.items()}
+    paths["agentic_training_result"] = _write_candidate_training_result(
+        root, PROMOTION_CANDIDATE_ID
+    )
+    _bind_registry_entry_links(
+        registry_entry_payload,
+        {
+            "datasets": example_root / "training_export" / "manifest.json",
+            "evals": paths["compare_gate"],
+            "serving_probes": (
+                example_root
+                / "serving_lifecycle"
+                / "managed_mock"
+                / "preflight"
+                / "serving_check.json"
+            ),
+            "training_runs": paths["agentic_training_result"],
+        },
+    )
+    paths["model_registry_entry"] = _write_source_json(
+        root / "model_registry_entry.json", registry_entry_payload
+    )
+    paths["evidence_bundle"] = evidence_bundle_path
+    paths["eval_summary"] = eval_lineage["eval_summary"]
+    paths["external_eval_results"] = [eval_lineage["external_eval_result"]]
     paths["model_card"] = root / "MODEL_CARD.md"
     paths["model_card"].write_text("# Model Card\n\nEvidence-backed candidate model.\n", encoding="utf-8")
     paths["dataset_card"] = root / "DATASET_CARD.md"
     paths["dataset_card"].write_text("# Dataset Card\n\nRedacted held-out data.\n", encoding="utf-8")
     return paths
+
+
+def _write_promotion_eval_lineage(root: Path) -> dict[str, Path]:
+    root.mkdir(exist_ok=True)
+    example_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
+    for filename in (
+        "baseline_suite_summary.json",
+        "candidate_suite_summary.json",
+        "heldout_manifest.json",
+        "external_eval_raw_result.json",
+        "external_eval_runner.json",
+    ):
+        shutil.copyfile(example_root / filename, root / filename)
+
+    candidate_id = PROMOTION_CANDIDATE_ID
+    heldout_path = root / "heldout_manifest.json"
+    plan_path = root / "external_eval_plan.json"
+    plan = build_external_eval_plan(
+        adapters=["local_mock"],
+        scenario_manifest=heldout_path,
+        model_endpoint=candidate_id,
+        model=candidate_id,
+        allow_installed=True,
+        output_base_dir=root,
+    )
+    write_external_eval_plan(plan, plan_path)
+
+    execution_id = "loop-fixture-promotion-eval-001"
+    runner_path = root / "external_eval_runner.json"
+    runner = json.loads(runner_path.read_text(encoding="utf-8"))
+    runner["execution_id"] = execution_id
+    runner["model_id"] = candidate_id
+    runner_path.write_text(json.dumps(runner, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result_path = root / "external_eval_result.json"
+    result = build_external_eval_result(
+        plan_path=plan_path,
+        heldout_manifest_path=heldout_path,
+        raw_result_path=root / "external_eval_raw_result.json",
+        runner_metadata_path=runner_path,
+        adapter_id="local_mock",
+        execution_id=execution_id,
+        model_id=candidate_id,
+        normalizer_id="hfr.local_mock.per_case_json",
+        normalizer_version="1",
+        raw_format="json",
+        execution_status="completed",
+        out_path=result_path,
+        created_at="2026-07-10T00:01:00+00:00",
+    )
+    write_external_eval_result(result, result_path)
+
+    eval_summary_path = root / "eval_summary.json"
+    eval_summary = build_eval_summary(
+        external_adapter_plan_specs=[f"local_mock={plan_path}"],
+        external_adapter_result_specs=[f"local_mock={result_path}"],
+        output_base_dir=root,
+    )
+    eval_summary_path.write_text(
+        json.dumps(eval_summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "eval_summary": eval_summary_path,
+        "external_eval_result": result_path,
+    }
+
+
+def _write_candidate_training_result(root: Path, candidate_id: str) -> Path:
+    example_root = ROOT / "examples" / "agentic_training"
+    for dirname in ("plans", "runtime_preflight", "trainer_outputs"):
+        shutil.copytree(
+            example_root / dirname,
+            root / dirname,
+            dirs_exist_ok=True,
+        )
+    for filename in ("agentic_training_flow.json", "trainer_consumer_plan.json"):
+        shutil.copyfile(example_root / filename, root / filename)
+    payload = _read_json_object(example_root / "completed_result.json")
+    result_path = root / "agentic_training_result.json"
+    payload["artifact_path"] = result_path.name
+    payload["registry_update"]["target_model_id"] = candidate_id
+    payload["registry_update"]["links"][0]["path"] = result_path.name
+    return _write_source_json(result_path, payload)
+
+
+def _bind_registry_entry_links(
+    payload: dict[str, object], sources: dict[str, Path]
+) -> None:
+    links = payload["links"]
+    if not isinstance(links, dict):
+        raise AssertionError("model registry fixture links must be an object")
+    for collection, source_path in sources.items():
+        rows = links[collection]
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            raise AssertionError(f"model registry fixture link missing: {collection}")
+        source_bytes = source_path.read_bytes()
+        rows[0]["path"] = str(source_path.resolve())
+        rows[0]["sha256"] = hashlib.sha256(source_bytes).hexdigest()
+        rows[0]["size_bytes"] = len(source_bytes)
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise AssertionError(f"expected JSON object fixture: {path}")
+    return payload
 
 
 def _write_source_json(path: Path, payload: dict[str, object]) -> Path:

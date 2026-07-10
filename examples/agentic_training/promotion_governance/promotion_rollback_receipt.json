@@ -6,7 +6,7 @@
       "path": "model_registry_before_alias_apply.json",
       "role": "registry",
       "schema_version": "hfr.model_registry.v1",
-      "sha256": "d4f9497fdd99c0a94d4d4d0e3527cc6056b0a6e9c26c42f55410f33af8a402da",
+      "sha256": "ebc83d5baded925a35eef1500ba2f22dfacaf5471ff804a38bc0c569ae3e5d52",
       "size_bytes": 11698
     }
   },
@@ -159,7 +159,7 @@
       "rollback": "local/mock-rollback"
     },
     "path": "model_registry_before_alias_apply.json",
-    "sha256": "d4f9497fdd99c0a94d4d4d0e3527cc6056b0a6e9c26c42f55410f33af8a402da",
+    "sha256": "ebc83d5baded925a35eef1500ba2f22dfacaf5471ff804a38bc0c569ae3e5d52",
     "size_bytes": 11698
   },
   "rollback": {

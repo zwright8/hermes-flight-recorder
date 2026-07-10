@@ -63,7 +63,7 @@
     "source": {
       "revision": "public-fixture-v1",
       "type": "local_fixture",
-      "url": "file://examples/agentic_training/completed_result.json",
+      "url": "file://examples/agentic_training/promotion_result.json",
       "weight_download_allowed": false
     }
   },
@@ -114,10 +114,10 @@
         "id": "demo-loop-001-training",
         "kind": "agentic_training_result",
         "metadata": {},
-        "path": "examples/agentic_training/completed_result.json",
+        "path": "examples/agentic_training/promotion_result.json",
         "recorded_at": "2026-07-10T01:48:06Z",
-        "sha256": "4a77bea1176b4df76458cb71e6ade458d117639009ebc420b1c71745f8602c95",
-        "size_bytes": 11554,
+        "sha256": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d",
+        "size_bytes": 11541,
         "status": "completed"
       }
     ]

@@ -679,6 +679,7 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             out_path=out,
             require_modules=["json"],
             skip_default_modules=True,
+            preserve_paths=True,
             created_at="2026-07-03T00:00:00+00:00",
         )
         write_agentic_training_runtime_preflight(out, runtime)

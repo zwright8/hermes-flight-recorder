@@ -10,13 +10,20 @@ from pathlib import Path
 from typing import Any
 
 from .agentic_training_result import AGENTIC_TRAINING_RESULT_SCHEMA_VERSION
-from .atomic_json import atomic_write_json_cas
+from .atomic_json import AtomicJsonError, atomic_write_json_cas, json_file_sha256
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
-from .compare_gate import COMPARE_GATE_SCHEMA_VERSION
+from .compare_gate import COMPARE_GATE_SCHEMA_VERSION, evaluate_compare_gate
+from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
+from .external_eval_result import EXTERNAL_EVAL_RESULT_SCHEMA_VERSION
 from .model_registry import MODEL_REGISTRY_ENTRY_SCHEMA_VERSION
-from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .path_safety import (
+    artifact_repository_root,
+    path_has_symlink_component as _path_has_symlink_component,
+    resolve_artifact_reference_path,
+)
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
+from .schema_registry import SchemaRegistryError, check_schema_contract
 
 PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
 PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
@@ -26,6 +33,28 @@ PROMOTION_RELEASE_RECORD_SCHEMA_VERSION = "hfr.promotion_release_record.v1"
 PROMOTION_POLICY_SCHEMA_VERSION = "hfr.promotion_policy.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 SERVING_PROFILE_SCHEMA_VERSION = "hfr.serving_profile.v1"
+
+PROMOTION_ALIAS_APPLY_CHECK_IDS = (
+    "registry_present",
+    "registry_schema",
+    "registry_validated",
+    "registry_stable_before_update",
+    "promotion_decision_present",
+    "promotion_decision_schema",
+    "promotion_decision_passed",
+    "promotion_decision_authorizes_alias_update",
+    "promotion_decision_validated",
+    "promotion_decision_stable_during_validation",
+    "champion_previous_target_registered",
+    "promotion_decision_alias_targets_match_models",
+    "candidate_target_registered",
+    "champion_target_registered",
+    "rollback_target_registered",
+    "champion_alias_matches_previous_target",
+    "registry_aliases_object",
+    "registry_candidate_entry_matches_decision_artifact",
+    "registry_alias_history_list",
+)
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
 PROMOTION_CARDS_REQUIRED_INPUTS = (
@@ -37,6 +66,7 @@ PROMOTION_CARDS_REQUIRED_INPUTS = (
 )
 PROMOTION_DECISION_REQUIRED_ARTIFACTS = (
     "evidence_bundle",
+    "eval_summary",
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",
@@ -63,6 +93,36 @@ PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS = (
     "promotion_decision",
     "promotion_cards",
     "promotion_alias_apply",
+)
+_PROMOTION_RELEASE_RECORD_CHECK_PREFIX = (
+    "release_id_present",
+    *(f"{role}_present" for role in PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS),
+    "promotion_decision_schema",
+    "promotion_cards_schema",
+    "promotion_alias_apply_schema",
+    "compare_gate_schema",
+    "promotion_decision_passed",
+    "promotion_cards_passed",
+    "promotion_alias_apply_passed",
+    "compare_gate_passed",
+    "input_artifacts_validated",
+)
+_PROMOTION_RELEASE_RECORD_POLICY_CHECKS = (
+    "promotion_policy_present",
+    "promotion_policy_schema",
+    "promotion_policy_release_artifacts_complete",
+    "promotion_policy_matches_decision",
+)
+_PROMOTION_RELEASE_RECORD_CHECK_SUFFIX_BEFORE_ROLLBACK_RECEIPT = (
+    "alias_receipt_matches_decision",
+    "alias_receipt_targets_match_decision",
+    "cards_match_decision",
+    "compare_gate_matches_decision",
+    "rollback_metadata_matches_target",
+)
+_PROMOTION_RELEASE_RECORD_CHECK_SUFFIX_AFTER_ROLLBACK_RECEIPT = (
+    "release_notes_nonempty",
+    "release_notes_claims_supported",
 )
 PROMOTION_POLICY_REQUIRED_FIELDS = (
     "required_artifacts",
@@ -109,6 +169,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     "rollback_id_present",
     *(f"{role}_present" for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS),
     "evidence_bundle_schema",
+    "eval_summary_schema",
     "promotion_ledger_gate_schema",
     "compare_gate_schema",
     "trainer_launch_check_schema",
@@ -116,9 +177,40 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     "agentic_training_result_schema",
     "serving_profile_schema",
     *(
+        f"{role}_contract_valid"
+        for role in (
+            "evidence_bundle",
+            "eval_summary",
+            "promotion_ledger_gate",
+            "compare_gate",
+            "trainer_launch_check",
+            "model_registry_entry",
+            "agentic_training_result",
+            "serving_profile",
+        )
+    ),
+    "promotion_ledger_gate_semantically_valid",
+    "compare_gate_semantically_valid",
+    "trainer_launch_check_semantically_valid",
+    "model_registry_entry_semantically_valid",
+    "agentic_training_result_semantically_valid",
+    "serving_profile_semantically_valid",
+    "compare_gate_matches_candidate",
+    "agentic_training_result_matches_candidate",
+    "evidence_bundle_semantically_valid",
+    "eval_summary_semantically_valid",
+    "external_eval_results_present",
+    "external_eval_results_semantically_valid",
+    "external_eval_result_set_exact",
+    "external_eval_results_match_candidate",
+    "evidence_bundle_eval_summary_bound",
+    "external_eval_results_governance_ready",
+    "external_eval_lineage_passed",
+    *(
         f"{role}_passed"
         for role in (
             "evidence_bundle",
+            "eval_summary",
             "promotion_ledger_gate",
             "compare_gate",
             "trainer_launch_check",
@@ -149,6 +241,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
 )
 _JSON_ARTIFACT_ROLES = {
     "evidence_bundle": EVIDENCE_BUNDLE_SCHEMA_VERSION,
+    "eval_summary": EVAL_SUMMARY_SCHEMA_VERSION,
     "promotion_ledger_gate": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
     "compare_gate": COMPARE_GATE_SCHEMA_VERSION,
     "trainer_launch_check": TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
@@ -158,6 +251,7 @@ _JSON_ARTIFACT_ROLES = {
 }
 _PASSED_JSON_ROLES = (
     "evidence_bundle",
+    "eval_summary",
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",
@@ -174,6 +268,21 @@ class PromotionDecisionError(ValueError):
     """Raised when a promotion decision cannot be produced."""
 
 
+def promotion_release_record_check_ids(
+    *,
+    release_policy_bound: bool,
+    rollback_receipt_bound: bool,
+) -> tuple[str, ...]:
+    """Return the canonical ordered release-record check contract."""
+    return (
+        *_PROMOTION_RELEASE_RECORD_CHECK_PREFIX,
+        *(_PROMOTION_RELEASE_RECORD_POLICY_CHECKS if release_policy_bound else ()),
+        *_PROMOTION_RELEASE_RECORD_CHECK_SUFFIX_BEFORE_ROLLBACK_RECEIPT,
+        *(("rollback_receipt_passed",) if rollback_receipt_bound else ()),
+        *_PROMOTION_RELEASE_RECORD_CHECK_SUFFIX_AFTER_ROLLBACK_RECEIPT,
+    )
+
+
 def build_promotion_decision(
     *,
     candidate_id: str,
@@ -183,6 +292,8 @@ def build_promotion_decision(
     champion_class: str = "champion",
     out_path: str | Path | None = None,
     evidence_bundle_path: str | Path | None = None,
+    eval_summary_path: str | Path | None = None,
+    external_eval_result_paths: list[str | Path] | None = None,
     promotion_ledger_gate_path: str | Path | None = None,
     compare_gate_path: str | Path | None = None,
     trainer_launch_check_path: str | Path | None = None,
@@ -208,6 +319,7 @@ def build_promotion_decision(
 
     paths = {
         "evidence_bundle": evidence_bundle_path,
+        "eval_summary": eval_summary_path,
         "promotion_ledger_gate": promotion_ledger_gate_path,
         "compare_gate": compare_gate_path,
         "trainer_launch_check": trainer_launch_check_path,
@@ -223,6 +335,72 @@ def build_promotion_decision(
         "serving_report": serving_report_path,
     }
     output_path = Path(out_path) if out_path is not None else None
+    result_paths = [Path(path) for path in (external_eval_result_paths or [])]
+    if output_path is not None:
+        compare_gate_file = Path(compare_gate_path) if compare_gate_path is not None else None
+        compare_gate_payload = (
+            _read_json_artifact(compare_gate_file, reject_symlink_components=True)
+            if compare_gate_file is not None
+            else None
+        )
+        promotion_gate_file = (
+            Path(promotion_ledger_gate_path)
+            if promotion_ledger_gate_path is not None
+            else None
+        )
+        promotion_gate_payload = (
+            _read_json_artifact(promotion_gate_file, reject_symlink_components=True)
+            if promotion_gate_file is not None
+            else None
+        )
+        trainer_launch_file = (
+            Path(trainer_launch_check_path)
+            if trainer_launch_check_path is not None
+            else None
+        )
+        trainer_launch_payload = (
+            _read_json_artifact(
+                trainer_launch_file,
+                reject_symlink_components=True,
+            )
+            if trainer_launch_file is not None
+            else None
+        )
+        semantic_sources = [
+            *_promotion_plain_source_candidates(
+                compare_gate_payload,
+                "compare_export",
+                compare_gate_file,
+            ),
+            *_promotion_plain_source_candidates(
+                promotion_gate_payload,
+                "promotion_ledger",
+                promotion_gate_file,
+            ),
+            *_promotion_plain_source_candidates(
+                trainer_launch_payload,
+                "preflight_path",
+                trainer_launch_file,
+            ),
+        ]
+        direct_sources = [
+            *(Path(path) for path in paths.values() if path is not None),
+            *result_paths,
+            *([Path(promotion_policy_path)] if promotion_policy_path is not None else []),
+            *semantic_sources,
+        ]
+        _reject_unowned_json_output(
+            output_path,
+            PROMOTION_DECISION_SCHEMA_VERSION,
+            label="promotion decision",
+            error_type=PromotionDecisionError,
+        )
+        _reject_output_source_collision(
+            output_path,
+            _artifact_source_closure(direct_sources),
+            label="promotion decision",
+            error_type=PromotionDecisionError,
+        )
     artifacts = {
         role: _artifact_record(
             role,
@@ -238,6 +416,19 @@ def build_promotion_decision(
         for role, raw_path in paths.items()
         if role in _JSON_ARTIFACT_ROLES or role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
+    result_artifacts = [
+        _artifact_record(
+            "external_eval_result",
+            path,
+            preserve_paths,
+            output_path,
+            reject_symlink_components=True,
+        )
+        for path in result_paths
+    ]
+    result_payloads = [
+        _read_json_artifact(path, reject_symlink_components=True) for path in result_paths
+    ]
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
     policy_artifact = (
         _artifact_record("promotion_policy", policy_path, preserve_paths, output_path, reject_symlink_components=True)
@@ -286,17 +477,116 @@ def build_promotion_decision(
         _add_check(
             checks,
             f"{role}_present",
-            record["exists"] is True,
-            actual={"exists": record["exists"], "path": record["path"]},
-            expected={"exists": True},
+            record["exists"] is True and record["kind"] == "file",
+            actual={
+                "exists": record["exists"],
+                "kind": record["kind"],
+                "path": record["path"],
+            },
+            expected={"exists": True, "kind": "file"},
             scope={"artifact_role": role},
             summary=f"{role} artifact is present and fingerprinted",
         )
 
     for role in _JSON_ARTIFACT_ROLES:
         _add_schema_check(checks, role, json_artifacts.get(role))
+        _add_json_schema_contract_check(checks, role, json_artifacts.get(role))
     for role in _PASSED_JSON_ROLES:
         _add_passed_json_check(checks, role, json_artifacts.get(role))
+
+    structured_validation_errors = {
+        role: _promotion_structured_validation_errors(
+            role,
+            Path(paths[role]) if paths[role] is not None else None,
+            json_artifacts.get(role),
+        )
+        for role in (
+            "promotion_ledger_gate",
+            "compare_gate",
+            "trainer_launch_check",
+            "model_registry_entry",
+            "agentic_training_result",
+            "serving_profile",
+        )
+    }
+    for role, errors in structured_validation_errors.items():
+        _add_check(
+            checks,
+            f"{role}_semantically_valid",
+            not errors,
+            actual={"error_count": len(errors)},
+            expected={"error_count": 0},
+            scope={"artifact_role": role},
+            summary=f"{role} passes deterministic semantic validation before promotion",
+        )
+    compare_candidate_id = _promotion_compare_candidate_id(
+        json_artifacts.get("compare_gate"),
+        Path(compare_gate_path) if compare_gate_path is not None else None,
+    )
+    _add_check(
+        checks,
+        "compare_gate_matches_candidate",
+        bool(candidate_id) and compare_candidate_id == candidate_id,
+        actual={
+            "candidate_id": candidate_id,
+            "compare_candidate_id": compare_candidate_id,
+        },
+        expected={"same_candidate_id": True},
+        scope={"artifact_role": "compare_gate"},
+        summary="compare gate source export identifies the promoted candidate",
+    )
+    training_result_target = _promotion_training_result_target(
+        json_artifacts.get("agentic_training_result")
+    )
+    _add_check(
+        checks,
+        "agentic_training_result_matches_candidate",
+        bool(candidate_id) and training_result_target == candidate_id,
+        actual={
+            "candidate_id": candidate_id,
+            "training_result_target_model_id": training_result_target,
+        },
+        expected={"same_candidate_id": True},
+        scope={"artifact_role": "agentic_training_result"},
+        summary="agentic training result registry target identifies the promoted candidate",
+    )
+
+    evidence_bundle_validation_errors = _promotion_semantic_validation_errors(
+        "evidence_bundle", Path(evidence_bundle_path) if evidence_bundle_path else None
+    )
+    eval_summary_validation_errors = _promotion_semantic_validation_errors(
+        "eval_summary", Path(eval_summary_path) if eval_summary_path else None
+    )
+    external_result_validation_errors = [
+        _promotion_semantic_validation_errors("external_eval_result", path)
+        for path in result_paths
+    ]
+    external_eval_lineage = _promotion_external_eval_lineage(
+        candidate_id=candidate_id,
+        evidence_bundle=json_artifacts.get("evidence_bundle"),
+        eval_summary=json_artifacts.get("eval_summary"),
+        eval_summary_artifact=artifacts["eval_summary"],
+        result_payloads=result_payloads,
+        result_artifacts=result_artifacts,
+        evidence_bundle_semantically_valid=not evidence_bundle_validation_errors,
+        eval_summary_semantically_valid=not eval_summary_validation_errors,
+        external_results_semantically_valid=(
+            bool(result_paths)
+            and not any(external_result_validation_errors)
+        ),
+    )
+    checks.extend(
+        _promotion_external_eval_checks(
+            external_eval_lineage,
+            evidence_bundle_semantically_valid=not evidence_bundle_validation_errors,
+            eval_summary_semantically_valid=not eval_summary_validation_errors,
+            evidence_bundle_error_count=len(evidence_bundle_validation_errors),
+            eval_summary_error_count=len(eval_summary_validation_errors),
+            external_result_error_count=sum(
+                len(errors) for errors in external_result_validation_errors
+            ),
+        )
+    )
 
     compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
     _add_compare_metrics_check(checks, compare_metrics)
@@ -353,7 +643,7 @@ def build_promotion_decision(
 
     failed_checks = sum(1 for check in checks if not check["passed"])
     passed = failed_checks == 0
-    metrics = _decision_metrics(checks, compare_metrics, policy)
+    metrics = _decision_metrics(checks, compare_metrics, policy, external_eval_lineage)
     decision = {
         "readiness": "ready" if passed else "blocked",
         "recommendation": "apply_alias_update" if passed else "block_promotion",
@@ -382,12 +672,14 @@ def build_promotion_decision(
         "failed_check_count": failed_checks,
         "checks": checks,
         "artifacts": artifacts,
+        "external_eval_lineage": external_eval_lineage,
         "policy": _promotion_policy_output(policy, policy_artifact),
         "metrics": metrics,
         "alias_update": _alias_update(passed, candidate_id, champion_id, rollback_id or ""),
         "notes": [
             "Promotion decisions are side-effect free; they do not move registry aliases.",
             "Alias movement is authorized only when every required governance artifact is present, fingerprinted, and passed.",
+            "Promotion requires a semantically valid eval summary bound to the evidence bundle and the exact passing external-result set for the candidate model.",
             "Blocked checks cover missing evidence, unknown license, redaction/safety failures, missing cards, missing rollback, eval mismatch, critical failures, secret exposure, forbidden actions, unsupported claims, and task-completion regressions.",
         ],
     }
@@ -409,10 +701,84 @@ def apply_promotion_aliases(
     registry_file = Path(registry_path)
     decision_file = Path(promotion_decision_path)
     receipt_path = Path(out_path)
+    _reject_unowned_json_output(
+        receipt_path,
+        PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
+        label="promotion alias receipt",
+        error_type=PromotionDecisionError,
+    )
+    _reject_output_source_collision(
+        receipt_path,
+        [registry_file, decision_file],
+        label="promotion alias receipt",
+        error_type=PromotionDecisionError,
+    )
+    receipt_expected_sha256 = json_file_sha256(receipt_path)
     registry_before_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
-    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths, receipt_path, reject_symlink_components=True)
-    registry = _read_json_artifact(registry_file, reject_symlink_components=True)
-    decision = _read_json_artifact(decision_file, reject_symlink_components=True)
+    decision_record_before_validation = _artifact_record(
+        "promotion_decision",
+        decision_file,
+        preserve_paths,
+        receipt_path,
+        reject_symlink_components=True,
+    )
+    registry, registry_snapshot_sha256, registry_snapshot_size = _read_json_artifact_snapshot(
+        registry_file, reject_symlink_components=True
+    )
+    decision, decision_snapshot_sha256, decision_snapshot_size = _read_json_artifact_snapshot(
+        decision_file, reject_symlink_components=True
+    )
+    _reject_output_source_collision(
+        receipt_path,
+        _artifact_source_closure(
+            [
+                registry_file,
+                decision_file,
+                *_promotion_decision_semantic_source_paths(decision, decision_file),
+            ]
+        ),
+        label="promotion alias receipt",
+        error_type=PromotionDecisionError,
+    )
+    internal_decision_validation = _validate_promotion_decision_snapshot(
+        decision,
+        decision_file,
+    )
+    internal_registry_validation = _validate_model_registry_snapshot(
+        registry,
+        registry_file,
+    )
+    registry_record_after_snapshot = _artifact_record(
+        "registry",
+        registry_file,
+        preserve_paths,
+        receipt_path,
+        reject_symlink_components=True,
+    )
+    decision_record_after_validation = _artifact_record(
+        "promotion_decision",
+        decision_file,
+        preserve_paths,
+        receipt_path,
+        reject_symlink_components=True,
+    )
+    decision_stable_during_validation = _artifact_records_match(
+        decision_record_before_validation,
+        decision_record_after_validation,
+    ) and _artifact_record_matches_snapshot(
+        decision_record_after_validation,
+        decision_snapshot_sha256,
+        decision_snapshot_size,
+    )
+    decision_record = decision_record_after_validation
+    registry_stable_before_update = _artifact_records_match(
+        registry_before_record,
+        registry_record_after_snapshot,
+    ) and _artifact_record_matches_snapshot(
+        registry_before_record,
+        registry_snapshot_sha256,
+        registry_snapshot_size,
+    )
     registry_obj = registry if isinstance(registry, dict) else {}
     decision_obj = decision if isinstance(decision, dict) else {}
     aliases_before = _registry_aliases(registry_obj)
@@ -423,6 +789,42 @@ def apply_promotion_aliases(
     champion_id = _model_id(decision_models.get("champion"))
     rollback_id = _model_id(decision_models.get("rollback"))
     alias_update = decision_obj.get("alias_update") if isinstance(decision_obj.get("alias_update"), dict) else {}
+    decision_registry_entry_path = _promotion_decision_artifact_source_path(
+        decision_obj,
+        "model_registry_entry",
+        decision_file,
+    )
+    (
+        decision_registry_entry,
+        decision_registry_entry_sha256,
+        decision_registry_entry_size,
+    ) = (
+        _read_json_artifact_snapshot(
+            decision_registry_entry_path,
+            reject_symlink_components=True,
+        )
+        if decision_registry_entry_path is not None
+        else (None, None, None)
+    )
+    decision_artifacts = (
+        decision_obj.get("artifacts")
+        if isinstance(decision_obj.get("artifacts"), dict)
+        else {}
+    )
+    decision_registry_entry_record = decision_artifacts.get("model_registry_entry")
+    decision_registry_entry_fingerprint_matches = (
+        isinstance(decision_registry_entry_record, dict)
+        and decision_registry_entry_record.get("sha256")
+        == decision_registry_entry_sha256
+        and decision_registry_entry_record.get("size_bytes")
+        == decision_registry_entry_size
+    )
+    registry_entries = (
+        registry_obj.get("entries")
+        if isinstance(registry_obj.get("entries"), dict)
+        else {}
+    )
+    registered_candidate_entry = registry_entries.get(candidate_id)
 
     checks: list[dict[str, Any]] = []
     _add_check(
@@ -442,6 +844,27 @@ def apply_promotion_aliases(
         expected={"schema_version": MODEL_REGISTRY_SCHEMA_VERSION},
         scope={"artifact_role": "registry"},
         summary="model registry uses the expected schema version",
+    )
+    _add_check(
+        checks,
+        "registry_validated",
+        internal_registry_validation["passed"] is True,
+        actual={
+            "error_count": internal_registry_validation["error_count"],
+            "warning_count": internal_registry_validation["warning_count"],
+        },
+        expected={"error_count": 0, "warning_count": 0},
+        scope={"artifact_role": "registry"},
+        summary="model registry snapshot passes strict semantic validation",
+    )
+    _add_check(
+        checks,
+        "registry_stable_before_update",
+        registry_stable_before_update,
+        actual={"stable": registry_stable_before_update},
+        expected={"stable": True},
+        scope={"artifact_role": "registry"},
+        summary="registry bytes used for alias updates match the CAS fingerprint",
     )
     _add_check(
         checks,
@@ -479,7 +902,7 @@ def apply_promotion_aliases(
         scope={"artifact_role": "promotion_decision"},
         summary="promotion decision explicitly authorizes alias movement",
     )
-    validation_passed = promotion_decision_validation.get("passed") if isinstance(promotion_decision_validation, dict) else None
+    validation_passed = internal_decision_validation.get("passed")
     _add_check(
         checks,
         "promotion_decision_validated",
@@ -488,6 +911,15 @@ def apply_promotion_aliases(
         expected={"passed": True},
         scope={"artifact_role": "promotion_decision"},
         summary="promotion decision validation passed immediately before alias movement",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_stable_during_validation",
+        decision_stable_during_validation,
+        actual={"stable": decision_stable_during_validation},
+        expected={"stable": True},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision bytes remain unchanged across validation and use",
     )
     _add_check(
         checks,
@@ -538,6 +970,23 @@ def apply_promotion_aliases(
     )
     _add_check(
         checks,
+        "registry_candidate_entry_matches_decision_artifact",
+        isinstance(decision_registry_entry, dict)
+        and decision_registry_entry_fingerprint_matches
+        and registered_candidate_entry == decision_registry_entry,
+        actual={
+            "candidate_id": candidate_id,
+            "decision_entry_present": isinstance(decision_registry_entry, dict),
+            "decision_entry_fingerprint_matches": decision_registry_entry_fingerprint_matches,
+            "registry_entry_matches": registered_candidate_entry
+            == decision_registry_entry,
+        },
+        expected={"same_candidate_entry": True},
+        scope={"artifact_role": "model_registry_entry"},
+        summary="registry candidate entry exactly matches the promotion decision artifact",
+    )
+    _add_check(
+        checks,
         "registry_alias_history_list",
         alias_history_before is None or isinstance(alias_history_before, list),
         actual="missing" if alias_history_before is None else type(alias_history_before).__name__,
@@ -553,6 +1002,7 @@ def apply_promotion_aliases(
     registry_after_record = registry_before_record
     alias_history_count_before = len(alias_history_before) if isinstance(alias_history_before, list) else 0
     alias_history_count_after = alias_history_count_before
+    registry_after_sha256: str | None = None
     if passed:
         updated = copy.deepcopy(registry_obj)
         updated_aliases = updated.setdefault("aliases", {})
@@ -570,12 +1020,41 @@ def apply_promotion_aliases(
             },
         }
         history.append(alias_history_entry)
-        atomic_write_json_cas(
+        registry_after_sha256 = atomic_write_json_cas(
             registry_file,
             updated,
-            expected_sha256=registry_before_record.get("sha256"),
+            expected_sha256=registry_snapshot_sha256,
         )
         registry_after_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path, reject_symlink_components=True)
+        (
+            registry_after_payload,
+            observed_registry_after_sha256,
+            observed_registry_after_size,
+        ) = _read_json_artifact_snapshot(
+            registry_file,
+            reject_symlink_components=True,
+        )
+        registry_after_stable = (
+            observed_registry_after_sha256 == registry_after_sha256
+            and registry_after_payload == updated
+            and registry_after_record.get("sha256") == registry_after_sha256
+            and registry_after_record.get("size_bytes")
+            == observed_registry_after_size
+        )
+        if not registry_after_stable:
+            try:
+                atomic_write_json_cas(
+                    registry_file,
+                    registry_obj,
+                    expected_sha256=registry_after_sha256,
+                )
+            except (AtomicJsonError, OSError) as rollback_error:
+                raise PromotionDecisionError(
+                    "model registry changed after alias update and guarded rollback could not be completed"
+                ) from rollback_error
+            raise PromotionDecisionError(
+                "model registry changed after alias update before receipt publication"
+            )
         aliases_after = _registry_aliases(updated)
         alias_history_count_after += 1
 
@@ -596,7 +1075,7 @@ def apply_promotion_aliases(
             "champion_previous_target": champion_id,
             "rollback_id": rollback_id,
         },
-        "promotion_decision_validation": _validation_summary(promotion_decision_validation),
+        "promotion_decision_validation": _validation_summary(internal_decision_validation),
         "registry_before": {
             "aliases": aliases_before,
         },
@@ -627,7 +1106,25 @@ def apply_promotion_aliases(
     }
     if metadata:
         receipt["metadata"] = dict(sorted(metadata.items()))
-    _write_json(receipt_path, receipt)
+    try:
+        atomic_write_json_cas(
+            receipt_path,
+            receipt,
+            expected_sha256=receipt_expected_sha256,
+        )
+    except (AtomicJsonError, OSError):
+        if passed and registry_after_sha256 is not None:
+            try:
+                atomic_write_json_cas(
+                    registry_file,
+                    registry_obj,
+                    expected_sha256=registry_after_sha256,
+                )
+            except (AtomicJsonError, OSError) as rollback_error:
+                raise PromotionDecisionError(
+                    "promotion alias receipt publication failed and registry rollback could not be completed"
+                ) from rollback_error
+        raise
     return receipt
 
 
@@ -974,7 +1471,7 @@ def build_promotion_release_record(
     unsupported_markers = [marker for marker in _UNSUPPORTED_CARD_MARKERS if marker in notes_text.lower()]
     _add_check(
         checks,
-        "release_notes_present",
+        "release_notes_nonempty",
         bool(notes_text.strip()),
         actual={"size_bytes": artifacts["release_notes"].get("size_bytes", 0), "nonempty": bool(notes_text.strip())},
         expected={"nonempty": True},
@@ -990,6 +1487,17 @@ def build_promotion_release_record(
         scope={"artifact_role": "release_notes"},
         summary="release notes contain no TODO/TBD/unsupported-claim markers",
     )
+
+    expected_check_ids = promotion_release_record_check_ids(
+        release_policy_bound=policy is not None,
+        rollback_receipt_bound=isinstance(rollback, dict)
+        and rollback.get("schema_version")
+        == PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
+    )
+    if tuple(check.get("id") for check in checks) != expected_check_ids:
+        raise PromotionDecisionError(
+            "internal release-record checks do not match the canonical contract"
+        )
 
     failed_checks = sum(1 for check in checks if not check["passed"])
     passed = failed_checks == 0
@@ -1330,6 +1838,140 @@ def _artifact_record(
     return record
 
 
+def _artifact_records_match(*records: dict[str, Any]) -> bool:
+    return bool(records) and all(record == records[0] for record in records[1:])
+
+
+def _artifact_record_matches_snapshot(
+    record: dict[str, Any], sha256: str | None, size_bytes: int | None
+) -> bool:
+    return (
+        record.get("exists") is True
+        and record.get("kind") == "file"
+        and isinstance(sha256, str)
+        and record.get("sha256") == sha256
+        and record.get("size_bytes") == size_bytes
+    )
+
+
+def _reject_output_source_collision(
+    output_path: Path,
+    source_paths: list[Path],
+    *,
+    label: str,
+    error_type: type[ValueError],
+) -> None:
+    try:
+        resolved_output = output_path.resolve(strict=False)
+    except OSError as exc:
+        raise error_type(f"{label} output path could not be resolved safely") from exc
+    for source_path in source_paths:
+        try:
+            resolved_source = source_path.resolve(strict=False)
+        except OSError as exc:
+            raise error_type(f"{label} input path could not be resolved safely") from exc
+        aliases_source = resolved_output == resolved_source
+        try:
+            aliases_source = aliases_source or resolved_output.is_relative_to(
+                resolved_source
+            )
+        except ValueError:
+            pass
+        if not aliases_source and output_path.exists() and source_path.exists():
+            try:
+                aliases_source = os.path.samefile(output_path, source_path)
+            except OSError:
+                aliases_source = False
+        if aliases_source:
+            raise error_type(f"{label} output must not alias an input source")
+
+
+def _reject_unowned_json_output(
+    output_path: Path,
+    expected_schema: str,
+    *,
+    label: str,
+    error_type: type[ValueError],
+) -> None:
+    if _path_has_symlink_component(output_path, include_leaf=True):
+        raise error_type(f"{label} output must not traverse a symlink")
+    if not output_path.exists():
+        return
+    payload = _read_json_artifact(output_path, reject_symlink_components=True)
+    if not isinstance(payload, dict) or payload.get("schema_version") != expected_schema:
+        raise error_type(
+            f"{label} output may replace only a prior {expected_schema} artifact"
+        )
+
+
+def _artifact_source_closure(source_paths: list[Path]) -> list[Path]:
+    pending = list(source_paths)
+    closure: list[Path] = []
+    seen: set[str] = set()
+    while pending:
+        source_path = pending.pop()
+        try:
+            identity = os.fspath(source_path.resolve(strict=False))
+        except OSError:
+            identity = os.fspath(source_path.absolute())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        closure.append(source_path)
+        if len(closure) > 10_000:
+            raise PromotionDecisionError(
+                "promotion artifact source closure exceeds 10000 paths"
+            )
+        if (
+            _path_has_symlink_component(source_path, include_leaf=True)
+            or not source_path.exists()
+            or not source_path.is_file()
+        ):
+            continue
+        try:
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        pending.extend(_artifact_reference_paths(payload, source_path))
+    return closure
+
+
+def _artifact_reference_paths(value: Any, source_path: Path) -> list[Path]:
+    references: list[Path] = []
+    pending: list[Any] = [value]
+    registry_links = (
+        value.get("schema_version")
+        in {MODEL_REGISTRY_ENTRY_SCHEMA_VERSION, MODEL_REGISTRY_SCHEMA_VERSION}
+        if isinstance(value, dict)
+        else False
+    )
+    while pending:
+        current = pending.pop()
+        if isinstance(current, dict):
+            raw_path = current.get("path")
+            if (
+                isinstance(raw_path, str)
+                and raw_path
+                and not raw_path.startswith("<redacted:")
+                and "://" not in raw_path
+            ):
+                reference = Path(raw_path)
+                if registry_links:
+                    references.append(
+                        resolve_artifact_reference_path(raw_path, source_path)
+                    )
+                else:
+                    references.append(
+                        reference
+                        if reference.is_absolute()
+                        else source_path.parent / reference
+                    )
+            pending.extend(current.values())
+        elif isinstance(current, list):
+            pending.extend(current)
+    return references
+
+
 def _read_json_artifact(path: Path, *, reject_symlink_components: bool = False) -> dict[str, Any] | None:
     if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
         return None
@@ -1340,6 +1982,713 @@ def _read_json_artifact(path: Path, *, reject_symlink_components: bool = False) 
     except (OSError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) else None
+
+
+def _read_json_artifact_snapshot(
+    path: Path, *, reject_symlink_components: bool = False
+) -> tuple[dict[str, Any] | None, str | None, int | None]:
+    if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        return None, None, None
+    if not path.exists() or not path.is_file():
+        return None, None, None
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, None, None
+    payload = value if isinstance(value, dict) else None
+    return payload, hashlib.sha256(raw).hexdigest(), len(raw)
+
+
+def _promotion_semantic_validation_errors(role: str, path: Path | None) -> list[str]:
+    if path is None:
+        return [f"{role} source is missing"]
+    from .validation import (
+        validate_agentic_training_result,
+        validate_evidence_bundle,
+        validate_eval_summary,
+        validate_external_eval_result,
+    )
+
+    validators = {
+        "evidence_bundle": validate_evidence_bundle,
+        "eval_summary": validate_eval_summary,
+        "external_eval_result": validate_external_eval_result,
+        "agentic_training_result": validate_agentic_training_result,
+    }
+    validator = validators[role]
+    target = validator(path)
+    return [*target.errors, *target.warnings]
+
+
+def _promotion_structured_validation_errors(
+    role: str,
+    path: Path | None,
+    payload: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(payload, dict):
+        return [f"{role} source is missing or is not a JSON object"]
+    if role != "compare_gate":
+        if path is None:
+            return [f"{role} source is missing"]
+        from .validation import (
+            validate_agentic_training_result,
+            validate_model_registry_entry,
+            validate_promotion_ledger_gate,
+            validate_serving_profile,
+            validate_trainer_launch_check,
+        )
+
+        validators = {
+            "promotion_ledger_gate": validate_promotion_ledger_gate,
+            "trainer_launch_check": validate_trainer_launch_check,
+            "model_registry_entry": validate_model_registry_entry,
+            "agentic_training_result": validate_agentic_training_result,
+            "serving_profile": validate_serving_profile,
+        }
+        validation = validators[role](path)
+        errors = [*validation.errors, *validation.warnings]
+        if role == "trainer_launch_check":
+            errors.extend(
+                _promotion_trainer_launch_replay_errors(payload, path)
+            )
+        return errors
+    errors = _gate_like_semantic_errors(payload, role)
+    if role == "compare_gate":
+        compare_export_path = _promotion_compare_export_path(payload, path)
+        if compare_export_path is None:
+            errors.append("compare_gate.compare_export must resolve to a directory")
+        else:
+            from .validation import validate_compare_export
+
+            validation = validate_compare_export(compare_export_path)
+            errors.extend(validation.errors)
+            errors.extend(validation.warnings)
+            if not validation.errors and not validation.warnings:
+                errors.extend(
+                    _promotion_compare_gate_replay_errors(
+                        payload,
+                        compare_export_path,
+                        validation,
+                    )
+                )
+    return errors
+
+
+def _gate_like_semantic_errors(payload: dict[str, Any], role: str) -> list[str]:
+    errors: list[str] = []
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return [f"{role}.checks must be a list"]
+    invalid_rows = [
+        index
+        for index, check in enumerate(checks)
+        if not isinstance(check, dict) or not isinstance(check.get("passed"), bool)
+    ]
+    if invalid_rows:
+        errors.append(f"{role}.checks contains invalid rows at {invalid_rows!r}")
+    failed_count = sum(
+        1
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False
+    )
+    if payload.get("check_count") != len(checks):
+        errors.append(f"{role}.check_count must match checks length")
+    if payload.get("failed_check_count") != failed_count:
+        errors.append(f"{role}.failed_check_count must match failed checks")
+    if payload.get("passed") is not (failed_count == 0 and not invalid_rows):
+        errors.append(f"{role}.passed must match replayed failed checks")
+    return errors
+
+
+def _promotion_compare_export_path(
+    compare_gate: dict[str, Any] | None, compare_gate_path: Path | None
+) -> Path | None:
+    return next(
+        (
+            candidate
+            for candidate in _promotion_plain_source_candidates(
+                compare_gate,
+                "compare_export",
+                compare_gate_path,
+            )
+            if candidate.exists() and candidate.is_dir()
+        ),
+        None,
+    )
+
+
+def _promotion_plain_source_candidates(
+    payload: dict[str, Any] | None,
+    field_name: str,
+    source_path: Path | None,
+) -> list[Path]:
+    raw_path = payload.get(field_name) if isinstance(payload, dict) else None
+    if (
+        not isinstance(raw_path, str)
+        or not raw_path
+    ):
+        return []
+    if raw_path.startswith("<redacted:"):
+        if source_path is None or not raw_path.endswith(">"):
+            return []
+        basename = raw_path[len("<redacted:") : -1]
+        if basename in {"", ".", ".."} or Path(basename).name != basename:
+            return []
+        return [source_path.parent / basename]
+    if "://" in raw_path:
+        return []
+    path = Path(raw_path)
+    if path.is_absolute() or source_path is None:
+        candidates = [path]
+    else:
+        candidates = [source_path.parent / path]
+        repository_root = artifact_repository_root(source_path)
+        if repository_root is not None:
+            candidates.append(repository_root / path)
+    unique: list[Path] = []
+    identities: set[str] = set()
+    for candidate in candidates:
+        identity = os.fspath(candidate.resolve(strict=False))
+        if identity not in identities:
+            identities.add(identity)
+            unique.append(candidate)
+    return unique
+
+
+def _promotion_trainer_launch_replay_errors(
+    launch_check: dict[str, Any], launch_check_path: Path
+) -> list[str]:
+    candidates = _promotion_plain_source_candidates(
+        launch_check,
+        "preflight_path",
+        launch_check_path,
+    )
+    preflight_path = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate.exists()
+            and candidate.is_file()
+            and not _path_has_symlink_component(candidate, include_leaf=True)
+        ),
+        None,
+    )
+    if preflight_path is None:
+        return [
+            "trainer_launch_check.preflight_path must resolve to a non-symlink regular file"
+        ]
+    preflight = _read_json_artifact(
+        preflight_path,
+        reject_symlink_components=True,
+    )
+    if not isinstance(preflight, dict):
+        return ["trainer launch preflight must contain a JSON object"]
+
+    from .preflight import build_trainer_launch_check
+    from .validation import validate_trainer_preflight
+
+    validation = validate_trainer_preflight(preflight_path, payload=preflight)
+    validation_summary = {
+        "schema_version": "hfr.validation.v1",
+        "passed": not validation.errors and not validation.warnings,
+        "strict": True,
+        "target_count": 1,
+        "error_count": len(validation.errors),
+        "warning_count": len(validation.warnings),
+        "targets": [validation.as_dict()],
+    }
+    recorded_preflight_path = launch_check.get("preflight_path")
+    try:
+        replay = build_trainer_launch_check(
+            preflight_path=(
+                recorded_preflight_path
+                if isinstance(recorded_preflight_path, str)
+                else preflight_path
+            ),
+            preflight=preflight,
+            validation_summary=validation_summary,
+            require_gates=(
+                launch_check.get("required_gates")
+                if isinstance(launch_check.get("required_gates"), list)
+                else []
+            ),
+            required_dataset_versions=(
+                launch_check.get("required_dataset_versions")
+                if isinstance(
+                    launch_check.get("required_dataset_versions"), list
+                )
+                else []
+            ),
+            require_metadata=(
+                launch_check.get("required_metadata")
+                if isinstance(launch_check.get("required_metadata"), dict)
+                else {}
+            ),
+            preserve_paths=True,
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        return [f"trainer launch check could not be replayed: {exc}"]
+
+    errors = [
+        f"trainer preflight validation failed: {error}"
+        for error in validation.errors
+    ]
+    errors.extend(
+        f"trainer preflight validation warning blocks promotion: {warning}"
+        for warning in validation.warnings
+    )
+    if replay != launch_check:
+        errors.append(
+            "trainer launch check must exactly match canonical replay from its current preflight"
+        )
+    return errors
+
+
+def _promotion_compare_candidate_id(
+    compare_gate: dict[str, Any] | None, compare_gate_path: Path | None
+) -> str:
+    export_path = _promotion_compare_export_path(compare_gate, compare_gate_path)
+    if export_path is None:
+        return ""
+    manifest = _read_json_artifact(export_path / "manifest.json")
+    metadata = manifest.get("metadata") if isinstance(manifest, dict) else None
+    candidate_id = metadata.get("candidate") if isinstance(metadata, dict) else None
+    return candidate_id if isinstance(candidate_id, str) else ""
+
+
+def _promotion_compare_gate_replay_errors(
+    compare_gate: dict[str, Any],
+    compare_export_path: Path,
+    validation: Any,
+) -> list[str]:
+    manifest = _read_json_artifact(compare_export_path / "manifest.json")
+    if not isinstance(manifest, dict):
+        return ["compare export manifest is not a JSON object"]
+    pairs_path = compare_export_path / "improvement_pairs.jsonl"
+    try:
+        pairs = [
+            json.loads(line)
+            for line in pairs_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"compare export pairs could not be replayed: {exc}"]
+    if any(not isinstance(row, dict) for row in pairs):
+        return ["compare export pairs must contain JSON objects"]
+    policy = compare_gate.get("policy")
+    effective = policy.get("effective") if isinstance(policy, dict) else None
+    if not isinstance(effective, dict):
+        return ["compare_gate.policy.effective must be an object"]
+    options = {
+        key: value
+        for key, value in effective.items()
+        if key not in {"strict_validation"}
+    }
+    validation_summary = {
+        "passed": not validation.errors and not validation.warnings,
+        "strict": effective.get("strict_validation") is True,
+        "target_count": 1,
+        "error_count": len(validation.errors),
+        "warning_count": len(validation.warnings),
+    }
+    try:
+        replay = evaluate_compare_gate(
+            manifest,
+            pairs,
+            compare_export_path=compare_gate.get("compare_export", ""),
+            validation_summary=validation_summary,
+            **options,
+        )
+    except (TypeError, ValueError) as exc:
+        return [f"compare gate policy could not be replayed: {exc}"]
+    replay_fields = (
+        "compare_export",
+        "passed",
+        "check_count",
+        "failed_check_count",
+        "checks",
+        "metrics",
+        "decision",
+    )
+    return [
+        f"compare_gate.{field_name} does not match replayed compare export"
+        for field_name in replay_fields
+        if compare_gate.get(field_name) != replay.get(field_name)
+    ]
+
+
+def _promotion_decision_semantic_source_paths(
+    decision: dict[str, Any] | None, decision_path: Path
+) -> list[Path]:
+    sources: list[Path] = []
+    for role, field_name in (
+        ("compare_gate", "compare_export"),
+        ("promotion_ledger_gate", "promotion_ledger"),
+        ("trainer_launch_check", "preflight_path"),
+    ):
+        artifact_path = _promotion_decision_artifact_source_path(
+            decision, role, decision_path
+        )
+        if artifact_path is None:
+            continue
+        payload = _read_json_artifact(
+            artifact_path, reject_symlink_components=True
+        )
+        sources.extend(
+            _promotion_plain_source_candidates(
+                payload,
+                field_name,
+                artifact_path,
+            )
+        )
+    return sources
+
+
+def _promotion_decision_artifact_source_path(
+    decision: dict[str, Any] | None,
+    role: str,
+    decision_path: Path,
+) -> Path | None:
+    artifacts = decision.get("artifacts") if isinstance(decision, dict) else None
+    record = artifacts.get(role) if isinstance(artifacts, dict) else None
+    raw_path = record.get("path") if isinstance(record, dict) else None
+    if not isinstance(raw_path, str) or not raw_path or raw_path.startswith("<redacted:"):
+        return None
+    recorded_path = Path(raw_path)
+    return (
+        recorded_path
+        if recorded_path.is_absolute()
+        else decision_path.parent / recorded_path
+    )
+
+
+def _promotion_training_result_target(payload: dict[str, Any] | None) -> str:
+    registry_update = payload.get("registry_update") if isinstance(payload, dict) else None
+    target = registry_update.get("target_model_id") if isinstance(registry_update, dict) else None
+    return target if isinstance(target, str) else ""
+
+
+def _validate_promotion_decision_snapshot(
+    decision: dict[str, Any] | None, source_path: Path
+) -> dict[str, Any]:
+    from .validation import ValidationTarget, _validate_promotion_decision
+
+    target = ValidationTarget("promotion_decision", str(source_path))
+    if decision is None:
+        target.errors.append("promotion decision snapshot is not a JSON object")
+    else:
+        _validate_promotion_decision(decision, target, source_path)
+    error_count = len(target.errors)
+    warning_count = len(target.warnings)
+    return {
+        "schema_version": "hfr.validation.v1",
+        "passed": error_count == 0 and warning_count == 0,
+        "strict": True,
+        "target_count": 1,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "targets": [target.as_dict()],
+    }
+
+
+def _validate_model_registry_snapshot(
+    registry: dict[str, Any] | None, source_path: Path
+) -> dict[str, Any]:
+    from .validation import ValidationTarget, _validate_model_registry
+
+    target = ValidationTarget("model_registry", str(source_path))
+    if registry is None:
+        target.errors.append("model registry snapshot is not a JSON object")
+    else:
+        _validate_model_registry(registry, target, source_path)
+    error_count = len(target.errors)
+    warning_count = len(target.warnings)
+    return {
+        "schema_version": "hfr.validation.v1",
+        "passed": error_count == 0 and warning_count == 0,
+        "strict": True,
+        "target_count": 1,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "targets": [target.as_dict()],
+    }
+
+
+def _promotion_external_eval_lineage(
+    *,
+    candidate_id: str,
+    evidence_bundle: dict[str, Any] | None,
+    eval_summary: dict[str, Any] | None,
+    eval_summary_artifact: dict[str, Any],
+    result_payloads: list[dict[str, Any] | None],
+    result_artifacts: list[dict[str, Any]],
+    evidence_bundle_semantically_valid: bool,
+    eval_summary_semantically_valid: bool,
+    external_results_semantically_valid: bool,
+) -> dict[str, Any]:
+    summary = eval_summary if isinstance(eval_summary, dict) else {}
+    summary_rows = summary.get("external_adapter_results")
+    summary_results = (
+        [row for row in summary_rows if isinstance(row, dict)]
+        if isinstance(summary_rows, list)
+        else []
+    )
+    results = [
+        _promotion_external_eval_result_projection(payload, artifact)
+        for payload, artifact in zip(result_payloads, result_artifacts, strict=True)
+    ]
+    results.sort(
+        key=lambda row: (
+            str(row.get("adapter_id") or ""),
+            str(row.get("artifact", {}).get("sha256") or ""),
+            str(row.get("artifact", {}).get("path") or ""),
+        )
+    )
+    result_sha256s = [row["artifact"].get("sha256") for row in results]
+    summary_sha256s = [row.get("sha256") for row in summary_results]
+    summary_by_sha256 = {
+        row.get("sha256"): row
+        for row in summary_results
+        if isinstance(row.get("sha256"), str) and row.get("sha256")
+    }
+    positive_unique_result_set = (
+        bool(results)
+        and all(isinstance(value, str) and value for value in result_sha256s)
+        and len(result_sha256s) == len(set(result_sha256s))
+    )
+    unique_summary_set = (
+        bool(summary_results)
+        and all(isinstance(value, str) and value for value in summary_sha256s)
+        and len(summary_sha256s) == len(set(summary_sha256s))
+    )
+    exact_result_set = (
+        positive_unique_result_set
+        and unique_summary_set
+        and len(results) == len(summary_results)
+        and set(result_sha256s) == set(summary_sha256s)
+        and all(
+            _promotion_summary_result_matches(
+                summary_by_sha256.get(result["artifact"].get("sha256")), result
+            )
+            for result in results
+        )
+    )
+    candidate_model_bound = bool(candidate_id) and bool(results) and all(
+        result.get("model_id") == candidate_id for result in results
+    )
+    bundle_artifacts = (
+        evidence_bundle.get("artifacts")
+        if isinstance(evidence_bundle, dict)
+        and isinstance(evidence_bundle.get("artifacts"), dict)
+        else {}
+    )
+    bundled_summary = (
+        bundle_artifacts.get("eval_summary")
+        if isinstance(bundle_artifacts.get("eval_summary"), dict)
+        else {}
+    )
+    evidence_bundle_summary_bound = (
+        eval_summary_artifact.get("exists") is True
+        and eval_summary_artifact.get("kind") == "file"
+        and isinstance(eval_summary_artifact.get("sha256"), str)
+        and bundled_summary.get("sha256") == eval_summary_artifact.get("sha256")
+        and bundled_summary.get("size_bytes") == eval_summary_artifact.get("size_bytes")
+    )
+    semantic_validation_passed = (
+        evidence_bundle_semantically_valid
+        and eval_summary_semantically_valid
+        and external_results_semantically_valid
+    )
+    governance_ready = (
+        summary.get("passed") is True
+        and summary.get("governance_ready") is True
+        and summary.get("external_adapter_result_count") == len(results)
+        and bool(results)
+        and all(_promotion_external_eval_result_governance_ready(result) for result in results)
+    )
+    passed = (
+        exact_result_set
+        and candidate_model_bound
+        and evidence_bundle_summary_bound
+        and semantic_validation_passed
+        and governance_ready
+    )
+    return {
+        "result_count": len(results),
+        "summary_result_count": len(summary_results),
+        "exact_result_set": exact_result_set,
+        "candidate_model_bound": candidate_model_bound,
+        "evidence_bundle_summary_bound": evidence_bundle_summary_bound,
+        "evidence_bundle_semantically_valid": evidence_bundle_semantically_valid,
+        "eval_summary_semantically_valid": eval_summary_semantically_valid,
+        "external_results_semantically_valid": external_results_semantically_valid,
+        "semantic_validation_passed": semantic_validation_passed,
+        "governance_ready": governance_ready,
+        "passed": passed,
+        "results": results,
+    }
+
+
+def _promotion_external_eval_result_projection(
+    payload: dict[str, Any] | None,
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
+    result = payload if isinstance(payload, dict) else {}
+    identity = result.get("identity") if isinstance(result.get("identity"), dict) else {}
+    integrity = result.get("integrity") if isinstance(result.get("integrity"), dict) else {}
+    execution = result.get("execution") if isinstance(result.get("execution"), dict) else {}
+    outcome = (
+        result.get("benchmark_outcome")
+        if isinstance(result.get("benchmark_outcome"), dict)
+        else {}
+    )
+    coverage = result.get("coverage") if isinstance(result.get("coverage"), dict) else {}
+    governance = result.get("governance") if isinstance(result.get("governance"), dict) else {}
+    return {
+        "artifact": copy.deepcopy(artifact),
+        "adapter_id": identity.get("adapter_id"),
+        "model_id": identity.get("model_id"),
+        "plan_sha256": identity.get("plan_sha256"),
+        "heldout_manifest_sha256": identity.get("heldout_manifest_sha256"),
+        "integrity_passed": integrity.get("passed") is True,
+        "execution_status": execution.get("status"),
+        "benchmark_status": outcome.get("status"),
+        "coverage_complete": coverage.get("complete") is True,
+        "governance_readiness": governance.get("readiness"),
+        "external_eval_claims_allowed": governance.get("external_eval_claims_allowed") is True,
+    }
+
+
+def _promotion_summary_result_matches(summary_row: Any, result: dict[str, Any]) -> bool:
+    if not isinstance(summary_row, dict):
+        return False
+    artifact = result.get("artifact") if isinstance(result.get("artifact"), dict) else {}
+    expected = {
+        "sha256": artifact.get("sha256"),
+        "size_bytes": artifact.get("size_bytes"),
+        "schema_version": EXTERNAL_EVAL_RESULT_SCHEMA_VERSION,
+        "adapter_id": result.get("adapter_id"),
+        "model_id": result.get("model_id"),
+        "source_plan_sha256": result.get("plan_sha256"),
+        "heldout_manifest_sha256": result.get("heldout_manifest_sha256"),
+        "integrity_passed": result.get("integrity_passed"),
+        "execution_status": result.get("execution_status"),
+        "benchmark_status": result.get("benchmark_status"),
+        "coverage_complete": result.get("coverage_complete"),
+        "governance_readiness": result.get("governance_readiness"),
+        "external_eval_claims_allowed": result.get("external_eval_claims_allowed"),
+    }
+    return all(summary_row.get(field_name) == value for field_name, value in expected.items())
+
+
+def _promotion_external_eval_result_governance_ready(result: dict[str, Any]) -> bool:
+    return (
+        result.get("integrity_passed") is True
+        and result.get("execution_status") == "completed"
+        and result.get("benchmark_status") == "passed"
+        and result.get("coverage_complete") is True
+        and result.get("governance_readiness") == "ready_for_review"
+        and result.get("external_eval_claims_allowed") is True
+    )
+
+
+def _promotion_external_eval_checks(
+    lineage: dict[str, Any],
+    *,
+    evidence_bundle_semantically_valid: bool,
+    eval_summary_semantically_valid: bool,
+    evidence_bundle_error_count: int,
+    eval_summary_error_count: int,
+    external_result_error_count: int,
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    present_result_count = sum(
+        1
+        for result in lineage["results"]
+        if isinstance(result.get("artifact"), dict)
+        and result["artifact"].get("exists") is True
+        and result["artifact"].get("kind") == "file"
+    )
+    _add_check(
+        checks,
+        "evidence_bundle_semantically_valid",
+        evidence_bundle_semantically_valid,
+        actual={"error_count": evidence_bundle_error_count},
+        expected={"error_count": 0},
+        scope={"artifact_role": "evidence_bundle"},
+        summary="evidence bundle passes semantic validation before promotion",
+    )
+    _add_check(
+        checks,
+        "eval_summary_semantically_valid",
+        eval_summary_semantically_valid,
+        actual={"error_count": eval_summary_error_count},
+        expected={"error_count": 0},
+        scope={"artifact_role": "eval_summary"},
+        summary="eval summary passes semantic validation before promotion",
+    )
+    _add_check(
+        checks,
+        "external_eval_results_present",
+        lineage["result_count"] > 0 and present_result_count == lineage["result_count"],
+        actual={
+            "result_count": lineage["result_count"],
+            "present_result_count": present_result_count,
+        },
+        expected={"minimum_result_count": 1, "all_results_present": True},
+        scope={"artifact_role": "external_eval_result"},
+        summary="at least one execution-backed external evaluation result is present",
+    )
+    _add_check(
+        checks,
+        "external_eval_results_semantically_valid",
+        lineage["external_results_semantically_valid"],
+        actual={
+            "result_count": lineage["result_count"],
+            "error_count": external_result_error_count,
+        },
+        expected={"minimum_result_count": 1, "error_count": 0},
+        scope={"artifact_role": "external_eval_result"},
+        summary="every external evaluation result passes deterministic semantic replay",
+    )
+    for check_id, field_name, summary in (
+        (
+            "external_eval_result_set_exact",
+            "exact_result_set",
+            "direct external evaluation results exactly match the eval-summary result set",
+        ),
+        (
+            "external_eval_results_match_candidate",
+            "candidate_model_bound",
+            "every external evaluation result identifies the promoted candidate model",
+        ),
+        (
+            "evidence_bundle_eval_summary_bound",
+            "evidence_bundle_summary_bound",
+            "evidence bundle fingerprints the exact promotion eval summary",
+        ),
+        (
+            "external_eval_results_governance_ready",
+            "governance_ready",
+            "the exact external evaluation result set passed and is ready for review",
+        ),
+        (
+            "external_eval_lineage_passed",
+            "passed",
+            "the complete promotion external-evaluation lineage is fail-closed and ready",
+        ),
+    ):
+        _add_check(
+            checks,
+            check_id,
+            lineage[field_name] is True,
+            actual={field_name: lineage[field_name]},
+            expected={field_name: True},
+            scope={"artifact_role": "external_eval_result"},
+            summary=summary,
+        )
+    return checks
 
 
 def _read_text_artifact(path: Path, *, reject_symlink_components: bool = False) -> str:
@@ -1492,7 +2841,7 @@ def _add_promotion_policy_checks(
         "promotion_policy_required_artifacts_complete",
         policy.get("required_artifacts"),
         PROMOTION_DECISION_REQUIRED_ARTIFACTS,
-        "promotion policy covers every promotion-decision artifact role",
+        "promotion policy covers every single-valued promotion-decision artifact role; repeatable external results are mandatory lineage inputs",
     )
     _add_artifact_contract_check(
         checks,
@@ -1636,6 +2985,25 @@ def _add_schema_check(checks: list[dict[str, Any]], role: str, payload: dict[str
     )
 
 
+def _add_json_schema_contract_check(
+    checks: list[dict[str, Any]], role: str, payload: dict[str, Any] | None
+) -> None:
+    try:
+        result = check_schema_contract(payload, name_or_id=role)
+        errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError) as exc:
+        errors = [str(exc)]
+    _add_check(
+        checks,
+        f"{role}_contract_valid",
+        not errors,
+        actual={"error_count": len(errors)},
+        expected={"error_count": 0, "schema_name": role},
+        scope={"artifact_role": role},
+        summary=f"{role} satisfies its complete published JSON Schema contract",
+    )
+
+
 def _add_passed_json_check(checks: list[dict[str, Any]], role: str, payload: dict[str, Any] | None) -> None:
     actual = payload.get("passed") if isinstance(payload, dict) else None
     _add_check(
@@ -1722,9 +3090,9 @@ def _add_rollback_metadata_check(checks: list[dict[str, Any]], payload: dict[str
     _add_check(
         checks,
         "rollback_metadata_matches_target",
-        bool(rollback_id) and actual_id == rollback_id and available is not False,
+        bool(rollback_id) and actual_id == rollback_id and available is True,
         actual={"rollback_id": actual_id, "available": available},
-        expected={"rollback_id": rollback_id or "", "available": "not false"},
+        expected={"rollback_id": rollback_id or "", "available": True},
         scope={"artifact_role": "rollback_metadata"},
         summary="rollback metadata points at the declared rollback target",
     )
@@ -1772,22 +3140,39 @@ def _add_card_claims_check(
     reject_symlink_components: bool = False,
 ) -> None:
     markers: list[str] = []
+    readable = False
+    non_empty = False
+    expected_heading = "# model card" if role == "model_card" else "# dataset card"
+    heading_present = False
     if path is not None and reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
         path = None
     if path is not None and path.exists() and path.is_file():
         try:
             text = path.read_text(encoding="utf-8").lower()
-        except OSError:
+            readable = True
+        except (OSError, UnicodeDecodeError):
             text = ""
+        non_empty = bool(text.strip())
+        heading_present = expected_heading in text
         markers = [marker for marker in _UNSUPPORTED_CARD_MARKERS if marker in text]
     _add_check(
         checks,
         f"{role}_claims_supported",
-        not markers,
-        actual={"unsupported_markers": markers},
-        expected={"unsupported_markers": []},
+        readable and non_empty and heading_present and not markers,
+        actual={
+            "readable": readable,
+            "non_empty": non_empty,
+            "expected_heading_present": heading_present,
+            "unsupported_markers": markers,
+        },
+        expected={
+            "readable": True,
+            "non_empty": True,
+            "expected_heading_present": True,
+            "unsupported_markers": [],
+        },
         scope={"artifact_role": role},
-        summary=f"{role} contains no TODO/TBD/unsupported-claim markers",
+        summary=f"{role} is a readable non-empty card without unsupported claim markers",
     )
 
 
@@ -1850,13 +3235,19 @@ def _add_check(
     checks.append(check)
 
 
-def _decision_metrics(checks: list[dict[str, Any]], compare_metrics: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+def _decision_metrics(
+    checks: list[dict[str, Any]],
+    compare_metrics: dict[str, Any],
+    policy: dict[str, Any],
+    external_eval_lineage: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
         "policy_required_artifact_count": len(policy.get("required_artifacts", [])),
         "policy_release_required_artifact_count": len(policy.get("release_required_artifacts", [])),
+        "external_eval_result_count": _int_value(external_eval_lineage.get("result_count")),
         "task_completion_regression_count": _int_value(compare_metrics.get("task_completion_regression_count")),
         "baseline_win_count": _int_value(compare_metrics.get("baseline_win_count")),
         "contract_drift_count": _int_value(compare_metrics.get("contract_drift_count")),

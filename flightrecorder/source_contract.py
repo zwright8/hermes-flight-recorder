@@ -1233,11 +1233,13 @@ def _capture_referenced_tree_fd(
 
 _EXPLICIT_PATH_FIELD_NAMES = {
     "compatibility_report",
+    "compare_export",
     "events",
     "home",
     "lineage",
     "manifest",
     "normalized_trace",
+    "promotion_ledger",
     "report",
     "reviewed_export",
     "reviewed_labels",

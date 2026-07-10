@@ -145,11 +145,11 @@
     "release": {
       "additionalProperties": false,
       "properties": {
-        "candidate_id": {"type": "string"},
-        "champion_previous_target": {"type": "string"},
-        "dataset_id": {"type": "string"},
-        "id": {"type": "string"},
-        "rollback_id": {"type": "string"}
+        "candidate_id": {"minLength": 1, "type": "string"},
+        "champion_previous_target": {"minLength": 1, "type": "string"},
+        "dataset_id": {"minLength": 1, "type": "string"},
+        "id": {"minLength": 1, "type": "string"},
+        "rollback_id": {"minLength": 1, "type": "string"}
       },
       "required": ["id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"],
       "type": "object"

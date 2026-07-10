@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .dependency_probe import module_available_without_import as _module_available
-from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .path_safety import (
+    artifact_repository_root,
+    path_has_symlink_component as _path_has_symlink_component,
+)
 from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
 
 AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION = "hfr.agentic_training_runtime_preflight.v1"
@@ -51,11 +55,13 @@ def build_agentic_training_runtime_preflight(
     out_path: str | Path | None = None,
     require_modules: list[str] | tuple[str, ...] | None = None,
     skip_default_modules: bool = False,
+    preserve_paths: bool = False,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a side-effect-free runtime readiness artifact for a training plan."""
-    plan_file = Path(plan_path)
-    _reject_symlinked_plan_input(plan_file)
+    raw_plan_file = Path(plan_path)
+    _reject_symlinked_plan_input(raw_plan_file)
+    plan_file = raw_plan_file.resolve(strict=False)
     plan_payload, plan_read_errors = _read_json_object(plan_file)
     plan_schema_check = _json_schema_record(plan_file, "agentic_training_plan")
     trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
@@ -153,11 +159,19 @@ def build_agentic_training_runtime_preflight(
 
     failed_checks = [check for check in checks if check["passed"] is False]
     passed = not failed_checks
+    displayed_plan_path = _display_plan_path(
+        plan_file,
+        out_path,
+        preserve_paths=preserve_paths,
+    )
     preflight = {
         "schema_version": AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "artifact_path": str(out_path or ""),
-        "plan_path": str(plan_file),
+        "artifact_path": _display_output_path(
+            out_path,
+            preserve_paths=preserve_paths,
+        ),
+        "plan_path": displayed_plan_path,
         "plan_sha256": _sha256_or_none(plan_file),
         "plan_mode": mode,
         "backend": backend,
@@ -169,7 +183,7 @@ def build_agentic_training_runtime_preflight(
         "checks": checks,
         "blocked_reasons": _blocked_reasons(failed_checks, dependency_checks, view_checks, mode_contract_check),
         "plan_check": {
-            "path": str(plan_file),
+            "path": displayed_plan_path,
             "exists": plan_file.exists(),
             "regular_file": plan_file.is_file(),
             "schema_name": "agentic_training_plan",
@@ -532,12 +546,74 @@ def _resolve_view_path(raw_path: str, plan: dict[str, Any], plan_path: Path) -> 
 
 
 def _display_path(path: Path) -> str:
-    if not path.is_absolute():
-        return str(path)
-    try:
-        return str(path.relative_to(Path.cwd().resolve()))
-    except ValueError:
-        return path.name
+    absolute_path = path.resolve(strict=False)
+    repository_root = artifact_repository_root(absolute_path)
+    if repository_root is not None:
+        try:
+            return str(absolute_path.relative_to(repository_root))
+        except ValueError:
+            pass
+    return absolute_path.name
+
+
+def _display_plan_path(
+    plan_path: Path,
+    out_path: str | Path | None,
+    *,
+    preserve_paths: bool,
+) -> str:
+    absolute_plan = plan_path.resolve(strict=False)
+    plan_repository_root = artifact_repository_root(absolute_plan)
+    if out_path is not None:
+        output = Path(out_path)
+        absolute_output = (
+            output if output.is_absolute() else Path.cwd() / output
+        ).resolve(strict=False)
+        output_repository_root = artifact_repository_root(absolute_output)
+        if (
+            plan_repository_root is not None
+            and output_repository_root == plan_repository_root
+        ):
+            return str(absolute_plan.relative_to(plan_repository_root))
+        try:
+            common_path = Path(
+                os.path.commonpath((absolute_plan, absolute_output.parent))
+            )
+        except ValueError:
+            common_path = Path(absolute_plan.anchor)
+        common_depth = len(common_path.parts) - (1 if common_path.anchor else 0)
+        if common_depth >= 2:
+            return os.path.relpath(absolute_plan, start=absolute_output.parent)
+        if preserve_paths:
+            return str(absolute_plan)
+        raise AgenticTrainingRuntimePreflightError(
+            "agentic_training_runtime_preflight plan and output must share a scoped ancestor; "
+            "place --out beside the plan or pass --preserve-paths for a private local artifact"
+        )
+    if plan_repository_root is not None:
+        return str(absolute_plan.relative_to(plan_repository_root))
+    if preserve_paths:
+        return str(absolute_plan)
+    return absolute_plan.name
+
+
+def _display_output_path(
+    out_path: str | Path | None,
+    *,
+    preserve_paths: bool,
+) -> str:
+    if out_path is None:
+        return ""
+    output = Path(out_path)
+    absolute_output = (
+        output if output.is_absolute() else Path.cwd() / output
+    ).resolve(strict=False)
+    if preserve_paths:
+        return str(absolute_output)
+    repository_root = artifact_repository_root(absolute_output)
+    if repository_root is not None:
+        return str(absolute_output.relative_to(repository_root))
+    return absolute_output.name
 
 
 def _manifest_path(plan: dict[str, Any], key: str, plan_path: Path) -> Path | None:

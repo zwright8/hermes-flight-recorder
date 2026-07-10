@@ -687,15 +687,32 @@ flightrecorder promotion-decision \
   --champion-id current-champion \
   --rollback-id previous-champion \
   --evidence-bundle runs/evidence_bundle.json \
+  --eval-summary runs/eval_summary.json \
+  --external-eval-result runs/external_eval_result.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --compare-gate runs/compare_gate.json \
   --trainer-launch-check runs/trainer_launch_check.json \
+  --model-registry-entry runs/model_registry_entry.json \
   --agentic-training-result runs/agentic_training_result.json \
+  --model-card runs/promotion_cards/MODEL_CARD.md \
+  --dataset-card runs/promotion_cards/DATASET_CARD.md \
+  --rollback-metadata runs/rollback.json \
+  --license-review runs/license_review.json \
+  --redaction-check runs/redaction_check.json \
+  --safety-gate runs/safety_gate.json \
   --serving-profile runs/serving_profile.json \
-  --model-card runs/promotion_cards/model_card.md \
-  --dataset-card runs/promotion_cards/dataset_card.md \
+  --serving-report runs/serving_report.json \
   --promotion-policy examples/promotion_policy.demo.json \
   --out runs/promotion_decision.json
 ```
+
+Repeat `--external-eval-result` once for every adapter result named by the eval
+summary. Promotion stays blocked unless that non-empty, unique result set
+matches the summary exactly, every result identifies `--candidate-id`, and the
+evidence bundle fingerprints the same eval summary. Strict validation reopens
+and semantically replays the bundle, summary, and results, then rebuilds the
+lineage checks; changing a source after decision generation invalidates the
+decision instead of preserving stale promotion authority.
 
 Governance can then produce cards, rollback receipts, release records, archive
 bundles, ledgers, and registry alias apply receipts.

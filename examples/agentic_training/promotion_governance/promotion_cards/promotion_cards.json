@@ -23,15 +23,15 @@
       "path": "../../evidence_handoff/evidence_bundle.json",
       "role": "evidence_bundle",
       "schema_version": "hfr.evidence_bundle.v1",
-      "sha256": "ecf543fef5e32e4f6b1656ae626733d8171383d35fd8566edb8b0bb3d4512913",
-      "size_bytes": 16328
+      "sha256": "aea6a6ba5ff01d666b5672a3e90f2963216eae1f5fe9b6e2bb7a72fb0652c544",
+      "size_bytes": 19147
     },
     "model_card": {
       "exists": true,
       "kind": "file",
       "path": "MODEL_CARD.md",
       "role": "model_card",
-      "sha256": "c5f62c808ad1d79f1f35af71919e135e25e5597b6b815e79f826b702ab1f342f",
+      "sha256": "eb0156ac9c5cc88b841316b21f4076d0351ee6228a86bb808d27a336f51689cf",
       "size_bytes": 810
     },
     "redaction_check": {
@@ -62,7 +62,7 @@
   "candidate": {
     "id": "local/mock-candidate",
     "license_status": "known",
-    "model_source": "examples/agentic_training/completed_result.json"
+    "model_source": "examples/agentic_training/promotion_result.json"
   },
   "cards_dir": "examples/agentic_training/promotion_governance/promotion_cards",
   "check_count": 18,

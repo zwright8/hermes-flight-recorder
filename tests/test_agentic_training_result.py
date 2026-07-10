@@ -40,6 +40,7 @@ class AgenticTrainingResultTests(unittest.TestCase):
             out_path=path,
             require_modules=["json"] if ready else ["hfr_missing_dependency_for_test"],
             skip_default_modules=True,
+            preserve_paths=True,
             created_at="2026-07-02T00:00:00+00:00",
         )
         write_agentic_training_runtime_preflight(path, preflight)

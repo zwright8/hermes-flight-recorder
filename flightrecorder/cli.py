@@ -2270,12 +2270,10 @@ def cmd_promotion_cards(args: argparse.Namespace) -> int:
 
 
 def cmd_promotion_alias_apply(args: argparse.Namespace) -> int:
-    validation_summary = validate_artifacts(promotion_decision_paths=[args.promotion_decision], strict=True)
     receipt = apply_promotion_aliases(
         registry_path=args.registry,
         promotion_decision_path=args.promotion_decision,
         out_path=args.out,
-        promotion_decision_validation=validation_summary,
         preserve_paths=args.preserve_paths,
         metadata=_metadata_options(args.metadata),
     )
@@ -2334,6 +2332,10 @@ def cmd_promotion_release_record(args: argparse.Namespace) -> int:
 
 
 def cmd_promotion_decision(args: argparse.Namespace) -> int:
+    output_path = Path(args.out) if args.out else None
+    expected_output_sha256 = (
+        json_file_sha256(output_path) if output_path is not None else None
+    )
     decision = build_promotion_decision(
         candidate_id=args.candidate_id,
         champion_id=args.champion_id,
@@ -2342,6 +2344,8 @@ def cmd_promotion_decision(args: argparse.Namespace) -> int:
         champion_class=args.champion_class,
         out_path=args.out,
         evidence_bundle_path=args.evidence_bundle,
+        eval_summary_path=args.eval_summary,
+        external_eval_result_paths=args.external_eval_result,
         promotion_ledger_gate_path=args.promotion_ledger_gate,
         compare_gate_path=args.compare_gate,
         trainer_launch_check_path=args.trainer_launch_check,
@@ -2359,13 +2363,15 @@ def cmd_promotion_decision(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         metadata=_metadata_options(args.metadata),
     )
-    rendered = json.dumps(decision, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(rendered, encoding="utf-8")
+    if output_path is not None:
+        atomic_write_json_cas(
+            output_path,
+            decision,
+            expected_sha256=expected_output_sha256,
+        )
         print(f"wrote {args.out}")
     else:
-        print(rendered, end="")
+        print(json.dumps(decision, indent=2, sort_keys=True, ensure_ascii=False) + "\n", end="")
     return 0 if decision["passed"] else 1
 
 
@@ -4390,6 +4396,13 @@ def _parser() -> argparse.ArgumentParser:
         help="Source class of the incumbent champion",
     )
     promotion_decision.add_argument("--evidence-bundle", help="evidence_bundle.json for the candidate run")
+    promotion_decision.add_argument("--eval-summary", help="eval_summary.json for the candidate evaluation")
+    promotion_decision.add_argument(
+        "--external-eval-result",
+        action="append",
+        default=[],
+        help="Execution-backed external_eval_result.json for the candidate; may be repeated",
+    )
     promotion_decision.add_argument("--promotion-ledger-gate", help="promotion_ledger_gate.json proving clean promotion history")
     promotion_decision.add_argument("--compare-gate", help="compare_gate.json proving candidate/champion eval movement")
     promotion_decision.add_argument("--trainer-launch-check", help="trainer_launch_check.json proving trainer handoff readiness")

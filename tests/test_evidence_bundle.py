@@ -959,6 +959,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertTrue(bundle["passed"])
             self.assertIn("eval_summary", bundle["decision"]["evidence_artifacts"])
             self.assertEqual(bundle["metrics"]["eval_summary"]["arm_count"], 1)
+            self.assertEqual(bundle["metrics"]["eval_summary"]["external_adapter_result_count"], 0)
             self.assertEqual(bundle["metrics"]["eval_summary"]["risk_count"], 0)
             self.assertEqual(bundle["decision"]["key_metrics"]["eval_summary"]["heldout_status"], "single_arm")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)

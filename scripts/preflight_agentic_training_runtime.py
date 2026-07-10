@@ -25,6 +25,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", required=True, type=Path, help="Destination runtime preflight JSON")
     parser.add_argument("--require-module", action="append", default=[], help="Additional Python module that must be discoverable")
     parser.add_argument("--skip-default-modules", action="store_true", help="Only check modules supplied with --require-module")
+    parser.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Allow private absolute plan/output paths when a public-safe replayable relative reference is impossible",
+    )
     parser.add_argument("--created-at", help="Override created_at for reproducible sample artifacts")
     return parser.parse_args(argv)
 
@@ -37,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
             out_path=args.out,
             require_modules=args.require_module,
             skip_default_modules=args.skip_default_modules,
+            preserve_paths=args.preserve_paths,
             created_at=args.created_at,
         )
         write_agentic_training_runtime_preflight(args.out, preflight)

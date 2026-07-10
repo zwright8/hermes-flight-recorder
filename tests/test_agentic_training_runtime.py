@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,7 +14,9 @@ from flightrecorder.agentic_training_runtime import (
     build_agentic_training_runtime_preflight,
 )
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
+from flightrecorder.source_contract import inspect_artifact_source
 from flightrecorder.validation import validate_agentic_training_runtime_preflight
+from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +25,7 @@ EXAMPLE_PLAN = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_
 
 class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
     def test_full_validator_reprobes_declared_dependency_modules(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             path = Path(tmp) / "runtime_preflight.json"
             preflight = build_agentic_training_runtime_preflight(
                 plan_path=EXAMPLE_PLAN,
@@ -41,7 +44,7 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertTrue(any("fresh dependency probes" in error for error in errors), errors)
 
     def test_full_validator_rejects_ready_receipt_with_empty_dependency_policy(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             path = Path(tmp) / "runtime_preflight.json"
             preflight = build_agentic_training_runtime_preflight(
                 plan_path=EXAMPLE_PLAN,
@@ -60,7 +63,7 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertTrue(any("passed must match recomputed runtime readiness" in error for error in errors), errors)
 
     def test_full_validator_rejects_schema_valid_forged_check_aggregates(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             path = Path(tmp) / "runtime_preflight.json"
             preflight = build_agentic_training_runtime_preflight(
                 plan_path=EXAMPLE_PLAN,
@@ -100,7 +103,7 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
                 sys.modules.pop("hfr_probe_side_effect", None)
 
     def test_committed_example_plan_can_pass_dependency_scoped_runtime_preflight(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             out = Path(tmp) / "runtime_preflight.json"
             preflight = build_agentic_training_runtime_preflight(
                 plan_path=EXAMPLE_PLAN,
@@ -364,8 +367,111 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             schema = check_schema_contract(preflight)
             self.assertTrue(schema["passed"], schema["errors"])
 
-    def test_cli_writes_schema_checkable_runtime_preflight(self):
+    def test_runtime_preflight_view_paths_are_cwd_independent_without_repo_marker(self):
         with tempfile.TemporaryDirectory() as tmp:
+            fixture_root = Path(tmp)
+            agentic_root = fixture_root / "examples" / "agentic_training"
+            agentic_root.mkdir(parents=True)
+            shutil.copytree(
+                ROOT / "examples" / "agentic_training" / "data",
+                agentic_root / "data",
+            )
+            for filename in ("dataset_manifest.json", "model_manifest.json"):
+                shutil.copyfile(
+                    ROOT / "examples" / "agentic_training" / filename,
+                    agentic_root / filename,
+                )
+            plan_path = agentic_root / "plans" / "sft_then_dpo_plan.json"
+            plan_path.parent.mkdir()
+            shutil.copyfile(EXAMPLE_PLAN, plan_path)
+            preflight_path = agentic_root / "runtime_preflight" / "ready.json"
+            preflight_path.parent.mkdir()
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(fixture_root)
+                preflight = build_agentic_training_runtime_preflight(
+                    plan_path=plan_path.relative_to(fixture_root),
+                    out_path=preflight_path.relative_to(fixture_root),
+                    require_modules=["json"],
+                    skip_default_modules=True,
+                    created_at="2026-07-02T00:00:00+00:00",
+                )
+            finally:
+                os.chdir(previous_cwd)
+            preflight_path.write_text(
+                json.dumps(preflight, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertTrue(preflight["passed"], preflight["blocked_reasons"])
+            self.assertEqual(
+                preflight["plan_path"],
+                "../plans/sft_then_dpo_plan.json",
+            )
+            self.assertEqual(
+                {view["resolved_path"] for view in preflight["view_checks"]},
+                {"dpo.jsonl", "sft.jsonl"},
+            )
+            self.assertEqual(
+                validate_agentic_training_runtime_preflight(preflight_path).errors,
+                [],
+            )
+
+    def test_runtime_preflight_rejects_private_cross_root_plan_reference_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "runtime_preflight.json"
+
+            with self.assertRaisesRegex(
+                AgenticTrainingRuntimePreflightError,
+                "plan and output must share a scoped ancestor",
+            ):
+                build_agentic_training_runtime_preflight(
+                    plan_path=EXAMPLE_PLAN,
+                    out_path=output,
+                    require_modules=["json"],
+                    skip_default_modules=True,
+                    created_at="2026-07-02T00:00:00+00:00",
+                )
+
+            private_preflight = build_agentic_training_runtime_preflight(
+                plan_path=EXAMPLE_PLAN,
+                out_path=output,
+                require_modules=["json"],
+                skip_default_modules=True,
+                preserve_paths=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            self.assertTrue(Path(private_preflight["plan_path"]).is_absolute())
+
+    def test_relocated_runtime_preflight_replays_relocated_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_root = Path(tmp)
+            copy_valid_loop_artifacts(fixture_root)
+            agentic_root = fixture_root / "loop_fixture" / "examples" / "agentic_training"
+            preflight_path = agentic_root / "runtime_preflight" / "ready.json"
+            self.assertEqual(validate_agentic_training_runtime_preflight(preflight_path).errors, [])
+
+            plan_path = agentic_root / "plans" / "sft_then_dpo_plan.json"
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            plan["passed"] = False
+            plan["readiness"] = "blocked"
+            plan["recommendation"] = "block_external_training"
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            errors = validate_agentic_training_runtime_preflight(preflight_path).errors
+
+            self.assertIn(
+                "agentic_training_runtime_preflight.plan_sha256 does not match the current plan file.",
+                errors,
+            )
+            self.assertTrue(any("observed_passed expected False" in error for error in errors), errors)
+            source = inspect_artifact_source(preflight_path, "agentic_training_runtime_preflight")
+            self.assertFalse(source["semantic_valid"])
+            self.assertFalse(source["ready"])
+
+    def test_cli_writes_schema_checkable_runtime_preflight(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
             out = Path(tmp) / "runtime_preflight.json"
             completed = subprocess.run(
                 [

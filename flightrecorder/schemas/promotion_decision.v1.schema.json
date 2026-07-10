@@ -10,6 +10,7 @@
     "checks": {"items": {"$ref": "#/$defs/gateCheck"}, "type": "array"},
     "decision": {"$ref": "#/$defs/decisionBlock"},
     "decision_path": {"type": "string"},
+    "external_eval_lineage": {"$ref": "#/$defs/externalEvalLineage"},
     "failed_check_count": {"minimum": 0, "type": "integer"},
     "metadata": {"additionalProperties": {"type": "string"}, "type": "object"},
     "metrics": {"$ref": "#/$defs/decisionMetrics"},
@@ -29,6 +30,7 @@
     "recommendation",
     "models",
     "decision",
+    "external_eval_lineage",
     "check_count",
     "failed_check_count",
     "checks",
@@ -65,7 +67,8 @@
         "agentic_training_result": {"$ref": "#/$defs/fingerprintedArtifact"},
         "compare_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
         "dataset_card": {"$ref": "#/$defs/fingerprintedArtifact"},
-        "evidence_bundle": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "evidence_bundle": {"$ref": "#/$defs/evidenceBundleArtifact"},
+        "eval_summary": {"$ref": "#/$defs/evalSummaryArtifact"},
         "license_review": {"$ref": "#/$defs/fingerprintedArtifact"},
         "model_card": {"$ref": "#/$defs/fingerprintedArtifact"},
         "model_registry_entry": {"$ref": "#/$defs/fingerprintedArtifact"},
@@ -79,6 +82,7 @@
       },
       "required": [
         "evidence_bundle",
+        "eval_summary",
         "promotion_ledger_gate",
         "compare_gate",
         "trainer_launch_check",
@@ -132,6 +136,7 @@
         "check_count": {"minimum": 0, "type": "integer"},
         "contract_drift_count": {"minimum": 0, "type": "integer"},
         "failed_check_count": {"minimum": 0, "type": "integer"},
+        "external_eval_result_count": {"minimum": 0, "type": "integer"},
         "new_critical_failure_count": {"minimum": 0, "type": "integer"},
         "policy_release_required_artifact_count": {"minimum": 0, "type": "integer"},
         "policy_required_artifact_count": {"minimum": 0, "type": "integer"},
@@ -143,6 +148,7 @@
       "required": [
         "check_count",
         "failed_check_count",
+        "external_eval_result_count",
         "required_artifact_count",
         "policy_required_artifact_count",
         "policy_release_required_artifact_count",
@@ -188,6 +194,128 @@
       },
       "required": ["role", "path", "exists", "kind"],
       "type": "object"
+    },
+    "externalEvalLineage": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_model_bound": {"type": "boolean"},
+        "eval_summary_semantically_valid": {"type": "boolean"},
+        "evidence_bundle_semantically_valid": {"type": "boolean"},
+        "evidence_bundle_summary_bound": {"type": "boolean"},
+        "exact_result_set": {"type": "boolean"},
+        "external_results_semantically_valid": {"type": "boolean"},
+        "governance_ready": {"type": "boolean"},
+        "passed": {"type": "boolean"},
+        "result_count": {"minimum": 0, "type": "integer"},
+        "results": {"items": {"$ref": "#/$defs/externalEvalLineageResult"}, "type": "array"},
+        "semantic_validation_passed": {"type": "boolean"},
+        "summary_result_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "result_count",
+        "summary_result_count",
+        "exact_result_set",
+        "candidate_model_bound",
+        "evidence_bundle_summary_bound",
+        "evidence_bundle_semantically_valid",
+        "eval_summary_semantically_valid",
+        "external_results_semantically_valid",
+        "semantic_validation_passed",
+        "governance_ready",
+        "passed",
+        "results"
+      ],
+      "type": "object"
+    },
+    "externalEvalLineageResult": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {"type": ["string", "null"]},
+        "artifact": {"$ref": "#/$defs/externalEvalResultArtifact"},
+        "benchmark_status": {"enum": ["passed", "failed", "inconclusive", "not_available", null]},
+        "coverage_complete": {"type": "boolean"},
+        "execution_status": {"enum": ["completed", "incomplete", "failed", null]},
+        "external_eval_claims_allowed": {"type": "boolean"},
+        "governance_readiness": {"enum": ["ready_for_review", "blocked", null]},
+        "heldout_manifest_sha256": {"anyOf": [{"pattern": "^[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+        "integrity_passed": {"type": "boolean"},
+        "model_id": {"type": ["string", "null"]},
+        "plan_sha256": {"anyOf": [{"pattern": "^[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]}
+      },
+      "required": [
+        "artifact",
+        "adapter_id",
+        "model_id",
+        "plan_sha256",
+        "heldout_manifest_sha256",
+        "integrity_passed",
+        "execution_status",
+        "benchmark_status",
+        "coverage_complete",
+        "governance_readiness",
+        "external_eval_claims_allowed"
+      ],
+      "type": "object"
+    },
+    "externalEvalResultArtifact": {
+      "allOf": [
+        {"$ref": "#/$defs/fingerprintedArtifact"},
+        {
+          "properties": {"role": {"const": "external_eval_result"}},
+          "required": ["role"],
+          "type": "object"
+        },
+        {
+          "if": {
+            "properties": {"exists": {"const": true}, "kind": {"const": "file"}},
+            "required": ["exists", "kind"]
+          },
+          "then": {
+            "properties": {"schema_version": {"const": "hfr.external_eval_result.v1"}},
+            "required": ["schema_version"]
+          }
+        }
+      ]
+    },
+    "evidenceBundleArtifact": {
+      "allOf": [
+        {"$ref": "#/$defs/fingerprintedArtifact"},
+        {
+          "properties": {"role": {"const": "evidence_bundle"}},
+          "required": ["role"],
+          "type": "object"
+        },
+        {
+          "if": {
+            "properties": {"exists": {"const": true}, "kind": {"const": "file"}},
+            "required": ["exists", "kind"]
+          },
+          "then": {
+            "properties": {"schema_version": {"const": "hfr.evidence_bundle.v1"}},
+            "required": ["schema_version"]
+          }
+        }
+      ]
+    },
+    "evalSummaryArtifact": {
+      "allOf": [
+        {"$ref": "#/$defs/fingerprintedArtifact"},
+        {
+          "properties": {"role": {"const": "eval_summary"}},
+          "required": ["role"],
+          "type": "object"
+        },
+        {
+          "if": {
+            "properties": {"exists": {"const": true}, "kind": {"const": "file"}},
+            "required": ["exists", "kind"]
+          },
+          "then": {
+            "properties": {"schema_version": {"const": "hfr.eval_summary.v1"}},
+            "required": ["schema_version"]
+          }
+        }
+      ]
     },
     "gateCheck": {
       "additionalProperties": false,

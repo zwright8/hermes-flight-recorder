@@ -324,11 +324,26 @@ Generate the evidence handoff harness result and bundle:
     --evidence-handoff \
     --validate \
     --strict)
+
+flightrecorder evidence-bundle \
+  --runs examples/agentic_training/evidence_handoff \
+  --suite-summary examples/agentic_training/evidence_handoff/suite_summary.json \
+  --scenario-quality examples/agentic_training/evidence_handoff/scenario_quality.json \
+  --evidence-coverage examples/agentic_training/evidence_handoff/evidence_coverage.json \
+  --trace-observability examples/agentic_training/evidence_handoff/trace_observability.json \
+  --repair-queue examples/agentic_training/evidence_handoff/repair_queue.json \
+  --validation examples/agentic_training/evidence_handoff/validation.json \
+  --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
+  --harness-manifest examples/agentic_training/evidence_handoff/harness_handoff/harness_manifest.json \
+  --harness-result examples/agentic_training/evidence_handoff/harness_handoff/harness_result.json \
+  --require-harness \
+  --out examples/agentic_training/evidence_handoff/evidence_bundle.json
 ```
 
 The committed evidence handoff uses one deterministic passing scenario to keep
 the public fixture compact. It emits `harness_handoff/harness_result.json` and
-`evidence_bundle.json` without raw sensitive traces or live external calls.
+then refreshes `evidence_bundle.json` with the exact eval-summary fingerprint,
+without raw sensitive traces or live external calls.
 
 Refresh the offline promotion-governance gates:
 
@@ -379,7 +394,7 @@ flightrecorder gate-promotion-ledger \
 flightrecorder promotion-cards \
   --candidate-id local/mock-candidate \
   --dataset-id agentic-training-export \
-  --model-source examples/agentic_training/completed_result.json \
+  --model-source examples/agentic_training/promotion_result.json \
   --license-status known \
   --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
   --training-export examples/agentic_training/training_export \
@@ -395,11 +410,13 @@ flightrecorder promotion-decision \
   --candidate-class trace-only \
   --champion-class trace-only \
   --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
+  --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
+  --external-eval-result examples/agentic_training/heldout_eval/external_eval_result.json \
   --promotion-ledger-gate examples/agentic_training/promotion_governance/promotion_ledger_gate.json \
   --compare-gate examples/agentic_training/promotion_governance/compare_gate.json \
   --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
   --model-registry-entry examples/agentic_training/promotion_governance/model_registry_entry.json \
-  --agentic-training-result examples/agentic_training/completed_result.json \
+  --agentic-training-result examples/agentic_training/promotion_result.json \
   --model-card examples/agentic_training/promotion_governance/promotion_cards/MODEL_CARD.md \
   --dataset-card examples/agentic_training/promotion_governance/promotion_cards/DATASET_CARD.md \
   --rollback-metadata examples/agentic_training/promotion_governance/rollback_metadata.json \
@@ -454,10 +471,20 @@ flightrecorder promotion-archive \
   --force
 ```
 
-The committed promotion decision consumes that compare gate and promotion
-history gate. It authorizes a reviewable alias update, but it does not update
-weights or call a provider. Alias movement is represented only by the separate
-guarded `promotion-alias-apply` command against a local mock
+The committed promotion decision consumes that compare gate, promotion-history
+gate, eval summary, and execution-backed external result. The
+`promotion_result.json` fixture is a promotion-specific copy of the completed
+training receipt whose registry update targets `local/mock-candidate`; the
+loop-level `completed_result.json` remains bound to the synthetic training
+source identity. Keeping those receipts separate makes the promoted registry
+identity explicit without rewriting the earlier execution record. For multiple
+selected adapters, repeat `--external-eval-result`; the non-empty unique result
+set must match the summary exactly, identify `local/mock-candidate`, and bind to
+the same summary fingerprint stored in the evidence bundle. Validation reopens
+and semantically replays those sources, so removing or changing one blocks the
+decision. The decision authorizes a reviewable alias update, but it does not
+update weights or call a provider. Alias movement is represented only by the
+separate guarded `promotion-alias-apply` command against a local mock
 `model_registry.json`; the release record and archive bind those receipts
 without publishing external artifacts.
 

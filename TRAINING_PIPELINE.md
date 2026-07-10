@@ -149,6 +149,7 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
+  --eval-summary runs/eval_summary.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
@@ -162,7 +163,9 @@ The bundle records artifact hashes, readiness checks, gate results, compact
 metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
-and gate policies are also appropriate for the target job.
+and gate policies are also appropriate for the target job. At an Eval or
+Governance boundary, include `--eval-summary` so a later promotion decision can
+bind the exact summary fingerprint carried by the bundle.
 Use `--require-gate` at trainer, Eval, or Governance boundaries so a bundle
 cannot pass without at least one gate summary. Included gates must carry the
 shared `decision` contract; weak legacy gates without `readiness`,
@@ -422,15 +425,20 @@ flightrecorder promotion-decision \
   --champion-id champion-v1 \
   --rollback-id champion-v1 \
   --evidence-bundle runs/evidence_bundle.json \
+  --eval-summary runs/eval_summary.json \
+  --external-eval-result runs/external_eval_result.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --compare-gate runs/compare_gate.json \
   --trainer-launch-check runs/trainer_launch_check.json \
+  --model-registry-entry runs/model_registry_entry.json \
+  --agentic-training-result runs/agentic_training_result.json \
   --model-card runs/promotion_cards/MODEL_CARD.md \
   --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \
   --license-review runs/license_review.json \
   --redaction-check runs/redaction_check.json \
   --safety-gate runs/safety_gate.json \
+  --serving-profile runs/serving_profile.json \
   --serving-report runs/serving_report.json \
   --promotion-policy examples/promotion_policy.demo.json \
   --out runs/promotion_decision.json
@@ -469,6 +477,18 @@ passing decision is still side-effect free: it authorizes an alias-update
 receipt, leaving the actual registry write to a later guarded step. Promotion
 decisions reject required source artifacts and card files that are symlinks or
 traverse symlinked parent directories before reading, hashing, or binding them.
+`--external-eval-result` is repeatable. The supplied results must form a
+non-empty, unique set that exactly matches the eval summary, each result must
+identify `--candidate-id`, and the evidence bundle must fingerprint that same
+summary. Generation semantically validates all three layers before authorizing
+promotion. Validation reopens and rehashes their source files, reruns semantic
+validation, rebuilds the external-eval lineage and its checks, and rejects a
+decision if a source was removed, replaced, or mutated after generation.
+The same replay boundary re-evaluates the compare export and promotion ledger,
+rebuilds the trainer launch check from its current preflight, and requires the
+candidate's live registry entry to exactly match the entry artifact named by
+the decision. Missing, malformed, or moved nested sources block both decision
+validation and alias application.
 `promotion-rollback-receipt` is side-effect free: it fingerprints the model
 registry, proves the rollback target is registered, and blocks when the target
 no longer matches the current champion before promotion. Validation also reads
@@ -491,6 +511,10 @@ appends an alias-history entry. Blocked receipts leave registry aliases
 unchanged. Alias-apply generation rejects registry and promotion-decision inputs
 that are symlinks or traverse symlinked parent directories before validation,
 hashing, replay, or registry mutation.
+The registry mutation and receipt publication use compare-and-swap writes. The
+alias receipt replays the current decision and registry snapshots, binds the
+candidate, previous champion, and rollback identities, and rolls the registry
+back if receipt publication fails after the registry write.
 `promotion-release-record` binds the final publishable evidence set: promotion
 decision, generated cards, alias receipt, rollback metadata, eval compare gate,
 and release notes. Validation rehashes every referenced artifact and matches
@@ -675,7 +699,10 @@ strict validation recomputes the policy and reruns those probes, so an empty or
 self-declared availability list cannot forge readiness. Runtime preflight
 rejects plan inputs that are symlinks or traverse symlinked parent directories,
 and selected views resolved through symlinks are blocked without SHA-256 or
-byte-size fingerprints.
+byte-size fingerprints. Plan and selected-view display paths are deterministic
+across working directories. Cross-root plan/output references are rejected by
+default rather than exposing a private home-directory layout; use
+`--preserve-paths` only for private local receipts that will not be published.
 After a trainer consumer plan exists, use `flightrecorder agentic-training-flow`
 to bind the ready plan, runtime preflight, and consumer command into
 `hfr.agentic_training_flow.v1`. It delegates only SFT, action-SFT, DPO, and

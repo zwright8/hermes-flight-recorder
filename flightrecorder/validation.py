@@ -172,6 +172,7 @@ from .preflight import (
 )
 from .governance import (
     PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
+    PROMOTION_ALIAS_APPLY_CHECK_IDS,
     PROMOTION_CARDS_REQUIRED_INPUTS,
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
@@ -184,6 +185,12 @@ from .governance import (
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
     PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS,
     PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
+    _JSON_ARTIFACT_ROLES as _PROMOTION_JSON_ARTIFACT_ROLES,
+    build_promotion_decision as _build_promotion_decision,
+    _decision_metrics as _build_promotion_decision_metrics,
+    _promotion_external_eval_checks as _build_promotion_external_eval_checks,
+    _promotion_external_eval_lineage as _build_promotion_external_eval_lineage,
+    promotion_release_record_check_ids,
 )
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import (
@@ -210,7 +217,10 @@ from .review import (
     REVIEWED_SFT_SCHEMA_VERSION,
 )
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
-from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .path_safety import (
+    path_has_symlink_component as _path_has_symlink_component,
+    resolve_artifact_reference_path,
+)
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_check import SCENARIO_CHECK_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
@@ -2717,7 +2727,7 @@ def _validate_model_registry_links_files(
             path_value = record.get("path")
             if not isinstance(path_value, str) or not path_value:
                 continue
-            link_path = _model_registry_link_path(path_value, source_path)
+            link_path = resolve_artifact_reference_path(path_value, source_path)
             if link_path.is_symlink():
                 target.errors.append(f"{record_label}.path must not resolve to a symlink.")
                 continue
@@ -2741,7 +2751,7 @@ def _validate_model_layer_file_ref(
     path_value = record.get("path")
     if not isinstance(path_value, str) or not path_value:
         return
-    link_path = _model_registry_link_path(path_value, source_path)
+    link_path = resolve_artifact_reference_path(path_value, source_path)
     if link_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
         return
@@ -2759,21 +2769,6 @@ def _validate_model_layer_file_ref(
         target.errors.append(f"{label}.sha256 must be a 64-character hex digest for path-backed refs.")
     elif _sha256(link_path) != record.get("sha256"):
         target.errors.append(f"{label}.sha256 does not match the current file.")
-
-
-def _model_registry_link_path(value: str, source_path: Path) -> Path:
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    source_relative = source_path.parent / path
-    if source_relative.exists():
-        return source_relative
-    for root in source_path.resolve().parents:
-        if (root / ".git").exists() or (root / "pyproject.toml").exists():
-            repo_relative = root / path
-            if repo_relative.exists():
-                return repo_relative
-    return source_relative
 
 
 def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
@@ -3691,11 +3686,7 @@ def _validate_agentic_training_runtime_preflight(
 def _resolve_runtime_preflight_plan_path(value: Any, source_path: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
-    recorded = Path(value)
-    if recorded.is_absolute():
-        return recorded
-    candidates = (source_path.parent / recorded, Path.cwd() / recorded)
-    return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+    return resolve_artifact_reference_path(value, source_path)
 
 
 def _validate_runtime_preflight_side_effect_boundary(value: Any, target: ValidationTarget) -> None:
@@ -21321,6 +21312,7 @@ _PROMOTION_DECISION_KEYS = {
     "recommendation",
     "models",
     "decision",
+    "external_eval_lineage",
     "check_count",
     "failed_check_count",
     "checks",
@@ -21345,6 +21337,7 @@ _PROMOTION_DECISION_BLOCKING_CHECK_KEYS = {"id", "summary", "scope"}
 _PROMOTION_DECISION_METRICS_KEYS = {
     "check_count",
     "failed_check_count",
+    "external_eval_result_count",
     "required_artifact_count",
     "policy_required_artifact_count",
     "policy_release_required_artifact_count",
@@ -21357,6 +21350,33 @@ _PROMOTION_DECISION_METRICS_KEYS = {
 }
 _PROMOTION_DECISION_ALIAS_UPDATE_KEYS = {"authorized", "recommendation", "aliases"}
 _PROMOTION_DECISION_ALIAS_ROW_KEYS = {"alias", "previous_target", "target"}
+_PROMOTION_EXTERNAL_EVAL_LINEAGE_KEYS = {
+    "result_count",
+    "summary_result_count",
+    "exact_result_set",
+    "candidate_model_bound",
+    "evidence_bundle_summary_bound",
+    "evidence_bundle_semantically_valid",
+    "eval_summary_semantically_valid",
+    "external_results_semantically_valid",
+    "semantic_validation_passed",
+    "governance_ready",
+    "passed",
+    "results",
+}
+_PROMOTION_EXTERNAL_EVAL_RESULT_KEYS = {
+    "artifact",
+    "adapter_id",
+    "model_id",
+    "plan_sha256",
+    "heldout_manifest_sha256",
+    "integrity_passed",
+    "execution_status",
+    "benchmark_status",
+    "coverage_complete",
+    "governance_readiness",
+    "external_eval_claims_allowed",
+}
 _PROMOTION_ALIAS_APPLY_KEYS = {
     "schema_version",
     "receipt_path",
@@ -21525,6 +21545,13 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_alias_apply.checks")
     _validate_promotion_gate_check_keys(checks, target, "promotion_alias_apply.checks")
+    actual_check_ids = [
+        check.get("id") if isinstance(check, dict) else None for check in checks
+    ]
+    if actual_check_ids != list(PROMOTION_ALIAS_APPLY_CHECK_IDS):
+        target.errors.append(
+            "promotion_alias_apply.checks must exactly match the required ordered alias-application check contract."
+        )
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"promotion_alias_apply.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -21550,7 +21577,28 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
     else:
         _validate_allowed_keys(artifacts, _PROMOTION_ALIAS_APPLY_ARTIFACT_KEYS, target, "promotion_alias_apply.artifacts")
     for role in ("registry", "promotion_decision"):
-        _validate_promotion_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_alias_apply.artifacts")
+        artifact = artifacts.get(role)
+        _validate_promotion_fingerprinted_artifact(
+            artifact,
+            role,
+            target,
+            source_path,
+            "promotion_alias_apply.artifacts",
+        )
+        if expected_passed:
+            record = artifact if isinstance(artifact, dict) else {}
+            if record.get("exists") is not True or record.get("kind") != "file":
+                target.errors.append(
+                    f"promotion_alias_apply.artifacts.{role} must be an existing file for applied receipts."
+                )
+            if not _is_sha256(record.get("sha256")):
+                target.errors.append(
+                    f"promotion_alias_apply.artifacts.{role}.sha256 must be a SHA-256 hex string for applied receipts."
+                )
+            if not _is_non_negative_int(record.get("size_bytes")):
+                target.errors.append(
+                    f"promotion_alias_apply.artifacts.{role}.size_bytes must be a non-negative integer for applied receipts."
+                )
 
     decision_ref = receipt.get("promotion_decision")
     if not isinstance(decision_ref, dict):
@@ -21591,7 +21639,10 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
         receipt.get("registry_before"), target, "promotion_alias_apply.registry_before", allow_fingerprint=False
     )
     after = _validate_alias_snapshot(
-        receipt.get("registry_after"), target, "promotion_alias_apply.registry_after", require_fingerprint=True
+        receipt.get("registry_after"),
+        target,
+        "promotion_alias_apply.registry_after",
+        require_fingerprint=expected_passed,
     )
     registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
     if after.get("sha256") != registry_artifact.get("sha256"):
@@ -21628,7 +21679,16 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
         after["aliases"],
         target,
     )
-    _validate_current_registry_matches_alias_receipt(registry_artifact, after["aliases"], history_entry, target, source_path)
+    _validate_current_registry_matches_alias_receipt(
+        registry_artifact,
+        decision_artifact,
+        decision_ref,
+        after["aliases"],
+        history_entry,
+        expected_passed,
+        target,
+        source_path,
+    )
     _validate_promotion_alias_apply_metrics(receipt.get("metrics"), checks, before["aliases"], after["aliases"], expected_passed, target)
     if not _is_string_list(receipt.get("notes")):
         target.errors.append("promotion_alias_apply.notes must be a list of strings.")
@@ -21715,7 +21775,10 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
         "promotion_rollback_receipt.artifacts",
     )
     registry_snapshot = _validate_alias_snapshot(
-        receipt.get("registry"), target, "promotion_rollback_receipt.registry", require_fingerprint=True
+        receipt.get("registry"),
+        target,
+        "promotion_rollback_receipt.registry",
+        require_fingerprint=expected_passed,
     )
     registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
     if registry_snapshot.get("sha256") != registry_artifact.get("sha256"):
@@ -21783,6 +21846,37 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_release_record.checks")
     _validate_promotion_gate_check_keys(checks, target, "promotion_release_record.checks")
+    policy_value = record.get("policy")
+    release_policy = (
+        policy_value.get("release_policy")
+        if isinstance(policy_value, dict)
+        else None
+    )
+    record_artifacts = record.get("artifacts")
+    rollback_record = (
+        record_artifacts.get("rollback_metadata")
+        if isinstance(record_artifacts, dict)
+        else None
+    )
+    rollback_path = _promotion_existing_artifact_path(
+        rollback_record,
+        source_path,
+    )
+    rollback_payload = _promotion_read_json_payload(rollback_path)
+    expected_check_ids = promotion_release_record_check_ids(
+        release_policy_bound=isinstance(release_policy, dict)
+        and bool(release_policy),
+        rollback_receipt_bound=isinstance(rollback_payload, dict)
+        and rollback_payload.get("schema_version")
+        == PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
+    )
+    actual_check_ids = tuple(
+        check.get("id") if isinstance(check, dict) else None for check in checks
+    )
+    if actual_check_ids != expected_check_ids:
+        target.errors.append(
+            "promotion_release_record.checks must exactly match the canonical ordered release check contract."
+        )
     if record.get("check_count") != len(checks):
         target.errors.append(f"promotion_release_record.check_count expected {len(checks)}, got {record.get('check_count')!r}.")
     if record.get("failed_check_count") != failed_checks:
@@ -21808,8 +21902,10 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
     else:
         _validate_allowed_keys(release, _PROMOTION_RELEASE_RECORD_RELEASE_KEYS, target, "promotion_release_record.release")
     for field_name in ("id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"):
-        if not isinstance(release.get(field_name), str):
-            target.errors.append(f"promotion_release_record.release.{field_name} must be a string.")
+        if not isinstance(release.get(field_name), str) or not release.get(field_name):
+            target.errors.append(
+                f"promotion_release_record.release.{field_name} must be a non-empty string."
+            )
 
     artifacts = record.get("artifacts")
     if not isinstance(artifacts, dict):
@@ -21823,7 +21919,20 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
     _validate_promotion_release_record_validation(record.get("artifact_validation"), expected_passed, target)
     _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target, source_path)
     _validate_promotion_release_record_metrics(record.get("metrics"), checks, target)
-    _validate_promotion_release_record_policy(record.get("policy"), target, source_path)
+    _validate_promotion_release_record_policy(
+        record.get("policy"),
+        artifacts,
+        target,
+        source_path,
+    )
+    _validate_current_promotion_release_artifacts(
+        artifacts,
+        release,
+        record.get("policy"),
+        expected_passed,
+        target,
+        source_path,
+    )
     if not _is_string_list(record.get("notes")):
         target.errors.append("promotion_release_record.notes must be a list of strings.")
     target.details.update(
@@ -21846,6 +21955,282 @@ def _validate_promotion_release_record_validation(value: Any, expected_passed: b
         expected_parent_passed=expected_passed,
         required_target_types=set(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS) if expected_passed else set(),
     )
+
+
+def _validate_current_promotion_release_artifacts(
+    artifacts: dict[str, Any],
+    release: dict[str, Any],
+    policy: Any,
+    expected_passed: bool,
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    if not expected_passed:
+        return
+
+    artifact_paths: dict[str, Path] = {}
+    for role in PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS:
+        record = artifacts.get(role)
+        artifact = record if isinstance(record, dict) else {}
+        allowed_kinds = (
+            {"directory", "file"} if role == "promotion_cards" else {"file"}
+        )
+        artifact_kind = artifact.get("kind")
+        resolved = _resolve_promotion_decision_artifact_path(
+            artifact.get("path"),
+            source_path,
+            artifact_kind,
+        )
+        kind_matches = (
+            resolved is not None
+            and resolved.exists()
+            and (
+                resolved.is_dir()
+                if artifact_kind == "directory"
+                else resolved.is_file()
+            )
+        )
+        fingerprint_matches_kind = (
+            _is_non_negative_int(artifact.get("file_count"))
+            if artifact_kind == "directory"
+            else _is_non_negative_int(artifact.get("size_bytes"))
+        )
+        if (
+            artifact.get("exists") is not True
+            or artifact_kind not in allowed_kinds
+            or not kind_matches
+            or not _is_sha256(artifact.get("sha256"))
+            or not fingerprint_matches_kind
+        ):
+            expected_kind = (
+                "file or directory" if role == "promotion_cards" else "file"
+            )
+            target.errors.append(
+                f"promotion_release_record.artifacts.{role} must resolve to a fingerprinted existing {expected_kind} for ready releases."
+            )
+            continue
+        artifact_paths[role] = resolved
+
+    validators = {
+        "promotion_decision": validate_promotion_decision,
+        "promotion_cards": validate_promotion_cards,
+        "promotion_alias_apply": validate_promotion_alias_apply,
+    }
+    for role, validator in validators.items():
+        artifact_path = artifact_paths.get(role)
+        if artifact_path is None:
+            continue
+        validation = validator(artifact_path)
+        for error in validation.errors:
+            target.errors.append(
+                f"promotion_release_record current {role} is invalid: {error}"
+            )
+        for warning in validation.warnings:
+            target.errors.append(
+                f"promotion_release_record current {role} warning blocks strict replay: {warning}"
+            )
+
+    decision_path = artifact_paths.get("promotion_decision")
+    decision = _promotion_read_json_payload(decision_path)
+    cards_path = artifact_paths.get("promotion_cards")
+    cards_manifest_path = (
+        cards_path / "promotion_cards.json"
+        if cards_path is not None and cards_path.is_dir()
+        else cards_path
+    )
+    cards = _promotion_read_json_payload(cards_manifest_path)
+    alias_receipt = _promotion_read_json_payload(
+        artifact_paths.get("promotion_alias_apply")
+    )
+    rollback = _promotion_read_json_payload(
+        artifact_paths.get("rollback_metadata")
+    )
+    compare_gate = _promotion_read_json_payload(
+        artifact_paths.get("compare_gate")
+    )
+
+    decision_models = (
+        decision.get("models") if isinstance(decision, dict) else None
+    )
+    candidate_id = _promotion_model_id(
+        decision_models.get("candidate")
+        if isinstance(decision_models, dict)
+        else None
+    )
+    champion_id = _promotion_model_id(
+        decision_models.get("champion")
+        if isinstance(decision_models, dict)
+        else None
+    )
+    rollback_id = _promotion_model_id(
+        decision_models.get("rollback")
+        if isinstance(decision_models, dict)
+        else None
+    )
+    decision_alias_update = (
+        decision.get("alias_update") if isinstance(decision, dict) else None
+    )
+    if (
+        not isinstance(decision, dict)
+        or decision.get("passed") is not True
+        or decision.get("recommendation") != "apply_alias_update"
+        or not isinstance(decision_alias_update, dict)
+        or decision_alias_update.get("authorized") is not True
+    ):
+        target.errors.append(
+            "promotion_release_record current promotion decision must pass and authorize alias application."
+        )
+    if not isinstance(cards, dict) or cards.get("passed") is not True:
+        target.errors.append(
+            "promotion_release_record current promotion cards must pass."
+        )
+    if not isinstance(alias_receipt, dict) or alias_receipt.get("passed") is not True:
+        target.errors.append(
+            "promotion_release_record current promotion alias receipt must pass."
+        )
+    if not isinstance(compare_gate, dict) or compare_gate.get("passed") is not True:
+        target.errors.append(
+            "promotion_release_record current compare gate must pass."
+        )
+    if (
+        not isinstance(rollback, dict)
+        or rollback.get("available") is not True
+        or rollback.get("rollback_id") != rollback_id
+    ):
+        target.errors.append(
+            "promotion_release_record current rollback metadata must make the decision rollback target available."
+        )
+    elif rollback.get("schema_version") == PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION:
+        rollback_path = artifact_paths.get("rollback_metadata")
+        rollback_validation = (
+            validate_promotion_rollback_receipt(rollback_path)
+            if rollback_path is not None
+            else None
+        )
+        if rollback_validation is None or rollback_validation.errors or rollback_validation.warnings:
+            target.errors.append(
+                "promotion_release_record current rollback receipt failed strict replay."
+            )
+
+    if release.get("candidate_id") != candidate_id:
+        target.errors.append(
+            "promotion_release_record.release.candidate_id must match the current promotion decision."
+        )
+    if release.get("champion_previous_target") != champion_id:
+        target.errors.append(
+            "promotion_release_record.release.champion_previous_target must match the current promotion decision."
+        )
+    if release.get("rollback_id") != rollback_id:
+        target.errors.append(
+            "promotion_release_record.release.rollback_id must match the current promotion decision."
+        )
+    cards_dataset = cards.get("dataset") if isinstance(cards, dict) else None
+    cards_candidate = cards.get("candidate") if isinstance(cards, dict) else None
+    cards_candidate_id = (
+        cards_candidate.get("id") if isinstance(cards_candidate, dict) else None
+    )
+    if cards_candidate_id != candidate_id:
+        target.errors.append(
+            "promotion_release_record current promotion cards candidate must match the current promotion decision."
+        )
+    dataset_id = (
+        cards_dataset.get("id") if isinstance(cards_dataset, dict) else None
+    )
+    if release.get("dataset_id") != dataset_id:
+        target.errors.append(
+            "promotion_release_record.release.dataset_id must match the current promotion cards."
+        )
+
+    decision_artifacts = (
+        decision.get("artifacts") if isinstance(decision, dict) else None
+    )
+    cards_artifacts = cards.get("artifacts") if isinstance(cards, dict) else None
+    alias_decision = (
+        alias_receipt.get("promotion_decision")
+        if isinstance(alias_receipt, dict)
+        else None
+    )
+    if (
+        not isinstance(alias_decision, dict)
+        or alias_decision.get("sha256")
+        != artifacts.get("promotion_decision", {}).get("sha256")
+        or alias_decision.get("candidate_id") != candidate_id
+        or alias_decision.get("champion_previous_target") != champion_id
+        or alias_decision.get("rollback_id") != rollback_id
+    ):
+        target.errors.append(
+            "promotion_release_record current alias receipt must bind the current decision and model targets."
+        )
+    if (
+        not isinstance(decision_artifacts, dict)
+        or not isinstance(cards_artifacts, dict)
+        or _promotion_artifact_sha(decision_artifacts.get("model_card"))
+        != _promotion_artifact_sha(cards_artifacts.get("model_card"))
+        or _promotion_artifact_sha(decision_artifacts.get("dataset_card"))
+        != _promotion_artifact_sha(cards_artifacts.get("dataset_card"))
+    ):
+        target.errors.append(
+            "promotion_release_record current cards must match the cards bound by the decision."
+        )
+    if (
+        not isinstance(decision_artifacts, dict)
+        or _promotion_artifact_sha(decision_artifacts.get("compare_gate"))
+        != artifacts.get("compare_gate", {}).get("sha256")
+    ):
+        target.errors.append(
+            "promotion_release_record current compare gate must match the decision compare gate."
+        )
+
+    record_policy = policy if isinstance(policy, dict) else {}
+    decision_policy = decision.get("policy") if isinstance(decision, dict) else None
+    if record_policy.get("promotion_decision_policy") != decision_policy:
+        target.errors.append(
+            "promotion_release_record policy must exactly match the current promotion decision policy."
+        )
+    release_policy = record_policy.get("release_policy")
+    if (
+        release_policy not in (None, {})
+        and _promotion_policy_without_artifact_path(release_policy)
+        != _promotion_policy_without_artifact_path(decision_policy)
+    ):
+        target.errors.append(
+            "promotion_release_record release policy must exactly match the current promotion decision policy."
+        )
+
+    release_notes_path = artifact_paths.get("release_notes")
+    try:
+        release_notes = (
+            release_notes_path.read_text(encoding="utf-8")
+            if release_notes_path is not None
+            else ""
+        )
+    except (OSError, UnicodeDecodeError):
+        release_notes = ""
+    unsupported_markers = [
+        marker
+        for marker in ("unsupported claim", "todo", "tbd")
+        if marker in release_notes.lower()
+    ]
+    if not release_notes.strip() or unsupported_markers:
+        target.errors.append(
+            "promotion_release_record current release notes must be readable, non-empty, and contain no unsupported markers."
+        )
+
+
+def _promotion_artifact_sha(value: Any) -> Any:
+    return value.get("sha256") if isinstance(value, dict) else None
+
+
+def _promotion_policy_without_artifact_path(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    normalized = dict(value)
+    artifact = value.get("artifact")
+    if isinstance(artifact, dict):
+        normalized["artifact"] = {
+            key: item for key, item in artifact.items() if key != "path"
+        }
+    return normalized
 
 
 def _validate_strict_compact_validation_summary(
@@ -22019,7 +22404,12 @@ def _validate_promotion_release_record_metrics(value: Any, checks: list[Any], ta
         target.errors.append("promotion_release_record.metrics.release_notes_size_bytes must be a non-negative integer.")
 
 
-def _validate_promotion_release_record_policy(value: Any, target: ValidationTarget, source_path: Path) -> None:
+def _validate_promotion_release_record_policy(
+    value: Any,
+    artifacts: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
     if value is None:
         return
     if not isinstance(value, dict):
@@ -22028,10 +22418,15 @@ def _validate_promotion_release_record_policy(value: Any, target: ValidationTarg
     _validate_allowed_keys(value, _PROMOTION_RELEASE_RECORD_POLICY_KEYS, target, "promotion_release_record.policy")
     decision_policy = value.get("promotion_decision_policy")
     if isinstance(decision_policy, dict) and decision_policy:
+        decision_artifact = artifacts.get("promotion_decision")
+        decision_path = _promotion_existing_artifact_path(
+            decision_artifact,
+            source_path,
+        )
         _validate_promotion_policy_section(
             decision_policy,
             target,
-            source_path,
+            decision_path or source_path,
             "promotion_release_record.policy.promotion_decision_policy",
         )
     elif decision_policy not in ({}, None):
@@ -22062,7 +22457,9 @@ def _validate_alias_snapshot(
     else:
         if not isinstance(value.get("path"), str):
             target.errors.append(f"{label}.path must be a string.")
-        if value.get("sha256") is not None and not _is_sha256(value.get("sha256")):
+        if require_fingerprint and not _is_sha256(value.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+        elif value.get("sha256") is not None and not _is_sha256(value.get("sha256")):
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
         if "size_bytes" in value and not _is_non_negative_int(value.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
@@ -22139,13 +22536,20 @@ def _validate_promotion_alias_apply_decision_validation(value: Any, expected_pas
 
 def _validate_current_registry_matches_alias_receipt(
     registry_artifact: dict[str, Any],
+    decision_artifact: dict[str, Any],
+    decision_ref: dict[str, Any],
     expected_aliases: dict[str, str],
     expected_history_entry: dict[str, Any] | None,
+    expected_passed: bool,
     target: ValidationTarget,
     source_path: Path,
 ) -> None:
     registry_path = _resolve_promotion_decision_artifact_path(registry_artifact.get("path"), source_path, "file")
     if registry_path is None or not registry_path.exists() or not registry_path.is_file():
+        if expected_passed:
+            target.errors.append(
+                "promotion_alias_apply current registry must resolve to an existing file for applied receipts."
+            )
         return
     try:
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -22158,6 +22562,24 @@ def _validate_current_registry_matches_alias_receipt(
     if registry.get("schema_version") != MODEL_REGISTRY_SCHEMA_VERSION:
         target.errors.append(
             f"promotion_alias_apply.artifacts.registry.schema_version expected {MODEL_REGISTRY_SCHEMA_VERSION!r}, got {registry.get('schema_version')!r}."
+        )
+    if expected_passed:
+        registry_validation = ValidationTarget("model_registry", str(registry_path))
+        _validate_model_registry(registry, registry_validation, registry_path)
+        for error in registry_validation.errors:
+            target.errors.append(
+                f"promotion_alias_apply current registry is invalid: {error}"
+            )
+        for warning in registry_validation.warnings:
+            target.errors.append(
+                f"promotion_alias_apply current registry warning blocks strict replay: {warning}"
+            )
+        _validate_alias_receipt_candidate_entry_binding(
+            registry,
+            decision_artifact,
+            decision_ref,
+            target,
+            source_path,
         )
     aliases = registry.get("aliases")
     if not isinstance(aliases, dict):
@@ -22175,6 +22597,123 @@ def _validate_current_registry_matches_alias_receipt(
             target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must be a list for applied receipts.")
         elif not any(isinstance(entry, dict) and entry == expected_history_entry for entry in history):
             target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must contain alias_history_entry.")
+
+
+def _validate_alias_receipt_candidate_entry_binding(
+    registry: dict[str, Any],
+    decision_artifact: dict[str, Any],
+    decision_ref: dict[str, Any],
+    target: ValidationTarget,
+    receipt_path: Path,
+) -> None:
+    decision_path = _promotion_existing_artifact_path(
+        decision_artifact,
+        receipt_path,
+    )
+    decision = _promotion_read_json_payload(decision_path)
+    if decision_path is None or not isinstance(decision, dict):
+        target.errors.append(
+            "promotion_alias_apply current promotion decision could not be replayed."
+        )
+        return
+    decision_validation = ValidationTarget("promotion_decision", str(decision_path))
+    _validate_promotion_decision(decision, decision_validation, decision_path)
+    for error in decision_validation.errors:
+        target.errors.append(
+            f"promotion_alias_apply current promotion decision is invalid: {error}"
+        )
+    for warning in decision_validation.warnings:
+        target.errors.append(
+            "promotion_alias_apply current promotion decision warning blocks "
+            f"strict replay: {warning}"
+        )
+    decision_block = decision.get("decision")
+    alias_update = decision.get("alias_update")
+    if (
+        decision.get("passed") is not True
+        or decision.get("readiness") != "ready"
+        or decision.get("recommendation") != "apply_alias_update"
+        or not isinstance(decision_block, dict)
+        or decision_block.get("recommendation") != "apply_alias_update"
+        or not isinstance(alias_update, dict)
+        or alias_update.get("authorized") is not True
+        or alias_update.get("recommendation") != "apply_alias_update"
+    ):
+        target.errors.append(
+            "promotion_alias_apply current promotion decision must be passing, ready, and authorize alias application."
+        )
+    models = decision.get("models")
+    candidate_id = decision_ref.get("candidate_id")
+    decision_candidate_id = _promotion_model_id(
+        models.get("candidate") if isinstance(models, dict) else None
+    )
+    decision_champion_id = _promotion_model_id(
+        models.get("champion") if isinstance(models, dict) else None
+    )
+    decision_rollback_id = _promotion_model_id(
+        models.get("rollback") if isinstance(models, dict) else None
+    )
+    expected_ref_fields = {
+        "candidate_id": decision_candidate_id,
+        "champion_previous_target": decision_champion_id,
+        "rollback_id": decision_rollback_id,
+    }
+    for field_name, expected_value in expected_ref_fields.items():
+        if decision_ref.get(field_name) != expected_value:
+            target.errors.append(
+                "promotion_alias_apply promotion_decision."
+                f"{field_name} must match the current decision model."
+            )
+
+    aliases = (
+        alias_update.get("aliases")
+        if isinstance(alias_update, dict)
+        else None
+    )
+    expected_aliases = [
+        {"alias": "candidate", "target": decision_candidate_id},
+        {
+            "alias": "champion",
+            "previous_target": decision_champion_id,
+            "target": decision_candidate_id,
+        },
+        {"alias": "rollback", "target": decision_rollback_id},
+    ]
+    if aliases != expected_aliases:
+        target.errors.append(
+            "promotion_alias_apply current promotion decision alias_update must "
+            "match its canonical model targets."
+        )
+    if not isinstance(candidate_id, str) or decision_candidate_id != candidate_id:
+        return
+    artifacts = decision.get("artifacts")
+    entry_record = (
+        artifacts.get("model_registry_entry")
+        if isinstance(artifacts, dict)
+        else None
+    )
+    entry_path = _promotion_existing_artifact_path(entry_record, decision_path)
+    entry = _promotion_read_json_payload(entry_path)
+    entries = registry.get("entries")
+    registered_entry = (
+        entries.get(candidate_id) if isinstance(entries, dict) else None
+    )
+    if not isinstance(entry_record, dict) or entry_path is None or not isinstance(entry, dict):
+        target.errors.append(
+            "promotion_alias_apply decision model_registry_entry could not be replayed."
+        )
+        return
+    if (
+        entry_record.get("sha256") != _sha256(entry_path)
+        or entry_record.get("size_bytes") != entry_path.stat().st_size
+    ):
+        target.errors.append(
+            "promotion_alias_apply decision model_registry_entry fingerprint is stale."
+        )
+    if registered_entry != entry:
+        target.errors.append(
+            "promotion_alias_apply current registry candidate entry must exactly match the decision artifact."
+        )
 
 
 def _validate_registry_artifact_matches_alias_snapshot(
@@ -22302,10 +22841,40 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
         _validate_allowed_keys(artifacts, set(PROMOTION_DECISION_REQUIRED_ARTIFACTS), target, "promotion_decision.artifacts")
     for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS:
         _validate_promotion_decision_artifact(artifacts.get(role), role, target, source_path)
+    _validate_promotion_external_eval_lineage(
+        decision.get("external_eval_lineage"),
+        artifacts,
+        checks,
+        candidate_id,
+        target,
+        source_path,
+    )
     policy = decision.get("policy")
     _validate_promotion_policy_section(policy, target, source_path, "promotion_decision.policy")
+    _validate_promotion_decision_check_replay(
+        decision,
+        artifacts,
+        target,
+        source_path,
+    )
     metrics = decision.get("metrics")
-    _validate_promotion_decision_metrics(metrics, checks, target, policy)
+    _validate_promotion_decision_metrics(
+        metrics,
+        checks,
+        target,
+        policy,
+        decision.get("external_eval_lineage"),
+        artifacts,
+        source_path,
+    )
+    if (
+        isinstance(decision_block, dict)
+        and isinstance(decision_block.get("key_metrics"), dict)
+        and decision_block.get("key_metrics") != metrics
+    ):
+        target.errors.append(
+            "promotion_decision.decision.key_metrics must exactly match promotion_decision.metrics."
+        )
     _validate_promotion_decision_alias_update(
         decision.get("alias_update"),
         expected_passed,
@@ -22411,6 +22980,373 @@ def _validate_promotion_decision_block(
 
 def _validate_promotion_decision_artifact(value: Any, role: str, target: ValidationTarget, source_path: Path) -> None:
     _validate_promotion_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
+    if (
+        not isinstance(value, dict)
+        or value.get("exists") is not True
+        or value.get("kind") != "file"
+    ):
+        return
+    expected_schema = _PROMOTION_JSON_ARTIFACT_ROLES.get(role)
+    if expected_schema is None:
+        return
+    if value.get("schema_version") != expected_schema:
+        target.errors.append(
+            f"promotion_decision.artifacts.{role}.schema_version must be {expected_schema}."
+        )
+    artifact_path = _promotion_existing_artifact_path(value, source_path)
+    payload = _promotion_read_json_payload(artifact_path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != expected_schema:
+        target.errors.append(
+            f"promotion_decision.artifacts.{role} source must use schema {expected_schema}."
+        )
+
+
+def _validate_promotion_external_eval_lineage(
+    value: Any,
+    artifacts: dict[str, Any],
+    checks: list[Any],
+    candidate_id: str,
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    label = "promotion_decision.external_eval_lineage"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        lineage: dict[str, Any] = {}
+    else:
+        lineage = value
+        _validate_allowed_keys(lineage, _PROMOTION_EXTERNAL_EVAL_LINEAGE_KEYS, target, label)
+    for field_name in ("result_count", "summary_result_count"):
+        if not _is_non_negative_int(lineage.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in (
+        "exact_result_set",
+        "candidate_model_bound",
+        "evidence_bundle_summary_bound",
+        "evidence_bundle_semantically_valid",
+        "eval_summary_semantically_valid",
+        "external_results_semantically_valid",
+        "semantic_validation_passed",
+        "governance_ready",
+        "passed",
+    ):
+        if not isinstance(lineage.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+
+    raw_results = lineage.get("results")
+    if not isinstance(raw_results, list):
+        target.errors.append(f"{label}.results must be a list.")
+        raw_results = []
+    result_artifacts: list[dict[str, Any]] = []
+    result_paths: list[Path | None] = []
+    for index, row in enumerate(raw_results):
+        row_label = f"{label}.results[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        _validate_allowed_keys(row, _PROMOTION_EXTERNAL_EVAL_RESULT_KEYS, target, row_label)
+        artifact = row.get("artifact")
+        if not isinstance(artifact, dict):
+            target.errors.append(f"{row_label}.artifact must be an object.")
+            continue
+        _validate_promotion_external_eval_result_artifact(
+            artifact,
+            target,
+            source_path,
+            f"{row_label}.artifact",
+        )
+        _validate_promotion_external_eval_result_projection(row, target, row_label)
+        result_artifacts.append(artifact)
+        result_paths.append(_promotion_existing_artifact_path(artifact, source_path))
+
+    evidence_record = artifacts.get("evidence_bundle")
+    summary_record = artifacts.get("eval_summary")
+    evidence_path = _promotion_existing_artifact_path(evidence_record, source_path)
+    summary_path = _promotion_existing_artifact_path(summary_record, source_path)
+    evidence_payload = _promotion_read_json_payload(evidence_path)
+    summary_payload = _promotion_read_json_payload(summary_path)
+    result_payloads = [_promotion_read_json_payload(path) for path in result_paths]
+
+    evidence_validation = validate_evidence_bundle(evidence_path) if evidence_path is not None else None
+    summary_validation = validate_eval_summary(summary_path) if summary_path is not None else None
+    result_validations = [
+        validate_external_eval_result(path) if path is not None else None for path in result_paths
+    ]
+    evidence_semantically_valid = (
+        evidence_validation is not None
+        and not evidence_validation.errors
+        and not evidence_validation.warnings
+    )
+    summary_semantically_valid = (
+        summary_validation is not None
+        and not summary_validation.errors
+        and not summary_validation.warnings
+    )
+    results_semantically_valid = (
+        bool(result_paths)
+        and len(result_paths) == len(raw_results)
+        and all(
+            validation is not None
+            and not validation.errors
+            and not validation.warnings
+            for validation in result_validations
+        )
+    )
+    if evidence_path is not None and not evidence_semantically_valid:
+        target.errors.append(
+            "promotion_decision.artifacts.evidence_bundle failed semantic validation at decision replay."
+        )
+    if summary_path is not None and not summary_semantically_valid:
+        target.errors.append(
+            "promotion_decision.artifacts.eval_summary failed semantic validation at decision replay."
+        )
+    for index, validation in enumerate(result_validations):
+        if validation is not None and (validation.errors or validation.warnings):
+            target.errors.append(
+                f"{label}.results[{index}].artifact failed semantic validation at decision replay."
+            )
+
+    expected = _build_promotion_external_eval_lineage(
+        candidate_id=candidate_id,
+        evidence_bundle=evidence_payload,
+        eval_summary=summary_payload,
+        eval_summary_artifact=summary_record if isinstance(summary_record, dict) else {},
+        result_payloads=result_payloads,
+        result_artifacts=result_artifacts,
+        evidence_bundle_semantically_valid=evidence_semantically_valid,
+        eval_summary_semantically_valid=summary_semantically_valid,
+        external_results_semantically_valid=results_semantically_valid,
+    )
+    if lineage != expected:
+        target.errors.append(
+            "promotion_decision.external_eval_lineage must exactly match replayed eval-summary and external-result evidence."
+        )
+    _validate_promotion_external_eval_check_replay(
+        checks,
+        expected,
+        target,
+        evidence_bundle_issue_count=(
+            len(evidence_validation.errors) + len(evidence_validation.warnings)
+            if evidence_validation is not None
+            else 1
+        ),
+        eval_summary_issue_count=(
+            len(summary_validation.errors) + len(summary_validation.warnings)
+            if summary_validation is not None
+            else 1
+        ),
+        external_result_issue_count=sum(
+            len(validation.errors) + len(validation.warnings)
+            if validation is not None
+            else 1
+            for validation in result_validations
+        ),
+    )
+
+
+def _validate_promotion_external_eval_result_artifact(
+    artifact: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    label: str,
+) -> None:
+    if artifact.get("role") != "external_eval_result":
+        target.errors.append(
+            f"{label}.role expected 'external_eval_result', got {artifact.get('role')!r}."
+        )
+    if not isinstance(artifact.get("path"), str):
+        target.errors.append(f"{label}.path must be a string.")
+    if not isinstance(artifact.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    kind = artifact.get("kind")
+    if kind not in {"file", "directory", "missing", "other"}:
+        target.errors.append(
+            f"{label}.kind must be file, directory, missing, or other."
+        )
+    if artifact.get("exists") is True:
+        if kind not in {"file", "directory"}:
+            target.errors.append(
+                f"{label}.kind must be file or directory when exists is true."
+            )
+        if not _is_sha256(artifact.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    if kind == "file":
+        if artifact.get("schema_version") != EXTERNAL_EVAL_RESULT_SCHEMA_VERSION:
+            target.errors.append(
+                f"{label}.schema_version must be {EXTERNAL_EVAL_RESULT_SCHEMA_VERSION}."
+            )
+        if not _is_non_negative_int(artifact.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if kind == "directory" and not _is_non_negative_int(artifact.get("file_count")):
+        target.errors.append(f"{label}.file_count must be a non-negative integer.")
+    _validate_promotion_decision_artifact_hash(artifact, target, label, source_path)
+
+
+def _validate_promotion_external_eval_result_projection(
+    row: dict[str, Any], target: ValidationTarget, label: str
+) -> None:
+    for field_name in ("adapter_id", "model_id"):
+        if row.get(field_name) is not None and not isinstance(row.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string or null.")
+    for field_name in ("plan_sha256", "heldout_manifest_sha256"):
+        if row.get(field_name) is not None and not _is_sha256(row.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a SHA-256 value or null.")
+    for field_name in (
+        "integrity_passed",
+        "coverage_complete",
+        "external_eval_claims_allowed",
+    ):
+        if not isinstance(row.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    allowed_values = {
+        "execution_status": {"completed", "incomplete", "failed", None},
+        "benchmark_status": {"passed", "failed", "inconclusive", "not_available", None},
+        "governance_readiness": {"ready_for_review", "blocked", None},
+    }
+    for field_name, allowed in allowed_values.items():
+        if row.get(field_name) not in allowed:
+            target.errors.append(f"{label}.{field_name} has an unsupported value.")
+
+
+def _promotion_existing_artifact_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, dict) or value.get("exists") is not True or value.get("kind") != "file":
+        return None
+    return _resolve_promotion_decision_artifact_path(
+        value.get("path"), source_path, value.get("kind")
+    )
+
+
+def _promotion_read_json_payload(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.exists() or not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _validate_promotion_decision_check_replay(
+    decision: dict[str, Any],
+    artifacts: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    models = decision.get("models")
+    model_rows = models if isinstance(models, dict) else {}
+    candidate = model_rows.get("candidate")
+    champion = model_rows.get("champion")
+    rollback = model_rows.get("rollback")
+    artifact_paths = {
+        role: _promotion_replay_artifact_path(artifacts.get(role), source_path)
+        for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS
+    }
+    lineage = decision.get("external_eval_lineage")
+    raw_results = lineage.get("results") if isinstance(lineage, dict) else None
+    result_records = [
+        row.get("artifact")
+        for row in raw_results
+        if isinstance(row, dict) and isinstance(row.get("artifact"), dict)
+    ] if isinstance(raw_results, list) else []
+    result_paths = [
+        path
+        for record in result_records
+        if (path := _promotion_replay_artifact_path(record, source_path)) is not None
+    ]
+    policy = decision.get("policy")
+    policy_artifact = policy.get("artifact") if isinstance(policy, dict) else None
+    policy_path = _promotion_replay_artifact_path(policy_artifact, source_path)
+    preserve_paths = _promotion_replay_uses_preserved_paths(
+        [*artifacts.values(), *result_records, policy_artifact]
+    )
+    try:
+        replay = _build_promotion_decision(
+            candidate_id=_promotion_model_id(candidate),
+            champion_id=_promotion_model_id(champion),
+            rollback_id=_promotion_model_id(rollback) or None,
+            candidate_class=(
+                candidate.get("class") if isinstance(candidate, dict) else ""
+            ),
+            champion_class=(
+                champion.get("class") if isinstance(champion, dict) else ""
+            ),
+            out_path=source_path,
+            external_eval_result_paths=result_paths,
+            promotion_policy_path=policy_path,
+            preserve_paths=preserve_paths,
+            **{
+                f"{role}_path": path
+                for role, path in artifact_paths.items()
+            },
+        )
+    except (OSError, ValueError) as exc:
+        target.errors.append(
+            f"promotion_decision.checks could not be replayed from current source artifacts: {exc}"
+        )
+        return
+    if decision.get("checks") != replay["checks"]:
+        target.errors.append(
+            "promotion_decision.checks must exactly match canonical replay from current source artifacts."
+        )
+    if decision.get("policy") != replay["policy"]:
+        target.errors.append(
+            "promotion_decision.policy must exactly match canonical replay from its current policy source."
+        )
+
+
+def _promotion_replay_artifact_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, dict):
+        return None
+    return _resolve_promotion_decision_artifact_path(
+        value.get("path"), source_path, value.get("kind")
+    )
+
+
+def _promotion_replay_uses_preserved_paths(values: list[Any]) -> bool:
+    return any(
+        isinstance(value, dict)
+        and isinstance(value.get("path"), str)
+        and bool(value["path"])
+        and Path(value["path"]).is_absolute()
+        for value in values
+    )
+
+
+def _validate_promotion_external_eval_check_replay(
+    checks: list[Any],
+    expected: dict[str, Any],
+    target: ValidationTarget,
+    *,
+    evidence_bundle_issue_count: int,
+    eval_summary_issue_count: int,
+    external_result_issue_count: int,
+) -> None:
+    expected_rows = _build_promotion_external_eval_checks(
+        expected,
+        evidence_bundle_semantically_valid=expected[
+            "evidence_bundle_semantically_valid"
+        ],
+        eval_summary_semantically_valid=expected["eval_summary_semantically_valid"],
+        evidence_bundle_error_count=evidence_bundle_issue_count,
+        eval_summary_error_count=eval_summary_issue_count,
+        external_result_error_count=external_result_issue_count,
+    )
+    for expected_row in expected_rows:
+        check_id = expected_row["id"]
+        matching = [
+            check
+            for check in checks
+            if isinstance(check, dict) and check.get("id") == check_id
+        ]
+        if len(matching) != 1:
+            target.errors.append(
+                f"promotion_decision.checks must contain exactly one {check_id!r} replay check."
+            )
+            continue
+        if matching[0] != expected_row:
+            target.errors.append(
+                f"promotion_decision.checks[{check_id!r}] must exactly match replayed external-eval lineage."
+            )
 
 
 def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTarget) -> None:
@@ -22679,25 +23615,38 @@ def _promotion_artifact_path_uses_symlink_ancestor(value: Any, source_path: Path
     return current_path is not None and _path_has_symlink_component(current_path, include_leaf=False)
 
 
-def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget, policy: Any) -> None:
+def _validate_promotion_decision_metrics(
+    value: Any,
+    checks: list[Any],
+    target: ValidationTarget,
+    policy: Any,
+    external_eval_lineage: Any,
+    artifacts: dict[str, Any],
+    source_path: Path,
+) -> None:
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.metrics must be an object.")
         return
     _validate_allowed_keys(value, _PROMOTION_DECISION_METRICS_KEYS, target, "promotion_decision.metrics")
-    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
     policy_obj = policy if isinstance(policy, dict) else {}
-    expected_fields = {
-        "check_count": len(checks),
-        "failed_check_count": expected_failed,
-        "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
-        "policy_required_artifact_count": len(policy_obj.get("required_artifacts", [])) if isinstance(policy_obj.get("required_artifacts"), list) else 0,
-        "policy_release_required_artifact_count": (
-            len(policy_obj.get("release_required_artifacts", [])) if isinstance(policy_obj.get("release_required_artifacts"), list) else 0
-        ),
-    }
-    for field_name, expected in expected_fields.items():
-        if value.get(field_name) != expected:
-            target.errors.append(f"promotion_decision.metrics.{field_name} expected {expected!r}, got {value.get(field_name)!r}.")
+    lineage_obj = external_eval_lineage if isinstance(external_eval_lineage, dict) else {}
+    compare_path = _promotion_existing_artifact_path(artifacts.get("compare_gate"), source_path)
+    compare_gate = _promotion_read_json_payload(compare_path)
+    compare_metrics = (
+        compare_gate.get("metrics")
+        if isinstance(compare_gate, dict) and isinstance(compare_gate.get("metrics"), dict)
+        else {}
+    )
+    expected_metrics = _build_promotion_decision_metrics(
+        [check for check in checks if isinstance(check, dict)],
+        compare_metrics,
+        policy_obj,
+        lineage_obj,
+    )
+    if value != expected_metrics:
+        target.errors.append(
+            "promotion_decision.metrics must exactly match replayed checks, policy, compare gate, and external-eval lineage."
+        )
     for field_name in (
         "task_completion_regression_count",
         "baseline_win_count",
@@ -25961,8 +26910,12 @@ def _resolve_action_ledger_bundle_path(value: Any, source_path: Path) -> Path | 
 def _resolve_gate_source_path(value: Any, source_path: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
+    if "://" in value:
+        return None
     if value.startswith("<redacted:") and value.endswith(">"):
         basename = value.removeprefix("<redacted:").removesuffix(">")
+        if basename in {"", ".", ".."} or Path(basename).name != basename:
+            return None
         return source_path.parent / basename
     path = Path(value)
     if path.is_absolute():
@@ -27753,6 +28706,7 @@ def _validate_bundle_eval_summary_metrics(value: dict[str, Any], target: Validat
         "comparison_count",
         "gate_count",
         "external_adapter_plan_count",
+        "external_adapter_result_count",
         "risk_count",
         "repair_work_item_count",
         "repair_critical_work_item_count",
@@ -27831,6 +28785,7 @@ def _eval_summary_bundle_metrics(summary: dict[str, Any]) -> dict[str, Any]:
         "comparison_count": summary.get("comparison_count"),
         "gate_count": summary.get("gate_count"),
         "external_adapter_plan_count": summary.get("external_adapter_plan_count"),
+        "external_adapter_result_count": summary.get("external_adapter_result_count"),
         "risk_count": len(risks),
         "risk_source_counts": _eval_summary_risk_source_counts(risks),
         "repair_work_item_count": repair.get("work_item_count"),

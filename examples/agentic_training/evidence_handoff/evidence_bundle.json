@@ -1,5 +1,14 @@
 {
   "artifacts": {
+    "eval_summary": {
+      "exists": true,
+      "kind": "file",
+      "passed": true,
+      "path": "../heldout_eval/eval_summary.json",
+      "schema_version": "hfr.eval_summary.v1",
+      "sha256": "397b10bcd00495b68d03fa08d3c649bed182765613afd1c3d915e61f84debfdb",
+      "size_bytes": 13218
+    },
     "evidence_coverage": {
       "exists": true,
       "kind": "file",
@@ -79,8 +88,8 @@
       "size_bytes": 2343
     }
   },
-  "bundle_path": "evidence_handoff/evidence_bundle.json",
-  "check_count": 17,
+  "bundle_path": "examples/agentic_training/evidence_handoff/evidence_bundle.json",
+  "check_count": 20,
   "checks": [
     {
       "actual": {
@@ -237,6 +246,50 @@
       "expected": {
         "passed": true
       },
+      "id": "eval_summary_schema_supported",
+      "passed": true,
+      "scope": {
+        "artifact": "eval_summary",
+        "schema_version": "hfr.eval_summary.v1"
+      },
+      "summary": "eval_summary_schema_supported: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "eval_summary_passed",
+      "passed": true,
+      "scope": {
+        "artifact": "eval_summary",
+        "risk_count": "0"
+      },
+      "summary": "eval_summary_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "eval_summary_governance_ready",
+      "passed": true,
+      "scope": {
+        "artifact": "eval_summary"
+      },
+      "summary": "eval_summary_governance_ready: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
       "id": "harness_handoff_pair_count",
       "passed": true,
       "scope": {
@@ -351,6 +404,7 @@
     "blocking_checks": [],
     "blocking_gates": [],
     "evidence_artifacts": [
+      "eval_summary",
       "evidence_coverage",
       "harness_manifest_1",
       "harness_result_1",
@@ -363,6 +417,26 @@
     ],
     "gate_count": 0,
     "key_metrics": {
+      "eval_summary": {
+        "arm_count": 2,
+        "comparison_count": 0,
+        "cross_arm_claims_allowed": true,
+        "external_adapter_plan_count": 1,
+        "external_adapter_result_count": 1,
+        "gate_count": 0,
+        "governance_ready": true,
+        "heldout_scenario_count": 3,
+        "heldout_status": "identical",
+        "passed": true,
+        "repair_critical_work_item_count": 8,
+        "repair_work_item_count": 8,
+        "risk_count": 0,
+        "risk_source_counts": [],
+        "serving_preflight_attached_count": 0,
+        "serving_preflight_blocking_reason_count": 0,
+        "serving_preflight_input_count": 0,
+        "serving_preflight_required": false
+      },
       "evidence_coverage": {
         "critical_failed_rule_evidence_rate": 1.0,
         "critical_failed_rules_without_evidence": 0,
@@ -474,6 +548,27 @@
   },
   "failed_check_count": 0,
   "metrics": {
+    "eval_summary": {
+      "arm_count": 2,
+      "comparison_count": 0,
+      "cross_arm_claims_allowed": true,
+      "external_adapter_plan_count": 1,
+      "external_adapter_result_count": 1,
+      "gate_count": 0,
+      "governance_ready": true,
+      "heldout_scenario_count": 3,
+      "heldout_status": "identical",
+      "passed": true,
+      "repair_critical_work_item_count": 8,
+      "repair_work_item_count": 8,
+      "risk_count": 0,
+      "risk_source_counts": [],
+      "schema_version": "hfr.eval_summary.v1",
+      "serving_preflight_attached_count": 0,
+      "serving_preflight_blocking_reason_count": 0,
+      "serving_preflight_input_count": 0,
+      "serving_preflight_required": false
+    },
     "evidence_coverage": {
       "critical_failed_rule_evidence_rate": 1.0,
       "critical_failed_rules_without_evidence": 0,
@@ -518,13 +613,13 @@
           "consistent": true,
           "handoff_source": "flightrecorder run-suite --evidence-handoff",
           "id": "prompt_injection_good",
-          "manifest_path": "evidence_handoff/harness_handoff/harness_manifest.json",
+          "manifest_path": "examples/agentic_training/evidence_handoff/harness_handoff/harness_manifest.json",
           "model": "fixture-model",
           "passed": true,
           "provider": "flightrecorder",
           "replay_lineage": "../prompt_injection_good/artifact_lineage.json",
           "replay_self_contained": true,
-          "result_path": "evidence_handoff/harness_handoff/harness_result.json",
+          "result_path": "examples/agentic_training/evidence_handoff/harness_handoff/harness_result.json",
           "run_suite_lineage_valid": true,
           "runner": "flightrecorder_run_suite",
           "scenario_id": "prompt_injection_good",
@@ -573,7 +668,7 @@
         }
       ],
       "run_count": 1,
-      "runs_dir": "evidence_handoff",
+      "runs_dir": "examples/agentic_training/evidence_handoff",
       "task_completion_status_counts": [
         {
           "count": 1,
