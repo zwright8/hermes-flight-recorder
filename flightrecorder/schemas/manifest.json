@@ -900,7 +900,7 @@
     {
       "artifact": "decision_gate",
       "artifact_schema_version": "hfr.decision_gate.v1",
-      "description": "Side-effect-free gate over a source artifact decision recommendation.",
+      "description": "Side-effect-free gate over a registered, schema-valid decision-bearing source artifact recommendation.",
       "filename": "decision_gate.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/decision_gate.v1.schema.json",
       "name": "decision_gate"

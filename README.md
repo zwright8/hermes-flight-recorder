@@ -835,6 +835,9 @@ Registry and governance commands add:
 ## Public Schemas
 
 Every public artifact family is registered in `flightrecorder/schemas/`.
+Decision gates additionally use this registry as an allowlist: only supported
+decision-bearing artifacts that satisfy their bundled schema can authorize a
+gate or enter promotion history.
 
 ```bash
 flightrecorder schemas --write-dir artifact_schemas

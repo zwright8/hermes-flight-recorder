@@ -10,6 +10,7 @@ from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .schema_registry import check_schema_contract
 
 PROMOTION_LEDGER_SCHEMA_VERSION = "hfr.promotion_ledger.v1"
 
@@ -61,6 +62,16 @@ def _read_decision_gate(path: Path) -> dict[str, Any]:
         raise PromotionLedgerError(f"Decision gate must contain a JSON object: {path}")
     if payload.get("schema_version") != DECISION_GATE_SCHEMA_VERSION:
         raise PromotionLedgerError(f"Decision gate has unsupported schema_version at {path}: {payload.get('schema_version')!r}")
+    schema_check = check_schema_contract(payload, name_or_id="decision_gate", artifact_path=path)
+    if not schema_check.get("passed"):
+        errors = schema_check.get("errors") if isinstance(schema_check.get("errors"), list) else []
+        detail = str(errors[0]) if errors else "unknown schema error"
+        raise PromotionLedgerError(f"Decision gate does not satisfy its bundled schema at {path}: {detail}")
+    from .validation import validate_decision_gate
+
+    validation = validate_decision_gate(path)
+    if validation.errors:
+        raise PromotionLedgerError(f"Decision gate failed semantic validation at {path}: {validation.errors[0]}")
     return payload
 
 

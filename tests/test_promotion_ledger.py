@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import tempfile
@@ -10,6 +11,7 @@ from unittest.mock import patch
 from flightrecorder.cli import main
 from flightrecorder.path_safety import locked_owned_output_directory
 from flightrecorder.promotion_archive import PromotionArchiveError, _prepare_archive_dir
+from flightrecorder.schema_registry import check_schema_file
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,18 +21,45 @@ def run_cli(args):
         return main(args)
 
 
-def _write_ready_action_ledger_gate(path):
+def _write_action_ledger_gate(path, *, passed=True, recurring_action_count=0):
+    checks = []
+    blocking_checks = []
+    if not passed:
+        check = {
+            "id": "max_recurring_actions",
+            "passed": False,
+            "actual": recurring_action_count,
+            "expected": {"maximum": 0},
+            "summary": "recurring actions exceed the configured maximum",
+        }
+        checks.append(check)
+        blocking_checks.append({"id": check["id"], "summary": check["summary"]})
+    metrics = {
+        "bundle_count": 0 if passed else 1,
+        "unique_action_count": recurring_action_count,
+        "open_action_count": recurring_action_count,
+        "new_action_count": 0,
+        "recurring_action_count": recurring_action_count,
+        "resolved_action_count": 0,
+        "open_priority_counts": [],
+    }
     path.write_text(
         json.dumps(
             {
                 "schema_version": "hfr.action_ledger_gate.v1",
-                "passed": True,
+                "action_ledger": "action_ledger.json",
+                "passed": passed,
+                "check_count": len(checks),
+                "failed_check_count": len(checks),
+                "checks": checks,
+                "metrics": metrics,
                 "decision": {
-                    "readiness": "ready",
-                    "recommendation": "promote_iteration",
-                    "summary": "ok",
-                    "blocking_check_count": 0,
-                    "key_metrics": {"recurring_action_count": 0},
+                    "readiness": "ready" if passed else "blocked",
+                    "recommendation": "promote_iteration" if passed else "block_iteration",
+                    "summary": "ok" if passed else "repair pressure remains",
+                    "blocking_check_count": len(checks),
+                    "blocking_checks": blocking_checks,
+                    "key_metrics": metrics,
                 },
             },
             sort_keys=True,
@@ -38,6 +67,10 @@ def _write_ready_action_ledger_gate(path):
         + "\n",
         encoding="utf-8",
     )
+
+
+def _write_ready_action_ledger_gate(path):
+    _write_action_ledger_gate(path)
 
 
 def _write_blocked_decision_gate(path):
@@ -127,6 +160,115 @@ def _build_ready_decision_gate(root, *, preserve_paths=False):
     return source, decision_gate, run_cli(command)
 
 
+def _build_historical_forged_decision_gate(root):
+    source = root / "arbitrary_source.json"
+    decision_gate = root / "historical_decision_gate.json"
+    _write_ready_action_ledger_gate(source)
+    code = run_cli(
+        [
+            "gate-decision",
+            "--artifact",
+            str(source),
+            "--expect-recommendation",
+            "promote_iteration",
+            "--expect-readiness",
+            "ready",
+            "--require-passed",
+            "--out",
+            str(decision_gate),
+        ]
+    )
+    if code != 0:
+        raise AssertionError(f"valid gate-decision fixture failed with code {code}")
+
+    source_payload = json.loads(source.read_text(encoding="utf-8"))
+    source_payload.pop("action_ledger")
+    source.write_text(json.dumps(source_payload, sort_keys=True) + "\n", encoding="utf-8")
+    source_bytes = source.read_bytes()
+
+    gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+    gate["source_artifact"]["size_bytes"] = len(source_bytes)
+    gate["source_artifact"]["sha256"] = hashlib.sha256(source_bytes).hexdigest()
+    decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    outer_schema = check_schema_file(decision_gate, "decision_gate")
+    if not outer_schema["passed"]:
+        raise AssertionError(f"historical decision gate fixture must satisfy its outer schema: {outer_schema['errors']}")
+    return source, decision_gate
+
+
+def _write_historical_promotion_ledger(decision_gate, ledger_path):
+    gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+    gate_bytes = decision_gate.read_bytes()
+    source = gate["source_decision"]
+    source_artifact = gate["source_artifact"]
+    record = {
+        "index": 0,
+        "path": decision_gate.name,
+        "exists": True,
+        "schema_version": gate["schema_version"],
+        "passed": gate["passed"],
+        "readiness": gate["readiness"],
+        "recommendation": gate["recommendation"],
+        "expected_recommendation": gate["expected_recommendation"],
+        "expected_readiness": gate["expected_readiness"],
+        "require_passed": gate["require_passed"],
+        "check_count": gate["check_count"],
+        "failed_check_count": gate["failed_check_count"],
+        "source": {
+            "schema_version": source["schema_version"],
+            "passed": source["passed"],
+            "recommendation": source["recommendation"],
+            "readiness": source["readiness"],
+            "blocking_check_count": source["blocking_check_count"],
+            "artifact_path": source_artifact["path"],
+            "artifact_exists": source_artifact["exists"],
+            "artifact_sha256": source_artifact["sha256"],
+        },
+        "size_bytes": len(gate_bytes),
+        "sha256": hashlib.sha256(gate_bytes).hexdigest(),
+    }
+    metrics = {
+        "decision_count": 1,
+        "allowed_count": 1,
+        "blocked_count": 0,
+        "latest_recommendation": "allow_promotion",
+        "latest_readiness": "ready",
+        "latest_passed": True,
+        "consecutive_allowed_count": 1,
+        "consecutive_blocked_count": 0,
+        "unique_source_artifact_count": 1,
+        "recommendation_counts": [{"id": "allow_promotion", "count": 1}],
+        "source_recommendation_counts": [{"id": "promote_iteration", "count": 1}],
+        "decision_gate_results": [
+            {
+                "index": 0,
+                "path": decision_gate.name,
+                "passed": True,
+                "recommendation": "allow_promotion",
+                "source_recommendation": "promote_iteration",
+                "failed_check_count": 0,
+            }
+        ],
+    }
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.promotion_ledger.v1",
+                "ledger_path": ledger_path.name,
+                "passed": True,
+                "decision_count": 1,
+                "records": [record],
+                "metrics": metrics,
+                "notes": ["Historical ledger created before decision-gate source contracts were enforced."],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 class PromotionLedgerTests(unittest.TestCase):
     def test_promotion_ledger_tracks_allow_and_block_decisions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -137,42 +279,10 @@ class PromotionLedgerTests(unittest.TestCase):
             block_gate = root / "block_decision_gate.json"
             ledger_path = root / "promotion_ledger.json"
 
-            allow_source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": True,
-                        "decision": {
-                            "readiness": "ready",
-                            "recommendation": "promote_iteration",
-                            "summary": "ok",
-                            "blocking_check_count": 0,
-                            "key_metrics": {"recurring_action_count": 0},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            block_source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": False,
-                        "decision": {
-                            "readiness": "blocked",
-                            "recommendation": "block_iteration",
-                            "summary": "repair pressure remains",
-                            "blocking_check_count": 1,
-                            "key_metrics": {"recurring_action_count": 2},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_action_ledger_gate(allow_source)
+            _write_action_ledger_gate(block_source, passed=False, recurring_action_count=2)
+            self.assertEqual(run_cli(["schemas", "--check", str(allow_source)]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(block_source)]), 0)
 
             self.assertEqual(
                 run_cli(
@@ -256,6 +366,151 @@ class PromotionLedgerTests(unittest.TestCase):
             ledger["metrics"]["allowed_count"] = 99
             ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--promotion-ledger", str(ledger_path)]), 1)
+
+    def test_promotion_ledger_rejects_historical_gate_over_uncontracted_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate = _build_historical_forged_decision_gate(root)
+            ledger_path = root / "promotion_ledger.json"
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(ledger_path.exists())
+
+    def test_promotion_ledger_rejects_gate_with_non_local_source_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate, gate_code = _build_ready_decision_gate(root)
+            ledger_path = root / "promotion_ledger.json"
+            self.assertEqual(gate_code, 0)
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["artifact"] = "https://example.test/action_ledger_gate.json"
+            gate["source_artifact"]["path"] = gate["artifact"]
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(ledger_path.exists())
+
+    def test_validate_rejects_ledger_with_non_local_gate_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate, gate_code = _build_ready_decision_gate(root)
+            ledger_path = root / "promotion_ledger.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(gate_code, 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(decision_gate),
+                        "--out",
+                        str(ledger_path),
+                    ]
+                ),
+                0,
+            )
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            non_local_path = "https://example.test/decision_gate.json"
+            ledger["records"][0]["path"] = non_local_path
+            ledger["metrics"]["decision_gate_results"][0]["path"] = non_local_path
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].path must resolve to a local file", errors)
+
+    def test_validate_rejects_historical_ledger_over_uncontracted_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate = _build_historical_forged_decision_gate(root)
+            ledger_path = root / "historical_promotion_ledger.json"
+            summary_path = root / "validation.json"
+            _write_historical_promotion_ledger(decision_gate, ledger_path)
+
+            code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = [error for target in summary["targets"] for error in target["errors"]]
+            self.assertTrue(errors)
+
+    def test_gate_promotion_ledger_rejects_historical_uncontracted_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate = _build_historical_forged_decision_gate(root)
+            ledger_path = root / "historical_promotion_ledger.json"
+            gate_path = root / "promotion_ledger_gate.json"
+            _write_historical_promotion_ledger(decision_gate, ledger_path)
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "gate-promotion-ledger",
+                        "--promotion-ledger",
+                        str(ledger_path),
+                        "--out",
+                        str(gate_path),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(gate_path.exists())
+
+    def test_gate_promotion_ledger_rejects_symlinked_ledger_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate, gate_code = _build_ready_decision_gate(root)
+            ledger_path = root / "promotion_ledger.json"
+            ledger_link = root / "promotion_ledger_link.json"
+            output_gate = root / "promotion_ledger_gate.json"
+            self.assertEqual(gate_code, 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(decision_gate),
+                        "--out",
+                        str(ledger_path),
+                    ]
+                ),
+                0,
+            )
+            try:
+                ledger_link.symlink_to(ledger_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "gate-promotion-ledger",
+                        "--promotion-ledger",
+                        str(ledger_link),
+                        "--out",
+                        str(output_gate),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(output_gate.exists())
 
     def test_promotion_ledger_writes_output_relative_decision_gate_path(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -571,24 +826,7 @@ class PromotionLedgerTests(unittest.TestCase):
             decision_gate = root / "decision_gate.json"
             ledger_path = root / "promotion_ledger.json"
             gate_path = root / "promotion_ledger_gate.json"
-            source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": True,
-                        "decision": {
-                            "readiness": "ready",
-                            "recommendation": "promote_iteration",
-                            "summary": "ok",
-                            "blocking_check_count": 0,
-                            "key_metrics": {"recurring_action_count": 0},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_ready_action_ledger_gate(source)
             self.assertEqual(
                 run_cli(
                     [
@@ -655,24 +893,7 @@ class PromotionLedgerTests(unittest.TestCase):
             decision_gate = root / "decision_gate.json"
             ledger_path = root / "promotion_ledger.json"
             gate_path = root / "promotion_ledger_gate.json"
-            source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": False,
-                        "decision": {
-                            "readiness": "blocked",
-                            "recommendation": "block_iteration",
-                            "summary": "blocked",
-                            "blocking_check_count": 1,
-                            "key_metrics": {"recurring_action_count": 5},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_action_ledger_gate(source, passed=False, recurring_action_count=5)
             self.assertEqual(
                 run_cli(
                     [
@@ -1000,24 +1221,7 @@ class PromotionLedgerTests(unittest.TestCase):
             archive_dir = root / "promotion_archive"
             source_ref = str(source.relative_to(ROOT))
             decision_gate_ref = str(decision_gate.relative_to(ROOT))
-            source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": True,
-                        "decision": {
-                            "readiness": "ready",
-                            "recommendation": "promote_iteration",
-                            "summary": "ok",
-                            "blocking_check_count": 0,
-                            "key_metrics": {"recurring_action_count": 0},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_ready_action_ledger_gate(source)
             run_cli(
                 [
                     "gate-decision",
@@ -1276,24 +1480,7 @@ class PromotionLedgerTests(unittest.TestCase):
             decision_gate = root / "decision_gate.json"
             ledger_path = root / "promotion_ledger.json"
             archive_dir = root / "promotion_archive"
-            source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": True,
-                        "decision": {
-                            "readiness": "ready",
-                            "recommendation": "promote_iteration",
-                            "summary": "ok",
-                            "blocking_check_count": 0,
-                            "key_metrics": {},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_ready_action_ledger_gate(source)
             run_cli(
                 [
                     "gate-decision",
@@ -1340,24 +1527,7 @@ class PromotionLedgerTests(unittest.TestCase):
             decision_gate = out_dir / "decision_gate.json"
             ledger_path = root / "promotion_ledger.json"
             archive_dir = root / "promotion_archive"
-            source.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "hfr.action_ledger_gate.v1",
-                        "passed": True,
-                        "decision": {
-                            "readiness": "ready",
-                            "recommendation": "promote_iteration",
-                            "summary": "ok",
-                            "blocking_check_count": 0,
-                            "key_metrics": {},
-                        },
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_ready_action_ledger_gate(source)
 
             self.assertEqual(
                 run_cli(

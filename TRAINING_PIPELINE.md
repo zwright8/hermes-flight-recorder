@@ -356,11 +356,14 @@ trainer-side readiness signal. External automation should use
 `decision.key_metrics` as the compact promotion contract. Use
 `flightrecorder gate-decision` to convert that source recommendation into a
 validatable `allow_promotion` or `block_promotion` artifact for CI or trainer
-handoff jobs. The generated `decision_gate.json` carries
+handoff jobs. The source must be a supported registered decision-bearing
+artifact that satisfies its bundled JSON Schema; arbitrary, unknown, and
+wrong-type JSON is rejected. The generated `decision_gate.json` carries
 `source_artifact.sha256`, tying the promotion decision to the exact source gate
 artifact it consumed. When that source path is available, validation also
-checks that the embedded `source_decision` still matches the source artifact's
-current decision block. Gate-decision generation and validation reject source
+rechecks the registered schema contract and verifies that the embedded
+`source_decision` still matches the source artifact's current decision block.
+Gate-decision generation and validation reject source
 artifacts that are symlinks or traverse symlinked parent directories before
 emitting or trusting those hashes. Use `flightrecorder promotion-ledger` to
 preserve the history of those allow/block artifacts across iterations. The
@@ -369,7 +372,8 @@ consecutive block or allow streaks, and source-artifact fingerprints, giving an
 external trainer launcher a stable "how did we get here?" artifact before it
 consumes the final decision gate. Promotion-ledger generation and validation
 reject symlinked recorded decision-gate paths before reading, hashing, or
-replaying those records. Use `flightrecorder gate-promotion-ledger`
+replaying those records. `flightrecorder gate-promotion-ledger` performs the
+same current-source validation before issuing a policy result. Use it
 when trainer or CI automation needs a policy decision over that history, such
 as requiring a clean latest allow decision, capping blocked-rate or blocked
 streaks, and forbidding source `block_iteration` recommendations before launch.

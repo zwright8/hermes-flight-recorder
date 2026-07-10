@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .schema_registry import check_schema_contract
 
@@ -99,6 +100,7 @@ def evaluate_promotion_ledger_gate(
     ledger: dict[str, Any],
     *,
     promotion_ledger_path: str | Path,
+    promotion_ledger_display_path: str | None = None,
     min_decisions: int | None = None,
     min_allowed_count: int | None = None,
     max_blocked_count: int | None = None,
@@ -132,6 +134,7 @@ def evaluate_promotion_ledger_gate(
     if semantic_check.errors:
         details = "; ".join(semantic_check.errors[:5])
         raise PromotionLedgerGateError(f"Promotion-ledger gate input failed semantic validation: {details}")
+    _validate_promotion_ledger_source(ledger, Path(promotion_ledger_path))
 
     metrics = ledger["metrics"]
     records = [record for record in ledger["records"] if isinstance(record, dict)]
@@ -202,7 +205,7 @@ def evaluate_promotion_ledger_gate(
     passed = all(check["passed"] for check in checks)
     return {
         "schema_version": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
-        "promotion_ledger": str(promotion_ledger_path),
+        "promotion_ledger": promotion_ledger_display_path or str(promotion_ledger_path),
         "passed": passed,
         "decision": _decision_summary(passed, checks, gate_metrics),
         "check_count": len(checks),
@@ -210,6 +213,33 @@ def evaluate_promotion_ledger_gate(
         "checks": checks,
         "metrics": gate_metrics,
     }
+
+
+def _validate_promotion_ledger_source(ledger: dict[str, Any], path: Path) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise PromotionLedgerGateError(
+            f"Promotion-ledger gate input must not traverse symlinked path components: {path}"
+        )
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input could not be reopened at {path}: {exc}") from exc
+    if current != ledger:
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input does not match the current artifact at {path}")
+    from .validation import validate_promotion_ledger
+
+    validation = validate_promotion_ledger(path)
+    if validation.errors:
+        details = "; ".join(validation.errors[:5])
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input failed source validation: {details}")
+    try:
+        current_after_validation = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PromotionLedgerGateError(
+            f"Promotion-ledger gate input could not be reopened after validation at {path}: {exc}"
+        ) from exc
+    if current_after_validation != ledger:
+        raise PromotionLedgerGateError(f"Promotion-ledger gate input changed during validation at {path}")
 
 
 def _add_min_check(checks: list[dict[str, Any]], check_id: str, actual: int | float, minimum: int | float) -> None:

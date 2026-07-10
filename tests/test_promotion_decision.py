@@ -1532,6 +1532,51 @@ class PromotionDecisionTests(unittest.TestCase):
             )
             compare_gate["compare_export"] = str(compare_export)
             _write_source_json(artifacts["compare_gate"], compare_gate)
+            history_gate_path = root / "promotion_history_decision_gate.json"
+            promotion_ledger_path = root / "promotion_ledger.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(artifacts["compare_gate"]),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(history_gate_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(history_gate_path),
+                        "--out",
+                        str(promotion_ledger_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-promotion-ledger",
+                        "--promotion-ledger",
+                        str(promotion_ledger_path),
+                        "--policy",
+                        str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json"),
+                        "--out",
+                        str(artifacts["promotion_ledger_gate"]),
+                    ]
+                ),
+                0,
+            )
             registry_entry = json.loads(
                 artifacts["model_registry_entry"].read_text(encoding="utf-8")
             )
@@ -3115,17 +3160,32 @@ class PromotionDecisionTests(unittest.TestCase):
             archive_dir = root / "promotion_archive"
             action_gate_ref = str(action_gate_path.relative_to(ROOT))
             decision_gate_ref = str(decision_gate_path.relative_to(ROOT))
+            action_gate_metrics = {
+                "bundle_count": 0,
+                "unique_action_count": 0,
+                "open_action_count": 0,
+                "new_action_count": 0,
+                "recurring_action_count": 0,
+                "resolved_action_count": 0,
+                "open_priority_counts": [],
+            }
             action_gate_path.write_text(
                 json.dumps(
                     {
                         "schema_version": "hfr.action_ledger_gate.v1",
+                        "action_ledger": "action_ledger.json",
                         "passed": True,
+                        "check_count": 0,
+                        "failed_check_count": 0,
+                        "checks": [],
+                        "metrics": action_gate_metrics,
                         "decision": {
                             "readiness": "ready",
                             "recommendation": "promote_iteration",
                             "summary": "ready for promotion history",
                             "blocking_check_count": 0,
-                            "key_metrics": {"recurring_action_count": 0},
+                            "blocking_checks": [],
+                            "key_metrics": action_gate_metrics,
                         },
                     },
                     sort_keys=True,

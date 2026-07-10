@@ -93,7 +93,7 @@ from .schema_registry import SchemaRegistryError, check_schema_contract, check_s
 from .source_contract import inspect_artifact_source
 from .compare_gate import compare_movement_summary
 from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
-from .decision_gate import DECISION_GATE_SCHEMA_VERSION
+from .decision_gate import DECISION_GATE_SCHEMA_VERSION, decision_gate_source_contract_errors
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .eval_summary import (
@@ -21317,6 +21317,7 @@ def _validate_decision_gate_source_artifact_hash(record: dict[str, Any], target:
         return
     file_path = _resolve_gate_source_path(record.get("path"), source_path)
     if file_path is None:
+        target.errors.append("decision_gate.source_artifact.path must resolve to a local file.")
         return
     if file_path.is_symlink():
         target.errors.append("decision_gate.source_artifact.path must not resolve to a symlink.")
@@ -21355,6 +21356,8 @@ def _validate_decision_gate_source_decision_matches_artifact(
     if not isinstance(artifact, dict):
         target.errors.append("decision_gate.source_artifact must contain a JSON object.")
         return
+    for error in decision_gate_source_contract_errors(artifact):
+        target.errors.append(f"decision_gate.source_artifact contract error: {error}.")
     actual_decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
     expected = {
         "schema_version": str(artifact.get("schema_version") or ""),
@@ -24068,6 +24071,14 @@ def _validate_promotion_ledger_record_matches_gate(
         target.errors.append(f"{label}.path must contain a JSON object.")
         return
 
+    gate_schema_check = check_schema_contract(gate, name_or_id="decision_gate", artifact_path=file_path)
+    nested_gate_target = ValidationTarget("decision_gate", str(file_path))
+    _validate_decision_gate(gate, nested_gate_target, file_path)
+    if not gate_schema_check.get("passed") or nested_gate_target.errors:
+        schema_errors = gate_schema_check.get("errors") if isinstance(gate_schema_check.get("errors"), list) else []
+        detail = str(schema_errors[0]) if schema_errors else nested_gate_target.errors[0]
+        target.errors.append(f"{label}.path must reference a valid decision gate: {detail}")
+
     gate_source = gate.get("source_decision") if isinstance(gate.get("source_decision"), dict) else {}
     gate_artifact = gate.get("source_artifact") if isinstance(gate.get("source_artifact"), dict) else {}
     expected = {
@@ -24119,6 +24130,7 @@ def _validate_promotion_ledger_record_file_hash(
         return
     file_path = _resolve_gate_source_path(record.get("path"), source_path)
     if file_path is None:
+        target.errors.append(f"{label}.path must resolve to a local file.")
         return
     if file_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
@@ -24375,7 +24387,8 @@ def _validate_promotion_ledger_gate_source_linkage(
     try:
         expected = evaluate_promotion_ledger_gate(
             ledger,
-            promotion_ledger_path=gate.get("promotion_ledger"),
+            promotion_ledger_path=ledger_path,
+            promotion_ledger_display_path=gate.get("promotion_ledger"),
             **_promotion_ledger_gate_replay_options(gate, checks),
         )
     except ValueError as exc:
