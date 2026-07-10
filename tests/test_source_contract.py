@@ -3,6 +3,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -513,6 +514,360 @@ class SourceContractTests(unittest.TestCase):
             self.assertTrue(source["schema_valid"])
             self.assertFalse(source["semantic_valid"])
             self.assertFalse(source["ready"])
+
+
+class SnapshotResourceBudgetTests(unittest.TestCase):
+    @staticmethod
+    def write_reference_source(
+        root: Path,
+        references: list[str],
+        *,
+        name: str = "s.json",
+    ) -> tuple[Path, dict[str, object], bytes]:
+        payload: dict[str, object] = {"artifact_paths": references}
+        content = (json.dumps(payload, sort_keys=True) + "\n").encode()
+        path = root / name
+        path.write_bytes(content)
+        return path, payload, content
+
+    def test_regular_file_budget_accepts_exact_limit_and_rejects_regular_and_sparse_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exact = root / "exact.bin"
+            regular_over = root / "regular-over.bin"
+            sparse_over = root / "sparse-over.bin"
+            exact.write_bytes(b"x" * 64)
+            regular_over.write_bytes(b"x" * 65)
+            with sparse_over.open("wb") as handle:
+                handle.seek(64)
+                handle.write(b"x")
+
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_FILE_BYTES", 64):
+                self.assertIsNotNone(source_contract._attest_regular_file(exact))
+                self.assertIsNone(source_contract._attest_regular_file(regular_over))
+                self.assertIsNone(source_contract._attest_regular_file(sparse_over))
+
+    def test_aggregate_byte_budget_accepts_exact_limit_and_rejects_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dependencies = {"one.bin": b"1" * 7, "two.bin": b"2" * 11}
+            for name, content in dependencies.items():
+                (root / name).write_bytes(content)
+            source_path, payload, source_content = self.write_reference_source(
+                root,
+                list(dependencies),
+            )
+            # The source is read once for pathname admission and once through
+            # the descriptor-bound closure; every dependency is read once.
+            exact_read_bytes = 2 * len(source_content) + sum(map(len, dependencies.values()))
+
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES",
+                exact_read_bytes,
+            ):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES",
+                exact_read_bytes - 1,
+            ):
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+
+    def test_unique_file_budget_accepts_exact_limit_and_rejects_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index in range(3):
+                (root / f"dep-{index}").write_bytes(bytes([index]))
+            source_path, exact_payload, _ = self.write_reference_source(
+                root,
+                ["dep-0", "dep-1"],
+            )
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_FILES", 3):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(
+                        source_path,
+                        exact_payload,
+                    )
+                )
+                source_path, over_payload, _ = self.write_reference_source(
+                    root,
+                    ["dep-0", "dep-1", "dep-2"],
+                )
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, over_payload)
+                )
+
+    def test_directory_count_budget_accepts_exact_limit_and_rejects_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tree" / "a" / "b").mkdir(parents=True)
+            source_path, payload, _ = self.write_reference_source(root, ["tree"])
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_DIRECTORIES", 4):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+                (root / "tree" / "a" / "b" / "c").mkdir()
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+
+    def test_recursion_depth_budget_accepts_exact_limit_and_rejects_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tree" / "a" / "b").mkdir(parents=True)
+            source_path, payload, _ = self.write_reference_source(root, ["tree"])
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_DEPTH", 3):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+                (root / "tree" / "a" / "b" / "c").mkdir()
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+
+    def test_directory_entry_budget_counts_skipped_special_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tree = root / "tree"
+            tree.mkdir()
+            try:
+                for index in range(3):
+                    (tree / f"link-{index}").symlink_to("missing")
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"symlinks unavailable: {error}")
+            source_path, payload, _ = self.write_reference_source(root, ["tree"])
+
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_DIRECTORY_ENTRIES",
+                3,
+            ):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+                (tree / "link-3").symlink_to("missing")
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+
+    def test_reference_count_and_resolution_step_budgets_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_path, exact_payload, _ = self.write_reference_source(
+                root,
+                ["missing-0", "missing-1", "missing-2"],
+            )
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_REFERENCES", 3):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(
+                        source_path,
+                        exact_payload,
+                    )
+                )
+                source_path, over_payload, _ = self.write_reference_source(
+                    root,
+                    ["missing-0", "missing-1", "missing-2", "missing-3"],
+                )
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, over_payload)
+                )
+
+            source_path, step_payload, _ = self.write_reference_source(root, ["a/b"])
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_REFERENCE_RESOLUTION_STEPS",
+                3,
+            ):
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, step_payload)
+                )
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_REFERENCE_RESOLUTION_STEPS",
+                2,
+            ):
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, step_payload)
+                )
+
+    def test_reference_text_budgets_cover_raw_redacted_and_component_amplification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_REFERENCE_CHARS", 16):
+                for reference in ("x" * 16, f"<redacted:{'x' * 16}>"):
+                    source_path, payload, _ = self.write_reference_source(root, [reference], name="s")
+                    self.assertIsNotNone(
+                        source_contract._capture_private_semantic_snapshot(source_path, payload)
+                    )
+                for reference in ("x" * 17, f"<redacted:{'x' * 17}>"):
+                    source_path, payload, _ = self.write_reference_source(root, [reference], name="s")
+                    self.assertIsNone(
+                        source_contract._capture_private_semantic_snapshot(source_path, payload)
+                    )
+
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_REFERENCE_COMPONENTS",
+                2,
+            ):
+                source_path, payload, _ = self.write_reference_source(root, ["a/b"], name="s")
+                self.assertIsNotNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+                source_path, payload, _ = self.write_reference_source(root, ["a/b/c"], name="s")
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(source_path, payload)
+                )
+
+    def test_json_lexical_budgets_reject_depth_and_nodes_before_parsing(self):
+        with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH", 3):
+            self.assertTrue(source_contract._json_bytes_within_lexical_budgets(b"[[[]]]"))
+            self.assertFalse(source_contract._json_bytes_within_lexical_budgets(b"[[[[]]]]"))
+        with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_JSON_NODES", 5):
+            self.assertTrue(source_contract._json_bytes_within_lexical_budgets(b"[0,0,0,0]"))
+            self.assertFalse(source_contract._json_bytes_within_lexical_budgets(b"[0,0,0,0,0]"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "source.json"
+            path.write_text('{"a": 0, "b": 0}\n', encoding="utf-8")
+            with (
+                patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_JSON_NODES", 2),
+                patch.object(source_contract.json, "loads", wraps=json.loads) as json_loads,
+            ):
+                source = source_contract.inspect_json_source(
+                    path,
+                    "reviewed_gate",
+                    require_semantics=False,
+                )
+            self.assertFalse(source["parse_valid"])
+            json_loads.assert_not_called()
+
+    def test_overlapping_child_then_parent_directory_references_do_not_reread_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tree" / "child").mkdir(parents=True)
+            child_content = b"child-data"
+            parent_content = b"parent-data"
+            (root / "tree" / "child" / "child.bin").write_bytes(child_content)
+            (root / "tree" / "parent.bin").write_bytes(parent_content)
+            # Reference iteration is LIFO, so this deliberately captures the
+            # child before its parent and exercises overlap de-duplication.
+            source_path, payload, source_content = self.write_reference_source(
+                root,
+                ["tree", "tree/child"],
+            )
+            exact_read_bytes = (
+                2 * len(source_content) + len(child_content) + len(parent_content)
+            )
+            with patch.object(
+                source_contract,
+                "_MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES",
+                exact_read_bytes,
+            ):
+                snapshot = source_contract._capture_private_semantic_snapshot(
+                    source_path,
+                    payload,
+                )
+
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(
+                [relative for relative, _attestation in snapshot.tree.files],
+                ["s.json", "tree/child/child.bin", "tree/parent.bin"],
+            )
+
+    def test_materialization_revalidates_path_budget_and_source_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_path, payload, _ = self.write_reference_source(root, [])
+            snapshot = source_contract._capture_private_semantic_snapshot(source_path, payload)
+            self.assertIsNotNone(snapshot)
+
+            escaped = replace(snapshot, source_relative_path=Path("../escape.json"))
+            with self.assertRaises(ValueError):
+                with source_contract._materialize_private_semantic_snapshot(escaped):
+                    self.fail("unsafe snapshot path was materialized")
+
+            mismatched = replace(
+                snapshot,
+                source_attestation=replace(snapshot.source_attestation, sha256="0" * 64),
+            )
+            with self.assertRaises(ValueError):
+                with source_contract._materialize_private_semantic_snapshot(mismatched):
+                    self.fail("unbound source attestation was materialized")
+
+            with (
+                patch.object(
+                    source_contract,
+                    "_MAX_SEMANTIC_SNAPSHOT_FILE_BYTES",
+                    len(snapshot.source_attestation.content) - 1,
+                ),
+                self.assertRaises(ValueError),
+            ):
+                with source_contract._materialize_private_semantic_snapshot(snapshot):
+                    self.fail("over-budget source was materialized")
+
+    def test_outer_artifact_directories_fail_closed_when_tree_exceeds_budget(self):
+        cases = (
+            (
+                ROOT / "examples" / "agentic_training" / "training_export",
+                "training_export",
+            ),
+            (
+                ROOT
+                / "examples"
+                / "agentic_training"
+                / "promotion_governance"
+                / "promotion_archive",
+                "promotion_archive",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            for source_path, role in cases:
+                with self.subTest(role=role):
+                    artifact_path = Path(tmp) / role
+                    shutil.copytree(source_path, artifact_path)
+                    with patch.object(source_contract, "_MAX_SEMANTIC_SNAPSHOT_FILES", 1):
+                        source = inspect_artifact_source(artifact_path, role)
+                    self.assertFalse(source["ready"], source)
+                    self.assertFalse(source["stable"], source)
+
+    def test_committed_control_plane_sources_remain_within_snapshot_budgets(self):
+        cases = (
+            (
+                ROOT / "examples" / "agentic_training" / "loop_plan.json",
+                "agentic_training_loop_plan",
+            ),
+            (
+                ROOT
+                / "examples"
+                / "agentic_training"
+                / "promotion_governance"
+                / "model_registry.json",
+                "model_registry",
+            ),
+            (
+                ROOT / "examples" / "agentic_training" / "training_export",
+                "training_export",
+            ),
+            (
+                ROOT
+                / "examples"
+                / "agentic_training"
+                / "model_grader"
+                / "passing_gate.json",
+                "model_grader_gate",
+            ),
+        )
+        for path, role in cases:
+            with self.subTest(role=role):
+                source = inspect_artifact_source(path, role)
+                self.assertTrue(source["ready"], source)
+                self.assertTrue(source["stable"], source)
 
 
 if __name__ == "__main__":

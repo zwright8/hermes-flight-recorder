@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -139,6 +139,23 @@ _REQUIRED_VALUES: dict[str, dict[str, Any]] = {
     "trainer_preflight": {"passed": True, "readiness": "ready"},
 }
 
+# Control-plane artifacts should remain compact and auditable. These ceilings
+# leave generous headroom over the committed closed-loop corpus while bounding
+# memory, disk, descriptor traversal, and adversarial reference expansion.
+_MAX_SEMANTIC_SNAPSHOT_FILE_BYTES = 4 * 1024 * 1024
+_MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES = 16 * 1024 * 1024
+_MAX_SEMANTIC_SNAPSHOT_FILES = 512
+_MAX_SEMANTIC_SNAPSHOT_DIRECTORIES = 128
+_MAX_SEMANTIC_SNAPSHOT_DEPTH = 24
+_MAX_SEMANTIC_SNAPSHOT_REFERENCES = 4096
+_MAX_SEMANTIC_SNAPSHOT_DIRECTORY_ENTRIES = 1024
+_MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH = 64
+_MAX_SEMANTIC_SNAPSHOT_JSON_NODES = 65536
+_MAX_SEMANTIC_SNAPSHOT_REFERENCE_CHARS = 4096
+_MAX_SEMANTIC_SNAPSHOT_REFERENCE_COMPONENTS = 64
+_MAX_SEMANTIC_SNAPSHOT_REFERENCE_RESOLUTION_STEPS = 65536
+_MAX_SEMANTIC_SNAPSHOT_BOUNDARY_EXPANSIONS = 4
+
 
 @dataclass(frozen=True)
 class _FileAttestation:
@@ -159,6 +176,85 @@ class _CapturedDirectoryTree:
     root: tuple[int, ...]
     directories: tuple[tuple[str, tuple[int, ...]], ...]
     files: tuple[tuple[str, _FileAttestation], ...]
+    referenced_path_count: int = 0
+
+
+@dataclass
+class _SnapshotResourceBudget:
+    files: set[str] = field(default_factory=set)
+    directories: set[str] = field(default_factory=lambda: {"."})
+    aggregate_bytes: int = 0
+    referenced_path_count: int = 0
+    directory_entry_count: int = 0
+    read_bytes: int = 0
+    reference_resolution_steps: int = 0
+
+    def reserve_file(self, relative: PurePosixPath, size_bytes: int) -> bool:
+        if not _is_safe_snapshot_relative_path(relative.as_posix()):
+            return False
+        key = relative.as_posix()
+        if key in self.files:
+            return True
+        if size_bytes < 0 or size_bytes > _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES:
+            return False
+        if len(self.files) + 1 > _MAX_SEMANTIC_SNAPSHOT_FILES:
+            return False
+        if self.aggregate_bytes + size_bytes > _MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES:
+            return False
+        if not self.reserve_directory(relative.parent):
+            return False
+        self.files.add(key)
+        self.aggregate_bytes += size_bytes
+        return True
+
+    def reserve_directory(self, relative: PurePosixPath) -> bool:
+        if not _is_safe_snapshot_relative_path(relative.as_posix(), allow_current=True):
+            return False
+        normalized = relative.as_posix()
+        if normalized in {"", "."}:
+            return True
+        if len(relative.parts) > _MAX_SEMANTIC_SNAPSHOT_DEPTH:
+            return False
+        pending = []
+        current = relative
+        while current != PurePosixPath("."):
+            key = current.as_posix()
+            if key in self.directories:
+                break
+            pending.append(key)
+            current = current.parent
+        if len(self.directories) + len(pending) > _MAX_SEMANTIC_SNAPSHOT_DIRECTORIES:
+            return False
+        self.directories.update(pending)
+        return True
+
+    def record_reference(self) -> bool:
+        if self.referenced_path_count + 1 > _MAX_SEMANTIC_SNAPSHOT_REFERENCES:
+            return False
+        self.referenced_path_count += 1
+        return True
+
+    def record_directory_entry(self) -> bool:
+        if self.directory_entry_count + 1 > _MAX_SEMANTIC_SNAPSHOT_DIRECTORY_ENTRIES:
+            return False
+        self.directory_entry_count += 1
+        return True
+
+    def reserve_read(self, size_bytes: int) -> bool:
+        if size_bytes < 0 or self.read_bytes + size_bytes > _MAX_SEMANTIC_SNAPSHOT_TOTAL_BYTES:
+            return False
+        self.read_bytes += size_bytes
+        return True
+
+    def reserve_reference_resolution(self, component_count: int) -> bool:
+        if (
+            component_count < 0
+            or self.reference_resolution_steps + component_count
+            > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_RESOLUTION_STEPS
+        ):
+            return False
+        self.reference_resolution_steps += component_count
+        return True
 
 
 @dataclass(frozen=True)
@@ -261,10 +357,18 @@ def inspect_json_source(
     parse_valid = False
     if before is not None:
         try:
+            if not _json_bytes_within_lexical_budgets(before.content):
+                raise ValueError("JSON lexical resource budget exceeded")
             raw = json.loads(before.content.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (
+            MemoryError,
+            RecursionError,
+            UnicodeDecodeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
             raw = None
-        if isinstance(raw, dict):
+        if isinstance(raw, dict) and _json_structure_within_resource_budgets(raw):
             payload = raw
             parse_valid = True
 
@@ -272,7 +376,7 @@ def inspect_json_source(
     if parse_valid:
         try:
             schema_valid = bool(check_schema_contract(payload, name_or_id=schema_name).get("passed"))
-        except (SchemaRegistryError, TypeError, ValueError):
+        except (MemoryError, RecursionError, SchemaRegistryError, TypeError, ValueError):
             schema_valid = False
 
     semantic_valid = not require_semantics
@@ -298,9 +402,11 @@ def inspect_json_source(
     after = _attest_regular_file(path) if before is not None else None
     stable = before is not None and before == after
     if private_snapshot is not None:
-        stable = stable and private_snapshot.tree == _recapture_private_semantic_snapshot(
-            private_snapshot
-        )
+        try:
+            recaptured_tree = _recapture_private_semantic_snapshot(private_snapshot)
+        except (MemoryError, RecursionError):
+            recaptured_tree = None
+        stable = stable and private_snapshot.tree == recaptured_tree
     semantic_valid = stable and semantic_valid
     return {
         "path": path,
@@ -333,6 +439,88 @@ def _path_is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _is_safe_snapshot_relative_path(value: str, *, allow_current: bool = False) -> bool:
+    if (
+        not value
+        or len(value) > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_CHARS
+        or value.count("/") + 1 > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_COMPONENTS
+        or "\\" in value
+        or "\x00" in value
+    ):
+        return False
+    if value == ".":
+        return allow_current
+    path = PurePosixPath(value)
+    return (
+        not path.is_absolute()
+        and ".." not in path.parts
+        and len(path.parts) <= _MAX_SEMANTIC_SNAPSHOT_DEPTH + 1
+        and posixpath.normpath(value) == value
+    )
+
+
+def _json_structure_within_resource_budgets(value: Any) -> bool:
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    node_count = 0
+    try:
+        while stack:
+            item, depth = stack.pop()
+            node_count += 1
+            if (
+                node_count > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES
+                or depth > _MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH
+            ):
+                return False
+            if isinstance(item, dict):
+                if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                    return False
+                stack.extend((child, depth + 1) for child in item.values())
+            elif isinstance(item, list):
+                if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                    return False
+                stack.extend((child, depth + 1) for child in item)
+    except (MemoryError, RecursionError):
+        return False
+    return True
+
+
+def _json_bytes_within_lexical_budgets(content: bytes) -> bool:
+    depth = 0
+    structural_node_count = 1
+    in_string = False
+    escaped = False
+    for byte in content:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:
+                escaped = True
+            elif byte == 0x22:
+                in_string = False
+            continue
+        if byte == 0x22:
+            in_string = True
+        elif byte in {0x5B, 0x7B}:
+            depth += 1
+            structural_node_count += 1
+            if depth > _MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH:
+                return False
+        elif byte in {0x5D, 0x7D}:
+            depth -= 1
+        elif byte == 0x2C:
+            structural_node_count += 1
+        if structural_node_count > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+            return False
+    return True
+
+
+def _looks_like_json(content: bytes) -> bool:
+    for byte in content:
+        if byte not in {0x09, 0x0A, 0x0D, 0x20}:
+            return byte in {0x5B, 0x7B}
+    return False
+
+
 def _capture_private_semantic_snapshot(
     path: Path,
     payload: dict[str, Any],
@@ -348,11 +536,17 @@ def _capture_private_semantic_snapshot(
         source_attestation = _attest_regular_file_at(parent_descriptor, absolute_path.name)
         if source_attestation is None:
             return None
+        capture_budget = _SnapshotResourceBudget()
+        if not capture_budget.reserve_read(len(source_attestation.content)):
+            return None
 
         repository_root = _nearest_repository_root(parent_path)
         allowed_root = _semantic_snapshot_allowed_root(parent_path, repository_root)
         try:
-            maximum_parent_depth = len(parent_path.relative_to(allowed_root).parts)
+            maximum_parent_depth = min(
+                len(parent_path.relative_to(allowed_root).parts),
+                _MAX_SEMANTIC_SNAPSHOT_DEPTH,
+            )
         except ValueError:
             return None
         repository_boundary = repository_root is not None
@@ -377,6 +571,7 @@ def _capture_private_semantic_snapshot(
             boundary_descriptor = next_descriptor
             boundary_path = next_boundary
 
+        boundary_expansion_count = 0
         while True:
             if boundary_path == Path(boundary_path.anchor):
                 return None
@@ -390,10 +585,13 @@ def _capture_private_semantic_snapshot(
                     source_relative_path,
                     repository_boundary=repository_boundary,
                     allow_parent_expansion=parent_depth < maximum_parent_depth,
+                    budget=capture_budget,
                 )
             except _SnapshotBoundaryExpansion as expansion:
+                boundary_expansion_count += 1
                 if (
                     expansion.parent_levels <= 0
+                    or boundary_expansion_count > _MAX_SEMANTIC_SNAPSHOT_BOUNDARY_EXPANSIONS
                     or parent_depth + expansion.parent_levels > maximum_parent_depth
                 ):
                     return None
@@ -420,7 +618,7 @@ def _capture_private_semantic_snapshot(
             tree=tree,
             repository_boundary=repository_boundary,
         )
-    except (OSError, UnicodeError, ValueError):
+    except (MemoryError, OSError, RecursionError, UnicodeError, ValueError):
         return None
     finally:
         if boundary_descriptor is not None:
@@ -429,19 +627,45 @@ def _capture_private_semantic_snapshot(
 
 
 def _required_snapshot_parent_depth(value: Any) -> int:
-    if isinstance(value, dict):
-        return max((_required_snapshot_parent_depth(item) for item in value.values()), default=0)
-    if isinstance(value, list):
-        return max((_required_snapshot_parent_depth(item) for item in value), default=0)
-    if not isinstance(value, str) or "\\" in value or "\x00" in value:
-        return 0
-    parts = PurePosixPath(value).parts
-    depth = 0
-    for part in parts:
-        if part != "..":
-            break
-        depth += 1
-    return depth
+    maximum_parent_depth = 0
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    node_count = 0
+    while stack:
+        item, depth = stack.pop()
+        node_count += 1
+        if node_count > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+            raise ValueError("semantic snapshot JSON node budget exceeded")
+        if depth > _MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH:
+            raise ValueError("semantic snapshot JSON depth budget exceeded")
+        if isinstance(item, dict):
+            if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                raise ValueError("semantic snapshot JSON node budget exceeded")
+            stack.extend((child, depth + 1) for child in item.values())
+            continue
+        if isinstance(item, list):
+            if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                raise ValueError("semantic snapshot JSON node budget exceeded")
+            stack.extend((child, depth + 1) for child in item)
+            continue
+        if not isinstance(item, str) or "\\" in item or "\x00" in item:
+            continue
+        parent_depth = 0
+        offset = 0
+        item_length = len(item)
+        while True:
+            remaining = item_length - offset
+            if remaining == 2 and item.startswith("..", offset):
+                step = 2
+            elif item.startswith("../", offset):
+                step = 3
+            else:
+                break
+            parent_depth += 1
+            offset += step
+            if parent_depth > _MAX_SEMANTIC_SNAPSHOT_DEPTH:
+                raise ValueError("semantic snapshot parent-depth budget exceeded")
+        maximum_parent_depth = max(maximum_parent_depth, parent_depth)
+    return maximum_parent_depth
 
 
 def _semantic_snapshot_parent_depth(
@@ -488,6 +712,14 @@ def _semantic_snapshot_allowed_root(parent: Path, repository_root: Path | None) 
 def _materialize_private_semantic_snapshot(
     snapshot: _PrivateSemanticSnapshot,
 ) -> Iterator[tuple[Path, Path]]:
+    source_relative = snapshot.source_relative_path.as_posix()
+    tree_source_attestation = dict(snapshot.tree.files).get(source_relative)
+    if (
+        not _is_safe_snapshot_relative_path(source_relative)
+        or tree_source_attestation != snapshot.source_attestation
+        or not _captured_tree_within_resource_budgets(snapshot.tree)
+    ):
+        raise ValueError("semantic snapshot exceeds resource budgets")
     with tempfile.TemporaryDirectory(prefix="hfr-source-snapshot-") as temp_value:
         snapshot_root = Path(temp_value) / "tree"
         snapshot_root.mkdir(mode=0o700)
@@ -514,6 +746,35 @@ def _materialize_private_semantic_snapshot(
                     pass
 
 
+def _captured_tree_within_resource_budgets(tree: _CapturedDirectoryTree) -> bool:
+    if not 0 <= tree.referenced_path_count <= _MAX_SEMANTIC_SNAPSHOT_REFERENCES:
+        return False
+    if len(tree.directories) + len(tree.files) > _MAX_SEMANTIC_SNAPSHOT_DIRECTORY_ENTRIES:
+        return False
+    budget = _SnapshotResourceBudget()
+    budget.referenced_path_count = tree.referenced_path_count
+    seen_directories: set[str] = set()
+    for relative, _signature in tree.directories:
+        if relative in seen_directories:
+            return False
+        seen_directories.add(relative)
+        if not budget.reserve_directory(PurePosixPath(relative)):
+            return False
+    seen_files: set[str] = set()
+    for relative, attestation in tree.files:
+        if relative in seen_files:
+            return False
+        seen_files.add(relative)
+        size_bytes = attestation.metadata[2]
+        if (
+            size_bytes != len(attestation.content)
+            or hashlib.sha256(attestation.content).hexdigest() != attestation.sha256
+            or not budget.reserve_file(PurePosixPath(relative), size_bytes)
+        ):
+            return False
+    return True
+
+
 def _validate_private_semantic_snapshot(snapshot: _PrivateSemanticSnapshot, role: str) -> bool:
     try:
         with _materialize_private_semantic_snapshot(snapshot) as (source_path, snapshot_root):
@@ -524,19 +785,22 @@ def _validate_private_semantic_snapshot(snapshot: _PrivateSemanticSnapshot, role
             finally:
                 _ACTIVE_SEMANTIC_INSPECTION_CACHE.reset(cache_token)
                 _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.reset(token)
-    except (OSError, UnicodeError, ValueError):
+    except (MemoryError, OSError, RecursionError, UnicodeError, ValueError):
         return False
 
 
 def _attest_regular_file(path: Path) -> _FileAttestation | None:
     """Read and attest one pathname-bound regular file without following its leaf."""
-    if path_has_symlink_component(path, include_leaf=True):
-        return None
     try:
+        if path_has_symlink_component(path, include_leaf=True):
+            return None
         pathname_before = path.stat(follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         return None
-    if not stat.S_ISREG(pathname_before.st_mode):
+    if (
+        not stat.S_ISREG(pathname_before.st_mode)
+        or pathname_before.st_size > _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES
+    ):
         return None
 
     flags = (
@@ -547,21 +811,29 @@ def _attest_regular_file(path: Path) -> _FileAttestation | None:
     )
     try:
         descriptor = os.open(path, flags)
-    except OSError:
+    except (MemoryError, OSError):
         return None
 
     chunks: list[bytes] = []
     try:
         before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode):
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_size > _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES
+        ):
             return None
+        captured_bytes = 0
         while True:
-            chunk = os.read(descriptor, 1024 * 1024)
+            remaining = _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES - captured_bytes
+            chunk = os.read(descriptor, min(1024 * 1024, remaining + 1))
             if not chunk:
                 break
             chunks.append(chunk)
+            captured_bytes += len(chunk)
+            if captured_bytes > _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES:
+                return None
         after = os.fstat(descriptor)
-    except OSError:
+    except (MemoryError, OSError):
         return None
     finally:
         os.close(descriptor)
@@ -570,36 +842,49 @@ def _attest_regular_file(path: Path) -> _FileAttestation | None:
         return None
     if _file_stat_signature(before) != _file_stat_signature(after):
         return None
-    if path_has_symlink_component(path, include_leaf=True):
-        return None
     try:
+        if path_has_symlink_component(path, include_leaf=True):
+            return None
         pathname_stat = path.stat(follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         return None
     if _file_stat_signature(after) != _file_stat_signature(pathname_stat):
         return None
 
-    content = b"".join(chunks)
-    return _FileAttestation(
-        identity=(after.st_dev, after.st_ino),
-        metadata=(
-            after.st_mode,
-            after.st_nlink,
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ctime_ns,
-        ),
-        sha256=hashlib.sha256(content).hexdigest(),
-        content=content,
-    )
+    try:
+        content = b"".join(chunks)
+        return _FileAttestation(
+            identity=(after.st_dev, after.st_ino),
+            metadata=(
+                after.st_mode,
+                after.st_nlink,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            ),
+            sha256=hashlib.sha256(content).hexdigest(),
+            content=content,
+        )
+    except MemoryError:
+        return None
 
 
-def _attest_regular_file_at(directory_descriptor: int, name: str) -> _FileAttestation | None:
+def _attest_regular_file_at(
+    directory_descriptor: int,
+    name: str,
+    *,
+    max_bytes: int = _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES,
+) -> _FileAttestation | None:
     try:
         pathname_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         return None
-    if not stat.S_ISREG(pathname_before.st_mode):
+    effective_max_bytes = min(max_bytes, _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES)
+    if (
+        effective_max_bytes < 0
+        or not stat.S_ISREG(pathname_before.st_mode)
+        or pathname_before.st_size > effective_max_bytes
+    ):
         return None
 
     flags = (
@@ -610,28 +895,33 @@ def _attest_regular_file_at(directory_descriptor: int, name: str) -> _FileAttest
     )
     try:
         descriptor = os.open(name, flags, dir_fd=directory_descriptor)
-    except OSError:
+    except (MemoryError, OSError):
         return None
 
     chunks: list[bytes] = []
     try:
         before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode):
+        if not stat.S_ISREG(before.st_mode) or before.st_size > effective_max_bytes:
             return None
+        captured_bytes = 0
         while True:
-            chunk = os.read(descriptor, 1024 * 1024)
+            remaining = effective_max_bytes - captured_bytes
+            chunk = os.read(descriptor, min(1024 * 1024, remaining + 1))
             if not chunk:
                 break
             chunks.append(chunk)
+            captured_bytes += len(chunk)
+            if captured_bytes > effective_max_bytes:
+                return None
         after = os.fstat(descriptor)
-    except OSError:
+    except (MemoryError, OSError):
         return None
     finally:
         os.close(descriptor)
 
     try:
         pathname_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         return None
     if not (
         _file_stat_signature(pathname_before)
@@ -641,19 +931,22 @@ def _attest_regular_file_at(directory_descriptor: int, name: str) -> _FileAttest
     ):
         return None
 
-    content = b"".join(chunks)
-    return _FileAttestation(
-        identity=(after.st_dev, after.st_ino),
-        metadata=(
-            after.st_mode,
-            after.st_nlink,
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ctime_ns,
-        ),
-        sha256=hashlib.sha256(content).hexdigest(),
-        content=content,
-    )
+    try:
+        content = b"".join(chunks)
+        return _FileAttestation(
+            identity=(after.st_dev, after.st_ino),
+            metadata=(
+                after.st_mode,
+                after.st_nlink,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            ),
+            sha256=hashlib.sha256(content).hexdigest(),
+            content=content,
+        )
+    except MemoryError:
+        return None
 
 
 def _directory_open_flags() -> int:
@@ -667,19 +960,19 @@ def _directory_open_flags() -> int:
 
 
 def _open_stable_directory(path: Path) -> int | None:
-    if path_has_symlink_component(path, include_leaf=True):
-        return None
     try:
+        if path_has_symlink_component(path, include_leaf=True):
+            return None
         pathname_before = path.stat(follow_symlinks=False)
         if not stat.S_ISDIR(pathname_before.st_mode):
             return None
         descriptor = os.open(path, _directory_open_flags())
-    except OSError:
+    except (MemoryError, OSError):
         return None
     try:
         opened = os.fstat(descriptor)
         pathname_after = path.stat(follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         os.close(descriptor)
         return None
     if not (
@@ -700,7 +993,7 @@ def _open_child_directory(directory_descriptor: int, name: str) -> int | None:
         descriptor = os.open(name, _directory_open_flags(), dir_fd=directory_descriptor)
         opened = os.fstat(descriptor)
         pathname_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-    except OSError:
+    except (MemoryError, OSError):
         if "descriptor" in locals():
             os.close(descriptor)
         return None
@@ -715,12 +1008,12 @@ def _open_child_directory(directory_descriptor: int, name: str) -> int | None:
 
 
 def _directory_descriptor_matches_path(descriptor: int, path: Path) -> bool:
-    if path_has_symlink_component(path, include_leaf=True):
-        return False
     try:
+        if path_has_symlink_component(path, include_leaf=True):
+            return False
         pathname_stat = path.stat(follow_symlinks=False)
         descriptor_stat = os.fstat(descriptor)
-    except OSError:
+    except (MemoryError, OSError):
         return False
     return _file_stat_signature(pathname_stat) == _file_stat_signature(descriptor_stat)
 
@@ -732,13 +1025,20 @@ def _recapture_private_semantic_snapshot(
     if descriptor is None:
         return None
     try:
+        if not _captured_tree_within_resource_budgets(snapshot.tree):
+            return None
         try:
             root_stat = os.fstat(descriptor)
-        except OSError:
+        except (MemoryError, OSError):
             return None
+        budget = _SnapshotResourceBudget()
+        budget.referenced_path_count = snapshot.tree.referenced_path_count
         directories: list[tuple[str, tuple[int, ...]]] = []
         for relative, expected_signature in snapshot.tree.directories:
-            directory_stat = _relative_path_stat(descriptor, PurePosixPath(relative))
+            relative_path = PurePosixPath(relative)
+            if not budget.reserve_directory(relative_path):
+                return None
+            directory_stat = _relative_path_stat(descriptor, relative_path)
             if directory_stat is None or not stat.S_ISDIR(directory_stat.st_mode):
                 return None
             signature = (
@@ -749,7 +1049,19 @@ def _recapture_private_semantic_snapshot(
             directories.append((relative, signature))
         files: list[tuple[str, _FileAttestation]] = []
         for relative, _expected_attestation in snapshot.tree.files:
-            attestation = _attest_relative_file(descriptor, PurePosixPath(relative))
+            relative_path = PurePosixPath(relative)
+            file_stat = _relative_path_stat(descriptor, relative_path)
+            if (
+                file_stat is None
+                or not budget.reserve_file(relative_path, file_stat.st_size)
+                or not budget.reserve_read(file_stat.st_size)
+            ):
+                return None
+            attestation = _attest_relative_file(
+                descriptor,
+                relative_path,
+                max_bytes=file_stat.st_size,
+            )
             if attestation is None:
                 return None
             files.append((relative, attestation))
@@ -757,7 +1069,10 @@ def _recapture_private_semantic_snapshot(
             root=_directory_identity(root_stat),
             directories=tuple(directories),
             files=tuple(files),
+            referenced_path_count=snapshot.tree.referenced_path_count,
         )
+    except (MemoryError, RecursionError):
+        return None
     finally:
         os.close(descriptor)
 
@@ -768,17 +1083,31 @@ def _capture_referenced_tree_fd(
     *,
     repository_boundary: bool,
     allow_parent_expansion: bool = False,
+    budget: _SnapshotResourceBudget | None = None,
 ) -> _CapturedDirectoryTree | None:
     files: dict[str, _FileAttestation] = {}
     directories: dict[str, tuple[int, ...]] = {}
     pending_json: list[PurePosixPath] = []
     scanned_json: set[str] = set()
+    captured_directory_roots: set[PurePosixPath] = set()
+    budget = budget or _SnapshotResourceBudget()
 
     def add_file(relative: PurePosixPath) -> bool:
         key = relative.as_posix()
         if key in files:
             return True
-        attestation = _attest_relative_file(root_descriptor, relative)
+        file_stat = _relative_path_stat(root_descriptor, relative)
+        if file_stat is None or not stat.S_ISREG(file_stat.st_mode):
+            return False
+        if not budget.reserve_file(relative, file_stat.st_size):
+            return False
+        if not budget.reserve_read(file_stat.st_size):
+            return False
+        attestation = _attest_relative_file(
+            root_descriptor,
+            relative,
+            max_bytes=file_stat.st_size,
+        )
         if attestation is None:
             return False
         files[key] = attestation
@@ -786,9 +1115,28 @@ def _capture_referenced_tree_fd(
         return True
 
     def add_directory(relative: PurePosixPath) -> bool:
-        captured = _capture_relative_directory(root_descriptor, relative)
+        if any(relative == root or relative.is_relative_to(root) for root in captured_directory_roots):
+            return True
+        if not budget.reserve_directory(relative):
+            return False
+        covered_descendants = {
+            root.relative_to(relative)
+            for root in captured_directory_roots
+            if root != relative and root.is_relative_to(relative)
+        }
+        captured = _capture_relative_directory(
+            root_descriptor,
+            relative,
+            budget=budget,
+            skip_relative_subtrees=covered_descendants,
+        )
         if captured is None:
             return False
+        covered_roots = {
+            root for root in captured_directory_roots if root.is_relative_to(relative)
+        }
+        captured_directory_roots.difference_update(covered_roots)
+        captured_directory_roots.add(relative)
         prefix = "" if relative == PurePosixPath(".") else relative.as_posix()
         if prefix:
             directories[prefix] = captured.root
@@ -814,6 +1162,8 @@ def _capture_referenced_tree_fd(
         if _relative_path_kind(root_descriptor, PurePosixPath(".git")) == "directory":
             marker_stat = _relative_path_stat(root_descriptor, PurePosixPath(".git"))
             if marker_stat is not None:
+                if not budget.reserve_directory(PurePosixPath(".git")):
+                    return None
                 directories[".git"] = _directory_identity(marker_stat)
 
     while pending_json:
@@ -823,10 +1173,22 @@ def _capture_referenced_tree_fd(
             continue
         scanned_json.add(current_key)
         attestation = files[current_key]
-        try:
-            payload = json.loads(attestation.content.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        if not _looks_like_json(attestation.content):
             continue
+        try:
+            if not _json_bytes_within_lexical_budgets(attestation.content):
+                return None
+            payload = json.loads(attestation.content.decode("utf-8"))
+        except (
+            MemoryError,
+            RecursionError,
+            UnicodeDecodeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
+            continue
+        if not _json_structure_within_resource_budgets(payload):
+            return None
         if isinstance(payload, dict) and payload.get("schema_version") == "hfr.rl.manifest.v1":
             split_directory = _normalized_relative_path(current.parent, "splits")
             if (
@@ -836,6 +1198,8 @@ def _capture_referenced_tree_fd(
             ):
                 return None
         for raw_value in _iter_referenced_path_values(payload):
+            if not budget.record_reference():
+                return None
             candidate = _referenced_relative_path(
                 root_descriptor,
                 current.parent,
@@ -843,10 +1207,11 @@ def _capture_referenced_tree_fd(
                 repository_boundary=repository_boundary,
                 allow_parent_expansion=allow_parent_expansion,
                 admitted_top_level=admitted_top_level,
+                budget=budget,
             )
             if candidate is None:
                 continue
-            kind = _relative_path_kind(root_descriptor, candidate)
+            kind = _budgeted_relative_path_kind(root_descriptor, candidate, budget)
             if kind == "file":
                 if not add_file(candidate):
                     return None
@@ -861,6 +1226,7 @@ def _capture_referenced_tree_fd(
         root=_directory_identity(root_stat),
         directories=tuple(sorted(directories.items())),
         files=tuple(sorted(files.items())),
+        referenced_path_count=budget.referenced_path_count,
     )
 
 
@@ -884,22 +1250,31 @@ _PATH_MAPPING_FIELD_NAMES = {"artifacts", "files", "outputs"}
 
 
 def _iter_referenced_path_values(value: Any, *, field_name: str = "") -> Iterator[str]:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            normalized_key = key.lower() if isinstance(key, str) else ""
-            if isinstance(item, str) and (
-                _is_path_field_name(normalized_key)
-                or field_name in _PATH_MAPPING_FIELD_NAMES
-            ):
+    stack: list[tuple[Any, str, bool, int]] = [(value, field_name, False, 0)]
+    node_count = 0
+    while stack:
+        item, current_field, path_mapping, depth = stack.pop()
+        node_count += 1
+        if node_count > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+            raise ValueError("semantic snapshot JSON node budget exceeded")
+        if depth > _MAX_SEMANTIC_SNAPSHOT_JSON_DEPTH:
+            raise ValueError("semantic snapshot JSON depth budget exceeded")
+        if isinstance(item, str):
+            if _is_path_field_name(current_field) or path_mapping:
                 yield item
-            elif isinstance(item, (dict, list)):
-                yield from _iter_referenced_path_values(item, field_name=normalized_key)
-    elif isinstance(value, list):
-        for item in value:
-            if isinstance(item, (dict, list)):
-                yield from _iter_referenced_path_values(item, field_name=field_name)
-            elif isinstance(item, str) and _is_path_field_name(field_name):
-                yield item
+            continue
+        if isinstance(item, dict):
+            child_path_mapping = current_field in _PATH_MAPPING_FIELD_NAMES
+            if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                raise ValueError("semantic snapshot JSON node budget exceeded")
+            for key, child in item.items():
+                normalized_key = key.lower() if isinstance(key, str) else ""
+                stack.append((child, normalized_key, child_path_mapping, depth + 1))
+            continue
+        if isinstance(item, list):
+            if node_count + len(stack) + len(item) > _MAX_SEMANTIC_SNAPSHOT_JSON_NODES:
+                raise ValueError("semantic snapshot JSON node budget exceeded")
+            stack.extend((child, current_field, path_mapping, depth + 1) for child in item)
 
 
 def _is_path_field_name(field_name: str) -> bool:
@@ -920,9 +1295,17 @@ def _referenced_relative_path(
     repository_boundary: bool,
     allow_parent_expansion: bool,
     admitted_top_level: str,
+    budget: _SnapshotResourceBudget,
 ) -> PurePosixPath | None:
     if raw_value.startswith("<redacted:") and raw_value.endswith(">"):
+        if len(raw_value) > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_CHARS + len("<redacted:>"):
+            raise ValueError("semantic snapshot reference path budget exceeded")
         raw_value = raw_value[len("<redacted:") : -1]
+    if (
+        len(raw_value) > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_CHARS
+        or raw_value.count("/") + 1 > _MAX_SEMANTIC_SNAPSHOT_REFERENCE_COMPONENTS
+    ):
+        raise ValueError("semantic snapshot reference path budget exceeded")
     if (
         not raw_value
         or raw_value in {".", ".."}
@@ -958,7 +1341,7 @@ def _referenced_relative_path(
     if (
         source_candidate is not None
         and not source_candidate_excluded
-        and _relative_path_kind(root_descriptor, source_candidate)
+        and _budgeted_relative_path_kind(root_descriptor, source_candidate, budget)
     ):
         return source_candidate
     for index in range(1, len(raw_parts)):
@@ -973,7 +1356,7 @@ def _referenced_relative_path(
                 repository_boundary=repository_boundary,
                 admitted_top_level=admitted_top_level,
             )
-            and _relative_path_kind(root_descriptor, suffix_candidate)
+            and _budgeted_relative_path_kind(root_descriptor, suffix_candidate, budget)
         ):
             return suffix_candidate
     if repository_boundary:
@@ -985,10 +1368,20 @@ def _referenced_relative_path(
                 repository_boundary=repository_boundary,
                 admitted_top_level=admitted_top_level,
             )
-            and _relative_path_kind(root_descriptor, repo_candidate)
+            and _budgeted_relative_path_kind(root_descriptor, repo_candidate, budget)
         ):
             return repo_candidate
     return None
+
+
+def _budgeted_relative_path_kind(
+    root_descriptor: int,
+    relative: PurePosixPath,
+    budget: _SnapshotResourceBudget,
+) -> str | None:
+    if not budget.reserve_reference_resolution(len(relative.parts)):
+        raise ValueError("semantic snapshot reference resolution budget exceeded")
+    return _relative_path_kind(root_descriptor, relative)
 
 
 def _repository_snapshot_candidate_excluded(
@@ -1009,18 +1402,28 @@ def _normalized_relative_path(base: PurePosixPath, raw_value: str) -> PurePosixP
     normalized = posixpath.normpath((base / raw_value).as_posix())
     if normalized == "." or normalized == ".." or normalized.startswith("../"):
         return None
+    if not _is_safe_snapshot_relative_path(normalized):
+        return None
     return PurePosixPath(normalized)
 
 
 def _capture_relative_directory(
     root_descriptor: int,
     relative: PurePosixPath,
+    *,
+    budget: _SnapshotResourceBudget,
+    skip_relative_subtrees: set[PurePosixPath],
 ) -> _CapturedDirectoryTree | None:
     descriptor = _open_relative_directory(root_descriptor, relative)
     if descriptor is None:
         return None
     try:
-        return _capture_directory_tree_fd(descriptor)
+        return _capture_directory_tree_fd(
+            descriptor,
+            budget=budget,
+            path_prefix=relative,
+            skip_relative_subtrees=skip_relative_subtrees,
+        )
     finally:
         os.close(descriptor)
 
@@ -1028,12 +1431,18 @@ def _capture_relative_directory(
 def _attest_relative_file(
     root_descriptor: int,
     relative: PurePosixPath,
+    *,
+    max_bytes: int = _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES,
 ) -> _FileAttestation | None:
     parent_descriptor = _open_relative_directory(root_descriptor, relative.parent)
     if parent_descriptor is None:
         return None
     try:
-        return _attest_regular_file_at(parent_descriptor, relative.name)
+        return _attest_regular_file_at(
+            parent_descriptor,
+            relative.name,
+            max_bytes=max_bytes,
+        )
     finally:
         os.close(parent_descriptor)
 
@@ -1095,7 +1504,15 @@ def _directory_identity(directory_stat: os.stat_result) -> tuple[int, ...]:
     return (directory_stat.st_dev, directory_stat.st_ino, directory_stat.st_mode)
 
 
-def _capture_directory_tree_fd(root_descriptor: int) -> _CapturedDirectoryTree | None:
+def _capture_directory_tree_fd(
+    root_descriptor: int,
+    *,
+    budget: _SnapshotResourceBudget,
+    path_prefix: PurePosixPath,
+    reject_special: bool = False,
+    skip_excluded_directories: bool = True,
+    skip_relative_subtrees: set[PurePosixPath] | None = None,
+) -> _CapturedDirectoryTree | None:
     directories: list[tuple[str, tuple[int, ...]]] = []
     files: list[tuple[str, _FileAttestation]] = []
 
@@ -1104,19 +1521,30 @@ def _capture_directory_tree_fd(root_descriptor: int) -> _CapturedDirectoryTree |
             directory_before = os.fstat(directory_descriptor)
             if not stat.S_ISDIR(directory_before.st_mode):
                 return False
-            names = sorted(os.listdir(directory_descriptor))
         except (OSError, UnicodeError):
+            return False
+        names = _bounded_directory_names(directory_descriptor, budget)
+        if names is None:
             return False
 
         for name in names:
             relative = (prefix / name).as_posix()
+            relative_path = prefix / name
+            if skip_relative_subtrees and any(
+                relative_path == subtree or relative_path.is_relative_to(subtree)
+                for subtree in skip_relative_subtrees
+            ):
+                continue
             try:
                 entry_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
             except OSError:
                 return False
             if stat.S_ISDIR(entry_before.st_mode):
-                if name in _PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES:
+                if skip_excluded_directories and name in _PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES:
                     continue
+                budget_path = path_prefix / prefix / name
+                if not budget.reserve_directory(budget_path):
+                    return False
                 child_descriptor = _open_child_directory(directory_descriptor, name)
                 if child_descriptor is None:
                     return False
@@ -1127,11 +1555,22 @@ def _capture_directory_tree_fd(root_descriptor: int) -> _CapturedDirectoryTree |
                 finally:
                     os.close(child_descriptor)
             elif stat.S_ISREG(entry_before.st_mode):
-                file_attestation = _attest_regular_file_at(directory_descriptor, name)
+                budget_path = path_prefix / prefix / name
+                if not budget.reserve_file(budget_path, entry_before.st_size):
+                    return False
+                if not budget.reserve_read(entry_before.st_size):
+                    return False
+                file_attestation = _attest_regular_file_at(
+                    directory_descriptor,
+                    name,
+                    max_bytes=entry_before.st_size,
+                )
                 if file_attestation is None:
                     return False
                 files.append((relative, file_attestation))
             else:
+                if reject_special:
+                    return False
                 # Never reproduce links, sockets, devices, or FIFOs in the
                 # private tree. A validator that references one consequently
                 # sees a missing artifact and fails closed; unrelated special
@@ -1169,6 +1608,26 @@ def _capture_directory_tree_fd(root_descriptor: int) -> _CapturedDirectoryTree |
     )
 
 
+def _bounded_directory_names(
+    directory_descriptor: int,
+    budget: _SnapshotResourceBudget,
+) -> list[str] | None:
+    names: list[str] = []
+    try:
+        with os.scandir(directory_descriptor) as entries:
+            for entry in entries:
+                if not budget.record_directory_entry():
+                    return None
+                names.append(entry.name)
+    except (MemoryError, OSError, UnicodeError):
+        return None
+    try:
+        names.sort()
+    except MemoryError:
+        return None
+    return names
+
+
 def _file_stat_signature(file_stat: os.stat_result) -> tuple[int, ...]:
     return (
         file_stat.st_dev,
@@ -1191,39 +1650,44 @@ def _attest_source_directory(path: Path) -> _DirectoryTreeAttestation | None:
 
 
 def _attest_source_directory_once(path: Path) -> _DirectoryTreeAttestation | None:
-    if path_has_symlink_component(path, include_leaf=True):
+    descriptor = _open_stable_directory(path)
+    if descriptor is None:
         return None
     try:
-        root_before = path.stat(follow_symlinks=False)
-        if not stat.S_ISDIR(root_before.st_mode):
-            return None
-        children = sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix())
-        entries: list[tuple[str, str, tuple[int, ...], str]] = []
-        for child in children:
-            relative = child.relative_to(path).as_posix()
-            child_stat = child.stat(follow_symlinks=False)
-            if stat.S_ISDIR(child_stat.st_mode):
-                entries.append((relative, "directory", _file_stat_signature(child_stat), ""))
-                continue
-            if not stat.S_ISREG(child_stat.st_mode):
-                return None
-            file_attestation = _attest_regular_file(child)
-            if file_attestation is None:
-                return None
-            entries.append(
-                (
-                    relative,
-                    "file",
-                    file_attestation.identity + file_attestation.metadata,
-                    file_attestation.sha256,
-                )
+        try:
+            tree = _capture_directory_tree_fd(
+                descriptor,
+                budget=_SnapshotResourceBudget(),
+                path_prefix=PurePosixPath("."),
+                reject_special=True,
+                skip_excluded_directories=False,
             )
-        root_after = path.stat(follow_symlinks=False)
-    except (OSError, UnicodeError, ValueError):
+            path_stable = _directory_descriptor_matches_path(descriptor, path)
+        except (MemoryError, RecursionError):
+            tree = None
+            path_stable = False
+    finally:
+        os.close(descriptor)
+    if tree is None or not path_stable:
         return None
-    if _file_stat_signature(root_before) != _file_stat_signature(root_after):
+    try:
+        entries = [
+            (relative, "directory", signature, "")
+            for relative, signature in tree.directories
+        ]
+        entries.extend(
+            (
+                relative,
+                "file",
+                attestation.identity + attestation.metadata,
+                attestation.sha256,
+            )
+            for relative, attestation in tree.files
+        )
+        entries.sort(key=lambda item: item[0])
+    except MemoryError:
         return None
-    return _DirectoryTreeAttestation(root=_file_stat_signature(root_after), entries=tuple(entries))
+    return _DirectoryTreeAttestation(root=tree.root, entries=tuple(entries))
 
 
 def _inspect_training_export(path: Path, *, require_semantics: bool) -> dict[str, Any]:
@@ -1312,7 +1776,16 @@ def _directory_contract_valid(path: Path, role: str) -> bool:
 
         validator = validate_promotion_archive if role == "promotion_archive" else validate_promotion_cards
         return not validator(path).errors
-    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError, TypeError, ValueError):
+    except (
+        MemoryError,
+        OSError,
+        RecursionError,
+        UnicodeError,
+        json.JSONDecodeError,
+        SchemaRegistryError,
+        TypeError,
+        ValueError,
+    ):
         return False
 
 
@@ -1321,7 +1794,16 @@ def _training_export_contract_valid(path: Path) -> bool:
         from .validation import validate_training_export
 
         return not validate_training_export(path).errors
-    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError, TypeError, ValueError):
+    except (
+        MemoryError,
+        OSError,
+        RecursionError,
+        UnicodeError,
+        json.JSONDecodeError,
+        SchemaRegistryError,
+        TypeError,
+        ValueError,
+    ):
         return False
 
 
@@ -1334,9 +1816,20 @@ def _semantic_contract_valid(path: Path, role: str) -> bool:
         try:
             from .gate_contract import summarize_gate_contract
 
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            content = path.read_bytes()
+            if not _json_bytes_within_lexical_budgets(content):
+                return False
+            payload = json.loads(content.decode("utf-8"))
             summary = summarize_gate_contract(payload)
-        except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError):
+        except (
+            MemoryError,
+            OSError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
             return False
         checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
         decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
@@ -1358,7 +1851,9 @@ def _semantic_contract_valid(path: Path, role: str) -> bool:
         ImportError,
         IndexError,
         KeyError,
+        MemoryError,
         OSError,
+        RecursionError,
         SchemaRegistryError,
         TypeError,
         UnicodeError,
