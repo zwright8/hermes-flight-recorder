@@ -29,6 +29,27 @@ SMOKE_SCRIPTS = (
 
 
 class PathHasSymlinkComponentTests(unittest.TestCase):
+    def test_invalid_path_is_treated_as_unsafe(self) -> None:
+        self.assertTrue(
+            path_has_symlink_component(Path("bad\x00path"), include_leaf=True)
+        )
+
+    def test_root_symlink_exception_is_limited_to_known_macos_system_paths(self) -> None:
+        with (
+            patch.object(path_safety_module.sys, "platform", "darwin"),
+            patch.object(Path, "resolve", return_value=Path("/private/var")),
+        ):
+            self.assertTrue(
+                path_safety_module._is_allowed_system_root_symlink(Path("/var"))
+            )
+            self.assertFalse(
+                path_safety_module._is_allowed_system_root_symlink(Path("/untrusted"))
+            )
+        with patch.object(path_safety_module.sys, "platform", "win32"):
+            self.assertFalse(
+                path_safety_module._is_allowed_system_root_symlink(Path("/var"))
+            )
+
     def test_relative_parent_walk_detects_sibling_symlink(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

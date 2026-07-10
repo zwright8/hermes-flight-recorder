@@ -7,8 +7,15 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
+import flightrecorder.heldout_manifest as heldout_manifest_module
 from flightrecorder.cli import main
+from flightrecorder.heldout_manifest import (
+    HeldoutManifestError,
+    build_heldout_manifest,
+    write_heldout_manifest,
+)
 from flightrecorder.schema_registry import check_schema_file
 from flightrecorder.validation import validate_artifacts
 
@@ -22,6 +29,601 @@ def run_cli(args):
 
 
 class HeldoutManifestTests(unittest.TestCase):
+    def test_heldout_manifest_rejects_output_aliases_to_suite_summary(self):
+        for alias_kind in ("exact", "hardlink"):
+            with (
+                self.subTest(alias_kind=alias_kind),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                root = Path(tmp)
+                suite = _suite_summary(
+                    root / "suite_summary.json",
+                    ["email_reply_completion"],
+                )
+                scenario = root / "scenarios" / "email_reply_completion.json"
+                suite_before = suite.read_bytes()
+                scenario_before = scenario.read_bytes()
+                if alias_kind == "exact":
+                    out = suite
+                else:
+                    out = root / "hardlinked_manifest.json"
+                    try:
+                        os.link(suite, out)
+                    except OSError as exc:
+                        self.skipTest(f"hardlink unavailable: {exc}")
+                out_before = out.read_bytes()
+
+                exit_code = None
+                try:
+                    run_cli(
+                        [
+                            "heldout-manifest",
+                            "--suite-summary",
+                            f"source={suite}",
+                            "--out",
+                            str(out),
+                        ]
+                    )
+                except SystemExit as exc:
+                    exit_code = exc.code
+
+                self.assertEqual(suite.read_bytes(), suite_before)
+                self.assertEqual(scenario.read_bytes(), scenario_before)
+                self.assertEqual(out.read_bytes(), out_before)
+                self.assertEqual(exit_code, 2)
+
+    def test_heldout_manifest_rejects_output_aliases_to_scenario_source(self):
+        for alias_kind in ("exact", "hardlink"):
+            with (
+                self.subTest(alias_kind=alias_kind),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                root = Path(tmp)
+                suite = _suite_summary(
+                    root / "suite_summary.json",
+                    ["email_reply_completion"],
+                )
+                scenario = root / "scenarios" / "email_reply_completion.json"
+                suite_before = suite.read_bytes()
+                scenario_before = scenario.read_bytes()
+                if alias_kind == "exact":
+                    out = scenario
+                else:
+                    out = root / "hardlinked_manifest.json"
+                    try:
+                        os.link(scenario, out)
+                    except OSError as exc:
+                        self.skipTest(f"hardlink unavailable: {exc}")
+                out_before = out.read_bytes()
+
+                exit_code = None
+                try:
+                    run_cli(
+                        [
+                            "heldout-manifest",
+                            "--suite-summary",
+                            f"source={suite}",
+                            "--out",
+                            str(out),
+                        ]
+                    )
+                except SystemExit as exc:
+                    exit_code = exc.code
+
+                self.assertEqual(suite.read_bytes(), suite_before)
+                self.assertEqual(scenario.read_bytes(), scenario_before)
+                self.assertEqual(out.read_bytes(), out_before)
+                self.assertEqual(exit_code, 2)
+
+    def test_heldout_manifest_protects_scenario_alias_when_fingerprint_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            scenario = root / "scenarios" / "email_reply_completion.json"
+            suite_payload = _read_json(suite)
+            suite_payload["runs"][0].pop("scenario_sha256")
+            suite.write_text(json.dumps(suite_payload), encoding="utf-8")
+            suite_before = suite.read_bytes()
+            scenario_before = scenario.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "heldout-manifest",
+                        "--suite-summary",
+                        f"source={suite}",
+                        "--out",
+                        str(scenario),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(scenario.read_bytes(), scenario_before)
+
+    def test_heldout_manifest_alias_scan_does_not_depend_on_suite_semantics(self):
+        cases = [
+            "invalid_scenario_id",
+            "later_run_after_malformed_path",
+            "absolute_path",
+            "traversal_path",
+            "error_row",
+        ]
+        if os.name != "nt":
+            cases.append("uri_like_local_path")
+            cases.append("redacted_like_local_path")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                suite_dir = root / "suite"
+                suite = _suite_summary(
+                    suite_dir / "suite_summary.json",
+                    ["first", "second"],
+                )
+                payload = _read_json(suite)
+                if case == "invalid_scenario_id":
+                    protected = suite_dir / payload["runs"][0]["scenario_path"]
+                    payload["runs"][0]["scenario_id"] = None
+                elif case == "later_run_after_malformed_path":
+                    protected = suite_dir / payload["runs"][1]["scenario_path"]
+                    payload["runs"][0]["scenario_path"] = ""
+                elif case == "absolute_path":
+                    protected = root / "absolute-scenario.json"
+                    protected.write_bytes(b'{"owner":"protected"}\n')
+                    payload["runs"][0]["scenario_path"] = str(protected)
+                elif case == "traversal_path":
+                    protected = root / "protected-scenario.json"
+                    protected.write_bytes(b'{"owner":"protected"}\n')
+                    payload["runs"][0]["scenario_path"] = "../protected-scenario.json"
+                elif case == "error_row":
+                    protected = suite_dir / "scenarios" / "error-source.json"
+                    protected.write_bytes(b'{"owner":"protected"}\n')
+                    payload["errors"] = [
+                        {
+                            "scenario_path": "scenarios/error-source.json",
+                            "error": "synthetic harness error",
+                        }
+                    ]
+                    payload["error_count"] = 1
+                else:
+                    raw_path = (
+                        "scenario://uri-like-local-source.json"
+                        if case == "uri_like_local_path"
+                        else "<redacted:local-source.json>"
+                    )
+                    protected = suite_dir / Path(raw_path)
+                    protected.parent.mkdir(parents=True, exist_ok=True)
+                    protected.write_bytes(b'{"owner":"protected"}\n')
+                    payload["runs"][0]["scenario_path"] = raw_path
+                suite.write_text(json.dumps(payload), encoding="utf-8")
+                suite_before = suite.read_bytes()
+                protected_before = protected.read_bytes()
+
+                with self.assertRaises(SystemExit) as raised:
+                    run_cli(
+                        [
+                            "heldout-manifest",
+                            "--suite-summary",
+                            f"source={suite}",
+                            "--out",
+                            str(protected),
+                        ]
+                    )
+
+                self.assertEqual(raised.exception.code, 2)
+                self.assertEqual(suite.read_bytes(), suite_before)
+                self.assertEqual(protected.read_bytes(), protected_before)
+
+    def test_heldout_manifest_reports_embedded_nul_scenario_path_cleanly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "suite.json", ["email_reply_completion"])
+            scenario = root / "scenarios" / "email_reply_completion.json"
+            payload = _read_json(suite)
+            payload["runs"][0]["scenario_path"] = "bad\x00path"
+            suite.write_text(json.dumps(payload), encoding="utf-8")
+            suite_before = suite.read_bytes()
+            scenario_before = scenario.read_bytes()
+            out = root / "heldout_manifest.json"
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "heldout-manifest",
+                        "--suite-summary",
+                        str(suite),
+                        "--out",
+                        str(out),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(scenario.read_bytes(), scenario_before)
+            self.assertFalse(out.exists())
+
+    def test_direct_heldout_writer_rejects_source_aliases_without_builder_hint(self):
+        for source_kind in ("suite", "scenario"):
+            with (
+                self.subTest(source_kind=source_kind),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                root = Path(tmp)
+                suite = _suite_summary(
+                    root / "suite_summary.json",
+                    ["email_reply_completion"],
+                )
+                scenario = root / "scenarios" / "email_reply_completion.json"
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=[f"source={suite}"]
+                )
+                protected = suite if source_kind == "suite" else scenario
+                suite_before = suite.read_bytes()
+                scenario_before = scenario.read_bytes()
+
+                with self.assertRaisesRegex(HeldoutManifestError, "must not alias"):
+                    write_heldout_manifest(manifest, protected)
+
+                self.assertEqual(suite.read_bytes(), suite_before)
+                self.assertEqual(scenario.read_bytes(), scenario_before)
+
+    def test_direct_heldout_writer_rejects_suite_drift_after_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            original = root / "scenarios" / "email_reply_completion.json"
+            replacement = root / "scenarios" / "replacement.json"
+            replacement.write_bytes(b'{"owner":"replacement"}\n')
+            manifest = build_heldout_manifest(
+                suite_summary_specs=[f"source={suite}"]
+            )
+            payload = _read_json(suite)
+            payload["runs"][0]["scenario_path"] = "scenarios/replacement.json"
+            payload["runs"][0]["scenario_sha256"] = hashlib.sha256(
+                replacement.read_bytes()
+            ).hexdigest()
+            suite.write_text(json.dumps(payload), encoding="utf-8")
+            suite_before = suite.read_bytes()
+            original_before = original.read_bytes()
+
+            with self.assertRaisesRegex(HeldoutManifestError, "changed after manifest build"):
+                write_heldout_manifest(manifest, original)
+
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(original.read_bytes(), original_before)
+
+    def test_direct_heldout_writer_binds_relative_sources_to_build_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_dir = root / "build"
+            other_dir = root / "other"
+            build_suite = _suite_summary(
+                build_dir / "suite.json",
+                ["email_reply_completion"],
+            )
+            original = build_dir / "scenarios" / "email_reply_completion.json"
+            _suite_summary(other_dir / "suite.json", ["different_scenario"])
+            original_before = original.read_bytes()
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(build_dir)
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=[build_suite.name]
+                )
+                os.chdir(other_dir)
+                with self.assertRaisesRegex(HeldoutManifestError, "must not alias"):
+                    write_heldout_manifest(manifest, original)
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(original.read_bytes(), original_before)
+
+    def test_direct_heldout_writer_rewrites_bound_source_after_cwd_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_dir = root / "build"
+            other_dir = root / "other"
+            build_suite = _suite_summary(build_dir / "suite.json", ["source_scenario"])
+            _suite_summary(other_dir / "suite.json", ["other_scenario"])
+            other_scenario = other_dir / "scenarios" / "other_scenario.json"
+            other_before = other_scenario.read_bytes()
+            out = other_dir / "heldout_manifest.json"
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(build_dir)
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=[build_suite.name]
+                )
+                os.chdir(other_dir)
+                write_heldout_manifest(manifest, out)
+            finally:
+                os.chdir(previous_cwd)
+
+            written = _read_json(out)
+            expected_source = os.path.relpath(build_suite.resolve(), other_dir.resolve())
+            self.assertEqual(written["sources"][0]["path"], expected_source)
+            self.assertEqual(other_scenario.read_bytes(), other_before)
+
+    def test_direct_heldout_writer_rejects_ambiguous_cwd_scenario_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_dir = root / "build"
+            other_dir = root / "other"
+            build_suite = _suite_summary(build_dir / "suite.json", ["source_scenario"])
+            _suite_summary(other_dir / "suite.json", ["other_scenario"])
+            other_scenario = other_dir / "scenarios" / "other_scenario.json"
+            other_before = other_scenario.read_bytes()
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(build_dir)
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=[build_suite.name]
+                )
+                os.chdir(other_dir)
+                with self.assertRaisesRegex(HeldoutManifestError, "must not alias"):
+                    write_heldout_manifest(manifest, other_scenario)
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(other_scenario.read_bytes(), other_before)
+
+    def test_direct_heldout_writer_survives_source_parent_symlink_retarget(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_a = root / "source-a"
+            source_b = root / "source-b"
+            suite_a = _suite_summary(source_a / "suite.json", ["shared_scenario"])
+            source_b.mkdir()
+            try:
+                os.link(suite_a, source_b / "suite.json")
+            except OSError as exc:
+                self.skipTest(f"hardlinks unavailable: {exc}")
+            scenario_b = source_b / "scenarios" / "shared_scenario.json"
+            scenario_b.parent.mkdir()
+            scenario_b.write_bytes(b'{"owner":"source-b"}\n')
+            current = root / "current"
+            try:
+                current.symlink_to(source_a, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            scenario_a = source_a / "scenarios" / "shared_scenario.json"
+            scenario_a_before = scenario_a.read_bytes()
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=["current/suite.json"]
+                )
+                current.unlink()
+                current.symlink_to(source_b, target_is_directory=True)
+                with self.assertRaisesRegex(HeldoutManifestError, "must not alias"):
+                    write_heldout_manifest(manifest, scenario_a)
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(scenario_a.read_bytes(), scenario_a_before)
+
+    def test_direct_heldout_writer_rejects_source_directory_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / "current"
+            moved = root / "moved"
+            suite = _suite_summary(current / "suite.json", ["shared_scenario"])
+            original = current / "scenarios" / "shared_scenario.json"
+            original_before = original.read_bytes()
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                manifest = build_heldout_manifest(
+                    suite_summary_specs=["current/suite.json"]
+                )
+                current.rename(moved)
+                current.mkdir()
+                try:
+                    os.link(moved / suite.name, current / suite.name)
+                except OSError as exc:
+                    self.skipTest(f"hardlinks unavailable: {exc}")
+                replacement = current / "scenarios" / "shared_scenario.json"
+                replacement.parent.mkdir()
+                replacement.write_bytes(b'{"owner":"replacement"}\n')
+                with self.assertRaisesRegex(
+                    HeldoutManifestError,
+                    "scenario source changed after manifest build",
+                ):
+                    write_heldout_manifest(
+                        manifest,
+                        moved / "scenarios" / "shared_scenario.json",
+                    )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(
+                (moved / "scenarios" / "shared_scenario.json").read_bytes(),
+                original_before,
+            )
+
+    def test_direct_heldout_writer_rejects_plain_unbound_manifest_dict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "suite.json", ["email_reply_completion"])
+            manifest = build_heldout_manifest(suite_summary_specs=[suite])
+
+            with self.assertRaisesRegex(HeldoutManifestError, "returned directly"):
+                write_heldout_manifest(dict(manifest), root / "heldout_manifest.json")
+
+    def test_direct_heldout_writer_rejects_mutated_source_projection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "suite.json", ["email_reply_completion"])
+            manifest = build_heldout_manifest(suite_summary_specs=[suite])
+            protected = root / "unrelated-source.json"
+            protected.write_bytes(b'{"owner":"protected"}\n')
+            protected_before = protected.read_bytes()
+            manifest["sources"][0]["path"] = str(protected)
+
+            with self.assertRaisesRegex(HeldoutManifestError, "sources changed"):
+                write_heldout_manifest(manifest, protected)
+
+            self.assertEqual(protected.read_bytes(), protected_before)
+
+    def test_direct_heldout_writer_captures_default_cas_baseline_at_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "suite.json", ["email_reply_completion"])
+            manifest = build_heldout_manifest(suite_summary_specs=[suite])
+            out = root / "heldout_manifest.json"
+            out.write_bytes(b'{"owner":"initial"}\n')
+            competing_bytes = b'{"owner":"competing"}\n'
+            actual_reject_aliases = heldout_manifest_module._reject_output_aliases
+            mutated = False
+
+            def mutate_output_during_source_checks(*args, **kwargs):
+                nonlocal mutated
+                result = actual_reject_aliases(*args, **kwargs)
+                if not mutated:
+                    out.write_bytes(competing_bytes)
+                    mutated = True
+                return result
+
+            with patch(
+                "flightrecorder.heldout_manifest._reject_output_aliases",
+                side_effect=mutate_output_during_source_checks,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed concurrently"):
+                    write_heldout_manifest(manifest, out)
+
+            self.assertEqual(out.read_bytes(), competing_bytes)
+
+    def test_heldout_manifest_rejects_leaf_output_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            scenario = root / "scenarios" / "email_reply_completion.json"
+            target = root / "protected.json"
+            target.write_bytes(b'{"owner":"protected"}\n')
+            out = root / "heldout_manifest.json"
+            try:
+                out.symlink_to(target)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            suite_before = suite.read_bytes()
+            scenario_before = scenario.read_bytes()
+            target_before = target.read_bytes()
+
+            exit_code = None
+            try:
+                run_cli(
+                    [
+                        "heldout-manifest",
+                        "--suite-summary",
+                        f"source={suite}",
+                        "--out",
+                        str(out),
+                    ]
+                )
+            except SystemExit as exc:
+                exit_code = exc.code
+
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(scenario.read_bytes(), scenario_before)
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertTrue(out.is_symlink())
+            self.assertEqual(exit_code, 2)
+
+    def test_heldout_manifest_rejects_symlinked_output_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            scenario = root / "scenarios" / "email_reply_completion.json"
+            target_parent = root / "protected"
+            target_parent.mkdir()
+            target = target_parent / "heldout_manifest.json"
+            target.write_bytes(b'{"owner":"protected"}\n')
+            linked_parent = root / "linked-output"
+            try:
+                linked_parent.symlink_to(target_parent, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            out = linked_parent / target.name
+            suite_before = suite.read_bytes()
+            scenario_before = scenario.read_bytes()
+            target_before = target.read_bytes()
+
+            exit_code = None
+            try:
+                run_cli(
+                    [
+                        "heldout-manifest",
+                        "--suite-summary",
+                        f"source={suite}",
+                        "--out",
+                        str(out),
+                    ]
+                )
+            except SystemExit as exc:
+                exit_code = exc.code
+
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(scenario.read_bytes(), scenario_before)
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertTrue(linked_parent.is_symlink())
+            self.assertEqual(exit_code, 2)
+
+    def test_heldout_manifest_atomic_publish_rejects_post_digest_conflict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "suite_summary.json",
+                ["email_reply_completion"],
+            )
+            scenario = root / "scenarios" / "email_reply_completion.json"
+            out = root / "heldout_manifest.json"
+            out.write_bytes(b'{"owner":"initial"}\n')
+            suite_before = suite.read_bytes()
+            scenario_before = scenario.read_bytes()
+            competing_bytes = b'{"owner":"competing"}\n'
+
+            from flightrecorder.cli import write_heldout_manifest as actual_write
+
+            def compete_then_write(*args, **kwargs):
+                out.write_bytes(competing_bytes)
+                return actual_write(*args, **kwargs)
+
+            exit_code = None
+            with patch(
+                "flightrecorder.cli.write_heldout_manifest",
+                side_effect=compete_then_write,
+            ):
+                try:
+                    run_cli(
+                        [
+                            "heldout-manifest",
+                            "--suite-summary",
+                            f"source={suite}",
+                            "--out",
+                            str(out),
+                        ]
+                    )
+                except SystemExit as exc:
+                    exit_code = exc.code
+
+            self.assertEqual(suite.read_bytes(), suite_before)
+            self.assertEqual(scenario.read_bytes(), scenario_before)
+            self.assertEqual(out.read_bytes(), competing_bytes)
+            self.assertEqual(exit_code, 2)
+
     def test_heldout_manifest_blocks_schema_invalid_suite_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

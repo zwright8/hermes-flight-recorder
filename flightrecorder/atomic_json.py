@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -40,9 +41,13 @@ def atomic_write_json_cas(
     value: dict[str, Any],
     *,
     expected_sha256: str | None,
+    new_file_mode: int | None = None,
 ) -> str:
     """Atomically write JSON only when the on-disk version is unchanged."""
+    if new_file_mode is not None and not 0 <= new_file_mode <= 0o777:
+        raise AtomicJsonError("new_file_mode must be a permission mode from 0o000 to 0o777")
     target = Path(path)
+    _reject_symlinked_path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     _reject_symlinked_path(target)
     lock_path = target.with_name(f".{target.name}.hfr.lock")
@@ -60,8 +65,23 @@ def atomic_write_json_cas(
                     f"JSON target changed concurrently: {target}; reload it before retrying"
                 )
             rendered = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-            replacement = _write_temporary_file(target, rendered)
+            if new_file_mode is None:
+                replacement = _write_temporary_file(target, rendered)
+            else:
+                replacement = _write_temporary_file(
+                    target,
+                    rendered,
+                    new_file_mode=new_file_mode,
+                )
             try:
+                _reject_symlinked_path(target)
+                current_sha256 = _sha256(target) if target.is_file() else None
+                if target.exists() and not target.is_file():
+                    raise AtomicJsonError(f"JSON target is not a regular file: {target}")
+                if current_sha256 != expected_sha256:
+                    raise AtomicJsonError(
+                        f"JSON target changed concurrently: {target}; reload it before retrying"
+                    )
                 os.replace(replacement, target)
                 _fsync_directory(target.parent)
             finally:
@@ -71,12 +91,20 @@ def atomic_write_json_cas(
             _unlock(lock_handle)
 
 
-def _write_temporary_file(target: Path, rendered: str) -> Path:
-    descriptor, raw_path = tempfile.mkstemp(
-        dir=target.parent,
-        prefix=f".{target.name}.",
-        suffix=".tmp",
-    )
+def _write_temporary_file(
+    target: Path,
+    rendered: str,
+    *,
+    new_file_mode: int | None = None,
+) -> Path:
+    if target.exists() or new_file_mode is None:
+        descriptor, raw_path = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+        )
+    else:
+        descriptor, raw_path = _open_temporary_file(target, new_file_mode)
     replacement = Path(raw_path)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -89,6 +117,20 @@ def _write_temporary_file(target: Path, rendered: str) -> Path:
     except Exception:
         replacement.unlink(missing_ok=True)
         raise
+
+
+def _open_temporary_file(target: Path, mode: int) -> tuple[int, str]:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    for _attempt in range(100):
+        replacement = target.with_name(
+            f".{target.name}.{secrets.token_hex(8)}.tmp"
+        )
+        try:
+            descriptor = os.open(replacement, flags, mode)
+        except FileExistsError:
+            continue
+        return descriptor, os.fspath(replacement)
+    raise AtomicJsonError(f"could not allocate a unique temporary file for {target}")
 
 
 def _reject_symlinked_path(path: Path) -> None:
