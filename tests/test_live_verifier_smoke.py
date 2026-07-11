@@ -14,6 +14,26 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "live_verifier_smoke.py"
+CUSTOM_ORIGIN_FLAGS = {
+    "discord": "HFR_DISCORD_ALLOW_CUSTOM_ORIGIN",
+    "github": "HFR_GITHUB_ALLOW_CUSTOM_ORIGIN",
+    "gitlab": "HFR_GITLAB_ALLOW_CUSTOM_ORIGIN",
+    "gmail": "HFR_GMAIL_ALLOW_CUSTOM_ORIGIN",
+    "google_calendar": "HFR_GOOGLE_CALENDAR_ALLOW_CUSTOM_ORIGIN",
+    "google_drive": "HFR_GOOGLE_DRIVE_ALLOW_CUSTOM_ORIGIN",
+    "imap": "HFR_IMAP_ALLOW_CUSTOM_ORIGIN",
+    "jira": "HFR_JIRA_ALLOW_CUSTOM_ORIGIN",
+    "kubernetes": "HFR_K8S_ALLOW_CUSTOM_ORIGIN",
+    "linear": "HFR_LINEAR_ALLOW_CUSTOM_ORIGIN",
+    "microsoft_graph_events": "HFR_MICROSOFT_GRAPH_ALLOW_CUSTOM_ORIGIN",
+    "microsoft_graph_messages": "HFR_MICROSOFT_GRAPH_ALLOW_CUSTOM_ORIGIN",
+    "notion": "HFR_NOTION_ALLOW_CUSTOM_ORIGIN",
+    "pagerduty": "HFR_PAGERDUTY_ALLOW_CUSTOM_ORIGIN",
+    "s3": "HFR_S3_ALLOW_CUSTOM_ORIGIN",
+    "slack": "HFR_SLACK_ALLOW_CUSTOM_ORIGIN",
+    "stripe": "HFR_STRIPE_ALLOW_CUSTOM_ORIGIN",
+    "zendesk": "HFR_ZENDESK_ALLOW_CUSTOM_ORIGIN",
+}
 
 
 def _load_script():
@@ -74,9 +94,129 @@ class LiveVerifierSmokeTests(unittest.TestCase):
             self.assertIn("HFR_SLACK_LIMIT must be an integer", summary["providers"][0]["error"])
             self.assertNotIn("slack-token", json.dumps(summary))
 
+    def test_each_custom_base_requires_its_provider_opt_in(self):
+        live_smoke = _load_script()
+        specs = live_smoke._provider_specs_by_id()
+        env_without_opt_ins = _provider_env("https://provider.example.test")
+        for flag in set(CUSTOM_ORIGIN_FLAGS.values()):
+            env_without_opt_ins.pop(flag)
+
+        for provider, flag in CUSTOM_ORIGIN_FLAGS.items():
+            with self.subTest(provider=provider):
+                source = specs[provider].build_source(env_without_opt_ins)
+                self.assertFalse(source["allow_custom_origin"])
+
+                opted_in_env = {**env_without_opt_ins, flag: "yes"}
+                opted_in_source = specs[provider].build_source(opted_in_env)
+                self.assertTrue(opted_in_source["allow_custom_origin"])
+                if provider == "imap":
+                    self.assertEqual(opted_in_source["username_env"], "IMAP_USERNAME")
+                    self.assertEqual(opted_in_source["password_env"], "IMAP_PASSWORD")
+                elif provider == "kubernetes":
+                    self.assertEqual(opted_in_source["bearer_token_env"], "KUBERNETES_BEARER_TOKEN")
+                elif provider == "s3":
+                    self.assertEqual(opted_in_source["access_key_env"], "AWS_ACCESS_KEY_ID")
+                    self.assertEqual(opted_in_source["secret_key_env"], "AWS_SECRET_ACCESS_KEY")
+                    self.assertEqual(opted_in_source["session_token_env"], "AWS_SESSION_TOKEN")
+
+    def test_custom_base_url_alone_does_not_authorize_credentials(self):
+        live_smoke = _load_script()
+        server = _JsonServer(_provider_routes())
+        env = {
+            "SLACK_BOT_TOKEN": "slack-token",
+            "HFR_SLACK_CHANNEL_ID": "C123",
+            "HFR_SLACK_BASE_URL": f"{server.url}/slack",
+        }
+        try:
+            with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env, clear=True):
+                with redirect_stdout(StringIO()):
+                    code = live_smoke.main(["--out", tmp, "--provider", "slack", "--allow-network"])
+
+                self.assertEqual(code, 1)
+                self.assertEqual(server.requests, [])
+                summary = _read_json(Path(tmp) / "live_verifier_smoke_summary.json")
+                self.assertFalse(summary["passed"])
+                self.assertEqual(summary["providers"][0]["status"], "failed")
+                self.assertIn("allow_custom_origin=true", summary["providers"][0]["error"])
+                config = _read_json(Path(tmp) / "slack" / "verifier_config.json")
+                self.assertFalse(config["sources"][0]["allow_custom_origin"])
+        finally:
+            server.close()
+
+    def test_signed_s3_custom_url_alone_does_not_authorize_aws_credentials(self):
+        live_smoke = _load_script()
+        server = _JsonServer(_provider_routes())
+        env = {
+            "AWS_ACCESS_KEY_ID": "default-access-key",
+            "AWS_SECRET_ACCESS_KEY": "default-secret-key",
+            "AWS_SESSION_TOKEN": "default-session-token",
+            "HFR_S3_BUCKET": "demo",
+            "HFR_S3_URL": f"{server.url}/s3",
+        }
+        try:
+            with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env, clear=True):
+                with redirect_stdout(StringIO()):
+                    code = live_smoke.main(["--out", tmp, "--provider", "s3", "--allow-network"])
+
+                self.assertEqual(code, 1)
+                self.assertEqual(server.requests, [])
+                summary = _read_json(Path(tmp) / "live_verifier_smoke_summary.json")
+                self.assertFalse(summary["passed"])
+                self.assertEqual(summary["providers"][0]["status"], "failed")
+                self.assertIn("allow_custom_origin=true", summary["providers"][0]["error"])
+                config = _read_json(Path(tmp) / "s3" / "verifier_config.json")
+                self.assertFalse(config["sources"][0]["allow_custom_origin"])
+        finally:
+            server.close()
+
+    def test_imap_host_alone_does_not_authorize_mailbox_credentials(self):
+        live_smoke = _load_script()
+        env = {
+            "IMAP_HOST": "imap.attacker.example.test",
+            "IMAP_USERNAME": "agent@example.test",
+            "IMAP_PASSWORD": "private-password",
+        }
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env, clear=True):
+            with patch("flightrecorder.verifiers.imaplib.IMAP4_SSL") as client:
+                with redirect_stdout(StringIO()):
+                    code = live_smoke.main(["--out", tmp, "--provider", "imap", "--allow-network"])
+
+            self.assertEqual(code, 1)
+            client.assert_not_called()
+            summary = _read_json(Path(tmp) / "live_verifier_smoke_summary.json")
+            self.assertFalse(summary["passed"])
+            self.assertEqual(summary["providers"][0]["status"], "failed")
+            self.assertIn("allow_custom_origin=true", summary["providers"][0]["error"])
+            config = _read_json(Path(tmp) / "imap" / "verifier_config.json")
+            self.assertFalse(config["sources"][0]["allow_custom_origin"])
+
+    def test_kubernetes_url_alone_does_not_authorize_bearer_credentials(self):
+        live_smoke = _load_script()
+        server = _JsonServer(_provider_routes())
+        env = {
+            "HFR_K8S_RESOURCE_URL": f"{server.url}/k8s/apis/apps/v1/namespaces/prod/deployments",
+            "KUBERNETES_BEARER_TOKEN": "private-token",
+        }
+        try:
+            with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env, clear=True):
+                with redirect_stdout(StringIO()):
+                    code = live_smoke.main(["--out", tmp, "--provider", "kubernetes", "--allow-network"])
+
+                self.assertEqual(code, 1)
+                self.assertEqual(server.requests, [])
+                summary = _read_json(Path(tmp) / "live_verifier_smoke_summary.json")
+                self.assertFalse(summary["passed"])
+                self.assertEqual(summary["providers"][0]["status"], "failed")
+                self.assertIn("allow_custom_origin=true", summary["providers"][0]["error"])
+                config = _read_json(Path(tmp) / "kubernetes" / "verifier_config.json")
+                self.assertFalse(config["sources"][0]["allow_custom_origin"])
+        finally:
+            server.close()
+
     def test_all_http_provider_smokes_pass_against_readonly_local_endpoints(self):
         live_smoke = _load_script()
         server = _JsonServer(_provider_routes())
+        FakeIMAP.instances.clear()
         providers = [
             "discord",
             "github",
@@ -122,8 +262,24 @@ class LiveVerifierSmokeTests(unittest.TestCase):
                     self.assertTrue(record["validation_passed"], record)
                     artifacts = record["artifacts"]
                     self.assertTrue(Path(artifacts["state_snapshot"]).exists(), artifacts)
+                    config = _read_json(Path(artifacts["verifier_config"]))
+                    if record["provider"] in CUSTOM_ORIGIN_FLAGS:
+                        self.assertTrue(config["sources"][0]["allow_custom_origin"], record)
+                    if record["provider"] == "s3":
+                        self.assertEqual(config["sources"][0]["access_key_env"], "AWS_ACCESS_KEY_ID")
+                        self.assertIn("secret_key_env", config["sources"][0])
+                        self.assertIn("session_token_env", config["sources"][0])
                     validation = _read_json(Path(artifacts["validation"]))
                     self.assertTrue(validation["passed"], validation)
+
+                s3_request = next(request for request in server.requests if request["path"] == "/s3")
+                self.assertIn("Credential=aws-access/", s3_request["authorization"])
+                self.assertEqual(s3_request["session_token"], "aws-session-token")
+                kubernetes_request = next(request for request in server.requests if request["path"].startswith("/k8s/"))
+                self.assertEqual(kubernetes_request["authorization"], "Bearer k8s-token")
+                self.assertEqual(len(FakeIMAP.instances), 1)
+                self.assertEqual(FakeIMAP.instances[0].username, "agent@example.test")
+                self.assertEqual(FakeIMAP.instances[0].password, "imap-password")
 
                 rendered = "\n".join(path.read_text(encoding="utf-8") for path in out.rglob("*.json"))
                 for secret in _secret_values(env):
@@ -133,11 +289,14 @@ class LiveVerifierSmokeTests(unittest.TestCase):
 
 
 class FakeIMAP:
+    instances = []
+
     def __init__(self, host, port, timeout=None):
         self.host = host
         self.port = port
         self.timeout = timeout
         self.selected_readonly = None
+        self.instances.append(self)
 
     def login(self, username, password):
         self.username = username
@@ -177,7 +336,15 @@ class _JsonServer:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 path, _, query = self.path.partition("?")
-                requests.append({"method": "GET", "path": path, "query": query})
+                requests.append(
+                    {
+                        "method": "GET",
+                        "path": path,
+                        "query": query,
+                        "authorization": self.headers.get("Authorization"),
+                        "session_token": self.headers.get("x-amz-security-token"),
+                    }
+                )
                 if path not in routes:
                     self.send_response(404)
                     self.end_headers()
@@ -291,7 +458,7 @@ def _provider_routes():
 
 
 def _provider_env(base_url: str) -> dict[str, str]:
-    return {
+    env = {
         "DISCORD_BOT_TOKEN": "discord-token",
         "HFR_DISCORD_CHANNEL_ID": "C123",
         "HFR_DISCORD_BASE_URL": f"{base_url}/discord/api/v10",
@@ -316,6 +483,7 @@ def _provider_env(base_url: str) -> dict[str, str]:
         "JIRA_EMAIL": "agent@example.test",
         "HFR_JIRA_BASE_URL": f"{base_url}/jira",
         "HFR_K8S_RESOURCE_URL": f"{base_url}/k8s/apis/apps/v1/namespaces/prod/deployments",
+        "KUBERNETES_BEARER_TOKEN": "k8s-token",
         "LINEAR_API_KEY": "linear-token",
         "HFR_LINEAR_BASE_URL": f"{base_url}/linear/graphql",
         "MICROSOFT_GRAPH_TOKEN": "graph-token",
@@ -326,9 +494,12 @@ def _provider_env(base_url: str) -> dict[str, str]:
         "HFR_NOTION_BASE_URL": f"{base_url}/notion/v1",
         "PAGERDUTY_API_TOKEN": "pagerduty-token",
         "HFR_PAGERDUTY_BASE_URL": f"{base_url}/pagerduty",
+        "AWS_ACCESS_KEY_ID": "aws-access",
+        "AWS_SECRET_ACCESS_KEY": "aws-secret-key",
+        "AWS_SESSION_TOKEN": "aws-session-token",
         "HFR_S3_BUCKET": "demo",
         "HFR_S3_URL": f"{base_url}/s3",
-        "HFR_S3_UNSIGNED": "true",
+        "HFR_S3_UNSIGNED": "false",
         "SLACK_BOT_TOKEN": "slack-token",
         "HFR_SLACK_CHANNEL_ID": "C123",
         "HFR_SLACK_BASE_URL": f"{base_url}/slack",
@@ -339,10 +510,16 @@ def _provider_env(base_url: str) -> dict[str, str]:
         "HFR_ZENDESK_BASE_URL": f"{base_url}/zendesk/api/v2",
         "HFR_ZENDESK_TICKET_ID": "42",
     }
+    env.update({flag: "1" for flag in set(CUSTOM_ORIGIN_FLAGS.values())})
+    return env
 
 
 def _secret_values(env: dict[str, str]) -> list[str]:
-    return [value for key, value in env.items() if "TOKEN" in key or "PASSWORD" in key or "SECRET" in key]
+    return [
+        value
+        for key, value in env.items()
+        if "TOKEN" in key or "PASSWORD" in key or "SECRET" in key or "ACCESS_KEY" in key
+    ]
 
 
 def _email_bytes() -> bytes:

@@ -103,7 +103,12 @@ _SEMANTIC_VALIDATOR_NAMES = {
     "trainer_wrapper_dry_run": "validate_trainer_wrapper_dry_run",
 }
 
-_GATE_CONTRACT_ROLES = {"compare_gate", "reviewed_gate"}
+_GATE_CONTRACT_ROLES = {
+    "compare_gate",
+    "reviewed_gate",
+    "suite_gate",
+    "training_gate",
+}
 
 _REQUIRED_VALUES: dict[str, dict[str, Any]] = {
     "action_ledger": {"passed": True},
@@ -138,6 +143,8 @@ _REQUIRED_VALUES: dict[str, dict[str, Any]] = {
     "review_calibration": {"passed": True},
     "reviewed_gate": {"passed": True},
     "serving_lifecycle": {"passed": True, "ready": True, "readiness": "ready"},
+    "suite_gate": {"passed": True},
+    "training_gate": {"passed": True},
     "trainer_launch_check": {"passed": True, "readiness": "ready"},
     "trainer_preflight": {"passed": True, "readiness": "ready"},
 }
@@ -543,6 +550,8 @@ def inspect_json_source(
             "path": path,
             "physical_exists": physical_exists,
             "regular_file": regular_file,
+            "size_bytes": before.metadata[2] if before is not None else None,
+            "sha256": before.sha256 if before is not None else None,
             "parse_valid": parse_valid,
             "schema_valid": schema_valid,
             "semantic_valid": semantic_valid,
@@ -2112,10 +2121,13 @@ def _capture_authenticated_reviewed_export_fd(
 
 
 _EXPLICIT_PATH_FIELD_NAMES = {
+    "action_ledger",
+    "artifact",
     "compatibility_report",
     "compare_export",
     "events",
     "home",
+    "improvement_ledger",
     "lineage",
     "manifest",
     "normalized_trace",
@@ -2126,6 +2138,8 @@ _EXPLICIT_PATH_FIELD_NAMES = {
     "root",
     "scorecard",
     "summary",
+    "suite_summary",
+    "training_export",
     "workspace",
 }
 
@@ -2809,6 +2823,8 @@ def _empty_inspection(path: Path) -> dict[str, Any]:
         "path": path,
         "physical_exists": False,
         "regular_file": False,
+        "size_bytes": None,
+        "sha256": None,
         "parse_valid": False,
         "schema_valid": False,
         "semantic_valid": False,

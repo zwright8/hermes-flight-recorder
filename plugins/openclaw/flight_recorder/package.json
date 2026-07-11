@@ -4,6 +4,9 @@
   "type": "module",
   "private": true,
   "description": "Read-only OpenClaw hook collector for Hermes Flight Recorder.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "files": [
     "src",
     "openclaw.plugin.json",

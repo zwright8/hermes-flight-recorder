@@ -4,7 +4,8 @@
 The smoke is intentionally read-only. It builds one verifier config per
 provider from environment variables, captures a state snapshot, validates the
 snapshot, and writes a machine-readable summary. Network calls only happen when
-``--allow-network`` is supplied.
+``--allow-network`` is supplied. Custom provider origins additionally require
+their provider-specific ``HFR_*_ALLOW_CUSTOM_ORIGIN`` environment variable.
 """
 
 from __future__ import annotations
@@ -311,7 +312,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="discord_messages",
             description="Read recent Discord channel messages.",
             required_env=("DISCORD_BOT_TOKEN", "HFR_DISCORD_CHANNEL_ID"),
-            optional_env=("HFR_DISCORD_BASE_URL", "HFR_DISCORD_LIMIT"),
+            optional_env=("HFR_DISCORD_BASE_URL", "HFR_DISCORD_ALLOW_CUSTOM_ORIGIN", "HFR_DISCORD_LIMIT"),
             sensitive_env=("DISCORD_BOT_TOKEN",),
             build_source=_discord_source,
         ),
@@ -320,7 +321,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="github_issue",
             description="Read one GitHub issue and its comments.",
             required_env=("HFR_GITHUB_OWNER", "HFR_GITHUB_REPO", "HFR_GITHUB_ISSUE_NUMBER"),
-            optional_env=("GITHUB_TOKEN", "HFR_GITHUB_BASE_URL"),
+            optional_env=("GITHUB_TOKEN", "HFR_GITHUB_BASE_URL", "HFR_GITHUB_ALLOW_CUSTOM_ORIGIN"),
             sensitive_env=("GITHUB_TOKEN",),
             build_source=_github_source,
         ),
@@ -329,7 +330,13 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="gitlab_issues",
             description="Read GitLab issues for one project.",
             required_env=("GITLAB_TOKEN", "HFR_GITLAB_PROJECT_ID"),
-            optional_env=("HFR_GITLAB_BASE_URL", "HFR_GITLAB_STATE", "HFR_GITLAB_LABELS", "HFR_GITLAB_SEARCH"),
+            optional_env=(
+                "HFR_GITLAB_BASE_URL",
+                "HFR_GITLAB_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GITLAB_STATE",
+                "HFR_GITLAB_LABELS",
+                "HFR_GITLAB_SEARCH",
+            ),
             sensitive_env=("GITLAB_TOKEN",),
             build_source=_gitlab_source,
         ),
@@ -338,7 +345,13 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="gmail_threads",
             description="Read Gmail thread metadata/messages.",
             required_env=("GMAIL_ACCESS_TOKEN",),
-            optional_env=("HFR_GMAIL_BASE_URL", "HFR_GMAIL_QUERY", "HFR_GMAIL_THREAD_ID", "HFR_GMAIL_MAX_THREADS"),
+            optional_env=(
+                "HFR_GMAIL_BASE_URL",
+                "HFR_GMAIL_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GMAIL_QUERY",
+                "HFR_GMAIL_THREAD_ID",
+                "HFR_GMAIL_MAX_THREADS",
+            ),
             sensitive_env=("GMAIL_ACCESS_TOKEN",),
             build_source=_gmail_source,
         ),
@@ -347,7 +360,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="google_calendar_events",
             description="Read Google Calendar events.",
             required_env=("GOOGLE_CALENDAR_ACCESS_TOKEN",),
-            optional_env=("HFR_GOOGLE_CALENDAR_BASE_URL", "HFR_GOOGLE_CALENDAR_ID", "HFR_GOOGLE_CALENDAR_QUERY"),
+            optional_env=(
+                "HFR_GOOGLE_CALENDAR_BASE_URL",
+                "HFR_GOOGLE_CALENDAR_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GOOGLE_CALENDAR_ID",
+                "HFR_GOOGLE_CALENDAR_QUERY",
+            ),
             sensitive_env=("GOOGLE_CALENDAR_ACCESS_TOKEN",),
             build_source=_google_calendar_source,
         ),
@@ -356,7 +374,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="google_drive_files",
             description="Read Google Drive file metadata.",
             required_env=("GOOGLE_DRIVE_ACCESS_TOKEN",),
-            optional_env=("HFR_GOOGLE_DRIVE_BASE_URL", "HFR_GOOGLE_DRIVE_QUERY", "HFR_GOOGLE_DRIVE_PAGE_SIZE"),
+            optional_env=(
+                "HFR_GOOGLE_DRIVE_BASE_URL",
+                "HFR_GOOGLE_DRIVE_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GOOGLE_DRIVE_QUERY",
+                "HFR_GOOGLE_DRIVE_PAGE_SIZE",
+            ),
             sensitive_env=("GOOGLE_DRIVE_ACCESS_TOKEN",),
             build_source=_google_drive_source,
         ),
@@ -365,7 +388,13 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="imap",
             description="Read one mailbox through IMAP SELECT readonly.",
             required_env=("IMAP_HOST", "IMAP_USERNAME", "IMAP_PASSWORD"),
-            optional_env=("IMAP_PORT", "IMAP_MAILBOX", "IMAP_SEARCH", "IMAP_MAX_MESSAGES"),
+            optional_env=(
+                "HFR_IMAP_ALLOW_CUSTOM_ORIGIN",
+                "IMAP_PORT",
+                "IMAP_MAILBOX",
+                "IMAP_SEARCH",
+                "IMAP_MAX_MESSAGES",
+            ),
             sensitive_env=("IMAP_PASSWORD",),
             build_source=_imap_source,
         ),
@@ -374,7 +403,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="jira_issues",
             description="Read Jira issues through search.",
             required_env=("JIRA_API_TOKEN", "HFR_JIRA_BASE_URL"),
-            optional_env=("JIRA_EMAIL", "HFR_JIRA_JQL", "HFR_JIRA_MAX_RESULTS"),
+            optional_env=("JIRA_EMAIL", "HFR_JIRA_ALLOW_CUSTOM_ORIGIN", "HFR_JIRA_JQL", "HFR_JIRA_MAX_RESULTS"),
             sensitive_env=("JIRA_API_TOKEN",),
             build_source=_jira_source,
         ),
@@ -383,7 +412,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="kubernetes_resources",
             description="Read Kubernetes API resources.",
             required_env=("HFR_K8S_RESOURCE_URL",),
-            optional_env=("KUBERNETES_BEARER_TOKEN", "HFR_K8S_TOKEN_ENV"),
+            optional_env=("KUBERNETES_BEARER_TOKEN", "HFR_K8S_TOKEN_ENV", "HFR_K8S_ALLOW_CUSTOM_ORIGIN"),
             sensitive_env=("KUBERNETES_BEARER_TOKEN",),
             build_source=_kubernetes_source,
         ),
@@ -392,7 +421,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="linear_issues",
             description="Read Linear issues through GraphQL.",
             required_env=("LINEAR_API_KEY",),
-            optional_env=("HFR_LINEAR_BASE_URL", "HFR_LINEAR_FIRST"),
+            optional_env=("HFR_LINEAR_BASE_URL", "HFR_LINEAR_ALLOW_CUSTOM_ORIGIN", "HFR_LINEAR_FIRST"),
             sensitive_env=("LINEAR_API_KEY",),
             build_source=_linear_source,
         ),
@@ -401,7 +430,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="microsoft_graph_events",
             description="Read Microsoft Graph calendar events.",
             required_env=("MICROSOFT_GRAPH_TOKEN",),
-            optional_env=("HFR_MICROSOFT_GRAPH_BASE_URL", "HFR_GRAPH_USER_ID", "HFR_GRAPH_EVENTS_TOP"),
+            optional_env=(
+                "HFR_MICROSOFT_GRAPH_BASE_URL",
+                "HFR_MICROSOFT_GRAPH_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GRAPH_USER_ID",
+                "HFR_GRAPH_EVENTS_TOP",
+            ),
             sensitive_env=("MICROSOFT_GRAPH_TOKEN",),
             build_source=_microsoft_graph_events_source,
         ),
@@ -410,7 +444,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="microsoft_graph_messages",
             description="Read Microsoft Graph mail messages.",
             required_env=("MICROSOFT_GRAPH_TOKEN",),
-            optional_env=("HFR_MICROSOFT_GRAPH_BASE_URL", "HFR_GRAPH_USER_ID", "HFR_GRAPH_MAIL_FOLDER_ID"),
+            optional_env=(
+                "HFR_MICROSOFT_GRAPH_BASE_URL",
+                "HFR_MICROSOFT_GRAPH_ALLOW_CUSTOM_ORIGIN",
+                "HFR_GRAPH_USER_ID",
+                "HFR_GRAPH_MAIL_FOLDER_ID",
+            ),
             sensitive_env=("MICROSOFT_GRAPH_TOKEN",),
             build_source=_microsoft_graph_messages_source,
         ),
@@ -419,7 +458,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="notion_database",
             description="Read Notion database pages.",
             required_env=("NOTION_TOKEN", "HFR_NOTION_DATABASE_ID"),
-            optional_env=("HFR_NOTION_BASE_URL", "HFR_NOTION_PAGE_SIZE"),
+            optional_env=("HFR_NOTION_BASE_URL", "HFR_NOTION_ALLOW_CUSTOM_ORIGIN", "HFR_NOTION_PAGE_SIZE"),
             sensitive_env=("NOTION_TOKEN",),
             build_source=_notion_source,
         ),
@@ -428,7 +467,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="pagerduty_incidents",
             description="Read PagerDuty incidents.",
             required_env=("PAGERDUTY_API_TOKEN",),
-            optional_env=("HFR_PAGERDUTY_BASE_URL", "HFR_PAGERDUTY_LIMIT", "HFR_PAGERDUTY_STATUSES"),
+            optional_env=(
+                "HFR_PAGERDUTY_BASE_URL",
+                "HFR_PAGERDUTY_ALLOW_CUSTOM_ORIGIN",
+                "HFR_PAGERDUTY_LIMIT",
+                "HFR_PAGERDUTY_STATUSES",
+            ),
             sensitive_env=("PAGERDUTY_API_TOKEN",),
             build_source=_pagerduty_source,
         ),
@@ -437,7 +481,15 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="s3_objects",
             description="Read an S3-compatible object listing.",
             required_env=("HFR_S3_BUCKET",),
-            optional_env=("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "HFR_S3_UNSIGNED"),
+            optional_env=(
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "HFR_S3_URL",
+                "HFR_S3_ENDPOINT_URL",
+                "HFR_S3_ALLOW_CUSTOM_ORIGIN",
+                "HFR_S3_UNSIGNED",
+            ),
             sensitive_env=("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"),
             build_source=_s3_source,
             missing_env=_s3_missing_env,
@@ -447,7 +499,7 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="slack_history",
             description="Read Slack channel history.",
             required_env=("SLACK_BOT_TOKEN", "HFR_SLACK_CHANNEL_ID"),
-            optional_env=("HFR_SLACK_BASE_URL", "HFR_SLACK_LIMIT"),
+            optional_env=("HFR_SLACK_BASE_URL", "HFR_SLACK_ALLOW_CUSTOM_ORIGIN", "HFR_SLACK_LIMIT"),
             sensitive_env=("SLACK_BOT_TOKEN",),
             build_source=_slack_source,
         ),
@@ -456,7 +508,13 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="stripe_objects",
             description="Read Stripe object or collection state.",
             required_env=("STRIPE_SECRET_KEY",),
-            optional_env=("HFR_STRIPE_BASE_URL", "HFR_STRIPE_RESOURCE", "HFR_STRIPE_OBJECT_ID", "HFR_STRIPE_LIMIT"),
+            optional_env=(
+                "HFR_STRIPE_BASE_URL",
+                "HFR_STRIPE_ALLOW_CUSTOM_ORIGIN",
+                "HFR_STRIPE_RESOURCE",
+                "HFR_STRIPE_OBJECT_ID",
+                "HFR_STRIPE_LIMIT",
+            ),
             sensitive_env=("STRIPE_SECRET_KEY",),
             build_source=_stripe_source,
         ),
@@ -465,7 +523,12 @@ def _provider_specs() -> list[ProviderSpec]:
             source_type="zendesk_tickets",
             description="Read Zendesk ticket/search state.",
             required_env=("ZENDESK_API_TOKEN", "HFR_ZENDESK_BASE_URL"),
-            optional_env=("ZENDESK_EMAIL", "HFR_ZENDESK_TICKET_ID", "HFR_ZENDESK_QUERY"),
+            optional_env=(
+                "ZENDESK_EMAIL",
+                "HFR_ZENDESK_ALLOW_CUSTOM_ORIGIN",
+                "HFR_ZENDESK_TICKET_ID",
+                "HFR_ZENDESK_QUERY",
+            ),
             sensitive_env=("ZENDESK_API_TOKEN",),
             build_source=_zendesk_source,
         ),
@@ -478,6 +541,7 @@ def _slack_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "slack",
             "type": "slack_history",
             "base_url": env.get("HFR_SLACK_BASE_URL", "https://slack.com/api"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "SLACK"),
             "channel_id": env["HFR_SLACK_CHANNEL_ID"],
             "token_env": "SLACK_BOT_TOKEN",
             "limit": _int_env(env, "HFR_SLACK_LIMIT", 5),
@@ -492,6 +556,7 @@ def _google_calendar_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "google_calendar",
             "type": "google_calendar_events",
             "base_url": env.get("HFR_GOOGLE_CALENDAR_BASE_URL", "https://www.googleapis.com/calendar/v3"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "GOOGLE_CALENDAR"),
             "calendar_id": env.get("HFR_GOOGLE_CALENDAR_ID", "primary"),
             "token_env": "GOOGLE_CALENDAR_ACCESS_TOKEN",
             "query": env.get("HFR_GOOGLE_CALENDAR_QUERY"),
@@ -507,6 +572,7 @@ def _google_drive_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "google_drive",
             "type": "google_drive_files",
             "base_url": env.get("HFR_GOOGLE_DRIVE_BASE_URL", "https://www.googleapis.com/drive/v3"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "GOOGLE_DRIVE"),
             "token_env": "GOOGLE_DRIVE_ACCESS_TOKEN",
             "query": env.get("HFR_GOOGLE_DRIVE_QUERY"),
             "page_size": _int_env(env, "HFR_GOOGLE_DRIVE_PAGE_SIZE", 5),
@@ -520,6 +586,7 @@ def _kubernetes_source(env: Mapping[str, str]) -> dict[str, Any]:
         "id": "kubernetes",
         "type": "kubernetes_resources",
         "url": env["HFR_K8S_RESOURCE_URL"],
+        "allow_custom_origin": _custom_origin_opt_in(env, "K8S"),
         "state_path": "kubernetes",
     }
     token_env = env.get("HFR_K8S_TOKEN_ENV")
@@ -537,6 +604,7 @@ def _stripe_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "stripe",
             "type": "stripe_objects",
             "base_url": env.get("HFR_STRIPE_BASE_URL", "https://api.stripe.com/v1"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "STRIPE"),
             "resource": env.get("HFR_STRIPE_RESOURCE", "payment_intents"),
             "object_id": object_id,
             "limit": _int_env(env, "HFR_STRIPE_LIMIT", 1),
@@ -552,6 +620,7 @@ def _notion_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "notion",
             "type": "notion_database",
             "base_url": env.get("HFR_NOTION_BASE_URL", "https://api.notion.com/v1"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "NOTION"),
             "database_id": env["HFR_NOTION_DATABASE_ID"],
             "token_env": "NOTION_TOKEN",
             "page_size": _int_env(env, "HFR_NOTION_PAGE_SIZE", 5),
@@ -566,6 +635,7 @@ def _linear_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "linear",
             "type": "linear_issues",
             "base_url": env.get("HFR_LINEAR_BASE_URL", "https://api.linear.app/graphql"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "LINEAR"),
             "token_env": "LINEAR_API_KEY",
             "first": _int_env(env, "HFR_LINEAR_FIRST", 5),
             "state_path": "linear",
@@ -578,6 +648,7 @@ def _jira_source(env: Mapping[str, str]) -> dict[str, Any]:
         "id": "jira",
         "type": "jira_issues",
         "base_url": env["HFR_JIRA_BASE_URL"],
+        "allow_custom_origin": _custom_origin_opt_in(env, "JIRA"),
         "jql": env.get("HFR_JIRA_JQL", "ORDER BY updated DESC"),
         "max_results": _int_env(env, "HFR_JIRA_MAX_RESULTS", 5),
         "state_path": "jira",
@@ -591,6 +662,7 @@ def _jira_source(env: Mapping[str, str]) -> dict[str, Any]:
 
 
 def _s3_source(env: Mapping[str, str]) -> dict[str, Any]:
+    unsigned = _bool_env(env, "HFR_S3_UNSIGNED", False)
     source = {
         "id": "s3",
         "type": "s3_objects",
@@ -598,9 +670,15 @@ def _s3_source(env: Mapping[str, str]) -> dict[str, Any]:
         "prefix": env.get("HFR_S3_PREFIX", ""),
         "region": env.get("HFR_AWS_REGION") or env.get("AWS_REGION", "us-east-1"),
         "max_keys": _int_env(env, "HFR_S3_MAX_KEYS", 5),
-        "unsigned": _bool_env(env, "HFR_S3_UNSIGNED", False),
+        "unsigned": unsigned,
+        "allow_custom_origin": _custom_origin_opt_in(env, "S3"),
         "state_path": "s3",
     }
+    if not unsigned:
+        source["access_key_env"] = "AWS_ACCESS_KEY_ID"
+        source["secret_key_env"] = "AWS_SECRET_ACCESS_KEY"
+        if env.get("AWS_SESSION_TOKEN"):
+            source["session_token_env"] = "AWS_SESSION_TOKEN"
     if env.get("HFR_S3_URL"):
         source["url"] = env["HFR_S3_URL"]
     elif env.get("HFR_S3_ENDPOINT_URL"):
@@ -614,6 +692,7 @@ def _microsoft_graph_messages_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "microsoft_graph_messages",
             "type": "microsoft_graph_messages",
             "base_url": env.get("HFR_MICROSOFT_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "MICROSOFT_GRAPH"),
             "token_env": "MICROSOFT_GRAPH_TOKEN",
             "user_id": env.get("HFR_GRAPH_USER_ID", "me"),
             "folder_id": env.get("HFR_GRAPH_MAIL_FOLDER_ID"),
@@ -629,6 +708,7 @@ def _microsoft_graph_events_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "microsoft_graph_events",
             "type": "microsoft_graph_events",
             "base_url": env.get("HFR_MICROSOFT_GRAPH_BASE_URL", "https://graph.microsoft.com/v1.0"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "MICROSOFT_GRAPH"),
             "token_env": "MICROSOFT_GRAPH_TOKEN",
             "user_id": env.get("HFR_GRAPH_USER_ID", "me"),
             "top": _int_env(env, "HFR_GRAPH_EVENTS_TOP", 5),
@@ -643,6 +723,7 @@ def _gitlab_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "gitlab",
             "type": "gitlab_issues",
             "base_url": env.get("HFR_GITLAB_BASE_URL", "https://gitlab.com/api/v4"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "GITLAB"),
             "project_id": env["HFR_GITLAB_PROJECT_ID"],
             "token_env": "GITLAB_TOKEN",
             "state": env.get("HFR_GITLAB_STATE"),
@@ -660,6 +741,7 @@ def _discord_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "discord",
             "type": "discord_messages",
             "base_url": env.get("HFR_DISCORD_BASE_URL", "https://discord.com/api/v10"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "DISCORD"),
             "channel_id": env["HFR_DISCORD_CHANNEL_ID"],
             "token_env": "DISCORD_BOT_TOKEN",
             "limit": _int_env(env, "HFR_DISCORD_LIMIT", 5),
@@ -673,6 +755,7 @@ def _zendesk_source(env: Mapping[str, str]) -> dict[str, Any]:
         "id": "zendesk",
         "type": "zendesk_tickets",
         "base_url": env["HFR_ZENDESK_BASE_URL"],
+        "allow_custom_origin": _custom_origin_opt_in(env, "ZENDESK"),
         "ticket_id": env.get("HFR_ZENDESK_TICKET_ID"),
         "query": env.get("HFR_ZENDESK_QUERY", "type:ticket"),
         "state_path": "zendesk",
@@ -691,6 +774,7 @@ def _pagerduty_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "pagerduty",
             "type": "pagerduty_incidents",
             "base_url": env.get("HFR_PAGERDUTY_BASE_URL", "https://api.pagerduty.com"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "PAGERDUTY"),
             "token_env": "PAGERDUTY_API_TOKEN",
             "limit": _int_env(env, "HFR_PAGERDUTY_LIMIT", 5),
             "statuses": _csv_env(env, "HFR_PAGERDUTY_STATUSES"),
@@ -707,6 +791,7 @@ def _github_source(env: Mapping[str, str]) -> dict[str, Any]:
         "repo": env["HFR_GITHUB_REPO"],
         "issue_number": _int_env(env, "HFR_GITHUB_ISSUE_NUMBER", 0),
         "base_url": env.get("HFR_GITHUB_BASE_URL", "https://api.github.com"),
+        "allow_custom_origin": _custom_origin_opt_in(env, "GITHUB"),
         "include_comments": True,
         "state_path": "github.issue",
     }
@@ -721,6 +806,7 @@ def _gmail_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "gmail",
             "type": "gmail_threads",
             "base_url": env.get("HFR_GMAIL_BASE_URL", "https://gmail.googleapis.com/gmail/v1"),
+            "allow_custom_origin": _custom_origin_opt_in(env, "GMAIL"),
             "token_env": "GMAIL_ACCESS_TOKEN",
             "query": env.get("HFR_GMAIL_QUERY"),
             "thread_id": env.get("HFR_GMAIL_THREAD_ID"),
@@ -737,6 +823,7 @@ def _imap_source(env: Mapping[str, str]) -> dict[str, Any]:
             "id": "imap",
             "type": "imap",
             "host": env["IMAP_HOST"],
+            "allow_custom_origin": _custom_origin_opt_in(env, "IMAP"),
             "port": _int_env(env, "IMAP_PORT", 993),
             "username_env": "IMAP_USERNAME",
             "password_env": "IMAP_PASSWORD",
@@ -804,6 +891,10 @@ def _bool_env(env: Mapping[str, str], name: str, default: bool) -> bool:
     if raw is None or raw == "":
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _custom_origin_opt_in(env: Mapping[str, str], provider: str) -> bool:
+    return _bool_env(env, f"HFR_{provider}_ALLOW_CUSTOM_ORIGIN", False)
 
 
 def _csv_env(env: Mapping[str, str], name: str) -> list[str] | None:

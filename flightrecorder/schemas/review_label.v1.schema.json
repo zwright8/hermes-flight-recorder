@@ -1,0 +1,32 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/review_label.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Human label template or completed label row for an export-review item.",
+  "if": {"properties": {"human_label": {"type": "string"}}, "required": ["human_label"]},
+  "then": {"properties": {"reviewed_at": {"minLength": 1, "type": "string"}, "reviewer": {"minLength": 1, "type": "string"}, "reviewer_confidence": {"$ref": "#/$defs/confidence"}}, "required": ["reviewer", "reviewer_confidence", "reviewed_at"]},
+  "properties": {
+    "accepted_evidence_refs": {"items": {}, "type": "array"},
+    "corrected_score": {"maximum": 100, "minimum": 0, "type": ["integer", "null"]},
+    "episode_id": {"minLength": 1, "type": "string"},
+    "human_label": {"oneOf": [{"$ref": "#/$defs/label"}, {"type": "null"}]},
+    "notes": {"type": "string"},
+    "rejected_evidence_refs": {"items": {}, "type": "array"},
+    "review_item_id": {"minLength": 1, "type": "string"},
+    "review_item_sha256": {"$ref": "#/$defs/sha256"},
+    "reviewed_at": {"type": ["string", "null"]},
+    "reviewer": {"type": ["string", "null"]},
+    "reviewer_confidence": {"oneOf": [{"$ref": "#/$defs/confidence"}, {"type": "null"}]},
+    "scenario_id": {"minLength": 1, "type": "string"},
+    "schema_version": {"const": "hfr.review.label.v1"},
+    "suggested_human_label": {"$ref": "#/$defs/label"}
+  },
+  "required": ["schema_version", "review_item_id", "review_item_sha256", "episode_id", "scenario_id", "suggested_human_label", "human_label", "corrected_score", "reviewer", "reviewer_confidence", "reviewed_at", "notes", "accepted_evidence_refs", "rejected_evidence_refs"],
+  "title": "Hermes Flight Recorder Review Label",
+  "type": "object",
+  "$defs": {
+    "confidence": {"enum": ["high", "medium", "low", "unknown"], "type": "string"},
+    "label": {"enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string"},
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

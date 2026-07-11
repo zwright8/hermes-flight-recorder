@@ -310,6 +310,9 @@ def _validate_string(value: str, schema: dict[str, Any], path: str, errors: list
     min_length = schema.get("minLength")
     if isinstance(min_length, int) and len(value) < min_length:
         errors.append(f"{path}: expected length >= {min_length}, got {len(value)}")
+    max_length = schema.get("maxLength")
+    if isinstance(max_length, int) and len(value) > max_length:
+        errors.append(f"{path}: expected length <= {max_length}, got {len(value)}")
     pattern = schema.get("pattern")
     if isinstance(pattern, str):
         import re

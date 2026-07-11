@@ -30,7 +30,10 @@ DEFAULT_HTTP_TIMEOUT_SECONDS = 15
 DEFAULT_MAX_BODY_CHARS = 4096
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 _SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_AWS_REGION_RE = re.compile(r"^[a-z0-9-]+$")
 _RESERVED_STATE_ROOTS = {"schema_version", "filesystem", "json_sources", "json", "observations", "verifiers"}
+_AUTHORIZATION_CREDENTIAL_HEADERS = frozenset({"authorization"})
+_GITLAB_CREDENTIAL_HEADERS = frozenset({"authorization", "private-token"})
 _DEFAULT_LINEAR_ISSUES_QUERY = """
 query FlightRecorderIssues($first: Int!) {
   issues(first: $first) {
@@ -260,6 +263,7 @@ def _capture_http_json_source(source: dict[str, Any]) -> dict[str, Any]:
 def _capture_slack_history_source(source: dict[str, Any]) -> dict[str, Any]:
     channel_id = _required_string(source, "channel_id")
     base_url = str(source.get("base_url") or "https://slack.com/api").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://slack.com/api", "Slack")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "SLACK_BOT_TOKEN")
@@ -292,6 +296,12 @@ def _capture_slack_history_source(source: dict[str, Any]) -> dict[str, Any]:
 def _capture_google_calendar_events_source(source: dict[str, Any]) -> dict[str, Any]:
     calendar_id = str(source.get("calendar_id") or "primary")
     base_url = str(source.get("base_url") or "https://www.googleapis.com/calendar/v3").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        "https://www.googleapis.com/calendar/v3",
+        "Google Calendar",
+    )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "GOOGLE_CALENDAR_ACCESS_TOKEN")
@@ -326,6 +336,7 @@ def _capture_google_calendar_events_source(source: dict[str, Any]) -> dict[str, 
 
 def _capture_google_drive_files_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://www.googleapis.com/drive/v3").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://www.googleapis.com/drive/v3", "Google Drive")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "GOOGLE_DRIVE_ACCESS_TOKEN")
@@ -355,6 +366,12 @@ def _capture_google_drive_files_source(source: dict[str, Any]) -> dict[str, Any]
 
 def _capture_kubernetes_resources_source(source: dict[str, Any]) -> dict[str, Any]:
     url = _required_string(source, "url")
+    credentialed = (
+        bool(source.get("token_env") or source.get("bearer_token_env"))
+        or _has_explicit_credential_config(source, (), _AUTHORIZATION_CREDENTIAL_HEADERS)
+    )
+    if credentialed and source.get("allow_custom_origin") is not True:
+        raise VerifierError("Kubernetes credentialed URL requires allow_custom_origin=true")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _headers_from_source(source)
@@ -370,6 +387,7 @@ def _capture_kubernetes_resources_source(source: dict[str, Any]) -> dict[str, An
 
 def _capture_stripe_objects_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://api.stripe.com/v1").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://api.stripe.com/v1", "Stripe")
     resource = _required_string(source, "resource").strip("/")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
@@ -396,6 +414,7 @@ def _capture_stripe_objects_source(source: dict[str, Any]) -> dict[str, Any]:
 def _capture_notion_database_source(source: dict[str, Any]) -> dict[str, Any]:
     database_id = _required_string(source, "database_id")
     base_url = str(source.get("base_url") or "https://api.notion.com/v1").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://api.notion.com/v1", "Notion")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "NOTION_TOKEN")
@@ -424,6 +443,7 @@ def _capture_notion_database_source(source: dict[str, Any]) -> dict[str, Any]:
 
 def _capture_linear_issues_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://api.linear.app/graphql").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://api.linear.app/graphql", "Linear")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "LINEAR_API_KEY")
@@ -453,6 +473,13 @@ def _capture_linear_issues_source(source: dict[str, Any]) -> dict[str, Any]:
 
 def _capture_jira_issues_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = _required_string(source, "base_url").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        None,
+        "Jira",
+        credential_fields=("token_env", "bearer_token_env", "api_token_env", "password_env"),
+    )
     endpoint = str(source.get("endpoint") or "/rest/api/3/search").lstrip("/")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
@@ -481,6 +508,8 @@ def _capture_s3_objects_source(source: dict[str, Any]) -> dict[str, Any]:
     bucket = _required_string(source, "bucket")
     prefix = str(source.get("prefix") or "")
     region = str(source.get("region") or os.environ.get("AWS_REGION") or "us-east-1")
+    if not _AWS_REGION_RE.fullmatch(region):
+        raise VerifierError("S3 region must contain only lowercase letters, digits, and hyphens")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     max_keys = _non_negative_int(source.get("max_keys", 1000), "max_keys")
@@ -496,7 +525,17 @@ def _capture_s3_objects_source(source: dict[str, Any]) -> dict[str, Any]:
     list_url = _url_with_params(list_url, params)
     headers = _headers_from_source(source)
     if not bool(source.get("unsigned", False)):
-        headers.update(_aws_sigv4_headers(source, "GET", list_url, region, service="s3"))
+        custom_origin = _require_safe_s3_signing_origin(source, list_url, region)
+        headers.update(
+            _aws_sigv4_headers(
+                source,
+                "GET",
+                list_url,
+                region,
+                service="s3",
+                allow_default_session_token=not custom_origin,
+            )
+        )
     _status_code, payload = _http_get_text(list_url, headers=headers, timeout=timeout, max_bytes=max_bytes)
     objects = _parse_s3_list_objects(payload)
     return {
@@ -509,6 +548,12 @@ def _capture_s3_objects_source(source: dict[str, Any]) -> dict[str, Any]:
 
 def _capture_microsoft_graph_messages_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://graph.microsoft.com/v1.0").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        "https://graph.microsoft.com/v1.0",
+        "Microsoft Graph",
+    )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "MICROSOFT_GRAPH_TOKEN")
@@ -534,6 +579,12 @@ def _capture_microsoft_graph_messages_source(source: dict[str, Any]) -> dict[str
 
 def _capture_microsoft_graph_events_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://graph.microsoft.com/v1.0").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        "https://graph.microsoft.com/v1.0",
+        "Microsoft Graph",
+    )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "MICROSOFT_GRAPH_TOKEN")
@@ -555,10 +606,17 @@ def _capture_microsoft_graph_events_source(source: dict[str, Any]) -> dict[str, 
 def _capture_gitlab_issues_source(source: dict[str, Any]) -> dict[str, Any]:
     project_id = _required_string(source, "project_id")
     base_url = str(source.get("base_url") or "https://gitlab.com/api/v4").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        "https://gitlab.com/api/v4",
+        "GitLab",
+        credential_headers=_GITLAB_CREDENTIAL_HEADERS,
+    )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _headers_from_source(source)
-    if "Authorization" not in headers:
+    if not _has_header(headers, "Authorization") and not _has_header(headers, "PRIVATE-TOKEN"):
         token_env = str(source.get("token_env") or "GITLAB_TOKEN")
         token = os.environ.get(token_env)
         if not token:
@@ -581,10 +639,11 @@ def _capture_gitlab_issues_source(source: dict[str, Any]) -> dict[str, Any]:
 def _capture_discord_messages_source(source: dict[str, Any]) -> dict[str, Any]:
     channel_id = _required_string(source, "channel_id")
     base_url = str(source.get("base_url") or "https://discord.com/api/v10").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://discord.com/api/v10", "Discord")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _headers_from_source(source)
-    if "Authorization" not in headers:
+    if not _has_header(headers, "Authorization"):
         token_env = str(source.get("token_env") or "DISCORD_BOT_TOKEN")
         token = os.environ.get(token_env)
         if not token:
@@ -604,6 +663,13 @@ def _capture_discord_messages_source(source: dict[str, Any]) -> dict[str, Any]:
 
 def _capture_zendesk_tickets_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = _required_string(source, "base_url").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        None,
+        "Zendesk",
+        credential_fields=("token_env", "bearer_token_env", "api_token_env"),
+    )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _zendesk_headers(source)
@@ -623,6 +689,7 @@ def _capture_zendesk_tickets_source(source: dict[str, Any]) -> dict[str, Any]:
 
 def _capture_pagerduty_incidents_source(source: dict[str, Any]) -> dict[str, Any]:
     base_url = str(source.get("base_url") or "https://api.pagerduty.com").rstrip("/")
+    _require_safe_credential_origin(source, base_url, "https://api.pagerduty.com", "PagerDuty")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
     headers = _bearer_headers(source, "PAGERDUTY_API_TOKEN")
@@ -704,6 +771,15 @@ def _capture_github_issue_source(source: dict[str, Any]) -> dict[str, Any]:
     repo = _required_string(source, "repo")
     issue_number = _non_negative_int(source.get("issue_number"), "issue_number")
     base_url = str(source.get("base_url") or "https://api.github.com").rstrip("/")
+    if source.get("token_env"):
+        _require_safe_credential_origin(
+            source,
+            base_url,
+            "https://api.github.com",
+            "GitHub",
+            credential_fields=("token_env",),
+            credential_headers=frozenset(),
+        )
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     headers = {
         "Accept": "application/vnd.github+json",
@@ -732,12 +808,20 @@ def _capture_github_issue_source(source: dict[str, Any]) -> dict[str, Any]:
 
 
 def _capture_gmail_threads_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://gmail.googleapis.com/gmail/v1").rstrip("/")
+    _require_safe_credential_origin(
+        source,
+        base_url,
+        "https://gmail.googleapis.com/gmail/v1",
+        "Gmail",
+        credential_fields=("token_env",),
+        credential_headers=frozenset(),
+    )
     token_env = str(source.get("token_env") or "GMAIL_ACCESS_TOKEN")
     token = os.environ.get(token_env)
     if not token:
         raise VerifierError(f"Gmail verifier requires access token in environment variable {token_env}")
 
-    base_url = str(source.get("base_url") or "https://gmail.googleapis.com/gmail/v1").rstrip("/")
     user_id = urllib.parse.quote(str(source.get("user_id") or "me"), safe="")
     timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
     headers = {
@@ -815,6 +899,8 @@ def _gmail_requested_thread_ids(
 
 def _capture_imap_source(source: dict[str, Any]) -> dict[str, Any]:
     host = _required_string(source, "host")
+    if source.get("allow_custom_origin") is not True:
+        raise VerifierError("IMAP host requires allow_custom_origin=true")
     port = _non_negative_int(source.get("port", 993), "port")
     username = _string_or_env(source, "username", "username_env")
     password = _string_or_env(source, "password", "password_env")
@@ -994,9 +1080,80 @@ def _headers_from_source(source: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
+def _require_safe_credential_origin(
+    source: dict[str, Any],
+    base_url: str,
+    official_base_url: str | None,
+    provider_name: str,
+    *,
+    credential_fields: tuple[str, ...] = ("token_env", "bearer_token_env"),
+    credential_headers: frozenset[str] = _AUTHORIZATION_CREDENTIAL_HEADERS,
+) -> None:
+    """Prevent provider credentials from silently following an attacker-controlled base URL."""
+    if official_base_url is not None and _normalized_http_origin(base_url) == _normalized_http_origin(
+        official_base_url
+    ):
+        return
+    if source.get("allow_custom_origin") is not True:
+        raise VerifierError(f"{provider_name} custom origin requires allow_custom_origin=true")
+    if not _has_explicit_credential_config(source, credential_fields, credential_headers):
+        raise VerifierError(
+            f"{provider_name} custom origin requires an explicit credential configuration; "
+            "default environment credentials are restricted to the official provider origin"
+        )
+
+
+def _require_safe_s3_signing_origin(source: dict[str, Any], list_url: str, region: str) -> bool:
+    official_endpoint = f"https://s3.{region}.amazonaws.com"
+    if _normalized_http_origin(list_url) == _normalized_http_origin(official_endpoint):
+        return False
+    if source.get("allow_custom_origin") is not True:
+        raise VerifierError("S3 custom origin requires allow_custom_origin=true")
+    if not all(
+        isinstance(source.get(field), str) and bool(source[field].strip())
+        for field in ("access_key_env", "secret_key_env")
+    ):
+        raise VerifierError("S3 custom origin requires explicit access_key_env and secret_key_env")
+    return True
+
+
+def _normalized_http_origin(url: str) -> tuple[str, str, int | None] | None:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return None
+    scheme = parsed.scheme.lower()
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if scheme not in {"http", "https"} or not hostname:
+        return None
+    if port is None:
+        port = 443 if scheme == "https" else 80
+    return scheme, hostname, port
+
+
+def _has_explicit_credential_config(
+    source: dict[str, Any],
+    credential_fields: tuple[str, ...],
+    credential_headers: frozenset[str],
+) -> bool:
+    if any(isinstance(source.get(field), str) and bool(source[field].strip()) for field in credential_fields):
+        return True
+    for source_field in ("headers", "headers_from_env"):
+        headers = source.get(source_field)
+        if isinstance(headers, dict) and any(str(name).lower() in credential_headers for name in headers):
+            return True
+    return False
+
+
+def _has_header(headers: dict[str, str], name: str) -> bool:
+    expected = name.lower()
+    return any(str(header_name).lower() == expected for header_name in headers)
+
+
 def _bearer_headers(source: dict[str, Any], default_token_env: str) -> dict[str, str]:
     headers = _headers_from_source(source)
-    if "Authorization" in headers:
+    if _has_header(headers, "Authorization"):
         return headers
     token_env = str(source.get("token_env") or source.get("bearer_token_env") or default_token_env)
     token = os.environ.get(token_env)
@@ -1008,7 +1165,7 @@ def _bearer_headers(source: dict[str, Any], default_token_env: str) -> dict[str,
 
 def _jira_headers(source: dict[str, Any]) -> dict[str, str]:
     headers = _headers_from_source(source)
-    if "Authorization" in headers:
+    if _has_header(headers, "Authorization"):
         return headers
     if source.get("token_env") or source.get("bearer_token_env"):
         return _bearer_headers(source, "JIRA_API_TOKEN")
@@ -1062,7 +1219,7 @@ def _http_json(
     try:
         payload = json.loads(response_body.decode("utf-8"))
     except json.JSONDecodeError as exc:
-        raise VerifierError(f"HTTP {method} {url} did not return valid JSON: {exc}") from exc
+        raise VerifierError(f"HTTP {method} response did not return valid JSON: {exc}") from exc
     return status_code, payload
 
 
@@ -1096,10 +1253,9 @@ def _http_request(
             max_body_bytes=max_bytes,
         )
     except HttpStatusError as exc:
-        error_body = exc.body.decode("utf-8", errors="replace")
         suffix = " [truncated]" if exc.truncated else ""
         raise VerifierError(
-            f"HTTP {method} request failed with status {exc.status_code}: {error_body}{suffix}"
+            f"HTTP {method} request failed with status {exc.status_code}; error body omitted{suffix}"
         ) from exc
     except SafeHttpError as exc:
         raise VerifierError(f"HTTP {method} request failed: {exc}") from exc
@@ -1425,7 +1581,7 @@ def _discord_message_summary(message: dict[str, Any], channel_id: str) -> dict[s
 
 def _zendesk_headers(source: dict[str, Any]) -> dict[str, str]:
     headers = _headers_from_source(source)
-    if "Authorization" in headers:
+    if _has_header(headers, "Authorization"):
         return headers
     if source.get("token_env") or source.get("bearer_token_env"):
         return _bearer_headers(source, "ZENDESK_API_TOKEN")
@@ -1541,14 +1697,25 @@ def _nested_value(root: Any, path: str) -> Any:
     return cursor
 
 
-def _aws_sigv4_headers(source: dict[str, Any], method: str, url: str, region: str, *, service: str) -> dict[str, str]:
+def _aws_sigv4_headers(
+    source: dict[str, Any],
+    method: str,
+    url: str,
+    region: str,
+    *,
+    service: str,
+    allow_default_session_token: bool = True,
+) -> dict[str, str]:
     access_key_env = str(source.get("access_key_env") or "AWS_ACCESS_KEY_ID")
     secret_key_env = str(source.get("secret_key_env") or "AWS_SECRET_ACCESS_KEY")
     access_key = os.environ.get(access_key_env)
     secret_key = os.environ.get(secret_key_env)
     if not access_key or not secret_key:
         raise VerifierError(f"S3 verifier requires {access_key_env} and {secret_key_env}, or unsigned=true")
-    session_token = os.environ.get(str(source.get("session_token_env") or "AWS_SESSION_TOKEN"))
+    session_token_env = source.get("session_token_env")
+    if session_token_env is None and allow_default_session_token:
+        session_token_env = "AWS_SESSION_TOKEN"
+    session_token = os.environ.get(str(session_token_env)) if session_token_env else None
     now = _datetime.datetime.utcnow()
     amz_date = now.strftime("%Y%m%dT%H%M%SZ")
     date_stamp = now.strftime("%Y%m%d")

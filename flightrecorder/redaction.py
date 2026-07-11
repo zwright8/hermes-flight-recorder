@@ -37,7 +37,13 @@ _ASSIGNMENT_PREFIX_RE = re.compile(
     r"(?P<key_quote>[\"']?)(?P<key>[\w.-]+)(?P=key_quote)"
     r"[^\S\r\n]*(?P<separator>[:=])[^\S\r\n]*"
 )
+_CLI_FLAG_RE = re.compile(r"(?<!\S)--(?P<key>[A-Za-z0-9][A-Za-z0-9_.-]*)")
+_FOLLOWING_FLAG_RE = re.compile(
+    r"(?:--[A-Za-z0-9_][A-Za-z0-9_.-]*|-[A-Za-z_][A-Za-z0-9_.-]*|--?)"
+    r"(?=$|[\s=;&|])"
+)
 _UNQUOTED_VALUE_DELIMITERS = frozenset(",;}\r\n")
+_CLI_VALUE_DELIMITERS = frozenset(" \t\r\n;&|\"'")
 
 
 @dataclass(frozen=True)
@@ -83,19 +89,19 @@ def is_unredacted_secret_value(value: Any) -> bool:
 
 
 def contains_unredacted_secret_assignment(text: str) -> bool:
-    """Return whether text contains a secret-like assignment with a raw value."""
+    """Return whether text contains a secret assignment or CLI argument with a raw value."""
     return any(
         is_unredacted_secret_value(_unquote(assignment.raw_value))
-        for assignment in _secret_assignments(text)
+        for assignment in (*_secret_assignments(text), *_secret_cli_arguments(text))
     )
 
 
 def redact_text(text: Any, secret_patterns: list[str] | None = None) -> str:
     """Return a string with secret-looking values redacted.
 
-    The generic assignment redactor keeps the key name visible for evidence
-    while removing the value. Scenario-specific patterns are then applied as a
-    second pass.
+    The generic assignment and CLI-argument redactors keep key names and flags
+    visible for evidence while removing values. Scenario-specific patterns are
+    then applied as a final pass.
     """
     patterns = _compile_patterns(secret_patterns or [])
     return _redact_text(text, patterns)
@@ -162,7 +168,8 @@ def _compile_patterns(secret_patterns: list[str]) -> list[re.Pattern[str]]:
 
 
 def _redact_text(text: Any, secret_patterns: list[re.Pattern[str]]) -> str:
-    rendered = _redact_secret_assignments(_stringify(text))
+    rendered = _redact_secret_cli_arguments(_stringify(text))
+    rendered = _redact_secret_assignments(rendered)
     for pattern in secret_patterns:
         rendered = pattern.sub(REDACTED_VALUE, rendered)
     return rendered
@@ -177,6 +184,21 @@ def _redact_secret_assignments(text: str) -> str:
             continue
         parts.extend((text[cursor : assignment.value_start], _redacted_assignment_value(raw_value)))
         cursor = assignment.value_end
+    if not parts:
+        return text
+    parts.append(text[cursor:])
+    return "".join(parts)
+
+
+def _redact_secret_cli_arguments(text: str) -> str:
+    parts: list[str] = []
+    cursor = 0
+    for argument in _secret_cli_arguments(text):
+        raw_value = argument.raw_value
+        if not is_unredacted_secret_value(_unquote(raw_value)):
+            continue
+        parts.extend((text[cursor : argument.value_start], _redacted_assignment_value(raw_value)))
+        cursor = argument.value_end
     if not parts:
         return text
     parts.append(text[cursor:])
@@ -203,6 +225,33 @@ def _secret_assignments(text: str) -> list[_SecretAssignment]:
     return assignments
 
 
+def _secret_cli_arguments(text: str) -> list[_SecretAssignment]:
+    arguments: list[_SecretAssignment] = []
+    search_from = 0
+    while match := _CLI_FLAG_RE.search(text, search_from):
+        flag_end = match.end()
+        search_from = max(flag_end, match.start() + 1)
+        if not is_secret_key(match.group("key")):
+            continue
+        if flag_end >= len(text) or text[flag_end] not in " \t":
+            continue
+        value_start = flag_end
+        while value_start < len(text) and text[value_start] in " \t":
+            value_start += 1
+        if value_start >= len(text) or _starts_following_flag(text, value_start):
+            continue
+        value_end = _cli_value_end(text, value_start)
+        arguments.append(
+            _SecretAssignment(
+                raw_value=text[value_start:value_end],
+                value_start=value_start,
+                value_end=value_end,
+            )
+        )
+        search_from = max(value_end, value_start + 1)
+    return arguments
+
+
 def _assignment_value_end(text: str, value_start: int) -> int:
     if value_start >= len(text):
         return value_start
@@ -218,7 +267,9 @@ def _assignment_value_end(text: str, value_start: int) -> int:
             next_field = cursor
             while next_field < len(text) and text[next_field] in " \t":
                 next_field += 1
-            if _starts_adjacent_assignment(text, next_field):
+            if _starts_adjacent_assignment(text, next_field) or _starts_cli_flag(
+                text, next_field
+            ):
                 break
         cursor += 1
     while cursor > value_start and text[cursor - 1] in " \t":
@@ -233,6 +284,30 @@ def _starts_adjacent_assignment(text: str, start: int) -> bool:
         and match.end() < len(text)
         and text[match.end()] not in "=,;}\r\n"
     )
+
+
+def _starts_cli_flag(text: str, start: int) -> bool:
+    return _CLI_FLAG_RE.match(text, start) is not None
+
+
+def _starts_following_flag(text: str, start: int) -> bool:
+    return _FOLLOWING_FLAG_RE.match(text, start) is not None
+
+
+def _cli_value_end(text: str, value_start: int) -> int:
+    if text[value_start] in {'"', "'"}:
+        return _quoted_value_end(text, value_start)
+
+    cursor = value_start
+    while cursor < len(text):
+        character = text[cursor]
+        if character == "\\" and cursor + 1 < len(text):
+            cursor += 2
+            continue
+        if character in _CLI_VALUE_DELIMITERS:
+            break
+        cursor += 1
+    return cursor
 
 
 def _quoted_value_end(text: str, value_start: int) -> int:

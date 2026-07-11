@@ -4,14 +4,25 @@ import os
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 import flightrecorder.path_safety as path_safety_module
 import flightrecorder.trainer_archive as trainer_archive_module
+from flightrecorder.cli import main
 from flightrecorder.preflight import build_trainer_launch_check, build_trainer_preflight
 from flightrecorder.trainer_archive import TrainerArchiveError, build_trainer_archive
 from flightrecorder.validation import validate_artifacts
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_cli(args: list[str]) -> int:
+    with redirect_stdout(StringIO()):
+        return main(args)
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -34,28 +45,20 @@ def _tree_snapshot(path: Path) -> dict[str, bytes | None]:
 
 
 def _write_passed_evidence_bundle(path: Path) -> None:
-    _write_json(
-        path,
-        {
-            "schema_version": "hfr.evidence_bundle.v1",
-            "bundle_path": path.name,
-            "passed": True,
-            "readiness": "ready",
-            "decision": {
-                "readiness": "ready",
-                "recommendation": "promote_handoff",
-                "summary": "Minimal archive hardening fixture is ready.",
-                "blocking_check_count": 0,
-                "next_actions": [],
-            },
-            "check_count": 0,
-            "failed_check_count": 0,
-            "checks": [],
-            "artifacts": {},
-            "metrics": {},
-            "notes": [],
-        },
+    runs = path.parent / "evidence_bundle_fixture_runs"
+    assert (
+        _run_cli(
+            [
+                "run",
+                "--scenario",
+                str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                "--out",
+                str(runs / "good"),
+            ]
+        )
+        == 0
     )
+    assert _run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(path)]) == 0
 
 
 class TrainerArchiveHardeningTests(unittest.TestCase):
@@ -76,7 +79,6 @@ class TrainerArchiveHardeningTests(unittest.TestCase):
             gate_paths=[bundle],
             evidence_bundle_path=bundle,
             trainer_command=trainer_command,
-            allow_unvalidated_gates=True,
         )
         _write_json(preflight_path, preflight)
         validation = validate_artifacts(trainer_preflight_paths=[preflight_path])

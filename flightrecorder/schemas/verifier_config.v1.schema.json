@@ -87,6 +87,9 @@
         "base_url": {
           "type": "string"
         },
+        "allow_custom_origin": {
+          "type": "boolean"
+        },
         "endpoint": {
           "type": "string"
         },

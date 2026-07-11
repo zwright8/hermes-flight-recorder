@@ -62,6 +62,54 @@ class VerifierAdapterTests(unittest.TestCase):
         finally:
             server.close()
 
+    def test_required_http_verifier_does_not_render_error_response_body(self):
+        error = HttpStatusError(
+            503,
+            b'{"api_key":"private-error-value"}',
+            truncated=False,
+        )
+        with patch("flightrecorder.verifiers.bounded_http_request", side_effect=error):
+            with self.assertRaises(VerifierError) as raised:
+                capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "remote",
+                                "type": "http_json",
+                                "url": "https://example.test/state",
+                            }
+                        ]
+                    }
+                )
+
+        rendered = str(raised.exception)
+        self.assertIn("status 503", rendered)
+        self.assertNotIn("private-error-value", rendered)
+
+    def test_invalid_json_verifier_error_omits_url_credentials_and_query(self):
+        url = "https://user:private-password@example.test/state?api_key=private-query-value"
+        with patch(
+            "flightrecorder.verifiers.bounded_http_request",
+            return_value=(200, b"not-json"),
+        ):
+            with self.assertRaises(VerifierError) as raised:
+                capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "remote",
+                                "type": "http_json",
+                                "url": url,
+                            }
+                        ]
+                    }
+                )
+
+        rendered = str(raised.exception)
+        self.assertIn("did not return valid JSON", rendered)
+        self.assertNotIn("private-password", rendered)
+        self.assertNotIn("private-query-value", rendered)
+
     def test_verifier_rejects_duplicate_source_ids_before_capture(self):
         config = {
             "sources": [
@@ -116,6 +164,368 @@ class VerifierAdapterTests(unittest.TestCase):
             sink.close()
 
         self.assertEqual(sink.requests, [])
+
+    def test_slack_default_token_is_not_sent_to_custom_origin(self):
+        attacker = _JsonServer({"/slack/conversations.history": {"ok": True, "messages": []}})
+        try:
+            with patch.dict(os.environ, {"SLACK_BOT_TOKEN": "private-default-token"}):
+                with self.assertRaisesRegex(VerifierError, "allow_custom_origin=true"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "slack",
+                                    "type": "slack_history",
+                                    "base_url": f"{attacker.url}/slack",
+                                    "channel_id": "C123",
+                                }
+                            ]
+                        }
+                    )
+        finally:
+            attacker.close()
+
+        self.assertEqual(attacker.requests, [])
+
+    def test_custom_provider_origin_requires_explicit_credential_config(self):
+        with patch.dict(os.environ, {"SLACK_BOT_TOKEN": "private-default-token"}):
+            with patch("flightrecorder.verifiers.bounded_http_request") as request:
+                with self.assertRaisesRegex(VerifierError, "explicit credential configuration"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "slack",
+                                    "type": "slack_history",
+                                    "base_url": "https://attacker.example.test/slack",
+                                    "allow_custom_origin": True,
+                                    "channel_id": "C123",
+                                }
+                            ]
+                        }
+                    )
+
+        request.assert_not_called()
+
+    def test_provider_adapters_reject_custom_origins_without_opt_in(self):
+        custom_base = "https://attacker.example.test"
+        cases = [
+            ("slack", {"type": "slack_history", "channel_id": "C123"}),
+            ("calendar", {"type": "google_calendar_events"}),
+            ("drive", {"type": "google_drive_files"}),
+            ("gmail", {"type": "gmail_threads"}),
+            ("stripe", {"type": "stripe_objects", "resource": "payment_intents"}),
+            ("notion", {"type": "notion_database", "database_id": "db1"}),
+            ("linear", {"type": "linear_issues"}),
+            ("graph_messages", {"type": "microsoft_graph_messages"}),
+            ("graph_events", {"type": "microsoft_graph_events"}),
+            (
+                "github",
+                {
+                    "type": "github_issue",
+                    "owner": "octo",
+                    "repo": "repo",
+                    "issue_number": 7,
+                    "token_env": "TEST_GITHUB_TOKEN",
+                },
+            ),
+            ("gitlab", {"type": "gitlab_issues", "project_id": "group/project"}),
+            ("discord", {"type": "discord_messages", "channel_id": "C123"}),
+            ("pagerduty", {"type": "pagerduty_incidents"}),
+            ("jira", {"type": "jira_issues"}),
+            ("zendesk", {"type": "zendesk_tickets"}),
+        ]
+
+        with patch("flightrecorder.verifiers.bounded_http_request") as request:
+            for source_id, source in cases:
+                configured_source = {"id": source_id, "base_url": custom_base, **source}
+                with self.subTest(source_type=source["type"]):
+                    with self.assertRaisesRegex(VerifierError, "allow_custom_origin=true"):
+                        capture_verified_state({"sources": [configured_source]})
+
+        request.assert_not_called()
+
+    def test_signed_s3_custom_origin_rejects_default_aws_credentials_before_request(self):
+        server = _JsonServer({"/s3": _s3_listing_xml()})
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "AWS_ACCESS_KEY_ID": "default-access-key",
+                    "AWS_SECRET_ACCESS_KEY": "default-secret-key",
+                    "AWS_SESSION_TOKEN": "default-session-token",
+                },
+                clear=True,
+            ):
+                for location in ({"url": f"{server.url}/s3"}, {"endpoint_url": server.url}):
+                    with self.subTest(location=next(iter(location))):
+                        with self.assertRaisesRegex(VerifierError, "allow_custom_origin=true"):
+                            capture_verified_state(
+                                {
+                                    "sources": [
+                                        {
+                                            "id": "s3",
+                                            "type": "s3_objects",
+                                            "bucket": "demo",
+                                            **location,
+                                        }
+                                    ]
+                                }
+                            )
+        finally:
+            server.close()
+
+        self.assertEqual(server.requests, [])
+
+    def test_signed_s3_custom_origin_requires_explicit_access_and_secret_env_names(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AWS_ACCESS_KEY_ID": "default-access-key",
+                "AWS_SECRET_ACCESS_KEY": "default-secret-key",
+                "AWS_SESSION_TOKEN": "default-session-token",
+            },
+            clear=True,
+        ):
+            with patch("flightrecorder.verifiers.bounded_http_request") as request:
+                with self.assertRaisesRegex(VerifierError, "explicit access_key_env and secret_key_env"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "s3",
+                                    "type": "s3_objects",
+                                    "bucket": "demo",
+                                    "url": "https://storage.example.test/demo",
+                                    "allow_custom_origin": True,
+                                }
+                            ]
+                        }
+                    )
+
+        request.assert_not_called()
+
+    def test_signed_s3_custom_origin_uses_only_explicitly_named_credentials(self):
+        with patch.dict(
+            os.environ,
+            {
+                "TEST_S3_ACCESS_KEY": "explicit-access-key",
+                "TEST_S3_SECRET_KEY": "explicit-secret-key",
+                "TEST_S3_SESSION_TOKEN": "explicit-session-token",
+                "AWS_SESSION_TOKEN": "default-session-token",
+            },
+            clear=True,
+        ):
+            with patch(
+                "flightrecorder.verifiers.bounded_http_request",
+                return_value=(200, _s3_listing_xml().encode("utf-8")),
+            ) as request:
+                snapshot = capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "s3",
+                                "type": "s3_objects",
+                                "bucket": "demo",
+                                "url": "https://storage.example.test/demo",
+                                "allow_custom_origin": True,
+                                "access_key_env": "TEST_S3_ACCESS_KEY",
+                                "secret_key_env": "TEST_S3_SECRET_KEY",
+                                "session_token_env": "TEST_S3_SESSION_TOKEN",
+                            }
+                        ]
+                    }
+                )
+
+        self.assertEqual(snapshot["verifiers"]["sources"]["s3"]["status"], "ok")
+        headers = request.call_args.kwargs["headers"]
+        self.assertIn("Credential=explicit-access-key/", headers["Authorization"])
+        self.assertEqual(headers["x-amz-security-token"], "explicit-session-token")
+        self.assertNotIn("default-session-token", json.dumps(headers))
+
+    def test_signed_s3_custom_origin_suppresses_implicit_default_session_token(self):
+        with patch.dict(
+            os.environ,
+            {
+                "TEST_S3_ACCESS_KEY": "explicit-access-key",
+                "TEST_S3_SECRET_KEY": "explicit-secret-key",
+                "AWS_SESSION_TOKEN": "default-session-token",
+            },
+            clear=True,
+        ):
+            with patch(
+                "flightrecorder.verifiers.bounded_http_request",
+                return_value=(200, _s3_listing_xml().encode("utf-8")),
+            ) as request:
+                capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "s3",
+                                "type": "s3_objects",
+                                "bucket": "demo",
+                                "url": "https://storage.example.test/demo",
+                                "allow_custom_origin": True,
+                                "access_key_env": "TEST_S3_ACCESS_KEY",
+                                "secret_key_env": "TEST_S3_SECRET_KEY",
+                            }
+                        ]
+                    }
+                )
+
+        self.assertNotIn("x-amz-security-token", request.call_args.kwargs["headers"])
+
+    def test_unsigned_s3_custom_endpoint_needs_no_credential_consent(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch(
+                "flightrecorder.verifiers.bounded_http_request",
+                return_value=(200, _s3_listing_xml().encode("utf-8")),
+            ) as request:
+                snapshot = capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "s3",
+                                "type": "s3_objects",
+                                "bucket": "demo",
+                                "endpoint_url": "https://storage.example.test",
+                                "unsigned": True,
+                            }
+                        ]
+                    }
+                )
+
+        self.assertEqual(snapshot["verifiers"]["sources"]["s3"]["status"], "ok")
+        headers = request.call_args.kwargs["headers"]
+        self.assertNotIn("Authorization", headers)
+        self.assertNotIn("x-amz-security-token", headers)
+
+    def test_s3_region_cannot_inject_a_non_aws_default_origin(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AWS_ACCESS_KEY_ID": "default-access-key",
+                "AWS_SECRET_ACCESS_KEY": "default-secret-key",
+            },
+            clear=True,
+        ):
+            with patch("flightrecorder.verifiers.bounded_http_request") as request:
+                with self.assertRaisesRegex(VerifierError, "S3 region must contain"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "s3",
+                                    "type": "s3_objects",
+                                    "bucket": "demo",
+                                    "region": "attacker.example/path",
+                                }
+                            ]
+                        }
+                    )
+
+        request.assert_not_called()
+
+    def test_imap_host_rejects_existing_credentials_without_explicit_consent(self):
+        with patch.dict(
+            os.environ,
+            {
+                "TEST_IMAP_USERNAME": "agent@example.test",
+                "TEST_IMAP_PASSWORD": "private-password",
+            },
+            clear=True,
+        ):
+            with patch("flightrecorder.verifiers.imaplib.IMAP4_SSL") as client:
+                with self.assertRaisesRegex(VerifierError, "allow_custom_origin=true"):
+                    capture_verified_state(
+                        {
+                            "sources": [
+                                {
+                                    "id": "imap",
+                                    "type": "imap",
+                                    "host": "imap.attacker.example.test",
+                                    "username_env": "TEST_IMAP_USERNAME",
+                                    "password_env": "TEST_IMAP_PASSWORD",
+                                }
+                            ]
+                        }
+                    )
+
+        client.assert_not_called()
+
+    def test_kubernetes_credentialed_url_rejects_missing_explicit_consent_before_request(self):
+        server = _JsonServer({"/api/v1/pods": {"items": []}})
+        try:
+            with patch.dict(os.environ, {"TEST_K8S_TOKEN": "private-token"}, clear=True):
+                credential_cases = (
+                    {"token_env": "TEST_K8S_TOKEN"},
+                    {"bearer_token_env": "TEST_K8S_TOKEN"},
+                    {"headers_from_env": {"Authorization": "TEST_K8S_TOKEN"}},
+                    {"headers": {"authorization": "Bearer private-token"}},
+                )
+                for credentials in credential_cases:
+                    with self.subTest(credentials=next(iter(credentials))):
+                        with self.assertRaisesRegex(VerifierError, "allow_custom_origin=true"):
+                            capture_verified_state(
+                                {
+                                    "sources": [
+                                        {
+                                            "id": "kubernetes",
+                                            "type": "kubernetes_resources",
+                                            "url": f"{server.url}/api/v1/pods",
+                                            **credentials,
+                                        }
+                                    ]
+                                }
+                            )
+        finally:
+            server.close()
+
+        self.assertEqual(server.requests, [])
+
+    def test_kubernetes_unauthenticated_custom_url_needs_no_credential_consent(self):
+        server = _JsonServer({"/api/v1/pods": {"items": [{"kind": "Pod", "metadata": {"name": "demo"}}]}})
+        try:
+            with patch.dict(os.environ, {}, clear=True):
+                snapshot = capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "kubernetes",
+                                "type": "kubernetes_resources",
+                                "url": f"{server.url}/api/v1/pods",
+                            }
+                        ]
+                    }
+                )
+        finally:
+            server.close()
+
+        self.assertEqual(snapshot["verifiers"]["sources"]["kubernetes"]["status"], "ok")
+        self.assertEqual(len(server.requests), 1)
+
+    def test_slack_default_token_remains_available_at_official_origin(self):
+        with patch.dict(os.environ, {"SLACK_BOT_TOKEN": "official-origin-token"}):
+            with patch(
+                "flightrecorder.verifiers._http_get_json",
+                return_value=(200, {"ok": True, "messages": []}),
+            ) as request:
+                snapshot = capture_verified_state(
+                    {
+                        "sources": [
+                            {
+                                "id": "slack",
+                                "type": "slack_history",
+                                "channel_id": "C123",
+                            }
+                        ]
+                    },
+                    secret_patterns=["official-origin-token"],
+                )
+
+        self.assertEqual(snapshot["verifiers"]["sources"]["slack"]["status"], "ok")
+        self.assertEqual(request.call_args.args[0].split("?", 1)[0], "https://slack.com/api/conversations.history")
+        self.assertEqual(request.call_args.kwargs["headers"]["Authorization"], "Bearer official-origin-token")
 
     def test_maildir_verifier_turns_external_email_state_into_score_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -287,6 +697,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "issue_number": 7,
                                 "token_env": "TEST_GITHUB_TOKEN",
                                 "base_url": server.url,
+                                "allow_custom_origin": True,
                                 "state_path": "github.issue_7",
                             },
                             {
@@ -295,6 +706,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "query": "to:customer@example.test",
                                 "token_env": "TEST_GMAIL_TOKEN",
                                 "base_url": f"{server.url}/gmail/v1",
+                                "allow_custom_origin": True,
                                 "state_path": "gmail.threads",
                             },
                         ],
@@ -460,6 +872,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                     "id": "slack_history",
                                     "type": "slack_history",
                                     "base_url": f"{server.url}/slack",
+                                    "allow_custom_origin": True,
                                     "channel_id": "C123",
                                     "token_env": "TEST_SLACK_TOKEN",
                                     "state_path": "slack",
@@ -576,6 +989,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                     "id": "calendar_events",
                                     "type": "google_calendar_events",
                                     "base_url": f"{server.url}/calendar/v3",
+                                    "allow_custom_origin": True,
                                     "calendar_id": "primary",
                                     "orderby": "startTime",
                                     "token_env": "TEST_CALENDAR_TOKEN",
@@ -861,6 +1275,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "slack",
                                 "type": "slack_history",
                                 "base_url": f"{server.url}/slack",
+                                "allow_custom_origin": True,
                                 "channel_id": "C123",
                                 "token_env": "TEST_SLACK_TOKEN",
                                 "state_path": "slack",
@@ -869,6 +1284,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "calendar",
                                 "type": "google_calendar_events",
                                 "base_url": f"{server.url}/calendar/v3",
+                                "allow_custom_origin": True,
                                 "calendar_id": "primary",
                                 "token_env": "TEST_CALENDAR_TOKEN",
                                 "state_path": "calendar",
@@ -877,6 +1293,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "drive",
                                 "type": "google_drive_files",
                                 "base_url": f"{server.url}/drive/v3",
+                                "allow_custom_origin": True,
                                 "token_env": "TEST_DRIVE_TOKEN",
                                 "state_path": "drive",
                             },
@@ -890,6 +1307,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "stripe",
                                 "type": "stripe_objects",
                                 "base_url": f"{server.url}/stripe/v1",
+                                "allow_custom_origin": True,
                                 "resource": "payment_intents",
                                 "object_id": "pi_123",
                                 "token_env": "TEST_STRIPE_TOKEN",
@@ -899,6 +1317,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "notion",
                                 "type": "notion_database",
                                 "base_url": f"{server.url}/notion/v1",
+                                "allow_custom_origin": True,
                                 "database_id": "db1",
                                 "token_env": "TEST_NOTION_TOKEN",
                                 "state_path": "notion",
@@ -907,6 +1326,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "linear",
                                 "type": "linear_issues",
                                 "base_url": f"{server.url}/linear/graphql",
+                                "allow_custom_origin": True,
                                 "token_env": "TEST_LINEAR_TOKEN",
                                 "state_path": "linear.issue",
                                 "state_value_path": "issues.0",
@@ -915,6 +1335,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "jira",
                                 "type": "jira_issues",
                                 "base_url": f"{server.url}/jira",
+                                "allow_custom_origin": True,
                                 "jql": "project = OPS",
                                 "bearer_token_env": "TEST_JIRA_TOKEN",
                                 "state_path": "jira.issue",
@@ -934,6 +1355,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "graph_messages",
                                 "type": "microsoft_graph_messages",
                                 "base_url": f"{server.url}/graph/v1.0",
+                                "allow_custom_origin": True,
                                 "folder_id": "SentItems",
                                 "token_env": "TEST_GRAPH_TOKEN",
                                 "state_path": "graph.mail",
@@ -942,6 +1364,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "graph_events",
                                 "type": "microsoft_graph_events",
                                 "base_url": f"{server.url}/graph/v1.0",
+                                "allow_custom_origin": True,
                                 "token_env": "TEST_GRAPH_TOKEN",
                                 "state_path": "graph.calendar",
                             },
@@ -949,6 +1372,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "gitlab",
                                 "type": "gitlab_issues",
                                 "base_url": f"{server.url}/gitlab/api/v4",
+                                "allow_custom_origin": True,
                                 "project_id": "group/project",
                                 "token_env": "TEST_GITLAB_TOKEN",
                                 "state_path": "gitlab",
@@ -957,6 +1381,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "discord",
                                 "type": "discord_messages",
                                 "base_url": f"{server.url}/discord/api/v10",
+                                "allow_custom_origin": True,
                                 "channel_id": "C123",
                                 "token_env": "TEST_DISCORD_TOKEN",
                                 "state_path": "discord",
@@ -965,6 +1390,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "zendesk",
                                 "type": "zendesk_tickets",
                                 "base_url": f"{server.url}/zendesk/api/v2",
+                                "allow_custom_origin": True,
                                 "ticket_id": "42",
                                 "bearer_token_env": "TEST_ZENDESK_TOKEN",
                                 "state_path": "zendesk.ticket",
@@ -974,6 +1400,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "id": "pagerduty",
                                 "type": "pagerduty_incidents",
                                 "base_url": f"{server.url}/pagerduty",
+                                "allow_custom_origin": True,
                                 "token_env": "TEST_PAGERDUTY_TOKEN",
                                 "state_path": "pagerduty.incident",
                                 "state_value_path": "incidents.0",
@@ -1111,6 +1538,7 @@ class VerifierAdapterTests(unittest.TestCase):
                                 "issue_number": 7,
                                 "token_env": "MISSING_GITHUB_TOKEN",
                                 "base_url": "http://127.0.0.1:1",
+                                "allow_custom_origin": True,
                             }
                         ]
                     }
@@ -1161,6 +1589,7 @@ class VerifierAdapterTests(unittest.TestCase):
                             "id": "inbox",
                             "type": "imap",
                             "host": "imap.example.test",
+                            "allow_custom_origin": True,
                             "username": "agent@example.test",
                             "password": "password",
                             "mailbox": "INBOX",
@@ -1200,6 +1629,18 @@ class SafeHttpPolicyTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.body, b"sensitive")
         self.assertTrue(raised.exception.truncated)
+
+    def test_http_status_errors_do_not_render_response_bodies(self):
+        error = HttpStatusError(
+            500,
+            b'{"access_token":"private-response-value"}',
+            truncated=True,
+        )
+
+        rendered = str(error)
+        self.assertIn("HTTP status 500", rendered)
+        self.assertIn("truncated", rendered)
+        self.assertNotIn("private-response-value", rendered)
 
     def test_sse_reader_bounds_lines_events_and_aggregate_bytes(self):
         cases = [
@@ -1294,6 +1735,15 @@ class _JsonServer:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
+
+
+def _s3_listing_xml() -> str:
+    return (
+        '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+        "<Contents><Key>reports/out.json</Key><LastModified>2026-06-29T00:00:00Z</LastModified>"
+        '<ETag>"abc123"</ETag><Size>42</Size><StorageClass>STANDARD</StorageClass></Contents>'
+        "</ListBucketResult>"
+    )
 
 
 def _maildir(path: Path) -> Path:

@@ -1,0 +1,129 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/lineage.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Per-run lineage manifest connecting source inputs, generated evidence, and replay instructions.",
+  "properties": {
+    "evidence_links": {"items": {"$ref": "#/$defs/evidenceLink"}, "type": "array"},
+    "graph": {"items": {"$ref": "#/$defs/graphEdge"}, "type": "array"},
+    "inputs": {"items": {"$ref": "#/$defs/fileRecord"}, "minItems": 2, "type": "array"},
+    "outputs": {"items": {"$ref": "#/$defs/fileRecord"}, "minItems": 4, "type": "array"},
+    "replay": {"$ref": "#/$defs/replay"},
+    "scenario": {
+      "additionalProperties": false,
+      "properties": {"id": {"minLength": 1, "type": "string"}, "title": {"minLength": 1, "type": "string"}},
+      "required": ["id", "title"],
+      "type": "object"
+    },
+    "schema_version": {"const": "hfr.lineage.v1"},
+    "scorecard": {
+      "additionalProperties": false,
+      "properties": {
+        "critical_failures": {"items": {"type": "string"}, "type": "array"},
+        "passed": {"type": "boolean"},
+        "schema_version": {"type": "string"},
+        "score": {"maximum": 100, "minimum": 0, "type": "integer"}
+      },
+      "required": ["schema_version", "score", "passed", "critical_failures"],
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_link_count": {"minimum": 0, "type": "integer"},
+        "input_count": {"minimum": 0, "type": "integer"},
+        "output_count": {"minimum": 0, "type": "integer"},
+        "self_contained_replay": {"type": "boolean"}
+      },
+      "required": ["input_count", "output_count", "evidence_link_count", "self_contained_replay"],
+      "type": "object"
+    },
+    "trace": {
+      "additionalProperties": false,
+      "properties": {
+        "event_count": {"minimum": 0, "type": "integer"},
+        "model": {"minLength": 1, "type": "string"},
+        "schema_version": {"type": "string"},
+        "session_id": {"minLength": 1, "type": "string"},
+        "source_format": {"minLength": 1, "type": "string"}
+      },
+      "required": ["schema_version", "session_id", "source_format", "model", "event_count"],
+      "type": "object"
+    }
+  },
+  "required": ["schema_version", "scenario", "trace", "scorecard", "inputs", "outputs", "graph", "evidence_links", "replay", "summary"],
+  "title": "Hermes Flight Recorder Artifact Lineage",
+  "type": "object",
+  "$defs": {
+    "evidenceLink": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {"minimum": 0, "type": "integer"},
+        "event_type": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]},
+        "ref_passed": {"type": "boolean"},
+        "rule_id": {"minLength": 1, "type": "string"},
+        "rule_name": {"minLength": 1, "type": "string"},
+        "rule_passed": {"type": "boolean"},
+        "scorecard_pointer": {"minLength": 1, "type": "string"},
+        "state_field": {"type": ["string", "null"]},
+        "state_pointer": {"type": "string"},
+        "status": {"type": ["string", "null"]},
+        "target": {"enum": ["event", "final_answer", "episode", "state_snapshot"], "type": "string"},
+        "tool_name": {"type": ["string", "null"]},
+        "trace_pointer": {"type": "string"}
+      },
+      "required": ["rule_id", "rule_name", "rule_passed", "scorecard_pointer", "target", "reason"],
+      "type": "object"
+    },
+    "fileRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "name": {"minLength": 1, "type": "string"},
+        "path": {"type": ["string", "null"]},
+        "role": {"enum": ["input", "output"], "type": "string"},
+        "sensitive": {"type": "boolean"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["name", "role", "path", "exists", "sensitive"],
+      "type": "object"
+    },
+    "fingerprint": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": ["boolean", "null"]},
+        "path": {"type": ["string", "null"]},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "size_bytes": {"minimum": 0, "type": ["integer", "null"]}
+      },
+      "required": ["path", "sha256", "size_bytes", "exists"],
+      "type": "object"
+    },
+    "graphEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array"},
+        "operation": {"minLength": 1, "type": "string"},
+        "to": {"minLength": 1, "type": "string"}
+      },
+      "required": ["from", "to", "operation"],
+      "type": "object"
+    },
+    "replay": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {"items": {"minLength": 1, "type": "string"}, "minItems": 4, "type": "array"},
+        "command": {"minLength": 1, "type": "string"},
+        "input_fingerprints": {"additionalProperties": {"$ref": "#/$defs/fingerprint"}, "minProperties": 2, "type": "object"},
+        "notes": {"items": {"type": "string"}, "type": "array"},
+        "self_contained": {"type": "boolean"},
+        "tool": {"const": "flightrecorder"}
+      },
+      "required": ["tool", "argv", "command", "input_fingerprints", "self_contained", "notes"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

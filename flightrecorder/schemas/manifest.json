@@ -178,6 +178,14 @@
       "name": "run_digest"
     },
     {
+      "artifact": "artifact_lineage",
+      "artifact_schema_version": "hfr.lineage.v1",
+      "description": "Per-run lineage manifest connecting source inputs, generated evidence, and replay instructions.",
+      "filename": "lineage.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/lineage.v1.schema.json",
+      "name": "lineage"
+    },
+    {
       "artifact": "harness_run_manifest",
       "artifact_schema_version": "hfr.harness_run_manifest.v1",
       "description": "Common harness manifest for mock and live runner executions.",
@@ -546,12 +554,68 @@
       "name": "review_manifest"
     },
     {
+      "artifact": "review_item",
+      "artifact_schema_version": "hfr.review.item.v1",
+      "description": "Evidence-grounded JSONL row emitted in an export-review queue.",
+      "filename": "review_item.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/review_item.v1.schema.json",
+      "name": "review_item"
+    },
+    {
+      "artifact": "review_label",
+      "artifact_schema_version": "hfr.review.label.v1",
+      "description": "Human label template or completed label JSONL row for an export-review item.",
+      "filename": "review_label.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/review_label.v1.schema.json",
+      "name": "review_label"
+    },
+    {
       "artifact": "reviewed_manifest",
       "artifact_schema_version": "hfr.reviewed.manifest.v1",
       "description": "Manifest for apply-review reviewed trainer handoffs.",
       "filename": "reviewed_manifest.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/reviewed_manifest.v1.schema.json",
       "name": "reviewed_manifest"
+    },
+    {
+      "artifact": "reviewed_label",
+      "artifact_schema_version": "hfr.reviewed.label.v1",
+      "description": "Human-reviewed label joined to its evidence and scorecard provenance.",
+      "filename": "reviewed_label.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_label.v1.schema.json",
+      "name": "reviewed_label"
+    },
+    {
+      "artifact": "reviewed_sft",
+      "artifact_schema_version": "hfr.reviewed.sft.v1",
+      "description": "Human-accepted supervised fine-tuning JSONL row emitted by apply-review.",
+      "filename": "reviewed_sft.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_sft.v1.schema.json",
+      "name": "reviewed_sft"
+    },
+    {
+      "artifact": "reviewed_reward_model",
+      "artifact_schema_version": "hfr.reviewed.reward_model.v1",
+      "description": "Human-reviewed reward-model JSONL row emitted by apply-review.",
+      "filename": "reviewed_reward_model.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_reward_model.v1.schema.json",
+      "name": "reviewed_reward_model"
+    },
+    {
+      "artifact": "reviewed_preference",
+      "artifact_schema_version": "hfr.reviewed.preference.v1",
+      "description": "Human-reviewed preference-pair JSONL row emitted by apply-review.",
+      "filename": "reviewed_preference.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_preference.v1.schema.json",
+      "name": "reviewed_preference"
+    },
+    {
+      "artifact": "reviewed_dpo",
+      "artifact_schema_version": "hfr.reviewed.dpo.v1",
+      "description": "Trainer-ready DPO JSONL row derived from human-reviewed preferences.",
+      "filename": "reviewed_dpo.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_dpo.v1.schema.json",
+      "name": "reviewed_dpo"
     },
     {
       "artifact": "review_calibration",
