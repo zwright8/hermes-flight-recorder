@@ -686,7 +686,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(training["status"], "blocked")
             self.assertIn("agentic_training_result", training["present_required_artifacts"])
             self.assertNotIn("agentic_training_result", training["missing_required_artifacts"])
-            self.assertEqual(training["non_completed_required_artifacts"], ["agentic_training_result"])
+            self.assertEqual(
+                training["non_completed_required_artifacts"],
+                ["cloud_training_completion_receipt", "agentic_training_result"],
+            )
             self.assertNotIn("agentic_training_result", plan["missing_phase_inputs"])
             execution_check = next(
                 check for check in plan["checks"] if check["id"] == "external_trainer_execution_completed"
