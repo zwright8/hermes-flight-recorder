@@ -13,7 +13,12 @@ from typing import Any
 
 from .path_safety import path_has_symlink_component
 from .reviewed_gate import ReviewedGateError, build_reviewed_export_source_artifact
-from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
+from .schema_registry import (
+    SchemaRegistryError,
+    check_schema_contract,
+    check_schema_file,
+    check_schema_jsonl_file,
+)
 from .source_contract import inspect_artifact_source
 from .training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
 
@@ -112,6 +117,21 @@ _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.reviewed_gate.v1",
     "hfr.review_calibration.v1",
 }
+TRAINER_PREFLIGHT_SEMANTIC_GATE_ROLES = {
+    "hfr.action_ledger_gate.v1": "action_ledger_gate",
+    "hfr.agentic_training_plan.v1": "agentic_training_plan",
+    "hfr.compare_gate.v1": "compare_gate",
+    "hfr.decision_gate.v1": "decision_gate",
+    "hfr.evidence_bundle.v1": "evidence_bundle",
+    "hfr.improvement_ledger_gate.v1": "improvement_ledger_gate",
+    "hfr.model_grader_gate.v1": "model_grader_gate",
+    "hfr.promotion_ledger_gate.v1": "promotion_ledger_gate",
+    "hfr.rejection_sampling_gate.v1": "rejection_sampling_gate",
+    "hfr.review_calibration.v1": "review_calibration",
+    "hfr.reviewed_gate.v1": "reviewed_gate",
+    "hfr.suite_gate.v1": "suite_gate",
+    "hfr.training_gate.v1": "training_gate",
+}
 
 
 class TrainerPreflightError(ValueError):
@@ -161,6 +181,29 @@ def build_trainer_preflight(
     validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths, output_path)
     gate_sources = [Path(path) for path in gate_paths]
     gates = [_gate_record(path, preserve_paths, validation_targets, output_path) for path in gate_sources]
+    for gate in gates:
+        declared_passed = gate.pop("_declared_passed") is True
+        schema_passed = gate.pop("_schema_passed") is True
+        semantics_required = gate.pop("_semantics_required") is True
+        semantic_ready = gate.pop("_semantic_ready") is True
+        gate["passed"] = bool(
+            declared_passed
+            and schema_passed
+            and (semantic_ready or allow_unvalidated_gates or not semantics_required)
+        )
+        _add_bool_check(
+            checks,
+            "gate_schema_passed",
+            schema_passed,
+            {"gate": gate["id"], "schema_version": gate["schema_version"]},
+        )
+        if semantics_required and not allow_unvalidated_gates:
+            _add_bool_check(
+                checks,
+                "gate_semantic_validation_passed",
+                semantic_ready,
+                {"gate": gate["id"], "schema_version": gate["schema_version"]},
+            )
     seen_gate_ids = {gate["id"] for gate in gates}
     for gate in gates:
         _add_bool_check(checks, "gate_passed", gate["passed"], {"gate": gate["id"], "path": gate["path"]})
@@ -192,7 +235,10 @@ def build_trainer_preflight(
             {"gate": gate["id"], "path": gate["path"]},
         )
 
-    for gate_id in require_gates or []:
+    required_gate_ids = list(
+        dict.fromkeys(require_gates or [gate["id"] for gate in gates])
+    )
+    for gate_id in required_gate_ids:
         _add_bool_check(checks, "required_gate_present", gate_id in seen_gate_ids, {"gate": gate_id})
 
     artifacts: dict[str, Any] = {}
@@ -244,26 +290,52 @@ def build_trainer_preflight(
             )
     if evidence_bundle_path is not None:
         bundle_path = Path(evidence_bundle_path)
-        artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths, output_path)
+        bundle, bundle_record, bundle_ready = _semantic_file_artifact_record(
+            bundle_path,
+            "evidence_bundle",
+            preserve_paths,
+            output_path,
+        )
+        artifacts["evidence_bundle"] = bundle_record
         _add_schema_contract(schema_contracts, checks, "evidence_bundle", bundle_path, "evidence_bundle", False, preserve_paths, output_path)
-        bundle = _read_json_optional(bundle_path)
-        _add_bool_check(checks, "evidence_bundle_exists", bundle_path.exists() and bundle_path.is_file(), {"artifact": "evidence_bundle"})
+        _add_bool_check(
+            checks,
+            "evidence_bundle_exists",
+            bundle_record.get("exists") is True
+            and bundle_record.get("regular_file") is True,
+            {"artifact": "evidence_bundle"},
+        )
         _add_bool_check(
             checks,
             "evidence_bundle_passed",
-            bool(isinstance(bundle, dict) and bundle.get("passed") is True),
+            bool(bundle.get("passed") is True and bundle_ready),
             {"artifact": "evidence_bundle"},
         )
     if agentic_training_plan_path is not None:
         plan_path = Path(agentic_training_plan_path)
-        artifacts["agentic_training_plan"] = _file_record(plan_path, preserve_paths, output_path)
+        plan, plan_record, plan_ready = _semantic_file_artifact_record(
+            plan_path,
+            "agentic_training_plan",
+            preserve_paths,
+            output_path,
+        )
+        artifacts["agentic_training_plan"] = plan_record
         _add_schema_contract(schema_contracts, checks, "agentic_training_plan", plan_path, "agentic_training_plan", False, preserve_paths, output_path)
-        plan = _read_json_optional(plan_path)
-        _add_bool_check(checks, "agentic_training_plan_exists", plan_path.exists() and plan_path.is_file(), {"artifact": "agentic_training_plan"})
+        _add_bool_check(
+            checks,
+            "agentic_training_plan_exists",
+            plan_record.get("exists") is True
+            and plan_record.get("regular_file") is True,
+            {"artifact": "agentic_training_plan"},
+        )
         _add_bool_check(
             checks,
             "agentic_training_plan_ready",
-            bool(isinstance(plan, dict) and plan.get("passed") is True and plan.get("recommendation") == "ready_for_external_trainer_plan"),
+            bool(
+                plan.get("passed") is True
+                and plan.get("recommendation") == "ready_for_external_trainer_plan"
+                and plan_ready
+            ),
             {"artifact": "agentic_training_plan"},
         )
 
@@ -278,7 +350,7 @@ def build_trainer_preflight(
         "recommendation": "launch_allowed" if passed else "block_launch",
         "gate_count": len(gates),
         "passed_gate_count": sum(1 for gate in gates if gate.get("passed") is True),
-        "required_gates": list(dict.fromkeys(require_gates or [])),
+        "required_gates": required_gate_ids,
         "required_dataset_versions": required_dataset_versions,
         "check_count": len(checks),
         "failed_check_count": failed_checks,
@@ -369,7 +441,18 @@ def build_trainer_launch_check(
     validation = _validation_record(validation_summary)
     gates = _launch_gate_records(preflight.get("gates"))
     metadata = _metadata(preflight.get("metadata") if isinstance(preflight.get("metadata"), dict) else None)
-    required_gates = list(dict.fromkeys(require_gates or []))
+    preflight_required_gates = (
+        preflight.get("required_gates")
+        if isinstance(preflight.get("required_gates"), list)
+        else []
+    )
+    required_gates = list(
+        dict.fromkeys(
+            str(gate_id)
+            for gate_id in [*(require_gates or []), *preflight_required_gates]
+            if isinstance(gate_id, str) and gate_id
+        )
+    )
     preflight_required_dataset_versions = (
         preflight.get("required_dataset_versions") if isinstance(preflight.get("required_dataset_versions"), list) else []
     )
@@ -566,9 +649,22 @@ def _attested_trainer_preflight(
     *,
     display_path: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    return _attested_json_object(
+        path,
+        display_path=display_path,
+        label="trainer preflight",
+    )
+
+
+def _attested_json_object(
+    path: Path,
+    *,
+    display_path: str,
+    label: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if path_has_symlink_component(path, include_leaf=True):
         raise TrainerPreflightError(
-            f"trainer preflight must resolve to a regular non-symlink file: {path}"
+            f"{label} must resolve to a regular non-symlink file: {path}"
         )
     try:
         with path.open("rb") as handle:
@@ -577,7 +673,7 @@ def _attested_trainer_preflight(
             after = os.fstat(handle.fileno())
         path_after = path.stat(follow_symlinks=False)
     except OSError as exc:
-        raise TrainerPreflightError(f"could not attest trainer preflight {path}: {exc}") from exc
+        raise TrainerPreflightError(f"could not attest {label} {path}: {exc}") from exc
     signatures = {
         (
             item.st_dev,
@@ -596,14 +692,14 @@ def _attested_trainer_preflight(
         or path_has_symlink_component(path, include_leaf=True)
     ):
         raise TrainerPreflightError(
-            f"trainer preflight changed while it was being attested: {path}"
+            f"{label} changed while it was being attested: {path}"
         )
     try:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise TrainerPreflightError(f"trainer preflight is not valid UTF-8 JSON: {path}: {exc}") from exc
+        raise TrainerPreflightError(f"{label} is not valid UTF-8 JSON: {path}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {path}")
+        raise TrainerPreflightError(f"{label} must contain a JSON object: {path}")
     schema_version = payload.get("schema_version")
     return payload, {
         "path": display_path,
@@ -622,21 +718,50 @@ def _attested_trainer_preflight(
 
 
 def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str, dict[str, Any]], output_path: Path) -> dict[str, Any]:
-    gate = _read_json_required(path, "gate")
+    gate, gate_source = _attested_json_object(
+        path,
+        display_path=_display_path_for_output_source(
+            path,
+            output_path,
+            preserve_paths,
+        ),
+        label="gate",
+    )
     schema_version = gate.get("schema_version") if isinstance(gate.get("schema_version"), str) else "unknown"
+    try:
+        schema_check = check_schema_contract(gate)
+    except SchemaRegistryError as exc:
+        raise TrainerPreflightError(
+            f"gate {path} uses an unsupported schema: {schema_version!r}"
+        ) from exc
+    schema_passed = schema_check.get("passed") is True
+    semantic_role = TRAINER_PREFLIGHT_SEMANTIC_GATE_ROLES.get(schema_version)
+    semantic_ready = bool(
+        schema_passed
+        and semantic_role is not None
+        and trainer_preflight_gate_semantics_ready(
+            path,
+            semantic_role,
+            expected_sha256=gate_source["sha256"],
+            expected_size_bytes=gate_source["size_bytes"],
+        )
+    )
     metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
     validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
     external_validation = _validation_target_for_path(path, validation_targets)
     record: dict[str, Any] = {
         "id": _gate_id(gate, path.stem),
-        "path": _display_path_for_output_source(path, output_path, preserve_paths),
-        "exists": path.exists(),
+        "path": gate_source["path"],
+        "exists": True,
         "schema_version": schema_version,
-        "passed": gate.get("passed") is True,
+        "passed": False,
+        "_declared_passed": gate.get("passed") is True,
+        "_schema_passed": schema_passed,
+        "_semantics_required": True,
+        "_semantic_ready": semantic_ready,
+        "size_bytes": gate_source["size_bytes"],
+        "sha256": gate_source["sha256"],
     }
-    if path.exists() and path.is_file():
-        record["size_bytes"] = path.stat().st_size
-        record["sha256"] = _sha256(path)
     if validation:
         record["validation"] = {
             "available": bool(validation.get("available")),
@@ -653,6 +778,38 @@ def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str,
 def _gate_id(gate: dict[str, Any], fallback: str) -> str:
     schema = str(gate.get("schema_version") or fallback)
     return schema.removeprefix("hfr.").removesuffix(".v1")
+
+
+def trainer_preflight_gate_semantics_ready(
+    path: Path,
+    role: str,
+    *,
+    expected_sha256: str | None = None,
+    expected_size_bytes: int | None = None,
+) -> bool:
+    """Validate a gate and its referenced evidence from one stable snapshot."""
+    try:
+        inspection = inspect_artifact_source(path, role)
+        return bool(
+            inspection.get("ready") is True
+            and (
+                expected_sha256 is None
+                or inspection.get("sha256") == expected_sha256
+            )
+            and (
+                expected_size_bytes is None
+                or inspection.get("size_bytes") == expected_size_bytes
+            )
+        )
+    except (
+        MemoryError,
+        OSError,
+        RecursionError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+    ):
+        return False
 
 
 def _gate_requires_validation(gate: dict[str, Any]) -> bool:
@@ -1054,6 +1211,39 @@ def _read_json_safely(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload or {}
+
+
+def _semantic_file_artifact_record(
+    path: Path,
+    role: str,
+    preserve_paths: bool,
+    output_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    inspection = inspect_artifact_source(path, role)
+    stable_regular_file = bool(
+        inspection.get("regular_file") is True
+        and inspection.get("stable") is True
+    )
+    record: dict[str, Any] = {
+        "path": _display_path_for_output_source(
+            path,
+            output_path,
+            preserve_paths,
+        ),
+        "exists": inspection.get("physical_exists") is True,
+        "kind": "file",
+        "regular_file": stable_regular_file,
+        "symlink": path.is_symlink(),
+    }
+    if stable_regular_file:
+        record["size_bytes"] = inspection.get("size_bytes")
+        record["sha256"] = inspection.get("sha256")
+    payload = inspection.get("payload")
+    return (
+        payload if isinstance(payload, dict) else {},
+        record,
+        inspection.get("ready") is True,
+    )
 
 
 def _file_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:

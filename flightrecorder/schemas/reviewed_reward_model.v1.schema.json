@@ -1,0 +1,24 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_reward_model.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Human-reviewed reward-model row emitted by apply-review.",
+  "properties": {
+    "episode_id": {"minLength": 1, "type": "string"},
+    "human_label": {"enum": ["accept", "reject", "unsafe", "incomplete"], "type": "string"},
+    "prompt": {"type": "string"},
+    "response": {"type": "string"},
+    "review_item_id": {"minLength": 1, "type": "string"},
+    "review_item_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "reviewer_confidence": {"enum": ["high", "medium", "low", "unknown"], "type": "string"},
+    "reward": {"maximum": 1, "minimum": 0, "type": "number"},
+    "scenario_id": {"minLength": 1, "type": "string"},
+    "schema_version": {"const": "hfr.reviewed.reward_model.v1"},
+    "score": {"maximum": 100, "minimum": 0, "type": "integer"},
+    "source_artifact": {"const": "reviewed_labels.jsonl"},
+    "task_family": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "review_item_id", "review_item_sha256", "episode_id", "scenario_id", "task_family", "prompt", "response", "human_label", "score", "reward", "reviewer_confidence", "source_artifact"],
+  "title": "Hermes Flight Recorder Reviewed Reward Model Row",
+  "type": "object"
+}

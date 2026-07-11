@@ -13,6 +13,11 @@ from unittest.mock import patch
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan, write_agentic_training_plan
 from flightrecorder.cli import main
+from flightrecorder.preflight import (
+    TrainerPreflightError,
+    build_trainer_launch_check,
+    build_trainer_preflight,
+)
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 from flightrecorder.validation import validate_artifacts
 
@@ -71,26 +76,20 @@ def make_reviewed_export(root: Path) -> Path:
 
 
 def write_passed_evidence_bundle(path: Path) -> None:
-    bundle = {
-        "schema_version": "hfr.evidence_bundle.v1",
-        "bundle_path": str(path),
-        "passed": True,
-        "readiness": "ready",
-        "decision": {
-            "readiness": "ready",
-            "recommendation": "promote_handoff",
-            "summary": "Minimal test evidence bundle is ready.",
-            "blocking_check_count": 0,
-            "next_actions": [],
-        },
-        "check_count": 0,
-        "failed_check_count": 0,
-        "checks": [],
-        "artifacts": {},
-        "metrics": {},
-        "notes": [],
-    }
-    path.write_text(json.dumps(bundle, sort_keys=True) + "\n", encoding="utf-8")
+    runs = path.parent / f"{path.stem}_fixture_runs"
+    assert (
+        run_cli(
+            [
+                "run",
+                "--scenario",
+                str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                "--out",
+                str(runs / "good"),
+            ]
+        )
+        == 0
+    )
+    assert run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(path)]) == 0
 
 
 def write_agentic_plan_fixture(root: Path) -> Path:
@@ -137,7 +136,7 @@ def write_agentic_plan_fixture(root: Path) -> Path:
         model_manifest_path=model,
         dataset_manifest_path=dataset,
         trainer_backend="axolotl",
-        output_dir=root / "adapters",
+        output_dir="adapters",
         limit=2,
         created_at="2026-07-02T00:00:00+00:00",
     )
@@ -196,6 +195,196 @@ def write_improvement_ledger_gate(path: Path) -> None:
 
 
 class TrainerPreflightTests(unittest.TestCase):
+    def test_trainer_preflight_rejects_unknown_gate_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "forged_gate.json"
+            gate.write_text(
+                json.dumps({"schema_version": "evil.gate.v1", "passed": True}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(TrainerPreflightError, "unsupported schema"):
+                build_trainer_preflight(
+                    out_path=root / "trainer_preflight.json",
+                    gate_paths=[gate],
+                    evidence_bundle_path=(
+                        ROOT
+                        / "examples"
+                        / "agentic_training"
+                        / "evidence_handoff"
+                        / "evidence_bundle.json"
+                    ),
+                    trainer_command="python trainer.py",
+                )
+
+    def test_trainer_preflight_blocks_schema_invalid_known_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "forged_training_gate.json"
+            gate.write_text(
+                json.dumps({"schema_version": "hfr.training_gate.v1", "passed": True}),
+                encoding="utf-8",
+            )
+
+            result = build_trainer_preflight(
+                out_path=root / "trainer_preflight.json",
+                gate_paths=[gate],
+                evidence_bundle_path=(
+                    ROOT
+                    / "examples"
+                    / "agentic_training"
+                    / "evidence_handoff"
+                    / "evidence_bundle.json"
+                ),
+                trainer_command="python trainer.py",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "gate_schema_passed",
+                {check["id"] for check in result["checks"] if not check["passed"]},
+            )
+
+    def test_trainer_preflight_requires_override_for_registered_non_gate_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "serving_lifecycle.json"
+            evidence_bundle = root / "evidence_bundle.json"
+            gate.write_bytes(
+                (
+                    ROOT
+                    / "examples"
+                    / "agentic_training"
+                    / "serving_lifecycle"
+                    / "managed_mock"
+                    / "serving_lifecycle.json"
+                ).read_bytes()
+            )
+            write_passed_evidence_bundle(evidence_bundle)
+
+            blocked = build_trainer_preflight(
+                out_path=root / "trainer_preflight.json",
+                gate_paths=[gate],
+                evidence_bundle_path=evidence_bundle,
+                trainer_command="python trainer.py",
+            )
+
+            self.assertFalse(blocked["passed"])
+            self.assertIn(
+                "gate_semantic_validation_passed",
+                {check["id"] for check in blocked["checks"] if not check["passed"]},
+            )
+
+            explicitly_unvalidated = build_trainer_preflight(
+                out_path=root / "trainer_preflight_unvalidated.json",
+                gate_paths=[gate],
+                evidence_bundle_path=evidence_bundle,
+                trainer_command="python trainer.py",
+                allow_unvalidated_gates=True,
+            )
+            self.assertTrue(explicitly_unvalidated["passed"])
+
+    def test_trainer_preflight_blocks_internally_inconsistent_known_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "forged_training_gate.json"
+            payload = json.loads(
+                (ROOT / "examples" / "agentic_training" / "training_gate.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            valid_gate_bytes = json.dumps(payload).encode("utf-8")
+            payload["checks"][0]["passed"] = False
+            invalid_gate_bytes = json.dumps(payload).encode("utf-8")
+            gate.write_bytes(invalid_gate_bytes)
+
+            result = build_trainer_preflight(
+                out_path=root / "trainer_preflight.json",
+                gate_paths=[gate],
+                evidence_bundle_path=(
+                    ROOT
+                    / "examples"
+                    / "agentic_training"
+                    / "evidence_handoff"
+                    / "evidence_bundle.json"
+                ),
+                trainer_command="python trainer.py",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "gate_semantic_validation_passed",
+                {check["id"] for check in result["checks"] if not check["passed"]},
+            )
+
+            from flightrecorder import preflight as preflight_module
+
+            original_semantic_validator = (
+                preflight_module.trainer_preflight_gate_semantics_ready
+            )
+
+            def validate_during_transient_valid_gate(path, role, **expected):
+                gate.write_bytes(valid_gate_bytes)
+                try:
+                    return original_semantic_validator(path, role, **expected)
+                finally:
+                    gate.write_bytes(invalid_gate_bytes)
+
+            with patch(
+                "flightrecorder.preflight.trainer_preflight_gate_semantics_ready",
+                side_effect=validate_during_transient_valid_gate,
+            ):
+                transient = build_trainer_preflight(
+                    out_path=root / "transient_trainer_preflight.json",
+                    gate_paths=[gate],
+                    evidence_bundle_path=(
+                        ROOT
+                        / "examples"
+                        / "agentic_training"
+                        / "evidence_handoff"
+                        / "evidence_bundle.json"
+                    ),
+                    trainer_command="python trainer.py",
+                )
+
+            self.assertFalse(transient["passed"])
+            self.assertEqual(gate.read_bytes(), invalid_gate_bytes)
+            self.assertEqual(
+                transient["gates"][0]["sha256"],
+                hashlib.sha256(invalid_gate_bytes).hexdigest(),
+            )
+
+    def test_launch_check_inherits_preflight_required_gate_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            preflight_path = root / "trainer_preflight.json"
+            launch_path = root / "trainer_launch_check.json"
+            write_passed_evidence_bundle(gate)
+            preflight = build_trainer_preflight(
+                out_path=preflight_path,
+                gate_paths=[gate],
+                evidence_bundle_path=gate,
+                trainer_command="python trainer.py",
+            )
+            preflight_path.write_text(json.dumps(preflight), encoding="utf-8")
+            validation = validate_artifacts(
+                trainer_preflight_paths=[preflight_path],
+                strict=True,
+            )
+
+            launch = build_trainer_launch_check(
+                preflight_path=preflight_path,
+                preflight=preflight,
+                validation_summary=validation,
+                out_path=launch_path,
+            )
+
+            self.assertEqual(preflight["required_gates"], ["evidence_bundle"])
+            self.assertEqual(launch["required_gates"], ["evidence_bundle"])
+            self.assertTrue(launch["approved_command"]["approved"])
+
     def _assert_trainer_wrapper_validation_rejects(
         self,
         root: Path,
@@ -351,6 +540,211 @@ class TrainerPreflightTests(unittest.TestCase):
                 {"trainer_preflight", "trainer_launch_check"},
             )
             self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive)]), 0)
+
+    def test_trainer_preflight_semantically_replays_dedicated_control_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "training_gate.json"
+            gate.write_bytes(
+                (ROOT / "examples" / "agentic_training" / "training_gate.json").read_bytes()
+            )
+            invalid_bundle = root / "invalid_evidence_bundle.json"
+            invalid_bundle.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.evidence_bundle.v1",
+                        "bundle_path": invalid_bundle.name,
+                        "passed": True,
+                        "readiness": "ready",
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_handoff",
+                            "summary": "Schema-valid but semantically incomplete fixture.",
+                            "blocking_check_count": 0,
+                            "next_actions": [],
+                        },
+                        "check_count": 0,
+                        "failed_check_count": 0,
+                        "checks": [],
+                        "artifacts": {},
+                        "metrics": {},
+                        "notes": [],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            invalid_plan = write_agentic_plan_fixture(root)
+            invalid_plan_payload = json.loads(invalid_plan.read_text(encoding="utf-8"))
+            invalid_plan_payload["checks"][0]["passed"] = False
+            invalid_plan.write_text(
+                json.dumps(invalid_plan_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            cases = (
+                (
+                    "evidence_bundle",
+                    {"evidence_bundle_path": invalid_bundle},
+                    "evidence_bundle_passed",
+                ),
+                (
+                    "agentic_training_plan",
+                    {"agentic_training_plan_path": invalid_plan},
+                    "agentic_training_plan_ready",
+                ),
+            )
+            for role, artifact_kwargs, failed_check_id in cases:
+                with self.subTest(role=role):
+                    preflight_path = root / f"{role}_preflight.json"
+                    preflight = build_trainer_preflight(
+                        out_path=preflight_path,
+                        gate_paths=[gate],
+                        trainer_command="python trainer.py",
+                        **artifact_kwargs,
+                    )
+                    preflight_path.write_text(
+                        json.dumps(preflight, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+
+                    self.assertFalse(preflight["passed"])
+                    self.assertIn(
+                        failed_check_id,
+                        {
+                            check["id"]
+                            for check in preflight["checks"]
+                            if not check["passed"]
+                        },
+                    )
+                    validation = validate_artifacts(
+                        trainer_preflight_paths=[preflight_path],
+                        strict=True,
+                    )
+                    self.assertFalse(validation["passed"], validation)
+                    errors = "\n".join(
+                        error
+                        for target in validation["targets"]
+                        for error in target["errors"]
+                    )
+                    self.assertIn(
+                        f"trainer_preflight.artifacts.{role}.path must reference a semantically ready {role} artifact.",
+                        errors,
+                    )
+                    launch = build_trainer_launch_check(
+                        preflight_path=preflight_path,
+                        preflight=preflight,
+                        validation_summary=validation,
+                    )
+                    self.assertFalse(launch["passed"])
+                    self.assertFalse(launch["approved_command"]["approved"])
+
+    def test_trainer_preflight_rejects_present_control_artifact_forged_as_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            preflight_path = root / "trainer_preflight.json"
+            agentic_plan = write_agentic_plan_fixture(root)
+            write_passed_evidence_bundle(gate)
+            preflight = build_trainer_preflight(
+                out_path=preflight_path,
+                gate_paths=[gate],
+                evidence_bundle_path=gate,
+                agentic_training_plan_path=agentic_plan,
+                trainer_command="python train.py --agentic-plan agentic_training_plan.json",
+            )
+            preflight_path.write_text(
+                json.dumps(preflight, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            initial = validate_artifacts(
+                trainer_preflight_paths=[preflight_path],
+                strict=True,
+            )
+            self.assertTrue(initial["passed"], initial)
+            original_preflight = json.loads(json.dumps(preflight))
+
+            artifact = preflight["artifacts"]["agentic_training_plan"]
+            artifact["exists"] = False
+            artifact["regular_file"] = False
+            artifact.pop("size_bytes", None)
+            artifact.pop("sha256", None)
+            preflight_path.write_text(
+                json.dumps(preflight, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            forged = validate_artifacts(
+                trainer_preflight_paths=[preflight_path],
+                strict=True,
+            )
+            self.assertFalse(forged["passed"], forged)
+            errors = "\n".join(
+                error
+                for target in forged["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight.artifacts.agentic_training_plan.path must reference a semantically ready agentic_training_plan artifact.",
+                errors,
+            )
+
+            directory_forgery = json.loads(json.dumps(original_preflight))
+            directory_artifact = directory_forgery["artifacts"][
+                "agentic_training_plan"
+            ]
+            directory_artifact["kind"] = "directory"
+            directory_artifact["exists"] = False
+            directory_artifact["regular_directory"] = False
+            directory_artifact.pop("regular_file", None)
+            directory_artifact.pop("size_bytes", None)
+            directory_artifact.pop("sha256", None)
+            preflight_path.write_text(
+                json.dumps(directory_forgery, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            wrong_kind = validate_artifacts(
+                trainer_preflight_paths=[preflight_path],
+                strict=True,
+            )
+            self.assertFalse(wrong_kind["passed"], wrong_kind)
+            wrong_kind_errors = "\n".join(
+                error
+                for target in wrong_kind["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight.artifacts.agentic_training_plan.path must reference a semantically ready agentic_training_plan artifact.",
+                wrong_kind_errors,
+            )
+
+            removed = json.loads(json.dumps(original_preflight))
+            removed["artifacts"].pop("agentic_training_plan")
+            removed["schema_contracts"].pop("agentic_training_plan")
+            preflight_path.write_text(
+                json.dumps(removed, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            missing = validate_artifacts(
+                trainer_preflight_paths=[preflight_path],
+                strict=True,
+            )
+            self.assertFalse(missing["passed"], missing)
+            missing_errors = "\n".join(
+                error
+                for target in missing["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight.artifacts must contain 'agentic_training_plan' when its control-artifact checks are present.",
+                missing_errors,
+            )
+            self.assertIn(
+                "trainer_preflight.schema_contracts must contain 'agentic_training_plan' when its control artifact is present.",
+                missing_errors,
+            )
 
     def test_trainer_consumer_plan_rejects_symlinked_archive_check_parent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3535,6 +3929,168 @@ class TrainerPreflightTests(unittest.TestCase):
             )
             launch = json.loads(launch_check.read_text(encoding="utf-8"))
             self.assertIn("preflight_validation_passed", {check["id"] for check in launch["checks"] if not check["passed"]})
+
+    def test_validate_rechecks_semantics_after_trainer_preflight_gate_record_is_rebound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--out",
+                    str(runs / "good"),
+                ]
+            )
+            run_cli(
+                [
+                    "export-rl",
+                    "--runs",
+                    str(runs),
+                    "--out",
+                    str(runs / "training_export"),
+                ]
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-export",
+                        "--training-export",
+                        str(runs / "training_export"),
+                        "--out",
+                        str(gate),
+                    ]
+                ),
+                0,
+            )
+            valid_gate_bytes = gate.read_bytes()
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--training-export",
+                        str(runs / "training_export"),
+                        "--trainer-command",
+                        "python train.py --dataset runs/training_export",
+                        "--preserve-paths",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            initial = validate_artifacts(trainer_preflight_paths=[preflight], strict=True)
+            self.assertTrue(initial["passed"], initial)
+
+            gate_payload = json.loads(gate.read_text(encoding="utf-8"))
+            gate_payload["checks"][0]["passed"] = False
+            gate.write_text(
+                json.dumps(gate_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
+            gate_bytes = gate.read_bytes()
+            preflight_payload["gates"][0]["size_bytes"] = len(gate_bytes)
+            preflight_payload["gates"][0]["sha256"] = hashlib.sha256(gate_bytes).hexdigest()
+            preflight.write_text(
+                json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_artifacts(trainer_preflight_paths=[preflight], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(
+                error
+                for target in validation["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight.gates[0].path must reference a semantically ready training_gate artifact.",
+                errors,
+            )
+
+            from flightrecorder import validation as validation_module
+
+            original_hash_validator = validation_module._validate_preflight_file_hash
+            original_semantic_validator = (
+                validation_module.trainer_preflight_gate_semantics_ready
+            )
+
+            def swap_to_valid_after_hash(
+                record,
+                target,
+                label,
+                source_path,
+                *,
+                require_kind=True,
+            ):
+                original_hash_validator(
+                    record,
+                    target,
+                    label,
+                    source_path,
+                    require_kind=require_kind,
+                )
+                if label == "trainer_preflight.gates[0]":
+                    gate.write_bytes(valid_gate_bytes)
+
+            def restore_invalid_after_semantics(path, role, **expected):
+                try:
+                    return original_semantic_validator(path, role, **expected)
+                finally:
+                    gate.write_bytes(gate_bytes)
+
+            with (
+                patch(
+                    "flightrecorder.validation._validate_preflight_file_hash",
+                    side_effect=swap_to_valid_after_hash,
+                ),
+                patch(
+                    "flightrecorder.validation.trainer_preflight_gate_semantics_ready",
+                    side_effect=restore_invalid_after_semantics,
+                ),
+            ):
+                aba_validation = validate_artifacts(
+                    trainer_preflight_paths=[preflight],
+                    strict=True,
+                )
+
+            self.assertFalse(aba_validation["passed"], aba_validation)
+            self.assertEqual(gate.read_bytes(), gate_bytes)
+            aba_errors = "\n".join(
+                error
+                for target in aba_validation["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight.gates[0].path must reference a semantically ready training_gate artifact.",
+                aba_errors,
+            )
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--out",
+                        str(launch_check),
+                    ]
+                ),
+                1,
+            )
+            launch = json.loads(launch_check.read_text(encoding="utf-8"))
+            self.assertFalse(launch["passed"])
+            self.assertIn(
+                "preflight_validation_passed",
+                {check["id"] for check in launch["checks"] if not check["passed"]},
+            )
 
     def test_validate_rejects_stale_trainer_preflight_artifact_symlink(self):
         with tempfile.TemporaryDirectory() as tmp:

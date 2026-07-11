@@ -43,3 +43,21 @@ Provider-shaped adapters generally do that mapping for you. For example,
 `payments.payment.status`. List-shaped sources such as `linear_issues`,
 `jira_issues`, and `s3_objects` can use `state_value_path` to copy one issue or
 the object list into the exact path your validator expects.
+
+Provider adapters send default environment credentials only to their official
+origins. A self-hosted, tenant-specific, or mock `base_url` must set
+`allow_custom_origin` to `true` and name its credential environment variable
+explicitly; the Jira and Zendesk examples demonstrate that opt-in.
+
+Signed `s3_objects` sources apply the same boundary to custom `url` and
+`endpoint_url` values: opt in with `allow_custom_origin: true` and explicitly
+set both `access_key_env` and `secret_key_env`. Set `session_token_env` when a
+session token should be sent; a custom origin never inherits the default
+`AWS_SESSION_TOKEN`. Unsigned custom S3 endpoints require no credential opt-in.
+
+Every IMAP source must explicitly consent to its configured host with
+`allow_custom_origin: true` before username/password login. A Kubernetes source
+needs the same explicit consent when it configures a bearer credential through
+`token_env`, `bearer_token_env`, or an Authorization header; unauthenticated
+Kubernetes reads do not require it. The bundled IMAP and Kubernetes examples
+show the credentialed form.

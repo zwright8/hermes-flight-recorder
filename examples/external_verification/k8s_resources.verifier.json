@@ -7,6 +7,7 @@
       "id": "kubernetes_resources",
       "type": "kubernetes_resources",
       "url": "https://kubernetes.example.com/apis/apps/v1/namespaces/prod/deployments",
+      "allow_custom_origin": true,
       "bearer_token_env": "K8S_READONLY_TOKEN",
       "state_path": "kubernetes"
     }

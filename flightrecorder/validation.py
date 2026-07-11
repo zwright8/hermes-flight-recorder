@@ -191,11 +191,13 @@ from .next_iteration_schedule import NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+    TRAINER_PREFLIGHT_SEMANTIC_GATE_ROLES,
     TRAINER_PREFLIGHT_SCHEMA_VERSION,
     TRAINER_PREFLIGHT_SOURCE_ARTIFACT_FIELDS,
     TrainerPreflightError,
     build_trainer_launch_check,
     build_trainer_preflight_source_artifact,
+    trainer_preflight_gate_semantics_ready,
 )
 from .governance import (
     PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
@@ -28550,6 +28552,12 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         _validate_trainer_preflight_artifact_record(name, record, target, source_path)
     for name, record in schema_contracts.items():
         _validate_trainer_preflight_schema_contract_record(name, record, target, source_path)
+    _validate_trainer_preflight_control_artifact_declarations(
+        checks,
+        artifacts,
+        schema_contracts,
+        target,
+    )
     dataset_selection = preflight.get("dataset_selection", [])
     _validate_trainer_preflight_dataset_selection(dataset_selection, target)
     _validate_trainer_preflight_reviewed_binding(gates, artifacts, target, source_path)
@@ -29024,12 +29032,8 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
             for field_name in ("error_count", "warning_count"):
                 if not _is_non_negative_int(validation.get(field_name)):
                     target.errors.append(f"{label}.validation.{field_name} must be a non-negative integer.")
-    semantic_ready = True
-    semantic_roles = {
-        "hfr.reviewed_gate.v1": "reviewed_gate",
-        "hfr.review_calibration.v1": "review_calibration",
-    }
-    role = semantic_roles.get(gate.get("schema_version"))
+    role = TRAINER_PREFLIGHT_SEMANTIC_GATE_ROLES.get(gate.get("schema_version"))
+    semantic_ready = role is not None or gate.get("passed") is not True
     gate_path = _resolve_gate_source_path(gate.get("path"), source_path)
     if role is not None:
         if gate.get("id") != role:
@@ -29038,10 +29042,19 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
             )
         semantic_ready = bool(
             gate_path is not None
-            and inspect_artifact_source(gate_path, role).get("ready") is True
+            and trainer_preflight_gate_semantics_ready(
+                gate_path,
+                role,
+                expected_sha256=gate.get("sha256"),
+                expected_size_bytes=gate.get("size_bytes"),
+            )
         )
         if not semantic_ready:
             target.errors.append(f"{label}.path must reference a semantically ready {role} artifact.")
+    elif gate.get("passed") is True:
+        target.errors.append(
+            f"{label}.schema_version is not an allowed semantic trainer gate."
+        )
     return gate.get("passed") is True and semantic_ready
 
 
@@ -29217,6 +29230,10 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
         target.errors.append(f"{label}.exists must be a boolean.")
     if record.get("kind") not in {"file", "directory"}:
         target.errors.append(f"{label}.kind must be file or directory.")
+    semantic_role = {
+        "evidence_bundle": "evidence_bundle",
+        "agentic_training_plan": "agentic_training_plan",
+    }.get(name)
     if record.get("kind") == "file":
         _validate_preflight_file_hash(record, target, label, source_path)
     if record.get("kind") == "directory":
@@ -29227,6 +29244,66 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
         if record.get("regular_directory") is True and not _is_non_negative_int(record.get("entry_count")):
             target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
         _validate_preflight_directory_hash(record, target, label, source_path)
+    artifact_path = _resolve_gate_source_path(record.get("path"), source_path)
+    if semantic_role is not None and not (
+        record.get("kind") == "file"
+        and record.get("exists") is True
+        and record.get("regular_file") is True
+        and artifact_path is not None
+        and trainer_preflight_gate_semantics_ready(
+            artifact_path,
+            semantic_role,
+            expected_sha256=record.get("sha256"),
+            expected_size_bytes=record.get("size_bytes"),
+        )
+    ):
+        target.errors.append(
+            f"{label}.path must reference a semantically ready {semantic_role} artifact."
+        )
+
+
+def _validate_trainer_preflight_control_artifact_declarations(
+    checks: list[Any],
+    artifacts: dict[str, Any],
+    schema_contracts: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    declarations = {
+        "evidence_bundle": ("evidence_bundle_exists", "evidence_bundle_passed"),
+        "agentic_training_plan": (
+            "agentic_training_plan_exists",
+            "agentic_training_plan_ready",
+        ),
+    }
+    for role, required_check_ids in declarations.items():
+        check_counts = {
+            check_id: sum(
+                1
+                for check in checks
+                if isinstance(check, dict) and check.get("id") == check_id
+            )
+            for check_id in required_check_ids
+        }
+        declared = bool(
+            role in artifacts
+            or role in schema_contracts
+            or any(check_counts.values())
+        )
+        if not declared:
+            continue
+        if role not in artifacts:
+            target.errors.append(
+                f"trainer_preflight.artifacts must contain {role!r} when its control-artifact checks are present."
+            )
+        if role not in schema_contracts:
+            target.errors.append(
+                f"trainer_preflight.schema_contracts must contain {role!r} when its control artifact is present."
+            )
+        for check_id, count in check_counts.items():
+            if count != 1:
+                target.errors.append(
+                    f"trainer_preflight.checks must contain exactly one {check_id!r} check when {role!r} is declared."
+                )
 
 
 def _validate_trainer_preflight_dataset_selection(

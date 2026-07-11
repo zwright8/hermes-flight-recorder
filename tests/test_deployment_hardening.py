@@ -568,6 +568,276 @@ class DeploymentHardeningTests(unittest.TestCase):
                 else:
                     os.environ["HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS"] = previous_max
 
+    def test_write_event_redacts_structural_and_embedded_secrets_before_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")
+            os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = tmp
+            structural_secret = "observer-structural-private-value"
+            command_secret = "observer-command-private-value"
+            flag_secret = "observer-flag-private-value"
+            quoted_flag_secret = "observer-quoted-flag-private-value"
+            try:
+                path = write_event(
+                    "pre_tool_call",
+                    {
+                        "session_id": "session-privacy",
+                        "api_key": structural_secret,
+                        "args": {
+                            "command": (
+                                f"curl https://example.invalid api_key={command_secret} "
+                                f"--api-key --token {flag_secret} "
+                                f'--client-secret "{quoted_flag_secret}" '
+                                "--token-budget 10 --api-key --verbose"
+                            ),
+                        },
+                    },
+                )
+
+                text = path.read_text(encoding="utf-8")
+                row = json.loads(text)
+                self.assertNotIn(structural_secret, text)
+                self.assertNotIn(command_secret, text)
+                self.assertNotIn(flag_secret, text)
+                self.assertNotIn(quoted_flag_secret, text)
+                self.assertEqual(row["payload"]["api_key"], "[REDACTED]")
+                self.assertIn("api_key=[REDACTED]", row["payload"]["args"]["command"])
+                self.assertIn(
+                    "--api-key --token [REDACTED]",
+                    row["payload"]["args"]["command"],
+                )
+                self.assertIn(
+                    '--client-secret "[REDACTED]"', row["payload"]["args"]["command"]
+                )
+                self.assertIn(
+                    "--token-budget 10 --api-key --verbose",
+                    row["payload"]["args"]["command"],
+                )
+            finally:
+                if previous is None:
+                    os.environ.pop("HERMES_FLIGHT_RECORDER_OUTPUT_DIR", None)
+                else:
+                    os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = previous
+
+    def test_write_event_redacts_tokenized_command_sequences_before_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")
+            os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = tmp
+            argv_secret = "observer-argv-private-value"
+            nested_secret = "observer-nested-argv-private-value"
+            command_argv_secret = "observer-command-argv-private-value"
+            args_secret = "observer-args-private-value"
+            arguments_secret = "observer-arguments-private-value"
+            try:
+                path = write_event(
+                    "pre_tool_call",
+                    {
+                        "session_id": "session-tokenized-privacy",
+                        "argv": [
+                            "curl",
+                            "--api-key",
+                            argv_secret,
+                            "--token-budget",
+                            "10",
+                            "--password",
+                            12345,
+                            "--client-secret",
+                            "--verbose",
+                            "visible",
+                        ],
+                        "nested": {
+                            "command": [
+                                "runner",
+                                "--api-key",
+                                "--token",
+                                nested_secret,
+                            ]
+                        },
+                        "aliases": {
+                            "command_argv": [
+                                "runner",
+                                "--access-key",
+                                command_argv_secret,
+                            ],
+                            "args": ["runner", "--token", args_secret],
+                            "arguments": [
+                                "runner",
+                                "--password",
+                                arguments_secret,
+                            ],
+                        },
+                        "ordinary_values": [
+                            "--api-key",
+                            "ordinary-array-value",
+                        ],
+                    },
+                )
+
+                text = path.read_text(encoding="utf-8")
+                row = json.loads(text)
+                self.assertNotIn(argv_secret, text)
+                self.assertNotIn(nested_secret, text)
+                self.assertNotIn(command_argv_secret, text)
+                self.assertNotIn(args_secret, text)
+                self.assertNotIn(arguments_secret, text)
+                self.assertEqual(
+                    row["payload"]["argv"],
+                    [
+                        "curl",
+                        "--api-key",
+                        "[REDACTED]",
+                        "--token-budget",
+                        "10",
+                        "--password",
+                        "[REDACTED]",
+                        "--client-secret",
+                        "--verbose",
+                        "visible",
+                    ],
+                )
+                self.assertEqual(
+                    row["payload"]["nested"]["command"],
+                    ["runner", "--api-key", "--token", "[REDACTED]"],
+                )
+                self.assertEqual(
+                    row["payload"]["aliases"],
+                    {
+                        "command_argv": [
+                            "runner",
+                            "--access-key",
+                            "[REDACTED]",
+                        ],
+                        "args": ["runner", "--token", "[REDACTED]"],
+                        "arguments": ["runner", "--password", "[REDACTED]"],
+                    },
+                )
+                self.assertEqual(
+                    row["payload"]["ordinary_values"],
+                    ["--api-key", "ordinary-array-value"],
+                )
+            finally:
+                if previous is None:
+                    os.environ.pop("HERMES_FLIGHT_RECORDER_OUTPUT_DIR", None)
+                else:
+                    os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = previous
+
+    def test_write_event_redacts_structural_header_and_parameter_pairs_before_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")
+            os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = tmp
+            header_secret = "observer-header-private-value"
+            named_header_secret = "observer-named-header-private-value"
+            parameter_secret = "observer-parameter-private-value"
+            query_secret = "observer-query-private-value"
+            try:
+                path = write_event(
+                    "pre_api_request",
+                    {
+                        "session_id": "session-pair-privacy",
+                        "headers": [
+                            ["Authorization", f"Bearer {header_secret}"],
+                            {
+                                "name": "Authorization",
+                                "value": f"Bearer {named_header_secret}",
+                            },
+                            ["Content-Type", "application/json"],
+                            {"name": "token_budget", "value": "10"},
+                        ],
+                        "params": [
+                            ["api_key", parameter_secret],
+                            ["token_budget", "10"],
+                            ["page", "1"],
+                        ],
+                        "queryParameters": [
+                            {"key": "access_token", "value": query_secret},
+                            {"key": "token_count", "value": "2"},
+                        ],
+                        "ordinary_pairs": [
+                            ["Authorization", "ordinary-bearer-value"],
+                        ],
+                    },
+                )
+
+                text = path.read_text(encoding="utf-8")
+                row = json.loads(text)
+                for secret in (
+                    header_secret,
+                    named_header_secret,
+                    parameter_secret,
+                    query_secret,
+                ):
+                    self.assertNotIn(secret, text)
+                self.assertEqual(
+                    row["payload"]["headers"],
+                    [
+                        ["Authorization", "[REDACTED]"],
+                        {"name": "Authorization", "value": "[REDACTED]"},
+                        ["Content-Type", "application/json"],
+                        {"name": "token_budget", "value": "10"},
+                    ],
+                )
+                self.assertEqual(
+                    row["payload"]["params"],
+                    [
+                        ["api_key", "[REDACTED]"],
+                        ["token_budget", "10"],
+                        ["page", "1"],
+                    ],
+                )
+                self.assertEqual(
+                    row["payload"]["queryParameters"],
+                    [
+                        {"key": "access_token", "value": "[REDACTED]"},
+                        {"key": "token_count", "value": "2"},
+                    ],
+                )
+                self.assertEqual(
+                    row["payload"]["ordinary_pairs"],
+                    [["Authorization", "ordinary-bearer-value"]],
+                )
+            finally:
+                if previous is None:
+                    os.environ.pop("HERMES_FLIGHT_RECORDER_OUTPUT_DIR", None)
+                else:
+                    os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = previous
+
+    def test_write_event_preserves_a_bounded_partial_payload_for_adversarial_collections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")
+            os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = tmp
+            try:
+                payload: dict[str, object] = {"session_id": "session-bounds"}
+                payload["cycle"] = payload
+                deep: dict[str, object] = {}
+                cursor = deep
+                for _ in range(64):
+                    child: dict[str, object] = {}
+                    cursor["child"] = child
+                    cursor = child
+                payload["deep"] = deep
+                payload["items"] = list(range(500))
+                payload["aggregate"] = ["x" * 12_000 for _ in range(100)]
+
+                path = write_event("post_llm_call", payload)
+
+                row = json.loads(path.read_text(encoding="utf-8"))
+                bounded = row["payload"]
+                self.assertEqual(bounded["cycle"], "[Circular]")
+                self.assertIn("max depth", json.dumps(bounded["deep"]))
+                self.assertLessEqual(len(bounded["items"]), 201)
+                self.assertIn("collection", str(bounded["items"][-1]).lower())
+                self.assertLess(len(bounded["aggregate"]), 100)
+                self.assertIn("aggregate", str(bounded["aggregate"][-1]).lower())
+                serialized_payload = json.dumps(
+                    bounded, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8")
+                self.assertLessEqual(len(serialized_payload), 1024 * 1024)
+                self.assertLess(len(path.read_bytes()), 1_100_000)
+            finally:
+                if previous is None:
+                    os.environ.pop("HERMES_FLIGHT_RECORDER_OUTPUT_DIR", None)
+                else:
+                    os.environ["HERMES_FLIGHT_RECORDER_OUTPUT_DIR"] = previous
+
     def test_write_event_uses_stable_collision_resistant_session_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             previous = os.environ.get("HERMES_FLIGHT_RECORDER_OUTPUT_DIR")

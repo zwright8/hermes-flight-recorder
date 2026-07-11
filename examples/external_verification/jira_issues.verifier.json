@@ -7,6 +7,7 @@
       "id": "jira_issues",
       "type": "jira_issues",
       "base_url": "https://example.atlassian.net",
+      "allow_custom_origin": true,
       "jql": "project = OPS ORDER BY updated DESC",
       "max_results": 50,
       "bearer_token_env": "JIRA_API_TOKEN",

@@ -86,6 +86,25 @@ Use the live verifier smoke before claiming production SaaS verification. It is
 opt-in and read-only; no provider calls are made unless `--allow-network` is
 supplied.
 
+When a smoke uses a custom provider base URL, authorize that origin separately
+with the matching provider flag; setting the base URL alone never opts
+credentials in. For example, a custom Gmail endpoint requires both
+`HFR_GMAIL_BASE_URL` and `HFR_GMAIL_ALLOW_CUSTOM_ORIGIN=1`. The same convention
+applies to Discord, GitHub, GitLab, Google Calendar, Google Drive, Jira, Linear,
+Microsoft Graph, Notion, PagerDuty, signed S3, Slack, Stripe, and Zendesk.
+Microsoft Graph events and messages share
+`HFR_MICROSOFT_GRAPH_ALLOW_CUSTOM_ORIGIN`. A signed custom S3 URL or endpoint
+requires `HFR_S3_ALLOW_CUSTOM_ORIGIN=1`; the smoke explicitly names its
+access/secret credential environment fields and its session-token field when a
+session token is configured. Unsigned custom S3 endpoints do not require this
+credential consent.
+
+IMAP has no provider-owned default host, so every live IMAP smoke additionally
+requires `HFR_IMAP_ALLOW_CUSTOM_ORIGIN=1`. A Kubernetes smoke that configures a
+bearer token requires `HFR_K8S_ALLOW_CUSTOM_ORIGIN=1`; an unauthenticated
+Kubernetes read may use its resource URL without credential consent. The host
+or resource URL alone never enables either flag.
+
 ```bash
 python scripts/live_verifier_smoke.py \
   --allow-network \

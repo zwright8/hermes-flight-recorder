@@ -98,6 +98,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "live_openclaw_smoke_summary",
             "live_smoke_summary",
             "live_verifier_smoke_summary",
+            "lineage",
             "model_adapter_manifest",
             "model_candidate",
             "model_compatibility_report",
@@ -123,9 +124,16 @@ class SchemaRegistryTests(unittest.TestCase):
             "rejection_sampling_gate",
             "repair_queue",
             "review_calibration",
+            "review_item",
+            "review_label",
             "review_manifest",
+            "reviewed_dpo",
             "reviewed_gate",
+            "reviewed_label",
             "reviewed_manifest",
+            "reviewed_preference",
+            "reviewed_reward_model",
+            "reviewed_sft",
             "rl_curriculum",
             "rl_dataset_metrics",
             "rl_dpo",
@@ -194,6 +202,59 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertEqual(by_name, by_version)
         self.assertEqual(by_name, by_filename)
         self.assertEqual(by_name["properties"]["schema_version"]["const"], "hfr.trace.v1")
+
+    def test_production_example_artifact_versions_are_registered(self):
+        # These versions are intentionally limited to example inputs or synthetic
+        # fixtures. They are not public artifact types emitted by production code.
+        documented_exceptions = {
+            "hfr.action_ledger_gate.policy.v1": "demo input policy",
+            "hfr.compare_gate.policy.v1": "demo input policy",
+            "hfr.dataset_manifest.example.v1": "example-only handoff manifest",
+            "hfr.improvement_ledger_gate.policy.v1": "demo input policy",
+            "hfr.model_candidate.example.v1": "example-only legacy model manifest",
+            "hfr.promotion_ledger_gate.policy.v1": "demo input policy",
+            "hfr.reviewed_gate.policy.v1": "demo input policy",
+            "hfr.suite_gate.policy.v1": "demo input policy",
+            "hfr.test_gate.v1": "synthetic failed-gate fixture",
+            "hfr.training_gate.policy.v1": "demo input policy",
+        }
+        observed_versions = set()
+        for path in sorted((ROOT / "examples").rglob("*")):
+            if path.suffix == ".json":
+                payloads = [json.loads(path.read_text(encoding="utf-8"))]
+            elif path.suffix == ".jsonl":
+                payloads = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            else:
+                continue
+            observed_versions.update(
+                payload["schema_version"]
+                for payload in payloads
+                if isinstance(payload, dict) and isinstance(payload.get("schema_version"), str)
+            )
+
+        registered_versions = {record["artifact_schema_version"] for record in list_schema_records()}
+        self.assertEqual(observed_versions - registered_versions, set(documented_exceptions))
+        self.assertTrue(set(documented_exceptions) <= observed_versions)
+
+    def test_newly_registered_production_examples_match_public_contracts(self):
+        lineage = check_schema_file(
+            ROOT / "examples" / "agentic_training" / "evidence_handoff" / "prompt_injection_good" / "artifact_lineage.json"
+        )
+        self.assertTrue(lineage["passed"], lineage["errors"])
+
+        jsonl_contracts = {
+            "review_item": ROOT / "examples" / "model_grader" / "review" / "review_items.jsonl",
+            "review_label": ROOT / "examples" / "model_grader" / "review" / "completed_labels.jsonl",
+            "reviewed_label": ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_labels.jsonl",
+            "reviewed_sft": ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_sft.jsonl",
+            "reviewed_reward_model": ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_reward_model.jsonl",
+            "reviewed_preference": ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_preferences.jsonl",
+            "reviewed_dpo": ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_dpo.jsonl",
+        }
+        for schema_name, path in jsonl_contracts.items():
+            with self.subTest(schema_name=schema_name):
+                result = check_schema_jsonl_file(path, schema_name)
+                self.assertTrue(result["passed"], result["errors"])
 
     def test_promotion_policy_schema_accepts_demo_policy(self):
         result = check_schema_file(ROOT / "examples" / "promotion_policy.demo.json", "promotion_policy")
@@ -324,6 +385,16 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertIn("$: expected at most 1 item(s), got 2", errors)
 
+    def test_external_cloud_training_runner_enforces_published_string_max_length(self):
+        runner_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "runner_metadata.json"
+        runner = json.loads(runner_path.read_text(encoding="utf-8"))
+        runner["provider_id"] = "p" * 257
+
+        result = check_schema_contract(runner, name_or_id="external_cloud_training_runner")
+
+        self.assertFalse(result["passed"])
+        self.assertIn("$.provider_id: expected length <= 256, got 257", result["errors"])
+
     def test_unique_items_uses_json_value_equality(self):
         schema = {"type": "array", "uniqueItems": True}
         nested_duplicate = [
@@ -436,6 +507,24 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "task_completion")
+
+    def test_verifier_config_custom_origin_consent_requires_a_boolean(self):
+        config = {
+            "schema_version": "hfr.verifier_config.v1",
+            "sources": [
+                {
+                    "id": "imap",
+                    "type": "imap",
+                    "host": "imap.example.test",
+                    "allow_custom_origin": "true",
+                }
+            ],
+        }
+
+        result = check_schema_contract(config)
+
+        self.assertFalse(result["passed"])
+        self.assertIn("$.sources[0].allow_custom_origin: expected type boolean, got string", result["errors"])
 
     def test_model_candidate_schema_enforces_license_and_compatibility_shape(self):
         candidate_path = ROOT / "experiments" / "registry" / "model_candidates" / "local_mock_tiny_chat.json"

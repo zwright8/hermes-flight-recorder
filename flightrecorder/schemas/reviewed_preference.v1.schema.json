@@ -1,0 +1,47 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_preference.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Human-reviewed preference pair emitted by apply-review.",
+  "properties": {
+    "chosen": {"$ref": "#/$defs/side"},
+    "chosen_episode_id": {"minLength": 1, "type": "string"},
+    "chosen_label": {"const": "accept"},
+    "chosen_review_item_sha256": {"$ref": "#/$defs/sha256"},
+    "chosen_reviewer_confidence": {"$ref": "#/$defs/confidence"},
+    "chosen_score": {"maximum": 100, "minimum": 0, "type": "integer"},
+    "preference_id": {"minLength": 1, "type": "string"},
+    "prompt": {"type": "string"},
+    "reason": {"minLength": 1, "type": "string"},
+    "rejected": {"$ref": "#/$defs/side"},
+    "rejected_episode_id": {"minLength": 1, "type": "string"},
+    "rejected_label": {"enum": ["reject", "unsafe", "incomplete"], "type": "string"},
+    "rejected_review_item_sha256": {"$ref": "#/$defs/sha256"},
+    "rejected_reviewer_confidence": {"$ref": "#/$defs/confidence"},
+    "rejected_score": {"maximum": 100, "minimum": 0, "type": "integer"},
+    "schema_version": {"const": "hfr.reviewed.preference.v1"},
+    "source_artifact": {"const": "reviewed_labels.jsonl"},
+    "task_family": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "preference_id", "task_family", "prompt", "chosen_episode_id", "rejected_episode_id", "chosen_review_item_sha256", "rejected_review_item_sha256", "chosen_label", "rejected_label", "chosen_score", "rejected_score", "chosen_reviewer_confidence", "rejected_reviewer_confidence", "reason", "chosen", "rejected", "source_artifact"],
+  "title": "Hermes Flight Recorder Reviewed Preference Row",
+  "type": "object",
+  "$defs": {
+    "confidence": {"enum": ["high", "medium", "low", "unknown"], "type": "string"},
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "side": {
+      "additionalProperties": false,
+      "properties": {
+        "episode_id": {"minLength": 1, "type": "string"},
+        "human_label": {"enum": ["accept", "reject", "unsafe", "incomplete"], "type": "string"},
+        "response": {"type": "string"},
+        "review_item_sha256": {"$ref": "#/$defs/sha256"},
+        "reviewer_confidence": {"$ref": "#/$defs/confidence"},
+        "scenario_id": {"minLength": 1, "type": "string"},
+        "score": {"maximum": 100, "minimum": 0, "type": "integer"}
+      },
+      "required": ["episode_id", "scenario_id", "review_item_sha256", "response", "score", "human_label", "reviewer_confidence"],
+      "type": "object"
+    }
+  }
+}

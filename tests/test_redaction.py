@@ -69,6 +69,37 @@ class RedactionTests(unittest.TestCase):
 
         self.assertEqual(redact_text(text), text)
 
+    def test_redact_text_redacts_separate_secret_cli_argument_values(self):
+        text = (
+            "runner --authorization --api-key private-api-value "
+            '--token "quoted token value" '
+            "--client-secret escaped\\ secret "
+            "--token-budget 10 --api-key-env HFR_API_KEY"
+        )
+
+        redacted = redact_text(text)
+
+        for secret in ("private-api-value", "quoted token value", "escaped\\ secret"):
+            self.assertNotIn(secret, redacted)
+        self.assertEqual(
+            redacted,
+            "runner --authorization --api-key [REDACTED] "
+            '--token "[REDACTED]" '
+            "--client-secret [REDACTED] "
+            "--token-budget 10 --api-key-env HFR_API_KEY",
+        )
+        self.assertTrue(contains_unredacted_secret_assignment(text))
+        self.assertFalse(contains_unredacted_secret_assignment(redacted))
+
+    def test_redact_text_does_not_consume_a_following_flag_as_a_secret_value(self):
+        text = (
+            "runner --api-key --verbose --token -v --client-secret --safe-mode "
+            "--token-budget 10"
+        )
+
+        self.assertEqual(redact_text(text), text)
+        self.assertFalse(contains_unredacted_secret_assignment(text))
+
     def test_redact_text_consumes_complete_authorization_header_values(self):
         text = (
             "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\n"
@@ -232,6 +263,8 @@ class RedactionTests(unittest.TestCase):
         safe_texts = (
             "authorization_count=3 credential_type=oauth cookie_name=session",
             "session_token_env=SESSION_TOKEN safe=visible",
+            "runner --token-budget 10 --api-key-env HFR_API_KEY",
+            "runner --api-key --verbose --token -v",
             "The authorization process and credential policy are documented.",
             "prompt_injection_bad:secret_exposure:3",
             'token="[REDACTED]" api_key="<redacted:environment>"',

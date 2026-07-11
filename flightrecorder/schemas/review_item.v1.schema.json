@@ -1,0 +1,97 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/review_item.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One evidence-grounded item emitted in an export-review queue.",
+  "properties": {
+    "episode_events_sha256": {"$ref": "#/$defs/sha256"},
+    "episode_id": {"minLength": 1, "type": "string"},
+    "event_count": {"minimum": 0, "type": "integer"},
+    "evidence_target_counts": {"additionalProperties": {"minimum": 0, "type": "integer"}, "type": "object"},
+    "final_answer": {"type": "string"},
+    "label_options": {"const": ["accept", "reject", "needs_review", "unsafe", "incomplete"]},
+    "prompt": {"type": "string"},
+    "review_item_id": {"minLength": 1, "type": "string"},
+    "review_item_sha256": {"$ref": "#/$defs/sha256"},
+    "rule_summaries": {"items": {"$ref": "#/$defs/ruleSummary"}, "type": "array"},
+    "scenario_id": {"minLength": 1, "type": "string"},
+    "scenario_title": {"type": "string"},
+    "schema_version": {"const": "hfr.review.item.v1"},
+    "scorecard": {"$ref": "#/$defs/scorecard"},
+    "source_artifact_fingerprints": {
+      "additionalProperties": false,
+      "properties": {"normalized_trace": {"$ref": "#/$defs/fingerprint"}, "scorecard": {"$ref": "#/$defs/fingerprint"}},
+      "required": ["normalized_trace", "scorecard"],
+      "type": "object"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "lineage": {"minLength": 1, "type": "string"},
+        "normalized_trace": {"minLength": 1, "type": "string"},
+        "regression_scenario": {"minLength": 1, "type": "string"},
+        "report": {"minLength": 1, "type": "string"},
+        "run_dir": {"minLength": 1, "type": "string"},
+        "scorecard": {"minLength": 1, "type": "string"}
+      },
+      "required": ["run_dir", "normalized_trace", "scorecard", "report"],
+      "type": "object"
+    },
+    "suggested_human_label": {"$ref": "#/$defs/label"},
+    "task_evidence": {"items": {"$ref": "#/$defs/taskEvidence"}, "type": "array"},
+    "task_family": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "review_item_id", "review_item_sha256", "episode_id", "scenario_id", "scenario_title", "task_family", "source_artifacts", "source_artifact_fingerprints", "prompt", "final_answer", "event_count", "episode_events_sha256", "scorecard", "rule_summaries", "task_evidence", "evidence_target_counts", "suggested_human_label", "label_options"],
+  "title": "Hermes Flight Recorder Review Item",
+  "type": "object",
+  "$defs": {
+    "fingerprint": {
+      "additionalProperties": false,
+      "properties": {"algorithm": {"const": "sha256-canonical-json-v1"}, "sha256": {"$ref": "#/$defs/sha256"}, "size_bytes": {"minimum": 0, "type": "integer"}},
+      "required": ["algorithm", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "label": {"enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string"},
+    "ruleSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "critical": {"type": "boolean"},
+        "evidence": {"items": {"type": "string"}, "type": "array"},
+        "evidence_ref_count": {"minimum": 0, "type": "integer"},
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "penalty": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["id", "name", "passed", "critical", "penalty", "evidence", "evidence_ref_count"],
+      "type": "object"
+    },
+    "scorecard": {
+      "additionalProperties": false,
+      "properties": {
+        "critical_failures": {"items": {"type": "string"}, "type": "array"},
+        "failed_rules": {"items": {"type": "string"}, "type": "array"},
+        "pass_threshold": {"maximum": 100, "minimum": 0, "type": ["integer", "null"]},
+        "passed": {"type": "boolean"},
+        "score": {"maximum": 100, "minimum": 0, "type": "integer"},
+        "summary": {"type": "string"}
+      },
+      "required": ["passed", "score", "pass_threshold", "summary", "critical_failures", "failed_rules"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "taskEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {"type": "string"},
+        "event_indices": {"items": {"minimum": 0, "type": "integer"}, "type": "array"},
+        "evidence": {"type": "string"},
+        "id": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "rule_id": {"type": "string"}
+      },
+      "required": ["rule_id", "id", "description", "passed", "evidence", "event_indices"],
+      "type": "object"
+    }
+  }
+}

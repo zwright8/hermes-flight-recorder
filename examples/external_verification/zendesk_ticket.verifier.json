@@ -7,6 +7,7 @@
       "id": "zendesk_ticket",
       "type": "zendesk_tickets",
       "base_url": "https://example.zendesk.com/api/v2",
+      "allow_custom_origin": true,
       "ticket_id": "42",
       "bearer_token_env": "ZENDESK_API_TOKEN",
       "state_path": "zendesk.ticket",

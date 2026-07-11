@@ -30,8 +30,8 @@ class HttpStatusError(SafeHttpError):
         self.status_code = status_code
         self.body = body
         self.truncated = truncated
-        suffix = " [truncated]" if truncated else ""
-        super().__init__(f"HTTP status {status_code}: {body.decode('utf-8', errors='replace')}{suffix}")
+        body_state = "error body omitted; truncated" if truncated else "error body omitted"
+        super().__init__(f"HTTP status {status_code} ({body_state})")
 
 
 @dataclass(frozen=True)
