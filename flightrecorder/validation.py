@@ -44,13 +44,16 @@ from .agentic_training_runtime import (
 from .agentic_training_loop_plan import (
     AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
-    CLOUD_TRAINING_LINEAGE_LINKS,
+    CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS,
     PHASES as AGENTIC_TRAINING_LOOP_PHASES,
     PLAN_READINESS_CHECK_IDS,
     PLAN_REQUIRED_ARTIFACT_ROLES,
     build_agentic_training_loop_plan as _build_agentic_training_loop_plan,
     _cloud_training_launch_receipt_semantic_passed as _loop_cloud_training_launch_receipt_semantic_passed,
     _cloud_training_status_receipt_semantic_passed as _loop_cloud_training_status_receipt_semantic_passed,
+    _cloud_training_completion_state as _loop_cloud_training_completion_state,
+    _cloud_training_completion_status as _loop_cloud_training_completion_status,
+    _agentic_training_result_plan_bound as _loop_agentic_training_result_plan_bound,
     _execution_completion as _loop_execution_completion,
     _execution_result_status as _loop_execution_result_status,
     _external_eval_receipt_semantic_passed as _loop_external_eval_receipt_semantic_passed,
@@ -91,8 +94,15 @@ from .cloud_training import (
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
     PROVIDER_ADAPTER_RECEIPT_TYPES,
 )
+from .cloud_training_completion import (
+    CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION,
+    build_cloud_training_completion_receipt,
+)
 from .schema_registry import SchemaRegistryError, check_schema_contract, check_schema_file
-from .source_contract import inspect_artifact_source
+from .source_contract import (
+    get_active_opaque_output_attestation,
+    inspect_artifact_source,
+)
 from .compare_gate import compare_movement_summary
 from .dataset_curation import (
     DATASET_CURATION_RECEIPT_SCHEMA_VERSION,
@@ -380,6 +390,7 @@ def validate_artifacts(
     cloud_training_launch_plan_paths: list[str | Path] | None = None,
     cloud_training_launch_receipt_paths: list[str | Path] | None = None,
     cloud_training_status_receipt_paths: list[str | Path] | None = None,
+    cloud_training_completion_receipt_paths: list[str | Path] | None = None,
     agentic_rollout_plan_paths: list[str | Path] | None = None,
     agentic_rollout_receipt_paths: list[str | Path] | None = None,
     rejection_sampling_gate_paths: list[str | Path] | None = None,
@@ -524,6 +535,8 @@ def validate_artifacts(
         targets.append(validate_cloud_training_launch_receipt(cloud_training_launch_receipt_path))
     for cloud_training_status_receipt_path in cloud_training_status_receipt_paths or []:
         targets.append(validate_cloud_training_status_receipt(cloud_training_status_receipt_path))
+    for cloud_training_completion_receipt_path in cloud_training_completion_receipt_paths or []:
+        targets.append(validate_cloud_training_completion_receipt(cloud_training_completion_receipt_path))
     for agentic_rollout_plan_path in agentic_rollout_plan_paths or []:
         targets.append(validate_agentic_rollout_plan(agentic_rollout_plan_path))
     for agentic_rollout_receipt_path in agentic_rollout_receipt_paths or []:
@@ -2098,6 +2111,147 @@ def validate_cloud_training_status_receipt(path: str | Path) -> ValidationTarget
     if receipt is not None:
         _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION, source_path=receipt_path)
     return target
+
+
+def validate_cloud_training_completion_receipt(path: str | Path) -> ValidationTarget:
+    """Validate and deterministically replay one imported cloud completion receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("cloud_training_completion_receipt", str(receipt_path))
+    receipt = _read_object(
+        receipt_path,
+        target,
+        "cloud_training_completion_receipt.json",
+    )
+    if receipt is None:
+        return target
+    try:
+        schema_check = check_schema_contract(
+            receipt,
+            name_or_id="cloud_training_completion_receipt",
+            artifact_path=receipt_path,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, SchemaRegistryError) as exc:
+        target.errors.append(f"cloud_training_completion_receipt schema: {exc}")
+    else:
+        target.errors.extend(
+            f"cloud_training_completion_receipt schema: {error}"
+            for error in schema_check.get("errors", [])
+        )
+    if receipt.get("schema_version") != CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION:
+        target.errors.append(
+            "cloud_training_completion_receipt.schema_version must be "
+            f"{CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION!r}."
+        )
+
+    sources = receipt.get("sources")
+    source_rows = sources if isinstance(sources, dict) else {}
+    if not isinstance(sources, dict):
+        target.errors.append("cloud_training_completion_receipt.sources must be an object.")
+    resolved = {
+        name: _validate_cloud_training_completion_source_ref(
+            source_rows.get(name),
+            target,
+            f"cloud_training_completion_receipt.sources.{name}",
+            receipt_path,
+        )
+        for name in (
+            "launch_plan",
+            "launch_receipt",
+            "status_receipt",
+            "runner_metadata",
+            "raw_provider_result",
+            "output_artifact_manifest",
+        )
+    }
+    if all(path is not None for path in resolved.values()):
+        try:
+            expected = build_cloud_training_completion_receipt(
+                launch_plan_path=resolved["launch_plan"],
+                launch_receipt_path=resolved["launch_receipt"],
+                status_receipt_path=resolved["status_receipt"],
+                runner_metadata_path=resolved["runner_metadata"],
+                raw_provider_result_path=resolved["raw_provider_result"],
+                output_artifact_manifest_path=resolved[
+                    "output_artifact_manifest"
+                ],
+                out_path=receipt_path,
+                created_at=str(receipt.get("created_at") or ""),
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            target.errors.append(
+                "cloud_training_completion_receipt could not replay imported "
+                f"sources: {exc}"
+            )
+        else:
+            if receipt != expected:
+                target.errors.append(
+                    "cloud_training_completion_receipt must exactly match "
+                    "deterministic replay of its current imported sources."
+                )
+    execution = receipt.get("execution")
+    governance = receipt.get("governance")
+    identity = receipt.get("identity")
+    target.details.update(
+        {
+            "integrity_passed": receipt.get("passed") is True,
+            "execution_status": execution.get("status")
+            if isinstance(execution, dict)
+            else None,
+            "governance_readiness": governance.get("readiness")
+            if isinstance(governance, dict)
+            else None,
+            "provider_id": identity.get("provider_id")
+            if isinstance(identity, dict)
+            else None,
+            "candidate_model_id": identity.get("candidate_model_id")
+            if isinstance(identity, dict)
+            else None,
+        }
+    )
+    return target
+
+
+def _validate_cloud_training_completion_source_ref(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    receipt_path: Path,
+) -> Path | None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    raw_path = value.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        target.errors.append(f"{label}.path must be a non-empty relative path.")
+        return None
+    if not _is_replayable_external_eval_ref_path(raw_path):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+        return None
+    source_path = receipt_path.parent / raw_path
+    opaque_attestation = get_active_opaque_output_attestation(source_path)
+    if opaque_attestation is None and (
+        _path_has_symlink_component(source_path, include_leaf=True)
+        or not source_path.is_file()
+    ):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return None
+    if value.get("exists") is not True or value.get("regular_file") is not True:
+        target.errors.append(f"{label} must describe an existing regular file.")
+    if opaque_attestation is not None:
+        source_size = opaque_attestation.size_bytes
+        source_sha256 = opaque_attestation.sha256
+    else:
+        try:
+            source_size = source_path.stat().st_size
+            source_sha256 = _sha256(source_path)
+        except OSError as exc:
+            target.errors.append(f"{label}.path could not be fingerprinted: {exc}")
+            return None
+    if value.get("size_bytes") != source_size:
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if value.get("sha256") != source_sha256:
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    return source_path
 
 
 def validate_agentic_rollout_plan(path: str | Path) -> ValidationTarget:
@@ -5048,7 +5202,9 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     if status in {"failed", "blocked", "aborted"} and (failure_class in {"none", "unknown"} or not failure_message.strip()):
         target.errors.append("agentic_training_result non-completed receipts require a classified failure and message.")
 
-    artifact_counts = _validate_agentic_training_result_artifacts(result.get("artifacts"), target, source_path)
+    artifact_counts = _validate_agentic_training_result_artifacts(
+        result.get("artifacts"), target, source_path
+    )
     metrics = result.get("metrics")
     if not isinstance(metrics, dict):
         target.errors.append("agentic_training_result.metrics must be an object.")
@@ -5104,13 +5260,17 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     )
 
 
-AGENTIC_LOOP_CLOUD_TRAINING_ROLES: tuple[str, ...] = (
+AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES: tuple[str, ...] = (
     "cloud_training_provider_registry",
     "cloud_training_preflight",
     "cloud_training_artifact_manifest",
     "cloud_training_launch_plan",
     "cloud_training_launch_receipt",
     "cloud_training_status_receipt",
+)
+AGENTIC_LOOP_CLOUD_TRAINING_ROLES: tuple[str, ...] = (
+    *AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES,
+    "cloud_training_completion_receipt",
 )
 
 _AGENTIC_TRAINING_LOOP_PLAN_KEYS = {
@@ -5139,6 +5299,7 @@ _AGENTIC_TRAINING_LOOP_PLAN_KEYS = {
     "provider_constraints",
     "cloud_training",
     "cloud_training_receipt_state",
+    "cloud_training_completion_state",
     "cloud_training_lineage",
     "external_eval_receipt_state",
     "execution_boundary",
@@ -5213,6 +5374,37 @@ _AGENTIC_TRAINING_LOOP_CLOUD_RECEIPT_STATE_KEYS = {
     "credential_values_recorded",
     "cost_incurred_usd",
     "fail_closed",
+}
+_AGENTIC_TRAINING_LOOP_CLOUD_COMPLETION_STATE_KEYS = {
+    "receipt_count",
+    "integrity_passed",
+    "execution_status",
+    "execution_terminal",
+    "successful",
+    "governance_readiness",
+    "cloud_training_completion_claims_allowed",
+    "provider_id",
+    "provider_job_id",
+    "execution_id",
+    "provider_identity_complete",
+    "pipeline_provider_id",
+    "provider_matches_pipeline",
+    "candidate_model_id",
+    "loop_candidate_model_id",
+    "candidate_matches_loop",
+    "training_result_candidate_model_id",
+    "candidate_matches_training_result",
+    "launch_plan_bound",
+    "launch_receipt_bound",
+    "status_receipt_bound",
+    "source_bindings_complete",
+    "output_artifact_manifest_sha256",
+    "output_artifact_manifest_bound",
+    "output_artifact_set_sha256",
+    "output_artifact_set_bound",
+    "artifact_count",
+    "regular_artifact_count",
+    "output_artifact_count",
 }
 _AGENTIC_TRAINING_LOOP_EXTERNAL_EVAL_RECEIPT_STATE_KEYS = {
     "receipt_count",
@@ -5349,6 +5541,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         )
     expected_check_ids = PLAN_READINESS_CHECK_IDS | {
         "external_trainer_execution_completed",
+        "external_cloud_training_completion_imported",
         "heldout_eval_is_fail_closed",
         "governance_required_for_promotion",
         "required_phase_inputs_present",
@@ -5444,6 +5637,21 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target,
         "agentic_training_loop_plan.cloud_training_receipt_state",
     )
+    cloud_training_completion_state = _loop_cloud_training_completion_state(
+        resolved_artifact_paths,
+        source_artifacts,
+        loop_candidate_model_id=(
+            plan.get("participants", {}).get("candidate_policy")
+            if isinstance(plan.get("participants"), dict)
+            else ""
+        ),
+    )
+    _validate_agentic_training_loop_cloud_training_completion_state(
+        plan.get("cloud_training_completion_state"),
+        cloud_training_completion_state,
+        target,
+        "agentic_training_loop_plan.cloud_training_completion_state",
+    )
     _validate_agentic_training_loop_cloud_training_lineage(
         plan.get("cloud_training_lineage"),
         source_artifacts,
@@ -5462,9 +5670,13 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         "agentic_training_loop_plan.external_eval_receipt_state",
     )
     training_result_status = _loop_execution_result_status(resolved_artifact_paths, "agentic_training_result")
+    cloud_training_completion_status = _loop_cloud_training_completion_status(
+        cloud_training_completion_state
+    )
     external_eval_result_status = _loop_execution_result_status(resolved_artifact_paths, "external_eval_result")
     execution_result_statuses = {
         "agentic_training_result": training_result_status,
+        "cloud_training_completion_receipt": cloud_training_completion_status,
         "external_eval_result": external_eval_result_status,
     }
     expected_execution_completion = _loop_execution_completion(execution_result_statuses)
@@ -5504,9 +5716,32 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target,
         "agentic_training_loop_plan.checks",
     )
-    if training_execution_check is not None and training_execution_check.get("passed") != (training_result_status == "completed"):
+    training_result_plan_bound = _loop_agentic_training_result_plan_bound(
+        resolved_artifact_paths,
+        source_artifacts,
+    )
+    expected_training_execution_passed = (
+        training_result_status == "completed"
+        and training_result_plan_bound
+        and cloud_training_completion_status == "completed"
+    )
+    if training_execution_check is not None and training_execution_check.get("passed") != expected_training_execution_passed:
         target.errors.append(
-            "agentic_training_loop_plan.checks.external_trainer_execution_completed.passed must match the training result state."
+            "agentic_training_loop_plan.checks.external_trainer_execution_completed.passed must match the training-result and cloud-completion state."
+        )
+    completion_check = _cloud_training_check_by_id(
+        checks,
+        "external_cloud_training_completion_imported",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    if (
+        completion_check is not None
+        and completion_check.get("passed")
+        != cloud_training_completion_state["successful"]
+    ):
+        target.errors.append(
+            "agentic_training_loop_plan.checks.external_cloud_training_completion_imported.passed must match imported completion state."
         )
     external_eval_handoff_check = _cloud_training_check_by_id(
         checks,
@@ -5984,15 +6219,15 @@ def _validate_agentic_training_loop_cloud_training(
     _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_TRAINING_KEYS, target, label)
     present = [
         role
-        for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES
+        for role in AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES
         if _agentic_training_loop_role_source_ready(source_artifacts, role, source_path)
     ]
-    missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
+    missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES if role not in present]
     expected = {
-        "required_artifacts": list(AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
+        "required_artifacts": list(AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES),
         "present_artifacts": present,
         "missing_artifacts": missing,
-        "artifact_count": sum(_agentic_loop_role_count(source_artifacts, role) for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
+        "artifact_count": sum(_agentic_loop_role_count(source_artifacts, role) for role in AGENTIC_LOOP_CLOUD_TRAINING_HANDOFF_ROLES),
         "provider_registry_present": "cloud_training_provider_registry" in present,
         "preflight_present": "cloud_training_preflight" in present,
         "artifact_manifest_present": "cloud_training_artifact_manifest" in present,
@@ -6022,6 +6257,27 @@ def _validate_agentic_training_loop_cloud_training_receipt_state(
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match cloud training receipt artifacts.")
+
+
+def _validate_agentic_training_loop_cloud_training_completion_state(
+    value: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(
+        value,
+        _AGENTIC_TRAINING_LOOP_CLOUD_COMPLETION_STATE_KEYS,
+        target,
+        label,
+    )
+    if value != expected:
+        target.errors.append(
+            f"{label} must match replayed cloud completion evidence exactly."
+        )
 
 
 def _validate_agentic_training_loop_external_eval_receipt_state(
@@ -6097,15 +6353,29 @@ def _expected_agentic_training_loop_cloud_training_lineage(
     source_path: Path,
 ) -> dict[str, Any]:
     provider = _expected_agentic_training_loop_cloud_training_provider_lineage(source_artifacts, source_path)
+    link_specs = CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS
     links = [
-        _expected_agentic_training_loop_cloud_training_link(source_artifacts, source_path, spec)
-        for spec in CLOUD_TRAINING_LINEAGE_LINKS
+        _expected_agentic_training_loop_cloud_training_link(
+            source_artifacts,
+            source_path,
+            spec,
+        )
+        for spec in link_specs
     ]
     missing_links = [link["id"] for link in links if link["status"].startswith("missing_")]
     mismatched_links = [link["id"] for link in links if link["status"] == "mismatched_sha256"]
     ambiguous_links = [link["id"] for link in links if link["status"].startswith("ambiguous_")]
     role_counts = _expected_agentic_training_loop_cloud_training_role_counts(source_artifacts)
-    duplicate_roles = [row["role"] for row in role_counts if row["count"] > 1]
+    active_roles = (
+        {"cloud_training_provider_registry"}
+        | {spec["source_role"] for spec in link_specs}
+        | {spec["target_role"] for spec in link_specs}
+    )
+    duplicate_roles = [
+        row["role"]
+        for row in role_counts
+        if row["role"] in active_roles and row["count"] > 1
+    ]
     matched_link_count = sum(1 for link in links if link["passed"])
     passed = (
         provider["provider_consistent"]
@@ -6395,7 +6665,16 @@ def _expected_agentic_training_loop_cloud_training_link(
     source_ref = _agentic_training_loop_first_ref(source_artifacts, source_role)
     target_ref = _agentic_training_loop_first_ref(source_artifacts, target_role)
     source_payload = _agentic_training_loop_first_payload(source_artifacts, source_role, source_path)
-    nested_refs = source_payload.get("source_artifacts") if isinstance(source_payload.get("source_artifacts"), dict) else {}
+    nested_field = (
+        "sources"
+        if source_role == "cloud_training_completion_receipt"
+        else "source_artifacts"
+    )
+    nested_refs = (
+        source_payload.get(nested_field)
+        if isinstance(source_payload.get(nested_field), dict)
+        else {}
+    )
     nested_ref = nested_refs.get(source_ref_name) if isinstance(nested_refs, dict) else None
     nested_ref = nested_ref if isinstance(nested_ref, dict) else {}
     nested_sha = nested_ref.get("sha256") if isinstance(nested_ref.get("sha256"), str) else ""
@@ -6576,6 +6855,24 @@ _AGENTIC_LOOP_LEDGER_DIGEST_KEYS = {
     "cloud_training_duplicate_role_count",
     "cloud_training_lineage_bound",
     "cloud_training_receipts_fail_closed",
+    "cloud_training_completion_successful",
+    "cloud_training_completion_integrity_passed",
+    "cloud_training_completion_execution_status",
+    "cloud_training_completion_execution_terminal",
+    "cloud_training_completion_governance_readiness",
+    "cloud_training_completion_claims_allowed",
+    "cloud_training_completion_provider_id",
+    "cloud_training_completion_provider_job_id",
+    "cloud_training_completion_execution_id",
+    "cloud_training_completion_provider_matches_pipeline",
+    "cloud_training_completion_candidate_model_id",
+    "cloud_training_completion_loop_candidate_model_id",
+    "cloud_training_completion_candidate_matches_loop",
+    "cloud_training_completion_candidate_matches_training_result",
+    "cloud_training_completion_source_bindings_complete",
+    "cloud_training_completion_output_artifact_manifest_bound",
+    "cloud_training_completion_output_artifact_set_bound",
+    "cloud_training_completion_output_artifact_count",
     "cloud_training_live_launch_requested",
     "cloud_training_cost_incurred_usd",
     "cloud_training_launch_mode",
@@ -6634,6 +6931,7 @@ _AGENTIC_LOOP_LEDGER_ITERATION_KEYS = {
     "artifact_role_counts",
     "cloud_training",
     "cloud_training_receipt_state",
+    "cloud_training_completion_state",
     "cloud_training_lineage",
     "cost_estimate",
     "serving",
@@ -6654,6 +6952,7 @@ _AGENTIC_LOOP_LEDGER_CLOUD_TRAINING_KEYS = _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS
     "launch_plan_present",
     "launch_receipt_present",
     "status_receipt_present",
+    "completion_receipt_present",
     "provider_api_calls_started",
     "cloud_jobs_started",
     "credential_values_recorded",
@@ -6740,6 +7039,13 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             target,
             ledger_path,
             f"{label}.cloud_training_receipt_state",
+        )
+        _validate_agentic_loop_ledger_cloud_training_completion_state(
+            row.get("cloud_training_completion_state"),
+            row,
+            target,
+            ledger_path,
+            f"{label}.cloud_training_completion_state",
         )
         _validate_agentic_loop_ledger_external_eval_receipt_state(
             row.get("external_eval_receipt_state"),
@@ -6864,6 +7170,11 @@ def _validate_agentic_loop_ledger_digest(
         latest_receipt_state = (
             latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
         )
+        latest_completion_state = (
+            latest.get("cloud_training_completion_state")
+            if isinstance(latest.get("cloud_training_completion_state"), dict)
+            else {}
+        )
         latest_external_eval_receipt_state = (
             latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
         )
@@ -6875,6 +7186,7 @@ def _validate_agentic_loop_ledger_digest(
             and not latest_missing_phase_inputs
             and latest_lineage.get("passed") is True
             and latest_receipt_state.get("fail_closed") is True
+            and latest_completion_state.get("successful") is True
             and latest_external_eval_receipt_state.get("fail_closed") is True
             and latest_external_eval_receipt_state.get("receipts_passed") is True
         )
@@ -7229,6 +7541,24 @@ def _validate_agentic_loop_governance_source_snapshots(value: dict[str, Any], ta
                 "promotion_decision_present",
                 "promotion_ledger_present",
                 "rollback_receipt_present",
+                "cloud_training_completion_successful",
+                "cloud_training_completion_integrity_passed",
+                "cloud_training_completion_execution_status",
+                "cloud_training_completion_execution_terminal",
+                "cloud_training_completion_governance_readiness",
+                "cloud_training_completion_claims_allowed",
+                "cloud_training_completion_provider_id",
+                "cloud_training_completion_provider_job_id",
+                "cloud_training_completion_execution_id",
+                "cloud_training_completion_provider_matches_pipeline",
+                "cloud_training_completion_candidate_model_id",
+                "cloud_training_completion_loop_candidate_model_id",
+                "cloud_training_completion_candidate_matches_loop",
+                "cloud_training_completion_candidate_matches_training_result",
+                "cloud_training_completion_source_bindings_complete",
+                "cloud_training_completion_output_artifact_manifest_bound",
+                "cloud_training_completion_output_artifact_set_bound",
+                "cloud_training_completion_output_artifact_count",
                 "side_effects_started",
                 "summary",
             },
@@ -7494,6 +7824,7 @@ def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any]
         "launch_plan_present": "cloud_training_launch_plan" in present,
         "launch_receipt_present": "cloud_training_launch_receipt" in present,
         "status_receipt_present": "cloud_training_status_receipt" in present,
+        "completion_receipt_present": "cloud_training_completion_receipt" in present,
         "provider_api_calls_started": False,
         "cloud_jobs_started": False,
         "credential_values_recorded": False,
@@ -7528,6 +7859,42 @@ def _validate_agentic_loop_ledger_cloud_training_receipt_state(
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match source loop plan cloud training receipt artifacts.")
+
+
+def _validate_agentic_loop_ledger_cloud_training_completion_state(
+    value: Any,
+    row: dict[str, Any],
+    target: ValidationTarget,
+    ledger_path: Path,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(
+        value,
+        _AGENTIC_TRAINING_LOOP_CLOUD_COMPLETION_STATE_KEYS,
+        target,
+        label,
+    )
+    source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
+    if (
+        source_path is None
+        or not source_path.exists()
+        or _path_has_symlink_component(source_path, include_leaf=True)
+        or not source_path.is_file()
+    ):
+        return
+    source_plan = _read_json_object_silent(source_path)
+    expected = (
+        source_plan.get("cloud_training_completion_state")
+        if isinstance(source_plan.get("cloud_training_completion_state"), dict)
+        else {}
+    )
+    if value != expected:
+        target.errors.append(
+            f"{label} must match source loop plan cloud completion state exactly."
+        )
 
 
 def _validate_agentic_loop_ledger_external_eval_receipt_state(
@@ -11912,7 +12279,11 @@ def _model_grader_label_counts(value: Any, target: ValidationTarget, label: str)
     return counts
 
 
-def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:
+def _validate_agentic_training_result_artifacts(
+    value: Any,
+    target: ValidationTarget,
+    source_path: Path,
+) -> dict[str, int]:
     counts = {
         "artifact_count": 0,
         "regular_artifact_count": 0,
@@ -11952,6 +12323,11 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
         path_value = artifact.get("path")
         path_is_safe = isinstance(path_value, str) and _is_safe_agentic_training_result_path(path_value)
         current_path = _agentic_training_result_reference_path(path_value, source_path) if path_is_safe else None
+        opaque_attestation = (
+            get_active_opaque_output_attestation(current_path)
+            if role in OUTPUT_ARTIFACT_ROLES and current_path is not None
+            else None
+        )
         if not isinstance(path_value, str) or not path_value:
             target.errors.append(f"{label}.path must be a non-empty string.")
         elif not path_is_safe:
@@ -11959,11 +12335,25 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
         for field_name in ("exists", "regular_file"):
             if not isinstance(artifact.get(field_name), bool):
                 target.errors.append(f"{label}.{field_name} must be a boolean.")
-        if artifact.get("exists") is True and current_path is not None and not current_path.exists():
+        current_exists = opaque_attestation is not None or (
+            current_path is not None and current_path.exists()
+        )
+        current_regular = opaque_attestation is not None or (
+            current_path is not None
+            and current_path.is_file()
+            and not current_path.is_symlink()
+            and not _path_has_symlink_component(current_path, include_leaf=False)
+        )
+        if artifact.get("exists") is True and current_path is not None and not current_exists:
             target.errors.append(f"{label}.path does not resolve to the current file.")
-        if artifact.get("regular_file") is True and current_path is not None and current_path.is_symlink():
+        if (
+            artifact.get("regular_file") is True
+            and current_path is not None
+            and opaque_attestation is None
+            and current_path.is_symlink()
+        ):
             target.errors.append(f"{label}.path must not be a symlink.")
-        if artifact.get("regular_file") is True and current_path is not None and not current_path.is_file():
+        if artifact.get("regular_file") is True and current_path is not None and not current_regular:
             target.errors.append(f"{label}.path does not resolve to a regular file.")
         if artifact.get("regular_file") is True:
             counts["regular_artifact_count"] += 1
@@ -11973,10 +12363,20 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
         if not _is_non_negative_int(artifact.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
-        elif artifact.get("regular_file") is True and current_path is not None and current_path.is_file():
-            if current_path.stat().st_size != artifact.get("size_bytes"):
+        elif artifact.get("regular_file") is True and current_path is not None and current_regular:
+            current_size = (
+                opaque_attestation.size_bytes
+                if opaque_attestation is not None
+                else current_path.stat().st_size
+            )
+            current_sha256 = (
+                opaque_attestation.sha256
+                if opaque_attestation is not None
+                else _sha256(current_path)
+            )
+            if current_size != artifact.get("size_bytes"):
                 target.errors.append(f"{label}.size_bytes does not match the current file.")
-            if _is_sha256(artifact.get("sha256")) and _sha256(current_path) != artifact.get("sha256"):
+            if _is_sha256(artifact.get("sha256")) and current_sha256 != artifact.get("sha256"):
                 target.errors.append(f"{label}.sha256 does not match the current file.")
     return counts
 

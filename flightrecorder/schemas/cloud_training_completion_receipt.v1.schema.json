@@ -1,0 +1,281 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_completion_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_path": {"minLength": 1, "type": "string"},
+    "created_at": {"format": "date-time", "type": "string"},
+    "execution": {"$ref": "#/$defs/execution"},
+    "execution_boundary": {"$ref": "#/$defs/executionBoundary"},
+    "governance": {"$ref": "#/$defs/governance"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "integrity": {"$ref": "#/$defs/integrity"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "outputs": {"$ref": "#/$defs/outputs"},
+    "passed": {"type": "boolean"},
+    "provider_constraints": {"$ref": "#/$defs/providerConstraints"},
+    "runner_observation": {"$ref": "#/$defs/runnerObservation"},
+    "schema_version": {"const": "hfr.cloud_training_completion_receipt.v1"},
+    "sources": {
+      "additionalProperties": false,
+      "properties": {
+        "launch_plan": {"$ref": "#/$defs/sourceRef"},
+        "launch_receipt": {"$ref": "#/$defs/sourceRef"},
+        "output_artifact_manifest": {"$ref": "#/$defs/sourceRef"},
+        "raw_provider_result": {"$ref": "#/$defs/sourceRef"},
+        "runner_metadata": {"$ref": "#/$defs/sourceRef"},
+        "status_receipt": {"$ref": "#/$defs/sourceRef"}
+      },
+      "required": [
+        "launch_plan",
+        "launch_receipt",
+        "status_receipt",
+        "runner_metadata",
+        "raw_provider_result",
+        "output_artifact_manifest"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "artifact_path",
+    "passed",
+    "integrity",
+    "execution",
+    "sources",
+    "identity",
+    "provider_constraints",
+    "runner_observation",
+    "outputs",
+    "governance",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Imported Cloud Training Completion Receipt",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {"minLength": 1, "type": "string"},
+        "passed": {"type": "boolean"},
+        "summary": {"minLength": 1, "type": "string"}
+      },
+      "required": ["id", "passed", "summary"],
+      "type": "object"
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "class": {
+              "enum": ["none", "provider", "runner", "capacity", "timeout", "cancelled", "artifact", "unknown"],
+              "type": "string"
+            },
+            "classified": {"type": "boolean"},
+            "message": {"type": "string"}
+          },
+          "required": ["class", "message", "classified"],
+          "type": "object"
+        },
+        "status": {
+          "enum": ["completed", "failed", "incomplete", "unknown"],
+          "type": "string"
+        },
+        "terminal": {"type": "boolean"}
+      },
+      "required": ["status", "terminal", "failure"],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts_downloaded_by_flight_recorder": {"const": false},
+        "artifacts_uploaded_by_flight_recorder": {"const": false},
+        "cloud_job_started_by_flight_recorder": {"const": false},
+        "credential_values_recorded_by_flight_recorder": {"const": false},
+        "external_runner_owns_execution": {"const": true},
+        "import_only": {"const": true},
+        "model_downloads_started_by_flight_recorder": {"const": false},
+        "provider_api_called_by_flight_recorder": {"const": false},
+        "provider_modules_imported_by_flight_recorder": {"const": false},
+        "provider_status_polled_by_flight_recorder": {"const": false},
+        "raw_provider_result_embedded": {"const": false},
+        "weights_updated_by_flight_recorder": {"const": false}
+      },
+      "required": [
+        "import_only",
+        "external_runner_owns_execution",
+        "provider_api_called_by_flight_recorder",
+        "cloud_job_started_by_flight_recorder",
+        "provider_status_polled_by_flight_recorder",
+        "artifacts_uploaded_by_flight_recorder",
+        "artifacts_downloaded_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "weights_updated_by_flight_recorder",
+        "provider_modules_imported_by_flight_recorder",
+        "credential_values_recorded_by_flight_recorder",
+        "raw_provider_result_embedded"
+      ],
+      "type": "object"
+    },
+    "governance": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_reasons": {"items": {"type": "string"}, "type": "array"},
+        "cloud_training_completion_claims_allowed": {"type": "boolean"},
+        "readiness": {"enum": ["ready_for_review", "blocked"], "type": "string"},
+        "recommendation": {
+          "enum": ["review_cloud_training_completion", "archive_cloud_training_failure", "block_cloud_training_completion_claims"],
+          "type": "string"
+        }
+      },
+      "required": ["readiness", "cloud_training_completion_claims_allowed", "recommendation", "blocking_reasons"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "agentic_training_plan_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "candidate_model_id": {"minLength": 1, "type": "string"},
+        "digest_sha256": {"$ref": "#/$defs/sha256"},
+        "execution_id": {"minLength": 1, "type": "string"},
+        "launch_plan_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "launch_receipt_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "output_artifact_manifest_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "output_artifact_set_sha256": {"$ref": "#/$defs/sha256"},
+        "provider_id": {"minLength": 1, "type": "string"},
+        "provider_job_id": {"minLength": 1, "type": "string"},
+        "raw_provider_result_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "runner_id": {"minLength": 1, "type": "string"},
+        "runner_metadata_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "runner_version": {"minLength": 1, "type": "string"},
+        "status_receipt_sha256": {"$ref": "#/$defs/nullableSha256"}
+      },
+      "required": [
+        "provider_id",
+        "provider_job_id",
+        "execution_id",
+        "candidate_model_id",
+        "runner_id",
+        "runner_version",
+        "launch_plan_sha256",
+        "launch_receipt_sha256",
+        "status_receipt_sha256",
+        "runner_metadata_sha256",
+        "raw_provider_result_sha256",
+        "output_artifact_manifest_sha256",
+        "output_artifact_set_sha256",
+        "agentic_training_plan_sha256",
+        "digest_sha256"
+      ],
+      "type": "object"
+    },
+    "integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_reasons": {"items": {"type": "string"}, "type": "array"},
+        "check_count": {"minimum": 0, "type": "integer"},
+        "checks": {"items": {"$ref": "#/$defs/check"}, "type": "array"},
+        "failed_check_count": {"minimum": 0, "type": "integer"},
+        "passed": {"type": "boolean"}
+      },
+      "required": ["passed", "check_count", "failed_check_count", "checks", "blocking_reasons"],
+      "type": "object"
+    },
+    "nullableSha256": {
+      "anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]
+    },
+    "outputs": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_count": {"minimum": 0, "type": "integer"},
+        "artifact_set_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_model_id": {"type": "string"},
+        "manifest_schema_version": {"const": "hfr.agentic_training_result.v1"},
+        "manifest_sha256": {"$ref": "#/$defs/nullableSha256"},
+        "output_artifact_count": {"minimum": 0, "type": "integer"},
+        "regular_artifact_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["manifest_schema_version", "manifest_sha256", "artifact_count", "regular_artifact_count", "output_artifact_count", "artifact_set_sha256", "candidate_model_id"],
+      "type": "object"
+    },
+    "providerConstraints": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_within_limit": {"type": "boolean"},
+        "gpu_class": {"minLength": 1, "type": "string"},
+        "max_cost_usd": {"minimum": 0, "type": ["number", "null"]},
+        "region": {"minLength": 1, "type": "string"},
+        "reported_cost_usd": {"minimum": 0, "type": ["number", "null"]}
+      },
+      "required": ["region", "gpu_class", "max_cost_usd", "reported_cost_usd", "cost_within_limit"],
+      "type": "object"
+    },
+    "runnerObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {"type": "integer"},
+        "finished_at": {"format": "date-time", "type": "string"},
+        "runner_id": {"minLength": 1, "type": "string"},
+        "runner_version": {"minLength": 1, "type": "string"},
+        "side_effects": {
+          "additionalProperties": false,
+          "properties": {
+            "artifacts_downloaded_by_flight_recorder": {"type": "boolean"},
+            "artifacts_uploaded_by_flight_recorder": {"type": "boolean"},
+            "cloud_job_started_by_flight_recorder": {"type": "boolean"},
+            "credential_values_recorded": {"enum": ["observed", "not_observed", "unknown"], "type": "string"},
+            "external_artifacts_downloaded": {"type": "boolean"},
+            "external_artifacts_uploaded": {"type": "boolean"},
+            "external_cloud_job_started": {"type": "boolean"},
+            "external_provider_api_called": {"type": "boolean"},
+            "model_downloads_started_by_flight_recorder": {"type": "boolean"},
+            "provider_api_called_by_flight_recorder": {"type": "boolean"},
+            "provider_modules_imported_by_flight_recorder": {"type": "boolean"},
+            "provider_status_polled_by_flight_recorder": {"type": "boolean"},
+            "weights_updated_by_flight_recorder": {"type": "boolean"}
+          },
+          "required": [
+            "external_provider_api_called",
+            "external_cloud_job_started",
+            "external_artifacts_uploaded",
+            "external_artifacts_downloaded",
+            "credential_values_recorded",
+            "provider_api_called_by_flight_recorder",
+            "cloud_job_started_by_flight_recorder",
+            "provider_status_polled_by_flight_recorder",
+            "artifacts_uploaded_by_flight_recorder",
+            "artifacts_downloaded_by_flight_recorder",
+            "model_downloads_started_by_flight_recorder",
+            "weights_updated_by_flight_recorder",
+            "provider_modules_imported_by_flight_recorder"
+          ],
+          "type": "object"
+        },
+        "started_at": {"format": "date-time", "type": "string"}
+      },
+      "required": ["runner_id", "runner_version", "started_at", "finished_at", "exit_code", "side_effects"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "sourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"const": true},
+        "path": {"minLength": 1, "type": "string"},
+        "regular_file": {"const": true},
+        "replayable": {"const": true},
+        "schema_version": {"type": ["string", "null"]},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "exists", "regular_file", "replayable", "sha256", "size_bytes", "schema_version"],
+      "type": "object"
+    }
+  }
+}

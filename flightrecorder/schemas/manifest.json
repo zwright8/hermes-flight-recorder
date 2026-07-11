@@ -786,6 +786,14 @@
       "name": "cloud_training_status_receipt"
     },
     {
+      "artifact": "cloud_training_completion_receipt",
+      "artifact_schema_version": "hfr.cloud_training_completion_receipt.v1",
+      "description": "Import-only receipt binding externally reported cloud training completion to its launch lineage and exact training outputs.",
+      "filename": "cloud_training_completion_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_completion_receipt.v1.schema.json",
+      "name": "cloud_training_completion_receipt"
+    },
+    {
       "artifact": "agentic_rollout_plan",
       "artifact_schema_version": "hfr.agentic_rollout_plan.v1",
       "description": "Fail-closed rollout generation plan for agentic training loops.",

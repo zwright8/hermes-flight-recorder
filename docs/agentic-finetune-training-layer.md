@@ -212,6 +212,16 @@ evidence-bundle --agentic-training-result runs/agentic_training_result.json` so
 the final preflight, wrapper dry-run, and result receipt are summarized under
 `metrics.trainer_handoff`.
 
+For externally owned cloud jobs, `flightrecorder cloud-training
+import-completion` adds a provider-neutral
+`hfr.cloud_training_completion_receipt.v1`. It hashes the launch plan,
+dry-run launch/status handoff, public runner metadata, opaque provider result,
+direct training-result manifest, and every recorded output. The importer never
+calls or polls a provider, imports its SDK, uploads/downloads artifacts, or
+updates weights. Integrity-valid failures remain archiveable, but loop
+governance and promotion require a completed receipt bound to the same
+candidate, direct training result, and exact non-empty adapter/checkpoint set.
+
 ## Durable Example
 
 The repository includes a tiny synthetic fixture under

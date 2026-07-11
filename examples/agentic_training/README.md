@@ -229,7 +229,25 @@ flightrecorder cloud-training status \
   --launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/cloud_training/status_receipt.json
+
+flightrecorder cloud-training import-completion \
+  --launch-plan examples/agentic_training/cloud_training/launch_plan.json \
+  --launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
+  --status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --runner-metadata examples/agentic_training/cloud_training/promotion_runner_metadata.json \
+  --raw-provider-result examples/agentic_training/cloud_training/raw_provider_result.json \
+  --output-artifact-manifest examples/agentic_training/promotion_result.json \
+  --created-at 2026-07-03T00:30:00+00:00 \
+  --out examples/agentic_training/promotion_cloud_training_completion_receipt.json
 ```
+
+The completion import is the only step that records the externally owned job
+outcome. It hashes but does not embed the opaque provider result, replays the
+launch/status lineage, and requires the direct agentic-training result to bind
+the exact candidate and output set. It never imports a provider SDK, polls a
+job, moves artifacts, or updates weights. Integrity-valid failed, incomplete,
+and unknown outcomes remain auditable but cannot authorize promotion or loop
+governance.
 
 Seed the held-out eval lane with a fail-closed external adapter handoff and an
 import-only result:
@@ -434,6 +452,7 @@ flightrecorder promotion-decision \
   --trainer-launch-check examples/agentic_training/trainer_launch_check.json \
   --model-registry-entry examples/agentic_training/promotion_governance/model_registry_entry.json \
   --agentic-training-result examples/agentic_training/promotion_result.json \
+  --cloud-training-completion-receipt examples/agentic_training/promotion_cloud_training_completion_receipt.json \
   --model-card examples/agentic_training/promotion_governance/promotion_cards/MODEL_CARD.md \
   --dataset-card examples/agentic_training/promotion_governance/promotion_cards/DATASET_CARD.md \
   --rollback-metadata examples/agentic_training/promotion_governance/rollback_metadata.json \
@@ -489,12 +508,11 @@ flightrecorder promotion-archive \
 ```
 
 The committed promotion decision consumes that compare gate, promotion-history
-gate, eval summary, and execution-backed external result. The
-`promotion_result.json` fixture is a promotion-specific copy of the completed
-training receipt whose registry update targets `local/mock-candidate`; the
-loop-level `completed_result.json` remains bound to the synthetic training
-source identity. Keeping those receipts separate makes the promoted registry
-identity explicit without rewriting the earlier execution record. For multiple
+gate, eval summary, execution-backed external result, and imported cloud
+completion receipt. The `promotion_result.json` fixture is the direct completed
+training receipt whose registry update targets `local/mock-candidate`; the loop
+binds that same receipt and its cloud completion evidence so candidate identity
+converges across execution, promotion, and governance. For multiple
 selected adapters, repeat `--external-eval-result`; the non-empty unique result
 set must match the summary exactly, identify `local/mock-candidate`, and bind to
 the same summary fingerprint stored in the evidence bundle. Validation reopens
@@ -532,13 +550,14 @@ flightrecorder agentic-loop plan \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
-  --agentic-training-result examples/agentic_training/completed_result.json \
+  --agentic-training-result examples/agentic_training/promotion_result.json \
   --cloud-training-provider-registry examples/agentic_training/cloud_training/provider_registry.json \
   --cloud-training-preflight examples/agentic_training/cloud_training/preflight.json \
   --cloud-training-artifact-manifest examples/agentic_training/cloud_training/artifact_manifest.json \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --cloud-training-completion-receipt examples/agentic_training/promotion_cloud_training_completion_receipt.json \
   --serving-lifecycle examples/agentic_training/serving_lifecycle/managed_mock/serving_lifecycle.json \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
@@ -585,7 +604,10 @@ alias-apply receipt is a local JSON-registry fixture. The
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
 records the SHA-256 chain from preflight through launch plan, launch receipt,
-and status receipt. The example ledger's governance decision recommends
+and status receipt. The separate `cloud_training_completion_state` replays the
+import-only receipt, binds its exact output set to the training result, and
+requires its candidate to match the loop participant before completion can
+authorize governance. The example ledger's governance decision recommends
 `approve`, while still listing `approve`, `reject`, `rollback`, and
 `request_another_iteration` as schema-checkable action rows. Because the
 rollback receipt is present, rollback is also available as a governance action.
@@ -625,6 +647,7 @@ flightrecorder validate \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --cloud-training-completion-receipt examples/agentic_training/promotion_cloud_training_completion_receipt.json \
   --serving-lifecycle examples/agentic_training/serving_lifecycle/managed_mock/serving_lifecycle.json \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \

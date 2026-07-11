@@ -211,6 +211,24 @@ def _compact_readiness_digest(digest: dict[str, Any]) -> dict[str, Any]:
         "promotion_decision_present",
         "promotion_ledger_present",
         "rollback_receipt_present",
+        "cloud_training_completion_successful",
+        "cloud_training_completion_integrity_passed",
+        "cloud_training_completion_execution_status",
+        "cloud_training_completion_execution_terminal",
+        "cloud_training_completion_governance_readiness",
+        "cloud_training_completion_claims_allowed",
+        "cloud_training_completion_provider_id",
+        "cloud_training_completion_provider_job_id",
+        "cloud_training_completion_execution_id",
+        "cloud_training_completion_provider_matches_pipeline",
+        "cloud_training_completion_candidate_model_id",
+        "cloud_training_completion_loop_candidate_model_id",
+        "cloud_training_completion_candidate_matches_loop",
+        "cloud_training_completion_candidate_matches_training_result",
+        "cloud_training_completion_source_bindings_complete",
+        "cloud_training_completion_output_artifact_manifest_bound",
+        "cloud_training_completion_output_artifact_set_bound",
+        "cloud_training_completion_output_artifact_count",
         "side_effects_started",
         "summary",
     )
@@ -219,6 +237,24 @@ def _compact_readiness_digest(digest: dict[str, Any]) -> dict[str, Any]:
     compact.setdefault("execution_completion", "incomplete")
     compact.setdefault("governance_readiness", "blocked")
     compact.setdefault("promotion_ledger_present", False)
+    compact.setdefault("cloud_training_completion_successful", False)
+    compact.setdefault("cloud_training_completion_integrity_passed", False)
+    compact.setdefault("cloud_training_completion_execution_status", "missing")
+    compact.setdefault("cloud_training_completion_execution_terminal", False)
+    compact.setdefault("cloud_training_completion_governance_readiness", "")
+    compact.setdefault("cloud_training_completion_claims_allowed", False)
+    compact.setdefault("cloud_training_completion_provider_id", "")
+    compact.setdefault("cloud_training_completion_provider_job_id", "")
+    compact.setdefault("cloud_training_completion_execution_id", "")
+    compact.setdefault("cloud_training_completion_provider_matches_pipeline", False)
+    compact.setdefault("cloud_training_completion_candidate_model_id", "")
+    compact.setdefault("cloud_training_completion_loop_candidate_model_id", "")
+    compact.setdefault("cloud_training_completion_candidate_matches_loop", False)
+    compact.setdefault("cloud_training_completion_candidate_matches_training_result", False)
+    compact.setdefault("cloud_training_completion_source_bindings_complete", False)
+    compact.setdefault("cloud_training_completion_output_artifact_manifest_bound", False)
+    compact.setdefault("cloud_training_completion_output_artifact_set_bound", False)
+    compact.setdefault("cloud_training_completion_output_artifact_count", 0)
     return compact
 
 
@@ -336,6 +372,108 @@ def _checks(ledger_ref: dict[str, Any], action: str, action_row: dict[str, Any] 
             "execution_completion": "completed",
             "governance_readiness": "ready_for_review",
             "ready_for_governance_review": True,
+        },
+    )
+    completion_identity = (
+        digest.get("cloud_training_completion_provider_id"),
+        digest.get("cloud_training_completion_provider_job_id"),
+        digest.get("cloud_training_completion_execution_id"),
+        digest.get("cloud_training_completion_candidate_model_id"),
+        digest.get("cloud_training_completion_loop_candidate_model_id"),
+    )
+    completion_ready = (
+        digest.get("cloud_training_completion_successful") is True
+        and digest.get("cloud_training_completion_integrity_passed") is True
+        and digest.get("cloud_training_completion_execution_status") == "completed"
+        and digest.get("cloud_training_completion_execution_terminal") is True
+        and digest.get("cloud_training_completion_governance_readiness") == "ready_for_review"
+        and digest.get("cloud_training_completion_claims_allowed") is True
+        and all(isinstance(value, str) and value for value in completion_identity)
+        and digest.get("cloud_training_completion_provider_matches_pipeline") is True
+        and digest.get("cloud_training_completion_candidate_matches_loop") is True
+        and digest.get("cloud_training_completion_candidate_matches_training_result") is True
+        and digest.get("cloud_training_completion_source_bindings_complete") is True
+        and digest.get("cloud_training_completion_output_artifact_manifest_bound") is True
+        and digest.get("cloud_training_completion_output_artifact_set_bound") is True
+        and isinstance(digest.get("cloud_training_completion_output_artifact_count"), int)
+        and not isinstance(digest.get("cloud_training_completion_output_artifact_count"), bool)
+        and digest.get("cloud_training_completion_output_artifact_count") > 0
+    )
+    _add_check(
+        checks,
+        "approval_requires_successful_cloud_training_completion",
+        action != "approve" or completion_ready,
+        {
+            "action": action,
+            "cloud_training_completion_successful": digest.get("cloud_training_completion_successful"),
+            "cloud_training_completion_integrity_passed": digest.get(
+                "cloud_training_completion_integrity_passed"
+            ),
+            "cloud_training_completion_execution_status": digest.get(
+                "cloud_training_completion_execution_status"
+            ),
+            "cloud_training_completion_execution_terminal": digest.get(
+                "cloud_training_completion_execution_terminal"
+            ),
+            "cloud_training_completion_governance_readiness": digest.get(
+                "cloud_training_completion_governance_readiness"
+            ),
+            "cloud_training_completion_claims_allowed": digest.get(
+                "cloud_training_completion_claims_allowed"
+            ),
+            "cloud_training_completion_provider_id": digest.get("cloud_training_completion_provider_id"),
+            "cloud_training_completion_provider_job_id": digest.get(
+                "cloud_training_completion_provider_job_id"
+            ),
+            "cloud_training_completion_execution_id": digest.get("cloud_training_completion_execution_id"),
+            "cloud_training_completion_provider_matches_pipeline": digest.get(
+                "cloud_training_completion_provider_matches_pipeline"
+            ),
+            "cloud_training_completion_candidate_model_id": digest.get(
+                "cloud_training_completion_candidate_model_id"
+            ),
+            "cloud_training_completion_loop_candidate_model_id": digest.get(
+                "cloud_training_completion_loop_candidate_model_id"
+            ),
+            "cloud_training_completion_candidate_matches_loop": digest.get(
+                "cloud_training_completion_candidate_matches_loop"
+            ),
+            "cloud_training_completion_candidate_matches_training_result": digest.get(
+                "cloud_training_completion_candidate_matches_training_result"
+            ),
+            "cloud_training_completion_source_bindings_complete": digest.get(
+                "cloud_training_completion_source_bindings_complete"
+            ),
+            "cloud_training_completion_output_artifact_manifest_bound": digest.get(
+                "cloud_training_completion_output_artifact_manifest_bound"
+            ),
+            "cloud_training_completion_output_artifact_set_bound": digest.get(
+                "cloud_training_completion_output_artifact_set_bound"
+            ),
+            "cloud_training_completion_output_artifact_count": digest.get(
+                "cloud_training_completion_output_artifact_count"
+            ),
+        },
+        {
+            "action": "approve",
+            "cloud_training_completion_successful": True,
+            "cloud_training_completion_integrity_passed": True,
+            "cloud_training_completion_execution_status": "completed",
+            "cloud_training_completion_execution_terminal": True,
+            "cloud_training_completion_governance_readiness": "ready_for_review",
+            "cloud_training_completion_claims_allowed": True,
+            "cloud_training_completion_provider_id": "<non-empty>",
+            "cloud_training_completion_provider_job_id": "<non-empty>",
+            "cloud_training_completion_execution_id": "<non-empty>",
+            "cloud_training_completion_provider_matches_pipeline": True,
+            "cloud_training_completion_candidate_model_id": "<non-empty>",
+            "cloud_training_completion_loop_candidate_model_id": "<non-empty>",
+            "cloud_training_completion_candidate_matches_loop": True,
+            "cloud_training_completion_candidate_matches_training_result": True,
+            "cloud_training_completion_source_bindings_complete": True,
+            "cloud_training_completion_output_artifact_manifest_bound": True,
+            "cloud_training_completion_output_artifact_set_bound": True,
+            "cloud_training_completion_output_artifact_count": 1,
         },
     )
     _add_check(

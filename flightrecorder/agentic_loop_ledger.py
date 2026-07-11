@@ -34,6 +34,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
         "cloud_training_launch_plan",
         "cloud_training_launch_receipt",
         "cloud_training_status_receipt",
+        "cloud_training_completion_receipt",
     ),
     "training": (
         "agentic_training_plan",
@@ -163,6 +164,7 @@ def _iteration_record(
         "external_eval_receipt_state": _external_eval_receipt_state(plan),
         "cloud_training": _cloud_training_summary(source_artifacts, plan),
         "cloud_training_receipt_state": _cloud_training_receipt_state(plan),
+        "cloud_training_completion_state": _cloud_training_completion_state(plan),
         "cloud_training_lineage": _cloud_training_lineage(plan),
         "training_outputs": _group_summary(source_artifacts, "training"),
         "governance": _governance_summary(source_artifacts, plan),
@@ -244,6 +246,11 @@ def _latest_ready_for_governance_review(latest: dict[str, Any]) -> bool:
         return False
     lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
     receipt_state = latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
+    completion_state = (
+        latest.get("cloud_training_completion_state")
+        if isinstance(latest.get("cloud_training_completion_state"), dict)
+        else {}
+    )
     external_eval_receipt_state = (
         latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
     )
@@ -255,6 +262,7 @@ def _latest_ready_for_governance_review(latest: dict[str, Any]) -> bool:
     return (
         lineage.get("passed") is True
         and receipt_state.get("fail_closed") is True
+        and completion_state.get("successful") is True
         and external_eval_receipt_state.get("fail_closed") is True
         and external_eval_receipt_state.get("receipts_passed") is True
         and not side_effects_started
@@ -267,6 +275,13 @@ def _governance_actions(latest: dict[str, Any], ready_for_review: bool) -> list[
     approve_blockers: list[str] = []
     if not ready_for_review:
         approve_blockers.append("latest_iteration_not_ready_for_governance_review")
+    completion_state = (
+        latest.get("cloud_training_completion_state")
+        if isinstance(latest.get("cloud_training_completion_state"), dict)
+        else {}
+    )
+    if completion_state.get("successful") is not True:
+        approve_blockers.append("cloud_training_completion_not_successful")
     if governance.get("promotion_decision_present") is not True:
         approve_blockers.append("missing_promotion_decision")
     if governance.get("promotion_ledger_present") is not True:
@@ -342,6 +357,11 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     cloud_training_receipt_state = (
         latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
     )
+    cloud_training_completion_state = (
+        latest.get("cloud_training_completion_state")
+        if isinstance(latest.get("cloud_training_completion_state"), dict)
+        else {}
+    )
     external_eval_receipt_state = (
         latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
     )
@@ -351,6 +371,7 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     )
     lineage_bound = cloud_training_lineage.get("passed") is True
     receipt_state_fail_closed = cloud_training_receipt_state.get("fail_closed") is True
+    completion_successful = cloud_training_completion_state.get("successful") is True
     external_eval_receipt_state_fail_closed = external_eval_receipt_state.get("fail_closed") is True
     external_eval_receipts_passed = external_eval_receipt_state.get("receipts_passed") is True
     ready = (
@@ -362,6 +383,7 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         and not side_effects_started
         and lineage_bound
         and receipt_state_fail_closed
+        and completion_successful
         and external_eval_receipt_state_fail_closed
         and external_eval_receipts_passed
     )
@@ -399,6 +421,57 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "side_effects_started": side_effects_started,
         "cloud_training_lineage_bound": lineage_bound,
         "cloud_training_receipts_fail_closed": receipt_state_fail_closed,
+        "cloud_training_completion_successful": completion_successful,
+        "cloud_training_completion_integrity_passed": cloud_training_completion_state.get("integrity_passed") is True,
+        "cloud_training_completion_execution_status": str(
+            cloud_training_completion_state.get("execution_status") or "missing"
+        ),
+        "cloud_training_completion_execution_terminal": cloud_training_completion_state.get("execution_terminal") is True,
+        "cloud_training_completion_governance_readiness": str(
+            cloud_training_completion_state.get("governance_readiness") or ""
+        ),
+        "cloud_training_completion_claims_allowed": cloud_training_completion_state.get(
+            "cloud_training_completion_claims_allowed"
+        )
+        is True,
+        "cloud_training_completion_provider_id": str(cloud_training_completion_state.get("provider_id") or ""),
+        "cloud_training_completion_provider_job_id": str(
+            cloud_training_completion_state.get("provider_job_id") or ""
+        ),
+        "cloud_training_completion_execution_id": str(cloud_training_completion_state.get("execution_id") or ""),
+        "cloud_training_completion_provider_matches_pipeline": cloud_training_completion_state.get(
+            "provider_matches_pipeline"
+        )
+        is True,
+        "cloud_training_completion_candidate_model_id": str(
+            cloud_training_completion_state.get("candidate_model_id") or ""
+        ),
+        "cloud_training_completion_loop_candidate_model_id": str(
+            cloud_training_completion_state.get("loop_candidate_model_id") or ""
+        ),
+        "cloud_training_completion_candidate_matches_loop": cloud_training_completion_state.get(
+            "candidate_matches_loop"
+        )
+        is True,
+        "cloud_training_completion_candidate_matches_training_result": cloud_training_completion_state.get(
+            "candidate_matches_training_result"
+        )
+        is True,
+        "cloud_training_completion_source_bindings_complete": cloud_training_completion_state.get(
+            "source_bindings_complete"
+        )
+        is True,
+        "cloud_training_completion_output_artifact_manifest_bound": cloud_training_completion_state.get(
+            "output_artifact_manifest_bound"
+        )
+        is True,
+        "cloud_training_completion_output_artifact_set_bound": cloud_training_completion_state.get(
+            "output_artifact_set_bound"
+        )
+        is True,
+        "cloud_training_completion_output_artifact_count": _non_negative_int(
+            cloud_training_completion_state.get("output_artifact_count")
+        ),
         "cloud_training_live_launch_requested": cloud_training_receipt_state.get("live_launch_requested") is True,
         "cloud_training_cost_incurred_usd": _number_or_zero(cloud_training_receipt_state.get("cost_incurred_usd")),
         "cloud_training_launch_mode": str(cloud_training_receipt_state.get("launch_mode") or ""),
@@ -449,6 +522,7 @@ def _cloud_training_summary(source_artifacts: dict[str, Any], plan: dict[str, An
             "launch_plan_present": _role_count(source_artifacts, "cloud_training_launch_plan") > 0,
             "launch_receipt_present": _role_count(source_artifacts, "cloud_training_launch_receipt") > 0,
             "status_receipt_present": _role_count(source_artifacts, "cloud_training_status_receipt") > 0,
+            "completion_receipt_present": _role_count(source_artifacts, "cloud_training_completion_receipt") > 0,
             "provider_api_calls_started": plan_summary.get("provider_api_calls_started") is True,
             "cloud_jobs_started": plan_summary.get("cloud_jobs_started") is True,
             "credential_values_recorded": plan_summary.get("credential_values_recorded") is True,
@@ -465,6 +539,11 @@ def _cloud_training_lineage(plan: dict[str, Any]) -> dict[str, Any]:
 
 def _cloud_training_receipt_state(plan: dict[str, Any]) -> dict[str, Any]:
     state = plan.get("cloud_training_receipt_state")
+    return state if isinstance(state, dict) else {}
+
+
+def _cloud_training_completion_state(plan: dict[str, Any]) -> dict[str, Any]:
+    state = plan.get("cloud_training_completion_state")
     return state if isinstance(state, dict) else {}
 
 

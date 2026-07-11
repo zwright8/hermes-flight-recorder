@@ -41,6 +41,7 @@ _SEMANTIC_VALIDATOR_NAMES = {
     "agentic_training_result": "validate_agentic_training_result",
     "agentic_training_runtime_preflight": "validate_agentic_training_runtime_preflight",
     "cloud_training_artifact_manifest": "validate_cloud_training_artifact_manifest",
+    "cloud_training_completion_receipt": "validate_cloud_training_completion_receipt",
     "cloud_training_launch_plan": "validate_cloud_training_launch_plan",
     "cloud_training_launch_receipt": "validate_cloud_training_launch_receipt",
     "cloud_training_preflight": "validate_cloud_training_preflight",
@@ -114,6 +115,7 @@ _REQUIRED_VALUES: dict[str, dict[str, Any]] = {
     "agentic_training_result": {"passed": True},
     "agentic_training_runtime_preflight": {"passed": True},
     "cloud_training_artifact_manifest": {"passed": True, "readiness": "ready"},
+    "cloud_training_completion_receipt": {"passed": True},
     "cloud_training_launch_plan": {"passed": True, "readiness": "ready_for_dry_run_launch"},
     "cloud_training_launch_receipt": {"passed": True, "readiness": "dry_run_recorded"},
     "cloud_training_preflight": {"passed": True, "readiness": "ready_for_dry_run_launch_plan"},
@@ -169,6 +171,16 @@ _REVIEWED_EXPORT_RECORD_SCHEMA_VERSIONS = {
     "hfr.reviewed_gate.v1",
 }
 
+# Model adapters and checkpoints are data-plane blobs, not control-plane JSON.
+# Valid agentic-training result receipts may attest a small, exact set without
+# retaining, spooling, or materializing their contents. These are denial-of-
+# service bounds rather than recommended artifact sizes.
+MAX_OPAQUE_TRAINING_OUTPUT_FILES = 32
+MAX_OPAQUE_TRAINING_OUTPUT_BYTES = 8 * 1024 * 1024 * 1024
+MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES = 32 * 1024 * 1024 * 1024
+MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES = 64 * 1024 * 1024
+_MAX_OPAQUE_RAW_PROVIDER_RESULT_FILES = 8
+
 
 @dataclass(frozen=True)
 class _FileAttestation:
@@ -177,6 +189,24 @@ class _FileAttestation:
     sha256: str
     content: bytes
     spool_path: Path | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class OpaqueOutputAttestation:
+    """Immutable digest-only evidence available during semantic replay."""
+
+    sha256: str
+    size_bytes: int
+    identity: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class _OpaqueSourceSpec:
+    relative: PurePosixPath
+    role: str
+    sha256: str
+    size_bytes: int
+    max_bytes: int
 
 
 @dataclass(frozen=True)
@@ -190,6 +220,7 @@ class _CapturedDirectoryTree:
     root: tuple[int, ...]
     directories: tuple[tuple[str, tuple[int, ...]], ...]
     files: tuple[tuple[str, _FileAttestation], ...]
+    opaque_files: tuple[tuple[str, str, _FileAttestation], ...] = ()
     referenced_path_count: int = 0
     exact_directory_entries: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
@@ -357,6 +388,10 @@ _ACTIVE_SEMANTIC_INSPECTION_CACHE: ContextVar[
     dict[tuple[str, str, bool], dict[str, Any]] | None
 ] = ContextVar("hfr_active_semantic_inspection_cache", default=None)
 
+_ACTIVE_OPAQUE_OUTPUT_ATTESTATIONS: ContextVar[
+    dict[str, OpaqueOutputAttestation] | None
+] = ContextVar("hfr_active_opaque_output_attestations", default=None)
+
 _PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES = {
     ".git",
     ".mypy_cache",
@@ -371,6 +406,25 @@ _PRIVATE_SNAPSHOT_EXCLUDED_REPOSITORY_ROOTS = {
     *_PRIVATE_SNAPSHOT_EXCLUDED_DIRECTORY_NAMES,
     "runs",
 }
+
+
+def get_active_opaque_output_attestation(
+    path_value: str | Path,
+) -> OpaqueOutputAttestation | None:
+    """Return scoped digest evidence for an intentionally unmaterialized file.
+
+    The mapping exists only while a descriptor-bound private semantic snapshot
+    is being validated. Callers must fall back to their normal fail-closed file
+    handling when this returns ``None``.
+    """
+    attestations = _ACTIVE_OPAQUE_OUTPUT_ATTESTATIONS.get()
+    if attestations is None:
+        return None
+    try:
+        key = os.path.abspath(Path(path_value))
+    except (OSError, TypeError, ValueError):
+        return None
+    return attestations.get(key)
 
 
 def inspect_artifact_source(
@@ -599,6 +653,139 @@ def _looks_like_json(content: bytes) -> bool:
         if byte not in {0x09, 0x0A, 0x0D, 0x20}:
             return byte in {0x5B, 0x7B}
     return False
+
+
+def _typed_opaque_source_specs(
+    payload: dict[str, Any],
+    source_relative: PurePosixPath,
+) -> tuple[tuple[_OpaqueSourceSpec, ...], frozenset[str]]:
+    """Return exact schema-authorized opaque leaves and traversal exclusions."""
+    schema_version = payload.get("schema_version")
+    if schema_version == "hfr.agentic_training_result.v1":
+        if not _schema_contract_passed(payload, "agentic_training_result"):
+            return (), frozenset()
+        training_result = payload.get("training_result")
+        artifacts = payload.get("artifacts")
+        output_dir = (
+            training_result.get("output_dir")
+            if isinstance(training_result, dict)
+            else None
+        )
+        if not isinstance(artifacts, list) or not isinstance(output_dir, str):
+            return (), frozenset()
+        output_rows = [
+            row
+            for row in artifacts
+            if isinstance(row, dict) and row.get("role") in {"adapter", "checkpoint"}
+        ]
+        if not output_rows:
+            return (), frozenset()
+        if (
+            len(output_rows) > MAX_OPAQUE_TRAINING_OUTPUT_FILES
+            or not _is_safe_snapshot_relative_path(output_dir)
+        ):
+            return (), frozenset()
+        output_root = _normalized_relative_path(source_relative.parent, output_dir)
+        if output_root is None:
+            return (), frozenset()
+        specs: list[_OpaqueSourceSpec] = []
+        seen_paths: set[str] = set()
+        aggregate_bytes = 0
+        for row in output_rows:
+            raw_path = row.get("path")
+            role = row.get("role")
+            expected_sha = row.get("sha256")
+            expected_size = row.get("size_bytes")
+            if (
+                not isinstance(raw_path, str)
+                or not _is_safe_snapshot_relative_path(raw_path)
+                or role not in {"adapter", "checkpoint"}
+                or row.get("exists") is not True
+                or row.get("regular_file") is not True
+                or not _is_sha256_hex(expected_sha)
+                or not isinstance(expected_size, int)
+                or isinstance(expected_size, bool)
+                or expected_size <= 0
+                or expected_size > MAX_OPAQUE_TRAINING_OUTPUT_BYTES
+            ):
+                return (), frozenset()
+            relative = _normalized_relative_path(source_relative.parent, raw_path)
+            if (
+                relative is None
+                or relative == output_root
+                or not relative.is_relative_to(output_root)
+                or relative.as_posix() in seen_paths
+            ):
+                return (), frozenset()
+            aggregate_bytes += expected_size
+            if aggregate_bytes > MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES:
+                return (), frozenset()
+            seen_paths.add(relative.as_posix())
+            specs.append(
+                _OpaqueSourceSpec(
+                    relative=relative,
+                    role=role,
+                    sha256=expected_sha,
+                    size_bytes=expected_size,
+                    max_bytes=MAX_OPAQUE_TRAINING_OUTPUT_BYTES,
+                )
+            )
+        # Suppress recursive traversal of output_dir only after the entire
+        # typed declaration is schema-valid and every admitted leaf is exact.
+        return tuple(specs), frozenset({output_dir, *(row["path"] for row in output_rows)})
+
+    if schema_version == "hfr.cloud_training_completion_receipt.v1":
+        if not _schema_contract_passed(payload, "cloud_training_completion_receipt"):
+            return (), frozenset()
+        sources = payload.get("sources")
+        record = sources.get("raw_provider_result") if isinstance(sources, dict) else None
+        if not isinstance(record, dict):
+            return (), frozenset()
+        raw_path = record.get("path")
+        expected_sha = record.get("sha256")
+        expected_size = record.get("size_bytes")
+        if (
+            not isinstance(raw_path, str)
+            or not _is_safe_snapshot_relative_path(raw_path)
+            or record.get("exists") is not True
+            or record.get("regular_file") is not True
+            or record.get("replayable") is not True
+            or not _is_sha256_hex(expected_sha)
+            or not isinstance(expected_size, int)
+            or isinstance(expected_size, bool)
+            or expected_size < 0
+            or expected_size > MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES
+        ):
+            return (), frozenset()
+        relative = _normalized_relative_path(source_relative.parent, raw_path)
+        if relative is None:
+            return (), frozenset()
+        return (
+            _OpaqueSourceSpec(
+                relative=relative,
+                role="raw_provider_result",
+                sha256=expected_sha,
+                size_bytes=expected_size,
+                max_bytes=MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES,
+            ),
+        ), frozenset({raw_path})
+
+    return (), frozenset()
+
+
+def _schema_contract_passed(payload: dict[str, Any], schema_name: str) -> bool:
+    try:
+        return bool(check_schema_contract(payload, name_or_id=schema_name).get("passed"))
+    except (MemoryError, RecursionError, SchemaRegistryError, TypeError, ValueError):
+        return False
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
 
 
 def _capture_private_semantic_snapshot(
@@ -857,10 +1044,12 @@ def _captured_tree_within_resource_budgets(tree: _CapturedDirectoryTree) -> bool
         if not budget.reserve_directory(PurePosixPath(relative)):
             return False
     seen_files: set[str] = set()
+    regular_identities: set[tuple[int, int]] = set()
     for relative, attestation in tree.files:
         if relative in seen_files:
             return False
         seen_files.add(relative)
+        regular_identities.add(attestation.identity)
         size_bytes = attestation.metadata[2]
         if attestation.spool_path is None:
             if (
@@ -878,6 +1067,58 @@ def _captured_tree_within_resource_budgets(tree: _CapturedDirectoryTree) -> bool
                 or not _spool_matches_attestation(attestation)
             ):
                 return False
+    opaque_output_count = 0
+    opaque_output_bytes = 0
+    opaque_raw_count = 0
+    opaque_raw_bytes = 0
+    opaque_identities: set[tuple[int, int]] = set()
+    seen_opaque_paths: set[str] = set()
+    for relative, role, attestation in tree.opaque_files:
+        size_bytes = attestation.metadata[2]
+        relative_path = PurePosixPath(relative)
+        if (
+            relative in seen_files
+            or relative in seen_opaque_paths
+            or not _is_safe_snapshot_relative_path(relative)
+            or attestation.content
+            or attestation.spool_path is not None
+        ):
+            return False
+        # Digest-only attestations never carry bytes; their stored metadata and
+        # public projection are the sole replay inputs.
+        if (
+            not isinstance(attestation.sha256, str)
+            or len(attestation.sha256) != 64
+            or any(char not in "0123456789abcdef" for char in attestation.sha256)
+            or attestation.identity in regular_identities
+            or attestation.identity in opaque_identities
+            or not budget.reserve_directory(relative_path.parent)
+        ):
+            return False
+        seen_opaque_paths.add(relative)
+        opaque_identities.add(attestation.identity)
+        if role in {"adapter", "checkpoint"}:
+            opaque_output_count += 1
+            opaque_output_bytes += size_bytes
+            if (
+                size_bytes <= 0
+                or size_bytes > MAX_OPAQUE_TRAINING_OUTPUT_BYTES
+                or opaque_output_count > MAX_OPAQUE_TRAINING_OUTPUT_FILES
+                or opaque_output_bytes > MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES
+            ):
+                return False
+        elif role == "raw_provider_result":
+            opaque_raw_count += 1
+            opaque_raw_bytes += size_bytes
+            if (
+                size_bytes < 0
+                or size_bytes > MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES
+                or opaque_raw_count > _MAX_OPAQUE_RAW_PROVIDER_RESULT_FILES
+                or opaque_raw_bytes > MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES
+            ):
+                return False
+        else:
+            return False
     directory_keys = {".", *seen_directories}
     seen_exact_directories: set[str] = set()
     for relative, names in tree.exact_directory_entries:
@@ -987,9 +1228,20 @@ def _validate_private_semantic_snapshot(snapshot: _PrivateSemanticSnapshot, role
         with _materialize_private_semantic_snapshot(snapshot) as (source_path, snapshot_root):
             token = _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.set(snapshot_root)
             cache_token = _ACTIVE_SEMANTIC_INSPECTION_CACHE.set({})
+            opaque_token = _ACTIVE_OPAQUE_OUTPUT_ATTESTATIONS.set(
+                {
+                    os.path.abspath(snapshot_root / relative): OpaqueOutputAttestation(
+                        sha256=attestation.sha256,
+                        size_bytes=attestation.metadata[2],
+                        identity=attestation.identity,
+                    )
+                    for relative, _role, attestation in snapshot.tree.opaque_files
+                }
+            )
             try:
                 return _semantic_contract_valid(source_path, role)
             finally:
+                _ACTIVE_OPAQUE_OUTPUT_ATTESTATIONS.reset(opaque_token)
                 _ACTIVE_SEMANTIC_INSPECTION_CACHE.reset(cache_token)
                 _ACTIVE_SEMANTIC_SNAPSHOT_ROOT.reset(token)
     except (MemoryError, OSError, RecursionError, UnicodeError, ValueError):
@@ -1354,10 +1606,52 @@ def _recapture_private_semantic_snapshot(
             if attestation is None:
                 return None
             files.append((relative, attestation))
+        opaque_files: list[tuple[str, str, _FileAttestation]] = []
+        opaque_output_count = 0
+        opaque_output_bytes = 0
+        opaque_raw_count = 0
+        opaque_raw_bytes = 0
+        for relative, role, expected_attestation in snapshot.tree.opaque_files:
+            relative_path = PurePosixPath(relative)
+            file_stat = _relative_path_stat(descriptor, relative_path)
+            if file_stat is None or not stat.S_ISREG(file_stat.st_mode):
+                return None
+            if role in {"adapter", "checkpoint"}:
+                opaque_output_count += 1
+                opaque_output_bytes += file_stat.st_size
+                max_bytes = MAX_OPAQUE_TRAINING_OUTPUT_BYTES
+                if (
+                    file_stat.st_size <= 0
+                    or opaque_output_count > MAX_OPAQUE_TRAINING_OUTPUT_FILES
+                    or opaque_output_bytes > MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES
+                ):
+                    return None
+            elif role == "raw_provider_result":
+                opaque_raw_count += 1
+                opaque_raw_bytes += file_stat.st_size
+                max_bytes = MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES
+                if (
+                    opaque_raw_count > _MAX_OPAQUE_RAW_PROVIDER_RESULT_FILES
+                    or opaque_raw_bytes > MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES
+                ):
+                    return None
+            else:
+                return None
+            if not budget.reserve_directory(relative_path.parent):
+                return None
+            attestation = _attest_relative_file_digest(
+                descriptor,
+                relative_path,
+                max_bytes=max_bytes,
+            )
+            if attestation is None or attestation != expected_attestation:
+                return None
+            opaque_files.append((relative, role, attestation))
         return _CapturedDirectoryTree(
             root=_directory_identity(root_stat),
             directories=tuple(directories),
             files=tuple(files),
+            opaque_files=tuple(opaque_files),
             referenced_path_count=snapshot.tree.referenced_path_count,
             exact_directory_entries=tuple(exact_directory_entries),
         )
@@ -1377,6 +1671,7 @@ def _capture_referenced_tree_fd(
     spool_store: _ReviewedExportSpoolStore | None = None,
 ) -> _CapturedDirectoryTree | None:
     files: dict[str, _FileAttestation] = {}
+    opaque_files: dict[str, tuple[str, _FileAttestation]] = {}
     directories: dict[str, tuple[int, ...]] = {}
     pending_json: list[PurePosixPath] = []
     scanned_json: set[str] = set()
@@ -1384,9 +1679,13 @@ def _capture_referenced_tree_fd(
     authenticated_reviewed_exports: dict[str, dict[str, Any]] = {}
     exact_directory_entries: dict[str, tuple[str, ...]] = {}
     budget = budget or _SnapshotResourceBudget()
+    opaque_output_bytes = 0
+    opaque_raw_bytes = 0
 
     def add_file(relative: PurePosixPath) -> bool:
         key = relative.as_posix()
+        if key in opaque_files:
+            return True
         if key in files:
             return True
         file_stat = _relative_path_stat(root_descriptor, relative)
@@ -1405,6 +1704,60 @@ def _capture_referenced_tree_fd(
             return False
         files[key] = attestation
         pending_json.append(relative)
+        return True
+
+    def add_opaque_file(spec: _OpaqueSourceSpec) -> bool:
+        nonlocal opaque_output_bytes, opaque_raw_bytes
+        key = spec.relative.as_posix()
+        existing = opaque_files.get(key)
+        if existing is not None:
+            existing_role, existing_attestation = existing
+            return (
+                existing_role == spec.role
+                and existing_attestation.sha256 == spec.sha256
+                and existing_attestation.metadata[2] == spec.size_bytes
+            )
+        if key in files or not budget.reserve_directory(spec.relative.parent):
+            return False
+        file_stat = _relative_path_stat(root_descriptor, spec.relative)
+        if (
+            file_stat is None
+            or not stat.S_ISREG(file_stat.st_mode)
+            or file_stat.st_size != spec.size_bytes
+        ):
+            return False
+        if spec.role in {"adapter", "checkpoint"}:
+            if len(
+                [role for role, _attestation in opaque_files.values() if role in {"adapter", "checkpoint"}]
+            ) + 1 > MAX_OPAQUE_TRAINING_OUTPUT_FILES:
+                return False
+            opaque_output_bytes += file_stat.st_size
+            if opaque_output_bytes > MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES:
+                return False
+        elif spec.role == "raw_provider_result":
+            if len(
+                [role for role, _attestation in opaque_files.values() if role == "raw_provider_result"]
+            ) + 1 > _MAX_OPAQUE_RAW_PROVIDER_RESULT_FILES:
+                return False
+            opaque_raw_bytes += file_stat.st_size
+            if opaque_raw_bytes > MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES:
+                return False
+        else:
+            return False
+        attestation = _attest_relative_file_digest(
+            root_descriptor,
+            spec.relative,
+            max_bytes=spec.max_bytes,
+        )
+        if (
+            attestation is None
+            or attestation.content
+            or attestation.spool_path is not None
+            or attestation.sha256 != spec.sha256
+            or attestation.metadata[2] != spec.size_bytes
+        ):
+            return False
+        opaque_files[key] = (spec.role, attestation)
         return True
 
     def add_directory(relative: PurePosixPath) -> bool:
@@ -1482,6 +1835,14 @@ def _capture_referenced_tree_fd(
             continue
         if not _json_structure_within_resource_budgets(payload):
             return None
+        opaque_exclusions: frozenset[str] = frozenset()
+        if isinstance(payload, dict):
+            try:
+                opaque_specs, opaque_exclusions = _typed_opaque_source_specs(payload, current)
+            except (MemoryError, RecursionError, TypeError, ValueError):
+                return None
+            if not all(add_opaque_file(spec) for spec in opaque_specs):
+                return None
         if isinstance(payload, dict):
             reviewed_record = _typed_reviewed_export_source_record(payload)
             if reviewed_record is not None:
@@ -1521,6 +1882,8 @@ def _capture_referenced_tree_fd(
         for raw_value in _iter_referenced_path_values(payload):
             if not budget.record_reference():
                 return None
+            if raw_value in opaque_exclusions:
+                continue
             candidate = _referenced_relative_path(
                 root_descriptor,
                 current.parent,
@@ -1543,10 +1906,23 @@ def _capture_referenced_tree_fd(
         root_stat = os.fstat(root_descriptor)
     except OSError:
         return None
+    regular_identities = {attestation.identity for attestation in files.values()}
+    opaque_identities = [
+        attestation.identity for _role, attestation in opaque_files.values()
+    ]
+    if (
+        len(opaque_identities) != len(set(opaque_identities))
+        or regular_identities.intersection(opaque_identities)
+    ):
+        return None
     return _CapturedDirectoryTree(
         root=_directory_identity(root_stat),
         directories=tuple(sorted(directories.items())),
         files=tuple(sorted(files.items())),
+        opaque_files=tuple(
+            (relative, role, attestation)
+            for relative, (role, attestation) in sorted(opaque_files.items())
+        ),
         referenced_path_count=budget.referenced_path_count,
         exact_directory_entries=tuple(sorted(exact_directory_entries.items())),
     )

@@ -69,6 +69,11 @@ from .cloud_training import (
     build_cloud_training_status_receipt,
     provider_choices as cloud_training_provider_choices,
 )
+from .cloud_training_completion import (
+    CloudTrainingCompletionError,
+    build_cloud_training_completion_receipt,
+    write_cloud_training_completion_receipt,
+)
 from .compare_gate import (
     COMPARE_GATE_POLICY_SCHEMA_VERSION,
     CompareGatePolicyError,
@@ -331,6 +336,7 @@ def main(argv: list[str] | None = None) -> int:
 
         ReviewCalibrationError,
         CloudTrainingError,
+        CloudTrainingCompletionError,
         TraceObservabilityError,
         ActionLedgerError,
         ActionLedgerGateError,
@@ -1306,6 +1312,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         cloud_training_launch_plan_paths=args.cloud_training_launch_plan,
         cloud_training_launch_receipt_paths=args.cloud_training_launch_receipt,
         cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
+        cloud_training_completion_receipt_paths=args.cloud_training_completion_receipt,
         agentic_rollout_plan_paths=args.agentic_rollout_plan,
         agentic_rollout_receipt_paths=args.agentic_rollout_receipt,
         rejection_sampling_gate_paths=args.rejection_sampling_gate,
@@ -1705,6 +1712,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "cloud_training_preflight": args.cloud_training_preflight,
         "cloud_training_provider_registry": args.cloud_training_provider_registry,
         "cloud_training_status_receipt": args.cloud_training_status_receipt,
+        "cloud_training_completion_receipt": args.cloud_training_completion_receipt,
         "dataset_curation_receipt": args.dataset_curation_receipt,
         "evidence_bundle": args.evidence_bundle,
         "eval_summary": args.eval_summary,
@@ -1898,6 +1906,28 @@ def cmd_cloud_training_status(args: argparse.Namespace) -> int:
     )
     _emit_json_payload(receipt, args.out)
     return 0 if receipt["passed"] else 1
+
+
+def cmd_cloud_training_import_completion(args: argparse.Namespace) -> int:
+    output_path = Path(args.out)
+    expected_output_sha256 = json_file_sha256(output_path)
+    receipt = build_cloud_training_completion_receipt(
+        launch_plan_path=args.launch_plan,
+        launch_receipt_path=args.launch_receipt,
+        status_receipt_path=args.status_receipt,
+        runner_metadata_path=args.runner_metadata,
+        raw_provider_result_path=args.raw_provider_result,
+        output_artifact_manifest_path=args.output_artifact_manifest,
+        out_path=output_path,
+        created_at=args.created_at,
+    )
+    write_cloud_training_completion_receipt(
+        receipt,
+        output_path,
+        expected_sha256=expected_output_sha256,
+    )
+    print(f"wrote {args.out}")
+    return 0 if receipt.get("passed") is True else 1
 
 
 def cmd_agentic_rollout_plan(args: argparse.Namespace) -> int:
@@ -2470,6 +2500,7 @@ def cmd_promotion_decision(args: argparse.Namespace) -> int:
         trainer_launch_check_path=args.trainer_launch_check,
         model_registry_entry_path=args.model_registry_entry,
         agentic_training_result_path=args.agentic_training_result,
+        cloud_training_completion_receipt_path=args.cloud_training_completion_receipt,
         model_card_path=args.model_card,
         dataset_card_path=args.dataset_card,
         rollback_metadata_path=args.rollback_metadata,
@@ -3757,6 +3788,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--cloud-training-launch-plan", action="append", default=[], help="Validate one cloud training launch plan")
     validate.add_argument("--cloud-training-launch-receipt", action="append", default=[], help="Validate one cloud training launch receipt")
     validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
+    validate.add_argument("--cloud-training-completion-receipt", action="append", default=[], help="Validate one imported cloud training completion receipt")
     validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
     validate.add_argument("--agentic-rollout-receipt", action="append", default=[], help="Validate one agentic mock rollout receipt")
     validate.add_argument("--rejection-sampling-gate", action="append", default=[], help="Validate one rejection sampling admission gate")
@@ -4105,6 +4137,7 @@ def _parser() -> argparse.ArgumentParser:
         help="cloud_training_launch_receipt artifact; may be repeated",
     )
     agentic_loop_plan.add_argument("--cloud-training-status-receipt", action="append", default=[], help="cloud_training_status_receipt artifact; may be repeated")
+    agentic_loop_plan.add_argument("--cloud-training-completion-receipt", action="append", default=[], help="cloud_training_completion_receipt artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-preflight", action="append", default=[], help="trainer_preflight artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-launch-check", action="append", default=[], help="trainer_launch_check artifact; may be repeated")
     agentic_loop_plan.add_argument("--serving-lifecycle", action="append", default=[], help="serving_lifecycle artifact; may be repeated")
@@ -4258,6 +4291,20 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_status.add_argument("--out", help="Write cloud training status receipt JSON to this path")
     cloud_training_status.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_status.set_defaults(func=cmd_cloud_training_status)
+
+    cloud_training_completion = cloud_training_subparsers.add_parser(
+        "import-completion",
+        help="Import externally produced cloud training completion evidence without provider calls",
+    )
+    cloud_training_completion.add_argument("--launch-plan", required=True, help="cloud_training_launch_plan artifact")
+    cloud_training_completion.add_argument("--launch-receipt", required=True, help="cloud_training_launch_receipt artifact")
+    cloud_training_completion.add_argument("--status-receipt", required=True, help="cloud_training_status_receipt artifact")
+    cloud_training_completion.add_argument("--runner-metadata", required=True, help="Public-safe external runner metadata JSON")
+    cloud_training_completion.add_argument("--raw-provider-result", required=True, help="Opaque externally produced provider result file")
+    cloud_training_completion.add_argument("--output-artifact-manifest", required=True, help="Direct agentic_training_result artifact describing exact outputs")
+    cloud_training_completion.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_completion.add_argument("--out", required=True, help="Write cloud_training_completion_receipt JSON")
+    cloud_training_completion.set_defaults(func=cmd_cloud_training_import_completion)
 
     agentic_rollout_plan = subparsers.add_parser("agentic-rollout-plan", help="Write a fail-closed rollout generation plan")
     agentic_rollout_plan.add_argument("--iteration-id", required=True, help="Stable iteration id")
@@ -4749,6 +4796,7 @@ def _parser() -> argparse.ArgumentParser:
     promotion_decision.add_argument("--trainer-launch-check", help="trainer_launch_check.json proving trainer handoff readiness")
     promotion_decision.add_argument("--model-registry-entry", help="model_registry_entry.json for the promoted candidate")
     promotion_decision.add_argument("--agentic-training-result", help="agentic_training_result.json for the promoted candidate")
+    promotion_decision.add_argument("--cloud-training-completion-receipt", help="Imported cloud_training_completion_receipt.json bound to the promoted candidate")
     promotion_decision.add_argument("--model-card", help="Candidate model card")
     promotion_decision.add_argument("--dataset-card", help="Dataset card for the training/eval data")
     promotion_decision.add_argument("--rollback-metadata", help="Rollback metadata JSON naming the rollback target")

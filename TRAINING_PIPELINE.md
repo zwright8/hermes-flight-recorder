@@ -436,6 +436,7 @@ flightrecorder promotion-decision \
   --trainer-launch-check runs/trainer_launch_check.json \
   --model-registry-entry runs/model_registry_entry.json \
   --agentic-training-result runs/agentic_training_result.json \
+  --cloud-training-completion-receipt runs/cloud_completion_receipt.json \
   --model-card runs/promotion_cards/MODEL_CARD.md \
   --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \
@@ -935,6 +936,7 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan runs/cloud_launch_plan.json \
   --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
   --cloud-training-status-receipt runs/cloud_status_receipt.json \
+  --cloud-training-completion-receipt runs/cloud_completion_receipt.json \
   --serving-lifecycle runs/serving_lifecycle.json \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
@@ -1093,6 +1095,10 @@ receipts. Launch/status receipt pass flags are counted only after replaying
 those receipts from their linked sources, and provider API calls, cloud jobs,
 cancellation calls, credential recording, or non-zero cost remain visible and
 keep the loop fail-closed.
+The separate `cloud_training_completion_state` binds an externally reported
+provider job to the exact launch/status chain, candidate training result, and
+output artifact set. A valid failure remains visible as failed execution
+evidence; it never counts as successful completion.
 Review group counts include `model_grader_disagreement_queue` and
 `model_grader_override_receipt` when human override resolution is needed, and
 eval group counts include `external_eval_plan`, `external_eval_receipt`, and
@@ -1206,11 +1212,23 @@ flightrecorder cloud-training status \
   --launch-receipt runs/cloud_launch_receipt.json \
   --cancel \
   --out runs/cloud_status_receipt.json
+
+flightrecorder cloud-training import-completion \
+  --launch-plan runs/cloud_launch_plan.json \
+  --launch-receipt runs/cloud_launch_receipt.json \
+  --status-receipt runs/cloud_status_receipt.json \
+  --runner-metadata runs/cloud_runner_metadata.json \
+  --raw-provider-result runs/cloud_raw_result.json \
+  --output-artifact-manifest runs/agentic_training_result.json \
+  --out runs/cloud_completion_receipt.json
 ```
 
 These commands are executable offline and keyless. They do not import provider
 SDKs, call provider APIs, create jobs, incur cost, download models, or update
-weights. `--live-preflight` records environment credential presence and provider
+weights. Completion replay streams content-addressed adapter/checkpoint leaves
+without copying them into semantic snapshots, with denial-of-service bounds of
+32 outputs, 8 GiB per output, and 32 GiB total; opaque provider results are
+bounded to 64 MiB. `--live-preflight` records environment credential presence and provider
 client module discoverability with metadata-only probes; it still records
 `provider_api_called: false` and cannot launch jobs. `--live` launch receipts
 are intentionally blocked until a future provider transport proves explicit

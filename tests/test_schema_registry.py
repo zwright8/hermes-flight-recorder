@@ -60,6 +60,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "agentic_training_result",
             "agentic_training_runtime_preflight",
             "cloud_training_artifact_manifest",
+            "cloud_training_completion_receipt",
             "cloud_training_launch_plan",
             "cloud_training_launch_receipt",
             "cloud_training_preflight",

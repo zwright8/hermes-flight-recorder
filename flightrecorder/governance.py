@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .agentic_training_result import AGENTIC_TRAINING_RESULT_SCHEMA_VERSION
+from .cloud_training_completion import CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION
 from .atomic_json import AtomicJsonError, atomic_write_json_cas, json_file_sha256
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .compare_gate import COMPARE_GATE_SCHEMA_VERSION, evaluate_compare_gate
@@ -72,6 +73,7 @@ PROMOTION_DECISION_REQUIRED_ARTIFACTS = (
     "trainer_launch_check",
     "model_registry_entry",
     "agentic_training_result",
+    "cloud_training_completion_receipt",
     "model_card",
     "dataset_card",
     "rollback_metadata",
@@ -175,6 +177,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     "trainer_launch_check_schema",
     "model_registry_entry_schema",
     "agentic_training_result_schema",
+    "cloud_training_completion_receipt_schema",
     "serving_profile_schema",
     *(
         f"{role}_contract_valid"
@@ -186,6 +189,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
             "trainer_launch_check",
             "model_registry_entry",
             "agentic_training_result",
+            "cloud_training_completion_receipt",
             "serving_profile",
         )
     ),
@@ -194,9 +198,15 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     "trainer_launch_check_semantically_valid",
     "model_registry_entry_semantically_valid",
     "agentic_training_result_semantically_valid",
+    "cloud_training_completion_receipt_semantically_valid",
     "serving_profile_semantically_valid",
     "compare_gate_matches_candidate",
     "agentic_training_result_matches_candidate",
+    "cloud_training_completion_integrity_passed",
+    "cloud_training_completion_succeeded",
+    "cloud_training_completion_matches_candidate",
+    "cloud_training_completion_binds_agentic_training_result",
+    "cloud_training_completion_outputs_match_agentic_training_result",
     "evidence_bundle_semantically_valid",
     "eval_summary_semantically_valid",
     "external_eval_results_present",
@@ -215,6 +225,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
             "compare_gate",
             "trainer_launch_check",
             "agentic_training_result",
+            "cloud_training_completion_receipt",
             "license_review",
             "redaction_check",
             "safety_gate",
@@ -247,6 +258,7 @@ _JSON_ARTIFACT_ROLES = {
     "trainer_launch_check": TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
     "model_registry_entry": MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
     "agentic_training_result": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
+    "cloud_training_completion_receipt": CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION,
     "serving_profile": SERVING_PROFILE_SCHEMA_VERSION,
 }
 _PASSED_JSON_ROLES = (
@@ -256,6 +268,7 @@ _PASSED_JSON_ROLES = (
     "compare_gate",
     "trainer_launch_check",
     "agentic_training_result",
+    "cloud_training_completion_receipt",
     "license_review",
     "redaction_check",
     "safety_gate",
@@ -299,6 +312,7 @@ def build_promotion_decision(
     trainer_launch_check_path: str | Path | None = None,
     model_registry_entry_path: str | Path | None = None,
     agentic_training_result_path: str | Path | None = None,
+    cloud_training_completion_receipt_path: str | Path | None = None,
     model_card_path: str | Path | None = None,
     dataset_card_path: str | Path | None = None,
     rollback_metadata_path: str | Path | None = None,
@@ -325,6 +339,7 @@ def build_promotion_decision(
         "trainer_launch_check": trainer_launch_check_path,
         "model_registry_entry": model_registry_entry_path,
         "agentic_training_result": agentic_training_result_path,
+        "cloud_training_completion_receipt": cloud_training_completion_receipt_path,
         "model_card": model_card_path,
         "dataset_card": dataset_card_path,
         "rollback_metadata": rollback_metadata_path,
@@ -506,6 +521,7 @@ def build_promotion_decision(
             "trainer_launch_check",
             "model_registry_entry",
             "agentic_training_result",
+            "cloud_training_completion_receipt",
             "serving_profile",
         )
     }
@@ -549,6 +565,133 @@ def build_promotion_decision(
         expected={"same_candidate_id": True},
         scope={"artifact_role": "agentic_training_result"},
         summary="agentic training result registry target identifies the promoted candidate",
+    )
+    completion_payload = json_artifacts.get("cloud_training_completion_receipt")
+    completion_identity = (
+        completion_payload.get("identity")
+        if isinstance(completion_payload, dict)
+        and isinstance(completion_payload.get("identity"), dict)
+        else {}
+    )
+    completion_execution = (
+        completion_payload.get("execution")
+        if isinstance(completion_payload, dict)
+        and isinstance(completion_payload.get("execution"), dict)
+        else {}
+    )
+    completion_governance = (
+        completion_payload.get("governance")
+        if isinstance(completion_payload, dict)
+        and isinstance(completion_payload.get("governance"), dict)
+        else {}
+    )
+    completion_sources = (
+        completion_payload.get("sources")
+        if isinstance(completion_payload, dict)
+        and isinstance(completion_payload.get("sources"), dict)
+        else {}
+    )
+    completion_outputs = (
+        completion_payload.get("outputs")
+        if isinstance(completion_payload, dict)
+        and isinstance(completion_payload.get("outputs"), dict)
+        else {}
+    )
+    completion_result_ref = completion_sources.get("output_artifact_manifest")
+    completion_result_sha256 = (
+        completion_result_ref.get("sha256")
+        if isinstance(completion_result_ref, dict)
+        else None
+    )
+    direct_result_sha256 = artifacts["agentic_training_result"].get("sha256")
+    completion_candidate_id = completion_identity.get("candidate_model_id")
+    completion_status = completion_execution.get("status")
+    _add_check(
+        checks,
+        "cloud_training_completion_integrity_passed",
+        isinstance(completion_payload, dict) and completion_payload.get("passed") is True,
+        actual={"passed": completion_payload.get("passed") if isinstance(completion_payload, dict) else None},
+        expected={"passed": True},
+        scope={"artifact_role": "cloud_training_completion_receipt"},
+        summary="cloud completion receipt reports internally consistent imported evidence",
+    )
+    _add_check(
+        checks,
+        "cloud_training_completion_succeeded",
+        completion_status == "completed"
+        and completion_governance.get("readiness") == "ready_for_review"
+        and completion_governance.get("cloud_training_completion_claims_allowed") is True,
+        actual={
+            "status": completion_status,
+            "readiness": completion_governance.get("readiness"),
+            "completion_claims_allowed": completion_governance.get(
+                "cloud_training_completion_claims_allowed"
+            ),
+        },
+        expected={
+            "status": "completed",
+            "readiness": "ready_for_review",
+            "completion_claims_allowed": True,
+        },
+        scope={"artifact_role": "cloud_training_completion_receipt"},
+        summary="externally reported cloud training completed and is eligible for review",
+    )
+    _add_check(
+        checks,
+        "cloud_training_completion_matches_candidate",
+        bool(candidate_id)
+        and completion_candidate_id == candidate_id
+        and completion_outputs.get("candidate_model_id") == candidate_id,
+        actual={
+            "candidate_id": candidate_id,
+            "completion_candidate_model_id": completion_candidate_id,
+            "output_candidate_model_id": completion_outputs.get("candidate_model_id"),
+        },
+        expected={"same_candidate_id": True},
+        scope={"artifact_role": "cloud_training_completion_receipt"},
+        summary="cloud completion and exact outputs identify the promoted candidate",
+    )
+    _add_check(
+        checks,
+        "cloud_training_completion_binds_agentic_training_result",
+        isinstance(direct_result_sha256, str)
+        and bool(direct_result_sha256)
+        and completion_result_sha256 == direct_result_sha256
+        and completion_identity.get("output_artifact_manifest_sha256")
+        == direct_result_sha256,
+        actual={
+            "agentic_training_result_sha256": direct_result_sha256,
+            "completion_source_sha256": completion_result_sha256,
+            "completion_identity_sha256": completion_identity.get(
+                "output_artifact_manifest_sha256"
+            ),
+        },
+        expected={"same_agentic_training_result": True},
+        scope={"artifact_role": "cloud_training_completion_receipt"},
+        summary="cloud completion binds the exact direct agentic training result",
+    )
+    output_set_sha256 = completion_outputs.get("artifact_set_sha256")
+    _add_check(
+        checks,
+        "cloud_training_completion_outputs_match_agentic_training_result",
+        completion_result_sha256 == direct_result_sha256
+        and isinstance(output_set_sha256, str)
+        and bool(output_set_sha256)
+        and completion_identity.get("output_artifact_set_sha256")
+        == output_set_sha256
+        and isinstance(completion_outputs.get("artifact_count"), int)
+        and not isinstance(completion_outputs.get("artifact_count"), bool)
+        and completion_outputs.get("artifact_count", 0) > 0,
+        actual={
+            "artifact_count": completion_outputs.get("artifact_count"),
+            "artifact_set_sha256": output_set_sha256,
+            "identity_artifact_set_sha256": completion_identity.get(
+                "output_artifact_set_sha256"
+            ),
+        },
+        expected={"exact_output_set_bound": True},
+        scope={"artifact_role": "cloud_training_completion_receipt"},
+        summary="cloud completion binds the exact non-empty output set in the agentic training result",
     )
 
     evidence_bundle_validation_errors = _promotion_semantic_validation_errors(
@@ -2033,6 +2176,7 @@ def _promotion_structured_validation_errors(
             return [f"{role} source is missing"]
         from .validation import (
             validate_agentic_training_result,
+            validate_cloud_training_completion_receipt,
             validate_model_registry_entry,
             validate_promotion_ledger_gate,
             validate_serving_profile,
@@ -2044,6 +2188,7 @@ def _promotion_structured_validation_errors(
             "trainer_launch_check": validate_trainer_launch_check,
             "model_registry_entry": validate_model_registry_entry,
             "agentic_training_result": validate_agentic_training_result,
+            "cloud_training_completion_receipt": validate_cloud_training_completion_receipt,
             "serving_profile": validate_serving_profile,
         }
         validation = validators[role](path)

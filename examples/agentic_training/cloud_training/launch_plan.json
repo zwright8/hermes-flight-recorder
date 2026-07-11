@@ -12,8 +12,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "fec5c60e4b6a9adf7b622235d3d399d85340c87f9cf4199c3a0194b1a39dbe5e",
-          "size_bytes": 11410,
+          "sha256": "ce747ae98fca1e0d9c51d6c34b46fd0fb66372b05d46fd6afeee676f14b4a90b",
+          "size_bytes": 11462,
           "source_passed": true,
           "source_recommendation": "build_dry_run_launch_plan"
         }
@@ -36,8 +36,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "254f73cb19c13360fc28cddcb310f38a6be564cf3ef69526a3932cff1ad2e30a",
-          "size_bytes": 6834,
+          "sha256": "5ff63e121d95d614668825743487a0f55e8179e8964ef7ccc6ea8fb922eef4ef",
+          "size_bytes": 6886,
           "source_passed": true,
           "source_recommendation": ""
         }
@@ -136,7 +136,8 @@
         "hfr.cloud_training_artifact_manifest.v1",
         "hfr.cloud_training_launch_plan.v1",
         "hfr.cloud_training_launch_receipt.v1",
-        "hfr.cloud_training_status_receipt.v1"
+        "hfr.cloud_training_status_receipt.v1",
+        "hfr.cloud_training_completion_receipt.v1"
       ],
       "requires_cost_limit": true,
       "requires_environment_credentials_for_live": true,
@@ -199,8 +200,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "254f73cb19c13360fc28cddcb310f38a6be564cf3ef69526a3932cff1ad2e30a",
-      "size_bytes": 6834,
+      "sha256": "5ff63e121d95d614668825743487a0f55e8179e8964ef7ccc6ea8fb922eef4ef",
+      "size_bytes": 6886,
       "source_passed": true,
       "source_recommendation": ""
     },
@@ -212,8 +213,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "fec5c60e4b6a9adf7b622235d3d399d85340c87f9cf4199c3a0194b1a39dbe5e",
-      "size_bytes": 11410,
+      "sha256": "ce747ae98fca1e0d9c51d6c34b46fd0fb66372b05d46fd6afeee676f14b4a90b",
+      "size_bytes": 11462,
       "source_passed": true,
       "source_recommendation": "build_dry_run_launch_plan"
     }

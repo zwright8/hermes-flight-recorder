@@ -7,6 +7,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+import flightrecorder.agentic_loop_governance as loop_governance_module
+import flightrecorder.agentic_loop_ledger as loop_ledger_module
 from flightrecorder.agentic_loop_ledger import AgenticLoopLedgerError, build_agentic_loop_ledger
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
 from flightrecorder.agentic_loop_governance import build_agentic_loop_governance_receipt
@@ -30,6 +32,36 @@ def run_cli(args):
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def loop_candidate_model_id(artifacts: dict[str, list[Path]]) -> str | None:
+    rows = artifacts.get("agentic_training_result")
+    if not isinstance(rows, list) or len(rows) != 1:
+        return None
+    try:
+        payload = json.loads(rows[0].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    registry_update = payload.get("registry_update") if isinstance(payload.get("registry_update"), dict) else {}
+    value = registry_update.get("target_model_id")
+    return value if isinstance(value, str) and value else None
+
+
+def attach_cloud_training_completion(artifacts: dict[str, list[Path]]) -> None:
+    existing = artifacts.get("cloud_training_completion_receipt")
+    if isinstance(existing, list) and len(existing) == 1:
+        return
+    rows = artifacts.get("agentic_training_result")
+    if isinstance(rows, list) and len(rows) == 1:
+        parent = rows[0].parent
+        for name in (
+            "promotion_cloud_training_completion_receipt.json",
+            "cloud_training_completion_receipt.json",
+        ):
+            candidate = parent / name
+            if candidate.is_file():
+                artifacts["cloud_training_completion_receipt"] = [candidate]
+                return
+
+
 def _write_valid_training_export(root: Path) -> Path:
     runs = root / "runs"
     assert run_cli(
@@ -47,6 +79,127 @@ def _write_valid_training_export(root: Path) -> Path:
 
 
 class AgenticLoopLedgerTests(unittest.TestCase):
+    def test_ledger_readiness_requires_successful_cloud_training_completion(self):
+        completion_state = {
+            "successful": True,
+            "integrity_passed": True,
+            "execution_status": "completed",
+            "execution_terminal": True,
+            "governance_readiness": "ready_for_review",
+            "cloud_training_completion_claims_allowed": True,
+            "provider_id": "local_mock",
+            "provider_job_id": "job-001",
+            "execution_id": "execution-001",
+            "provider_matches_pipeline": True,
+            "candidate_model_id": "local/output-candidate",
+            "loop_candidate_model_id": "local/output-candidate",
+            "candidate_matches_loop": True,
+            "candidate_matches_training_result": True,
+            "source_bindings_complete": True,
+            "output_artifact_manifest_bound": True,
+            "output_artifact_set_bound": True,
+            "output_artifact_count": 1,
+        }
+        latest = {
+            "index": 0,
+            "iteration_id": "loop-completion",
+            "plan_readiness": "ready_to_execute",
+            "execution_completion": "completed",
+            "governance_readiness": "ready_for_review",
+            "readiness": "ready_for_governance_review",
+            "recommendation": "submit_for_governance_review",
+            "missing_phase_inputs": [],
+            "blocked_reason_count": 0,
+            "artifact_group_counts": [],
+            "cloud_training_lineage": {"passed": True, "provider": {}},
+            "cloud_training_receipt_state": {"fail_closed": True},
+            "cloud_training_completion_state": completion_state,
+            "external_eval_receipt_state": {"fail_closed": True, "receipts_passed": True},
+            "governance": {
+                "promotion_decision_present": True,
+                "promotion_ledger_present": True,
+                "rollback_receipt_present": False,
+                "cloud_jobs_started": False,
+                "paid_model_grader_calls_started": False,
+                "weights_updated_by_flight_recorder": False,
+            },
+            "cost_estimate": {},
+            "next_actions": {},
+        }
+        decision = {
+            "readiness": "ready",
+            "recommendation": "ready_for_governance_review",
+            "recommended_governance_action": "approve",
+        }
+
+        self.assertTrue(loop_ledger_module._latest_ready_for_governance_review(latest))
+        digest = loop_ledger_module._readiness_digest([latest], decision)
+        self.assertTrue(digest["ready_for_governance_review"])
+        self.assertTrue(digest["cloud_training_completion_successful"])
+        self.assertEqual(digest["cloud_training_completion_candidate_model_id"], "local/output-candidate")
+        self.assertTrue(digest["cloud_training_completion_candidate_matches_loop"])
+
+        completion_state["successful"] = False
+        self.assertFalse(loop_ledger_module._latest_ready_for_governance_review(latest))
+        actions = loop_ledger_module._governance_actions(latest, False)
+        approve = next(row for row in actions if row["action"] == "approve")
+        self.assertIn("cloud_training_completion_not_successful", approve["blocked_reasons"])
+
+    def test_governance_approval_rechecks_cloud_training_completion_digest(self):
+        digest = {
+            "plan_readiness": "ready_to_execute",
+            "execution_completion": "completed",
+            "governance_readiness": "ready_for_review",
+            "ready_for_governance_review": True,
+            "cloud_training_completion_successful": True,
+            "cloud_training_completion_integrity_passed": True,
+            "cloud_training_completion_execution_status": "completed",
+            "cloud_training_completion_execution_terminal": True,
+            "cloud_training_completion_governance_readiness": "ready_for_review",
+            "cloud_training_completion_claims_allowed": True,
+            "cloud_training_completion_provider_id": "local_mock",
+            "cloud_training_completion_provider_job_id": "job-001",
+            "cloud_training_completion_execution_id": "execution-001",
+            "cloud_training_completion_provider_matches_pipeline": True,
+            "cloud_training_completion_candidate_model_id": "local/output-candidate",
+            "cloud_training_completion_loop_candidate_model_id": "local/output-candidate",
+            "cloud_training_completion_candidate_matches_loop": True,
+            "cloud_training_completion_candidate_matches_training_result": True,
+            "cloud_training_completion_source_bindings_complete": True,
+            "cloud_training_completion_output_artifact_manifest_bound": True,
+            "cloud_training_completion_output_artifact_set_bound": True,
+            "cloud_training_completion_output_artifact_count": 1,
+        }
+        ledger_ref = {
+            "exists": True,
+            "schema_version": "hfr.agentic_loop_ledger.v1",
+            "passed": True,
+            "readiness_digest": digest,
+            "execution_boundary": {
+                "ledger_only": True,
+                "cloud_jobs_started": False,
+                "paid_model_grader_calls_started": False,
+                "live_benchmarks_started": False,
+                "model_downloads_started": False,
+                "weights_updated_by_flight_recorder": False,
+                "credential_values_recorded": False,
+            },
+        }
+        action_row = {"action": "approve", "available": True, "blocked_reasons": []}
+
+        checks = loop_governance_module._checks(ledger_ref, "approve", action_row)
+        completion_check = next(
+            check for check in checks if check["id"] == "approval_requires_successful_cloud_training_completion"
+        )
+        self.assertTrue(completion_check["passed"])
+
+        digest["cloud_training_completion_candidate_matches_loop"] = False
+        checks = loop_governance_module._checks(ledger_ref, "approve", action_row)
+        completion_check = next(
+            check for check in checks if check["id"] == "approval_requires_successful_cloud_training_completion"
+        )
+        self.assertFalse(completion_check["passed"])
+
     def test_ledger_rejects_schema_invalid_loop_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1667,6 +1820,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             out_path=path,
             iteration_id=iteration_id,
             objective=f"Iteration {iteration_id}",
+            candidate=loop_candidate_model_id(artifacts),
             artifact_paths=artifacts,
             budget={"max_cloud_cost_usd": 0, "max_gpu_hours": 0},
             created_at="2026-07-03T00:00:00+00:00",
@@ -1677,6 +1831,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
     def write_ready_artifacts(self, root: Path) -> dict[str, list[Path]]:
         root.mkdir(parents=True, exist_ok=True)
         artifacts = copy_valid_loop_artifacts(root)
+        attach_cloud_training_completion(artifacts)
         artifacts.pop("promotion_rollback_receipt", None)
         return artifacts
 

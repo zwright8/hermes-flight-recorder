@@ -28,6 +28,7 @@ PROVIDER_ADAPTER_RECEIPT_TYPES: tuple[str, ...] = (
     CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+    "hfr.cloud_training_completion_receipt.v1",
 )
 
 PROVIDERS: dict[str, dict[str, Any]] = {

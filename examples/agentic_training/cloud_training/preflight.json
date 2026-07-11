@@ -299,7 +299,8 @@
         "hfr.cloud_training_artifact_manifest.v1",
         "hfr.cloud_training_launch_plan.v1",
         "hfr.cloud_training_launch_receipt.v1",
-        "hfr.cloud_training_status_receipt.v1"
+        "hfr.cloud_training_status_receipt.v1",
+        "hfr.cloud_training_completion_receipt.v1"
       ],
       "requires_cost_limit": true,
       "requires_environment_credentials_for_live": true,

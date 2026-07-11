@@ -27,6 +27,36 @@ from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def loop_candidate_model_id(artifacts: dict[str, list[Path]]) -> str | None:
+    rows = artifacts.get("agentic_training_result")
+    if not isinstance(rows, list) or len(rows) != 1:
+        return None
+    try:
+        payload = json.loads(rows[0].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    registry_update = payload.get("registry_update") if isinstance(payload.get("registry_update"), dict) else {}
+    value = registry_update.get("target_model_id")
+    return value if isinstance(value, str) and value else None
+
+
+def attach_cloud_training_completion(artifacts: dict[str, list[Path]]) -> None:
+    existing = artifacts.get("cloud_training_completion_receipt")
+    if isinstance(existing, list) and len(existing) == 1:
+        return
+    rows = artifacts.get("agentic_training_result")
+    if isinstance(rows, list) and len(rows) == 1:
+        parent = rows[0].parent
+        for name in (
+            "promotion_cloud_training_completion_receipt.json",
+            "cloud_training_completion_receipt.json",
+        ):
+            candidate = parent / name
+            if candidate.is_file():
+                artifacts["cloud_training_completion_receipt"] = [candidate]
+                return
+
+
 def directory_tree_fingerprint(path: Path) -> dict[str, int | str]:
     digest = hashlib.sha256()
     file_count = 0
@@ -127,6 +157,239 @@ def write_external_result_fixture(
 
 
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
+    def test_cloud_training_completion_state_requires_bound_success_evidence(self):
+        launch_plan_sha = "1" * 64
+        launch_receipt_sha = "2" * 64
+        status_receipt_sha = "3" * 64
+        training_result_sha = "4" * 64
+        payload = {
+            "schema_version": "hfr.cloud_training_completion_receipt.v1",
+            "passed": True,
+            "execution": {"status": "completed", "terminal": True},
+            "identity": {
+                "provider_id": "local_mock",
+                "provider_job_id": "job-001",
+                "execution_id": "execution-001",
+                "candidate_model_id": "local/output-candidate",
+                "output_artifact_manifest_sha256": training_result_sha,
+                "output_artifact_set_sha256": "5" * 64,
+            },
+            "sources": {
+                "launch_plan": {"sha256": launch_plan_sha},
+                "launch_receipt": {"sha256": launch_receipt_sha},
+                "status_receipt": {"sha256": status_receipt_sha},
+                "output_artifact_manifest": {"sha256": training_result_sha},
+            },
+            "outputs": {
+                "manifest_sha256": training_result_sha,
+                "artifact_set_sha256": "5" * 64,
+                "artifact_count": 3,
+                "regular_artifact_count": 3,
+                "output_artifact_count": 1,
+                "candidate_model_id": "local/output-candidate",
+            },
+            "governance": {
+                "readiness": "ready_for_review",
+                "cloud_training_completion_claims_allowed": True,
+            },
+        }
+        source = {
+            "physical_exists": True,
+            "regular_file": True,
+            "parse_valid": True,
+            "schema_valid": True,
+            "semantic_valid": True,
+            "stable": True,
+            "ready": True,
+            "payload": payload,
+        }
+        refs = {
+            "cloud_training_launch_plan": [{"sha256": launch_plan_sha}],
+            "cloud_training_launch_receipt": [{"sha256": launch_receipt_sha}],
+            "cloud_training_status_receipt": [{"sha256": status_receipt_sha}],
+            "agentic_training_result": [{"sha256": training_result_sha}],
+        }
+        with (
+            patch.object(loop_plan_module, "inspect_artifact_source", return_value=source),
+            patch.object(
+                loop_plan_module,
+                "_cloud_training_provider_lineage",
+                return_value={"pipeline_provider_id": "local_mock"},
+            ),
+            patch.object(
+                loop_plan_module,
+                "_single_payload",
+                return_value={"registry_update": {"target_model_id": "local/output-candidate"}},
+            ) as training_result_payload,
+        ):
+            state = loop_plan_module._cloud_training_completion_state(
+                {"cloud_training_completion_receipt": [Path("completion.json")]},
+                refs,
+                loop_candidate_model_id="local/output-candidate",
+            )
+            training_result_payload.return_value = {
+                "registry_update": {"target_model_id": "local/different-output-candidate"}
+            }
+            mismatched_candidate_state = loop_plan_module._cloud_training_completion_state(
+                {"cloud_training_completion_receipt": [Path("completion.json")]},
+                refs,
+                loop_candidate_model_id="local/output-candidate",
+            )
+            training_result_payload.return_value = {
+                "registry_update": {"target_model_id": "local/output-candidate"}
+            }
+            payload["identity"]["output_artifact_set_sha256"] = "8" * 64
+            mismatched_output_set_state = loop_plan_module._cloud_training_completion_state(
+                {"cloud_training_completion_receipt": [Path("completion.json")]},
+                refs,
+                loop_candidate_model_id="local/output-candidate",
+            )
+            payload["identity"]["output_artifact_set_sha256"] = "5" * 64
+            mismatched_loop_candidate_state = loop_plan_module._cloud_training_completion_state(
+                {"cloud_training_completion_receipt": [Path("completion.json")]},
+                refs,
+                loop_candidate_model_id="local/different-loop-candidate",
+            )
+
+        self.assertTrue(state["integrity_passed"])
+        self.assertTrue(state["successful"])
+        self.assertTrue(state["source_bindings_complete"])
+        self.assertTrue(state["candidate_matches_loop"])
+        self.assertTrue(state["candidate_matches_training_result"])
+        self.assertTrue(state["output_artifact_manifest_bound"])
+        self.assertTrue(state["output_artifact_set_bound"])
+        self.assertEqual(loop_plan_module._cloud_training_completion_status(state), "completed")
+        self.assertFalse(mismatched_candidate_state["candidate_matches_training_result"])
+        self.assertFalse(mismatched_candidate_state["successful"])
+        self.assertFalse(mismatched_output_set_state["output_artifact_set_bound"])
+        self.assertFalse(mismatched_output_set_state["successful"])
+        self.assertFalse(mismatched_loop_candidate_state["candidate_matches_loop"])
+        self.assertFalse(mismatched_loop_candidate_state["successful"])
+
+    def test_cloud_training_completion_outcomes_fail_closed(self):
+        for status, expected in (("failed", "failed"), ("incomplete", "incomplete"), ("unknown", "incomplete")):
+            with self.subTest(status=status):
+                state = {
+                    "integrity_passed": True,
+                    "execution_status": status,
+                    "successful": False,
+                }
+                self.assertEqual(loop_plan_module._cloud_training_completion_status(state), expected)
+        self.assertEqual(
+            loop_plan_module._cloud_training_completion_status(
+                {"integrity_passed": False, "execution_status": "failed", "successful": False}
+            ),
+            "incomplete",
+        )
+
+    def test_cloud_training_completion_lineage_reads_top_level_sources(self):
+        completion_sha = "6" * 64
+        launch_plan_sha = "7" * 64
+        spec = next(
+            row
+            for row in loop_plan_module.CLOUD_TRAINING_LINEAGE_LINKS
+            if row["id"] == "completion_receipt_links_launch_plan"
+        )
+        refs = {
+            "cloud_training_completion_receipt": [
+                {"sha256": completion_sha, "schema_version": "hfr.cloud_training_completion_receipt.v1"}
+            ],
+            "cloud_training_launch_plan": [
+                {"sha256": launch_plan_sha, "schema_version": "hfr.cloud_training_launch_plan.v1"}
+            ],
+        }
+        payload = {"sources": {"launch_plan": {"sha256": launch_plan_sha}}}
+
+        with patch.object(loop_plan_module, "_first_payload", return_value=payload):
+            link = loop_plan_module._cloud_training_lineage_link(refs, {}, spec)
+
+        self.assertTrue(link["passed"])
+        self.assertEqual(link["source_ref_sha256"], launch_plan_sha)
+
+    def test_completion_evidence_does_not_change_handoff_lineage(self):
+        def matched_link(_refs, _paths, spec):
+            return {"id": spec["id"], "status": "matched", "passed": True}
+
+        provider = {
+            "provider_consistent": True,
+            "registry_contains_pipeline_provider": True,
+        }
+        refs = {"agentic_training_result": [{}, {}]}
+        with (
+            patch.object(loop_plan_module, "_cloud_training_provider_lineage", return_value=provider),
+            patch.object(loop_plan_module, "_cloud_training_lineage_link", side_effect=matched_link),
+        ):
+            pre_execution = loop_plan_module._cloud_training_lineage(refs, {})
+            with_completion = loop_plan_module._cloud_training_lineage(
+                {**refs, "cloud_training_completion_receipt": [{}]},
+                {},
+            )
+
+        self.assertNotIn("agentic_training_result", pre_execution["duplicate_roles"])
+        self.assertTrue(pre_execution["passed"])
+        self.assertEqual(with_completion, pre_execution)
+
+    def test_missing_completion_receipt_preserves_plan_readiness_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            artifacts.pop("cloud_training_completion_receipt", None)
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="completion-is-post-execution",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "incomplete")
+            self.assertEqual(plan["governance_readiness"], "blocked")
+            self.assertFalse(plan["cloud_training_completion_state"]["successful"])
+            self.assertIn("cloud_training_completion_receipt", plan["missing_phase_inputs"])
+            self.assertFalse(
+                any(
+                    link["id"].startswith("completion_receipt_links_")
+                    for link in plan["cloud_training_lineage"]["links"]
+                )
+            )
+            completion_check = next(
+                check for check in plan["checks"] if check["id"] == "external_cloud_training_completion_imported"
+            )
+            self.assertFalse(completion_check["passed"])
+            self.assertTrue(check_schema_contract(plan, name_or_id="agentic_training_loop_plan")["passed"])
+
+    def test_imported_completion_receipt_completes_external_training(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            attach_cloud_training_completion(artifacts)
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="completion-imported",
+                candidate=loop_candidate_model_id(artifacts),
+                artifact_paths=artifacts,
+                created_at="2026-07-10T00:00:00+00:00",
+            )
+
+            state = plan["cloud_training_completion_state"]
+            self.assertEqual(plan["plan_readiness"], "ready_to_execute")
+            self.assertEqual(plan["execution_completion"], "completed")
+            self.assertTrue(state["integrity_passed"])
+            self.assertTrue(state["successful"])
+            self.assertTrue(state["candidate_matches_training_result"])
+            self.assertTrue(state["source_bindings_complete"])
+            self.assertTrue(state["output_artifact_manifest_bound"])
+            self.assertTrue(state["output_artifact_set_bound"])
+            self.assertFalse(
+                any(
+                    link["id"].startswith("completion_receipt_links_")
+                    for link in plan["cloud_training_lineage"]["links"]
+                )
+            )
+            self.assertTrue(check_schema_contract(plan, name_or_id="agentic_training_loop_plan")["passed"])
+
     def test_multi_adapter_external_results_require_an_exact_completed_set(self):
         def inspection(adapter_id: str, status: str = "completed") -> dict[str, object]:
             return {
@@ -356,6 +619,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifacts = self.write_loop_artifacts(root)
+            attach_cloud_training_completion(artifacts)
             result_path, result = write_external_result_fixture(
                 artifacts,
                 execution_status="completed",
@@ -368,6 +632,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             plan = build_agentic_training_loop_plan(
                 out_path=root / "loop.json",
                 iteration_id="external-eval-benchmark-failed",
+                candidate=loop_candidate_model_id(artifacts),
                 artifact_paths=artifacts,
                 created_at="2026-07-03T00:00:00+00:00",
             )
@@ -605,7 +870,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertTrue(plan["passed"])
         self.assertEqual(plan["readiness"], "ready_for_governance_review")
-        self.assertEqual(plan["artifact_count"], 41)
+        self.assertEqual(plan["artifact_count"], 42)
         self.assertEqual(plan["plan_readiness"], "ready_to_execute")
         self.assertEqual(plan["execution_completion"], "completed")
         self.assertEqual(plan["governance_readiness"], "ready_for_review")
@@ -697,13 +962,14 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifacts = self.write_loop_artifacts(root)
+            attach_cloud_training_completion(artifacts)
 
             plan = build_agentic_training_loop_plan(
                 out_path=root / "loop.json",
                 iteration_id="loop-001",
                 objective="Close the held-out tool-use regression.",
                 baseline="local/baseline",
-                candidate="local/candidate",
+                candidate=loop_candidate_model_id(artifacts),
                 teacher="local/teacher",
                 artifact_paths=artifacts,
                 budget={"max_rollouts": 20, "max_cloud_cost_usd": 0, "max_gpu_hours": 0},
@@ -1018,6 +1284,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifacts = self.write_loop_artifacts(root)
+            attach_cloud_training_completion(artifacts)
             decision_path = artifacts["promotion_decision"][0]
             decision = json.loads(decision_path.read_text(encoding="utf-8"))
             decision["notes"].append("Operator note: expected drift is ~5%; /tmp is mentioned as prose, not an artifact path.")
@@ -1027,6 +1294,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             plan = build_agentic_training_loop_plan(
                 out_path=loop_plan,
                 iteration_id="loop-path-like-prose",
+                candidate=loop_candidate_model_id(artifacts),
                 artifact_paths=artifacts,
                 created_at="2026-07-03T00:00:00+00:00",
             )

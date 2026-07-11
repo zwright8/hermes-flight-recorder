@@ -1791,6 +1791,7 @@ class CloudTrainingTests(unittest.TestCase):
         self.assertIn("cloud_training_launch_plan", names)
         self.assertIn("cloud_training_launch_receipt", names)
         self.assertIn("cloud_training_status_receipt", names)
+        self.assertIn("cloud_training_completion_receipt", names)
 
     def test_provider_choices_are_stable(self):
         choices = provider_choices()
