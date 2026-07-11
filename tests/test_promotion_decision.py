@@ -1738,10 +1738,11 @@ class PromotionDecisionTests(unittest.TestCase):
             ):
                 root = Path(tmp)
                 artifacts = write_governance_artifacts(root)
-                copied_example = root / "agentic_training"
+                copied_example = artifacts["trainer_launch_check"].parent
                 shutil.copytree(
                     ROOT / "examples" / "agentic_training",
                     copied_example,
+                    dirs_exist_ok=True,
                 )
                 preflight_path = copied_example / "trainer_preflight.json"
                 launch_path = artifacts["trainer_launch_check"]
@@ -5382,7 +5383,7 @@ def write_governance_artifacts(
         metrics.update(compare_metrics)
     compare_gate = _write_source_json(root / "compare_gate.json", compare_payload)
     trainer_launch_check = _write_source_json(
-        root / "trainer_launch_check.json",
+        semantic_root / "trainer_launch_check.json",
         _read_json_object(example_root / "trainer_launch_check.json"),
     )
     agentic_training_result = _write_candidate_training_result(

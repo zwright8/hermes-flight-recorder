@@ -60,8 +60,8 @@
           "schema_errors": [],
           "schema_name": "trainer_launch_check",
           "schema_passed": true,
-          "sha256": "5a697e598d66d04e4ce1c2788d84e77432baf5ae21ccb0377657a2faeb0d558c",
-          "size_bytes": 4325,
+          "sha256": "4401d7eb63a2030b7cdc09176cfd4210711372652e1d766bba47b621b01bf776",
+          "size_bytes": 4537,
           "source_passed": true,
           "source_recommendation": "launch_allowed"
         }
@@ -368,8 +368,8 @@
       "schema_errors": [],
       "schema_name": "trainer_launch_check",
       "schema_passed": true,
-      "sha256": "5a697e598d66d04e4ce1c2788d84e77432baf5ae21ccb0377657a2faeb0d558c",
-      "size_bytes": 4325,
+      "sha256": "4401d7eb63a2030b7cdc09176cfd4210711372652e1d766bba47b621b01bf776",
+      "size_bytes": 4537,
       "source_passed": true,
       "source_recommendation": "launch_allowed"
     },

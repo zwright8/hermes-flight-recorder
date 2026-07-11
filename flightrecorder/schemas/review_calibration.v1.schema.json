@@ -13,6 +13,7 @@
       "items": { "$ref": "#/$defs/disagreement" },
       "type": "array"
     },
+    "effective_policy": { "$ref": "#/$defs/effective_policy" },
     "failed_check_count": { "minimum": 0, "type": "integer" },
     "metrics": { "$ref": "#/$defs/metrics" },
     "notes": {
@@ -22,7 +23,8 @@
     "passed": { "type": "boolean" },
     "reviewed_export": { "minLength": 1, "type": "string" },
     "schema_version": { "const": "hfr.review_calibration.v1" },
-    "source": { "$ref": "#/$defs/source" }
+    "source": { "$ref": "#/$defs/source" },
+    "source_artifacts": { "$ref": "#/$defs/source_artifacts" }
   },
   "required": [
     "schema_version",
@@ -39,6 +41,28 @@
   "title": "Hermes Flight Recorder Review Calibration",
   "type": "object",
   "$defs": {
+    "effective_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_disagreements": { "minimum": 0, "type": ["integer", "null"] },
+        "max_false_negatives": { "minimum": 0, "type": ["integer", "null"] },
+        "max_false_positives": { "minimum": 0, "type": ["integer", "null"] },
+        "min_agreement_rate": { "maximum": 1, "minimum": 0, "type": ["number", "null"] },
+        "min_comparable_labels": { "minimum": 0, "type": ["integer", "null"] },
+        "require_valid_export": { "type": "boolean" },
+        "strict_validation": { "type": "boolean" }
+      },
+      "required": [
+        "min_agreement_rate",
+        "max_disagreements",
+        "max_false_positives",
+        "max_false_negatives",
+        "min_comparable_labels",
+        "require_valid_export",
+        "strict_validation"
+      ],
+      "type": "object"
+    },
     "check": {
       "oneOf": [
         { "$ref": "#/$defs/min_check" },
@@ -242,6 +266,46 @@
         "reviewed_labels": { "minLength": 1, "type": "string" }
       },
       "required": ["reviewed_labels"],
+      "type": "object"
+    },
+    "source_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "contains_symlinks": { "const": false },
+        "dataset_version": { "minLength": 1, "type": "string" },
+        "exists": { "const": true },
+        "file_count": { "minimum": 1, "type": "integer" },
+        "kind": { "const": "directory" },
+        "manifest_path": { "minLength": 1, "type": "string" },
+        "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "manifest_size_bytes": { "minimum": 1, "type": "integer" },
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 1, "type": "integer" },
+        "tree_hash_algorithm": { "const": "hfr.sha256.file-tree.v1" }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists",
+        "tree_hash_algorithm",
+        "sha256",
+        "file_count",
+        "size_bytes",
+        "contains_symlinks",
+        "manifest_path",
+        "manifest_sha256",
+        "manifest_size_bytes",
+        "dataset_version"
+      ],
+      "type": "object"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "reviewed_export": { "$ref": "#/$defs/source_artifact" }
+      },
+      "required": ["reviewed_export"],
       "type": "object"
     },
     "validation": {

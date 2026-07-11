@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from flightrecorder import source_contract, validation
 from flightrecorder.agentic_training_loop_plan import PHASES
+from flightrecorder.reviewed_gate import REVIEWED_EXPORT_CONTENT_FILES
 from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.source_contract import (
     _DIRECTORY_MANIFESTS,
@@ -17,13 +18,66 @@ from flightrecorder.source_contract import (
     inspect_artifact_source,
 )
 from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
-from tests.test_review_calibration import make_reviewed_export, run_cli as run_review_calibration_cli
+from tests.test_review_calibration import (
+    make_reviewed_export,
+    read_jsonl,
+    run_cli as run_review_calibration_cli,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def make_large_reviewed_export(tmp: str) -> Path:
+    """Build a valid reviewed export with JSONL data above the control-plane limit."""
+    root = Path(tmp)
+    make_reviewed_export(tmp)
+    review = root / "review"
+    labels_path = root / "completed_labels.jsonl"
+    rows = read_jsonl(labels_path)
+    rows[0]["notes"] = "x" * (source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES + 1024)
+    labels_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    reviewed = root / "large_reviewed"
+    code = run_review_calibration_cli(
+        [
+            "apply-review",
+            "--review-export",
+            str(review),
+            "--labels",
+            str(labels_path),
+            "--out",
+            str(reviewed),
+        ]
+    )
+    if code != 0:
+        raise AssertionError(f"large reviewed export setup failed with exit code {code}")
+    return reviewed
+
+
 class SourceContractTests(unittest.TestCase):
+    def test_reviewed_export_snapshot_cap_allows_large_jsonl_but_stays_bounded(self):
+        cap = 16 * 1024 * 1024
+        self.assertEqual(
+            source_contract._MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES,
+            cap,
+        )
+        self.assertGreater(
+            source_contract._MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES,
+            source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES,
+        )
+        store = source_contract._ReviewedExportSpoolStore()
+        try:
+            self.assertIsNone(store.allocate(cap + 1))
+            self.assertEqual(store.aggregate_bytes, 0)
+            self.assertIsNone(store.directory)
+            self.assertIsNotNone(store.allocate(cap))
+            self.assertIsNone(store.allocate(1))
+        finally:
+            store.close()
+
     def test_training_export_tree_mutation_during_validation_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             export_path = Path(tmp) / "training_export"
@@ -435,6 +489,197 @@ class SourceContractTests(unittest.TestCase):
             gate_source = inspect_artifact_source(gate_path, "model_grader_gate")
             self.assertTrue(gate_source["semantic_valid"], gate_source)
             self.assertTrue(gate_source["ready"], gate_source)
+
+    def test_typed_reviewed_export_spools_large_jsonl_through_downstream_closure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_large_reviewed_export(tmp)
+            large_paths = [
+                path
+                for path in reviewed.rglob("*.jsonl")
+                if path.stat().st_size > source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES
+            ]
+            self.assertGreaterEqual(len(large_paths), 2)
+
+            reviewed_gate = root / "reviewed_gate.json"
+            self.assertEqual(
+                run_review_calibration_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--out",
+                        str(reviewed_gate),
+                    ]
+                ),
+                0,
+            )
+            calibration = root / "review_calibration.json"
+            self.assertEqual(
+                run_review_calibration_cli(
+                    [
+                        "review-calibration",
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--out",
+                        str(calibration),
+                    ]
+                ),
+                0,
+            )
+            rubric = root / "model_grader_rubric.json"
+            dry_run = root / "model_grader_dry_run.json"
+            model_grader_gate = root / "model_grader_gate.json"
+            self.assertEqual(
+                run_review_calibration_cli(
+                    [
+                        "model-grader",
+                        "rubric",
+                        "--review-export",
+                        str(root / "review"),
+                        "--rubric-id",
+                        "large-reviewed-source-contract",
+                        "--out",
+                        str(rubric),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_review_calibration_cli(
+                    [
+                        "model-grader",
+                        "dry-run",
+                        "--review-export",
+                        str(root / "review"),
+                        "--rubric",
+                        str(rubric),
+                        "--grader-id",
+                        "large-reviewed-mock-grader",
+                        "--out",
+                        str(dry_run),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_review_calibration_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(dry_run),
+                        "--rubric",
+                        str(rubric),
+                        "--review-calibration",
+                        str(calibration),
+                        "--out",
+                        str(model_grader_gate),
+                    ]
+                ),
+                0,
+            )
+
+            direct_source = inspect_artifact_source(reviewed_gate, "reviewed_gate")
+            downstream_source = inspect_artifact_source(model_grader_gate, "model_grader_gate")
+            self.assertTrue(direct_source["ready"], direct_source)
+            self.assertTrue(downstream_source["ready"], downstream_source)
+
+            snapshot = source_contract._capture_private_semantic_snapshot(
+                reviewed_gate,
+                direct_source["payload"],
+            )
+            self.assertIsNotNone(snapshot)
+            self.assertIsNotNone(snapshot.spool_store)
+            self.assertIsNotNone(snapshot.spool_store.directory)
+            spool_root = Path(snapshot.spool_store.directory.name)
+            try:
+                spooled = {
+                    relative
+                    for relative, attestation in snapshot.tree.files
+                    if attestation.spool_path is not None
+                }
+                self.assertEqual(
+                    spooled,
+                    {
+                        f"large_reviewed/{relative}"
+                        for relative in REVIEWED_EXPORT_CONTENT_FILES
+                        if relative.endswith(".jsonl")
+                    },
+                )
+                self.assertEqual(len(snapshot.tree.exact_directory_entries), 2)
+            finally:
+                snapshot.close()
+            self.assertFalse(spool_root.exists())
+
+            forged_gate = root / "forged_reviewed_gate.json"
+            forged_payload = json.loads(json.dumps(direct_source["payload"]))
+            forged_payload["source_artifacts"]["reviewed_export"]["sha256"] = "0" * 64
+            forged_gate.write_text(
+                json.dumps(forged_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(
+                source_contract._capture_private_semantic_snapshot(
+                    forged_gate,
+                    forged_payload,
+                )
+            )
+
+            reviewed_jsonl_bytes = sum(
+                path.stat().st_size for path in reviewed.rglob("*.jsonl")
+            )
+            self.assertLess(
+                reviewed_jsonl_bytes,
+                source_contract._MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES,
+            )
+            with patch.object(
+                source_contract,
+                "_MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES",
+                reviewed_jsonl_bytes - 1,
+            ):
+                self.assertIsNone(
+                    source_contract._capture_private_semantic_snapshot(
+                        reviewed_gate,
+                        direct_source["payload"],
+                    )
+                )
+
+            unexpected = reviewed / "unexpected.jsonl"
+            unexpected.write_text("{}\n", encoding="utf-8")
+            self.assertFalse(inspect_artifact_source(reviewed_gate, "reviewed_gate")["ready"])
+            unexpected.unlink()
+
+            semantic_validator = source_contract._semantic_contract_valid
+
+            def mutate_large_source(path: Path, role: str) -> bool:
+                with large_paths[0].open("ab") as handle:
+                    handle.write(b" ")
+                return semantic_validator(path, role)
+
+            with patch.object(
+                source_contract,
+                "_semantic_contract_valid",
+                side_effect=mutate_large_source,
+            ):
+                mutated = inspect_artifact_source(reviewed_gate, "reviewed_gate")
+            self.assertFalse(mutated["stable"], mutated)
+            self.assertFalse(mutated["ready"], mutated)
+
+    def test_untyped_large_reference_remains_subject_to_generic_file_budget(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            large = root / "untyped.jsonl"
+            with large.open("wb") as handle:
+                handle.seek(source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES)
+                handle.write(b"x")
+            source_path = root / "source.json"
+            payload = {"artifact_paths": [large.name]}
+            source_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertIsNone(
+                source_contract._capture_private_semantic_snapshot(source_path, payload)
+            )
 
     def test_all_loop_readiness_roles_have_semantic_contracts(self):
         required_roles = {role for phase in PHASES for role in phase["required"]}

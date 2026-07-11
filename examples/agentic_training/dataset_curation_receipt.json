@@ -1,6 +1,6 @@
 {
   "blocked_reasons": [],
-  "check_count": 4,
+  "check_count": 5,
   "checks": [
     {
       "actual": {
@@ -28,6 +28,56 @@
       "id": "training_exports_present",
       "passed": true,
       "summary": "training_exports_present: passed=True"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "errors": [],
+        "mismatched_reviewed_item_ids": [],
+        "mismatched_reviewed_label_ids": [],
+        "mismatched_rollout_scenario_ids": [],
+        "missing_reviewed_item_ids": [],
+        "missing_rollout_scenario_ids": [],
+        "reviewed_item_count": 2,
+        "reviewed_item_mismatch_count": 0,
+        "reviewed_item_missing_count": 0,
+        "reviewed_label_mismatch_count": 0,
+        "rollout_scenario_count": 2,
+        "rollout_scenario_mismatch_count": 0,
+        "rollout_scenario_missing_count": 0,
+        "training_export_count": 1,
+        "training_exports": [
+          {
+            "error_count": 0,
+            "errors": [],
+            "export_index": 0,
+            "mismatched_reviewed_item_ids": [],
+            "mismatched_reviewed_label_ids": [],
+            "mismatched_rollout_scenario_ids": [],
+            "missing_reviewed_item_ids": [],
+            "missing_rollout_scenario_ids": [],
+            "passed": true,
+            "reviewed_item_mismatch_count": 0,
+            "reviewed_item_missing_count": 0,
+            "reviewed_label_mismatch_count": 0,
+            "reviewed_label_mismatches": [],
+            "rollout_scenario_mismatch_count": 0,
+            "rollout_scenario_missing_count": 0
+          }
+        ],
+        "training_exports_all_complete": true
+      },
+      "expected": {
+        "reviewed_item_mismatch_count": 0,
+        "reviewed_item_missing_count": 0,
+        "reviewed_label_mismatch_count": 0,
+        "rollout_scenario_mismatch_count": 0,
+        "rollout_scenario_missing_count": 0,
+        "training_exports_all_complete": true
+      },
+      "id": "training_exports_cover_admitted_lineage",
+      "passed": true,
+      "summary": "training_exports_cover_admitted_lineage: passed=True"
     },
     {
       "actual": {
@@ -85,8 +135,8 @@
         "readiness": "ready_for_dataset_curation",
         "role": "rejection_sampling_gate",
         "schema_version": "hfr.rejection_sampling_gate.v1",
-        "sha256": "5fa35da1cc9bff69597e6090b15bffdd3b0808e0ac364d300e99cbaf49b9cd07",
-        "size_bytes": 5506
+        "sha256": "3bec25ed39934be1daf3bab42e3c0e2cd830dd9c091ac4796a4ad860e8bc6287",
+        "size_bytes": 6037
       }
     ],
     "training_export": [
@@ -109,7 +159,8 @@
   },
   "notes": [
     "This receipt records dataset curation readiness only; it does not write accepted or rejected rows.",
-    "Existing training exports remain the source for downstream training gates and trainer preflights."
+    "Every selected training export must independently cover the exact reviewed episode-event digests and rollout scenario fingerprints admitted by rejection sampling.",
+    "Trainer-ready SFT, reward-model, and DPO roles must preserve each admitted human label, including exclusion of needs_review rows."
   ],
   "passed": true,
   "readiness": "ready_for_external_trainer_handoff",

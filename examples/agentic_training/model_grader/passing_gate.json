@@ -6,7 +6,7 @@
     "uncalibrated_labels_admitted": 0
   },
   "blocked_reasons": [],
-  "check_count": 9,
+  "check_count": 10,
   "checks": [
     {
       "actual": {
@@ -18,7 +18,7 @@
           "schema_errors": [],
           "schema_name": "model_grader_dry_run",
           "schema_passed": true,
-          "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+          "sha256": "4170dd311af0d9192027367a967ae88731d99ba26b2bab0cd8ee698f22f4c78a",
           "size_bytes": 5601,
           "source_passed": true,
           "source_recommendation": "gate_before_training_admission"
@@ -42,7 +42,7 @@
           "schema_errors": [],
           "schema_name": "rubric_spec",
           "schema_passed": true,
-          "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+          "sha256": "834133b9937bc161c8fed13853ca9099464e26af1b1aa68d955fd89dd7ae4810",
           "size_bytes": 2227,
           "source_passed": null,
           "source_recommendation": ""
@@ -66,8 +66,8 @@
           "schema_errors": [],
           "schema_name": "review_calibration",
           "schema_passed": true,
-          "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
-          "size_bytes": 3197,
+          "sha256": "659d12f34642e2c07ddede85c2827089b1fa13af1c9a6cfde7f1d427fc404db7",
+          "size_bytes": 4035,
           "source_passed": true,
           "source_recommendation": ""
         }
@@ -89,8 +89,8 @@
           "schema_errors": [],
           "schema_name": "review_calibration",
           "schema_passed": true,
-          "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
-          "size_bytes": 3197,
+          "sha256": "659d12f34642e2c07ddede85c2827089b1fa13af1c9a6cfde7f1d427fc404db7",
+          "size_bytes": 4035,
           "source_passed": true,
           "source_recommendation": ""
         },
@@ -107,10 +107,27 @@
     },
     {
       "actual": {
+        "calibration_review_items_sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+        "calibration_review_items_size_bytes": 8344,
+        "dry_run_review_items_sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+        "dry_run_review_items_size_bytes": 8344,
+        "rubric_review_items_sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+        "rubric_review_items_size_bytes": 8344,
+        "same_review_items": true
+      },
+      "expected": {
+        "same_review_items": true
+      },
+      "id": "review_calibration_matches_dry_run_review_items",
+      "passed": true,
+      "summary": "review_calibration_matches_dry_run_review_items: passed"
+    },
+    {
+      "actual": {
         "agreement_rate": 1.0
       },
       "expected": {
-        "min": 1.0
+        "min": 0.8
       },
       "id": "min_calibration_agreement_rate",
       "passed": true,
@@ -191,6 +208,7 @@
   "notes": [
     "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",
     "Missing or failing calibration blocks by default.",
+    "Calibration must derive from the same review-items fingerprint as the dry-run and rubric.",
     "Dry-run disagreement queues or labels requiring human review block until resolved by a future override contract.",
     "The gate records no provider calls and admits zero uncalibrated labels."
   ],
@@ -207,7 +225,7 @@
       "schema_errors": [],
       "schema_name": "model_grader_dry_run",
       "schema_passed": true,
-      "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+      "sha256": "4170dd311af0d9192027367a967ae88731d99ba26b2bab0cd8ee698f22f4c78a",
       "size_bytes": 5601,
       "source_passed": true,
       "source_recommendation": "gate_before_training_admission"
@@ -235,8 +253,8 @@
       "schema_errors": [],
       "schema_name": "review_calibration",
       "schema_passed": true,
-      "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
-      "size_bytes": 3197,
+      "sha256": "659d12f34642e2c07ddede85c2827089b1fa13af1c9a6cfde7f1d427fc404db7",
+      "size_bytes": 4035,
       "source_passed": true,
       "source_recommendation": ""
     },
@@ -248,7 +266,7 @@
       "schema_errors": [],
       "schema_name": "rubric_spec",
       "schema_passed": true,
-      "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+      "sha256": "834133b9937bc161c8fed13853ca9099464e26af1b1aa68d955fd89dd7ae4810",
       "size_bytes": 2227,
       "source_passed": null,
       "source_recommendation": ""

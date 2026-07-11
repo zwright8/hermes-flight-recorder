@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shlex
@@ -8,6 +9,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan, write_agentic_training_plan
 from flightrecorder.cli import main
@@ -28,6 +30,17 @@ def run_cli_output(args):
     with redirect_stdout(output):
         code = main(args)
     return code, output.getvalue()
+
+
+def run_cli_error(args):
+    output = StringIO()
+    error = StringIO()
+    with redirect_stdout(output), redirect_stderr(error):
+        try:
+            code = main(args)
+        except SystemExit as exc:
+            code = exc.code
+    return code, output.getvalue(), error.getvalue()
 
 
 def read_jsonl(path: Path):
@@ -936,14 +949,78 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(launch["approved_command"]["approved"])
             launch_schema = check_schema_contract(launch, name_or_id="trainer_launch_check")
             self.assertTrue(launch_schema["passed"], launch_schema["errors"])
+            clean_preflight = Path(tmp) / "trainer_preflight_relative_command.json"
             clean_launch_check = Path(tmp) / "trainer_launch_check_relative_command.json"
-            clean_launch = json.loads(json.dumps(launch))
-            clean_approved = clean_launch["approved_command"]
-            clean_approved["argv"] = ["python", "train.py", "--dataset", "training_export"]
-            clean_approved["raw"] = shlex.join(clean_approved["argv"])
-            clean_approved["shell"] = shlex.join(clean_approved["argv"])
-            clean_launch_check.write_text(json.dumps(clean_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--training-export",
+                        str(runs / "training_export"),
+                        "--require-gate",
+                        "training_gate",
+                        "--require-dataset-version",
+                        dataset_version,
+                        "--trainer-command",
+                        "python train.py --dataset training_export",
+                        "--metadata",
+                        "launcher=dry-run",
+                        "--out",
+                        str(clean_preflight),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(clean_preflight),
+                        "--require-gate",
+                        "training_gate",
+                        "--require-dataset-version",
+                        dataset_version,
+                        "--require-metadata",
+                        "launcher=dry-run",
+                        "--out",
+                        str(clean_launch_check),
+                    ]
+                ),
+                0,
+            )
+            clean_launch = json.loads(clean_launch_check.read_text(encoding="utf-8"))
             self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(clean_launch_check)]), 0)
+            legacy_launch = json.loads(json.dumps(clean_launch))
+            legacy_launch.pop("source_artifacts")
+            legacy_schema = check_schema_contract(legacy_launch, name_or_id="trainer_launch_check")
+            self.assertTrue(legacy_schema["passed"], legacy_schema["errors"])
+            legacy_launch_path = Path(tmp) / "trainer_launch_check_legacy_unbound.json"
+            legacy_launch_summary = Path(tmp) / "trainer_launch_check_legacy_unbound_summary.json"
+            legacy_launch_path.write_text(
+                json.dumps(legacy_launch, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "validate",
+                        "--trainer-launch-check",
+                        str(legacy_launch_path),
+                        "--out",
+                        str(legacy_launch_summary),
+                    ]
+                ),
+                1,
+            )
+            legacy_errors = "\n".join(
+                error
+                for target in json.loads(legacy_launch_summary.read_text(encoding="utf-8"))["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn("trainer_launch_check.source_artifacts must be an object.", legacy_errors)
             absolute_launch_check = Path(tmp) / "trainer_launch_check_absolute_command.json"
             absolute_launch_summary = Path(tmp) / "trainer_launch_check_absolute_command_summary.json"
             forged_launch = json.loads(json.dumps(clean_launch))
@@ -2394,7 +2471,7 @@ class TrainerPreflightTests(unittest.TestCase):
             preflight = root / "trainer_preflight.json"
             self.assertEqual(
                 run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--skip-validation", "--out", str(gate)]),
-                0,
+                1,
             )
 
             code = run_cli(
@@ -2421,7 +2498,7 @@ class TrainerPreflightTests(unittest.TestCase):
             preflight = root / "trainer_preflight.json"
             self.assertEqual(
                 run_cli(["review-calibration", "--reviewed-export", str(reviewed), "--skip-validation", "--out", str(calibration)]),
-                0,
+                1,
             )
 
             code = run_cli(
@@ -2658,6 +2735,634 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(dataset_selection["trainer_views"]["contract_version"], "hfr.rl.trainer_views.v1")
             self.assertEqual(dataset_selection["trainer_views"]["mode_to_view"]["action_sft"], "reviewed_sft")
             self.assertEqual(dataset_selection["trainer_views"]["mode_to_view"]["dpo"], "reviewed_dpo")
+
+    def test_valid_trainer_preflight_becomes_invalid_after_reviewed_export_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(root)
+            gate = root / "reviewed_gate.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            self.assertEqual(run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--out", str(gate)]), 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--require-gate",
+                        "reviewed_gate",
+                        "--trainer-command",
+                        "python train.py --dataset reviewed",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            initial_validation = validate_artifacts(trainer_preflight_paths=[preflight], strict=True)
+            self.assertTrue(initial_validation["passed"], initial_validation)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--require-gate",
+                        "reviewed_gate",
+                        "--out",
+                        str(launch_check),
+                    ]
+                ),
+                0,
+            )
+            initial_launch_validation = validate_artifacts(
+                trainer_launch_check_paths=[launch_check],
+                strict=True,
+            )
+            self.assertTrue(initial_launch_validation["passed"], initial_launch_validation)
+
+            with (reviewed / "reviewed_sft.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write("\n")
+
+            stale_validation = validate_artifacts(trainer_preflight_paths=[preflight], strict=True)
+            self.assertFalse(stale_validation["passed"], stale_validation)
+            errors = "\n".join(error for target in stale_validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_preflight reviewed_gate must bind the selected reviewed_export exactly.", errors)
+            stale_launch_validation = validate_artifacts(
+                trainer_launch_check_paths=[launch_check],
+                strict=True,
+            )
+            self.assertFalse(stale_launch_validation["passed"], stale_launch_validation)
+            launch_errors = "\n".join(
+                error
+                for target in stale_launch_validation["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_launch_check trainer preflight: trainer_preflight reviewed_gate must bind the selected reviewed_export exactly.",
+                launch_errors,
+            )
+            self.assertIn(
+                "trainer_launch_check must match deterministic replay of its current trainer preflight, requirements, and strictness exactly.",
+                launch_errors,
+            )
+
+    def test_validate_checks_every_reviewed_gate_binding_after_failed_check_is_removed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_root = root / "first"
+            second_root = root / "second"
+            first_root.mkdir()
+            second_root.mkdir()
+            first_reviewed = make_reviewed_export(first_root)
+            second_reviewed = make_reviewed_export(second_root)
+            first_gate = first_root / "reviewed_gate.json"
+            second_gate = second_root / "reviewed_gate.json"
+            preflight = root / "trainer_preflight.json"
+            self.assertNotEqual(
+                json.loads((first_reviewed / "manifest.json").read_text(encoding="utf-8"))["dataset_version"],
+                json.loads((second_reviewed / "manifest.json").read_text(encoding="utf-8"))["dataset_version"],
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(first_reviewed),
+                        "--out",
+                        str(first_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(second_reviewed),
+                        "--out",
+                        str(second_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(first_gate),
+                        "--gate",
+                        str(second_gate),
+                        "--reviewed-export",
+                        str(first_reviewed),
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+
+            forged = json.loads(preflight.read_text(encoding="utf-8"))
+            forged["checks"] = [
+                check for check in forged["checks"] if check.get("passed") is True
+            ]
+            forged["check_count"] = len(forged["checks"])
+            forged["failed_check_count"] = 0
+            forged["passed"] = True
+            forged["readiness"] = "ready"
+            forged["recommendation"] = "launch_allowed"
+            preflight.write_text(
+                json.dumps(forged, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_artifacts(
+                trainer_preflight_paths=[preflight],
+                strict=True,
+            )
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(
+                error
+                for validation_target in validation["targets"]
+                for error in validation_target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight reviewed_gate must bind the selected reviewed_export exactly.",
+                errors,
+            )
+
+    def test_validate_rejects_duplicate_reviewed_gate_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(root)
+            gate = root / "reviewed_gate.json"
+            preflight = root / "trainer_preflight.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--out",
+                        str(gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--gate",
+                        str(gate),
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+
+            validation = validate_artifacts(
+                trainer_preflight_paths=[preflight],
+                strict=True,
+            )
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(
+                error
+                for validation_target in validation["targets"]
+                for error in validation_target["errors"]
+            )
+            self.assertIn(
+                "trainer_preflight must not contain duplicate reviewed_gate paths.",
+                errors,
+            )
+
+    def test_review_calibration_must_match_selected_export_through_launch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_root = root / "first"
+            second_root = root / "second"
+            first_root.mkdir()
+            second_root.mkdir()
+            first_reviewed = make_reviewed_export(first_root)
+            second_reviewed = make_reviewed_export(second_root)
+            first_gate = first_root / "reviewed_gate.json"
+            second_calibration = second_root / "review_calibration.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            self.assertNotEqual(
+                json.loads((first_reviewed / "manifest.json").read_text(encoding="utf-8"))["dataset_version"],
+                json.loads((second_reviewed / "manifest.json").read_text(encoding="utf-8"))["dataset_version"],
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(first_reviewed),
+                        "--out",
+                        str(first_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "review-calibration",
+                        "--reviewed-export",
+                        str(second_reviewed),
+                        "--out",
+                        str(second_calibration),
+                    ]
+                ),
+                0,
+            )
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(first_gate),
+                        "--gate",
+                        str(second_calibration),
+                        "--reviewed-export",
+                        str(first_reviewed),
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            blocked = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertIn(
+                "review_calibration_matches_reviewed_export",
+                {
+                    check["id"]
+                    for check in blocked["checks"]
+                    if check.get("passed") is False
+                },
+            )
+
+            forged = json.loads(json.dumps(blocked))
+            forged["checks"] = [
+                check for check in forged["checks"] if check.get("passed") is True
+            ]
+            forged["check_count"] = len(forged["checks"])
+            forged["failed_check_count"] = 0
+            forged["passed"] = True
+            forged["readiness"] = "ready"
+            forged["recommendation"] = "launch_allowed"
+            preflight.write_text(
+                json.dumps(forged, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_artifacts(
+                trainer_preflight_paths=[preflight],
+                strict=True,
+            )
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(
+                error
+                for validation_target in validation["targets"]
+                for error in validation_target["errors"]
+            )
+            expected_error = (
+                "trainer_preflight review_calibration must bind the selected "
+                "reviewed_export exactly."
+            )
+            self.assertIn(expected_error, errors)
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--strict",
+                        "--out",
+                        str(launch_check),
+                    ]
+                ),
+                1,
+            )
+            launch = json.loads(launch_check.read_text(encoding="utf-8"))
+            self.assertFalse(launch["passed"])
+            launch_validation = validate_artifacts(
+                trainer_launch_check_paths=[launch_check],
+                strict=True,
+            )
+            self.assertFalse(launch_validation["passed"], launch_validation)
+            launch_errors = "\n".join(
+                error
+                for validation_target in launch_validation["targets"]
+                for error in validation_target["errors"]
+            )
+            self.assertIn(
+                f"trainer_launch_check trainer preflight: {expected_error}",
+                launch_errors,
+            )
+
+    def test_trainer_launch_check_rejects_private_parent_path_and_binds_local_preflight_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            private_ancestor_name = "private-user-workspace-name"
+            source_dir = root / private_ancestor_name
+            output_dir = root / "output"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = source_dir / "trainer_preflight.json"
+            launch_check = output_dir / "trainer_launch_check.json"
+            summary = root / "validation.json"
+            write_passed_evidence_bundle(gate)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            preflight_bytes = preflight.read_bytes()
+
+            code, output, error = run_cli_error(
+                ["trainer-launch-check", "--preflight", str(preflight)]
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(output, "")
+            self.assertIn(
+                "trainer-launch-check requires --out unless --print-command is used",
+                error,
+            )
+
+            code, output, error = run_cli_error(
+                [
+                    "trainer-launch-check",
+                    "--preflight",
+                    str(preflight),
+                    "--out",
+                    str(launch_check),
+                ]
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(output, "")
+            self.assertIn("normalized, non-traversing relative path", error)
+            self.assertNotIn(private_ancestor_name, output + error)
+            self.assertFalse(launch_check.exists())
+
+            launch_check = source_dir / "trainer_launch_check.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--out",
+                        str(launch_check),
+                    ]
+                ),
+                0,
+            )
+
+            launch = json.loads(launch_check.read_text(encoding="utf-8"))
+            source = launch["source_artifacts"]["trainer_preflight"]
+            self.assertEqual(launch["preflight_path"], "trainer_preflight.json")
+            self.assertEqual(source["path"], launch["preflight_path"])
+            self.assertEqual(source["schema_version"], "hfr.trainer_preflight.v1")
+            self.assertEqual(source["size_bytes"], len(preflight_bytes))
+            self.assertEqual(source["sha256"], hashlib.sha256(preflight_bytes).hexdigest())
+            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check)]), 0)
+
+            unsafe_launch = json.loads(json.dumps(launch))
+            unsafe_launch["preflight_path"] = str(preflight)
+            unsafe_launch["source_artifacts"]["trainer_preflight"]["path"] = str(preflight)
+            unsafe_path = source_dir / "trainer_launch_check_absolute_source.json"
+            unsafe_summary = root / "unsafe_validation.json"
+            unsafe_path.write_text(
+                json.dumps(unsafe_launch, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "validate",
+                        "--trainer-launch-check",
+                        str(unsafe_path),
+                        "--out",
+                        str(unsafe_summary),
+                    ]
+                ),
+                1,
+            )
+            unsafe_errors = "\n".join(
+                error
+                for target in json.loads(unsafe_summary.read_text(encoding="utf-8"))["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn("must be a canonical output-relative path", unsafe_errors)
+
+            preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
+            preflight_payload["notes"].append("changed-after-launch-approval")
+            preflight.write_text(
+                json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-launch-check",
+                    str(launch_check),
+                    "--out",
+                    str(summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            errors = "\n".join(
+                error
+                for target in json.loads(summary.read_text(encoding="utf-8"))["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "trainer_launch_check.source_artifacts.trainer_preflight must match the current trainer-preflight bytes.",
+                errors,
+            )
+            self.assertIn("trainer_launch_check must match deterministic replay", errors)
+
+    def test_trainer_launch_check_validates_attested_invalid_payload_during_transient_valid_aba(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            write_passed_evidence_bundle(gate)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            valid_bytes = preflight.read_bytes()
+            invalid = json.loads(valid_bytes.decode("utf-8"))
+            invalid["gates"][0]["sha256"] = "0" * 64
+            invalid_bytes = (
+                json.dumps(invalid, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            preflight.write_bytes(invalid_bytes)
+
+            from flightrecorder.validation import validate_trainer_preflight
+
+            transient_count = 0
+
+            def validate_during_transient_valid_file(path, *, payload=None):
+                nonlocal transient_count
+                preflight.write_bytes(valid_bytes)
+                transient_count += 1
+                try:
+                    return validate_trainer_preflight(path, payload=payload)
+                finally:
+                    preflight.write_bytes(invalid_bytes)
+
+            with patch(
+                "flightrecorder.cli.validate_trainer_preflight",
+                side_effect=validate_during_transient_valid_file,
+            ):
+                self.assertEqual(
+                    run_cli(
+                        [
+                            "trainer-launch-check",
+                            "--preflight",
+                            str(preflight),
+                            "--out",
+                            str(launch_check),
+                        ]
+                    ),
+                    1,
+                )
+
+            launch = json.loads(launch_check.read_text(encoding="utf-8"))
+            self.assertFalse(launch["passed"])
+            self.assertEqual(
+                launch["source_artifacts"]["trainer_preflight"]["sha256"],
+                hashlib.sha256(invalid_bytes).hexdigest(),
+            )
+            self.assertIn(
+                "preflight_validation_passed",
+                {check["id"] for check in launch["checks"] if not check["passed"]},
+            )
+
+            with patch(
+                "flightrecorder.cli.validate_trainer_preflight",
+                side_effect=validate_during_transient_valid_file,
+            ):
+                code, output, error = run_cli_error(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--print-command",
+                    ]
+                )
+            self.assertEqual(code, 1)
+            self.assertEqual(output, "")
+            self.assertIn("BLOCKED trainer-launch-check", error)
+            self.assertEqual(transient_count, 2)
+            self.assertEqual(preflight.read_bytes(), invalid_bytes)
+
+    def test_trainer_launch_check_rejects_output_that_aliases_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            preflight = root / "trainer_preflight.json"
+            write_passed_evidence_bundle(gate)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            original = preflight.read_bytes()
+            stderr = StringIO()
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--out",
+                        str(preflight),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("trainer launch check output must not alias source file", stderr.getvalue())
+            self.assertEqual(preflight.read_bytes(), original)
+
+    def test_trainer_preflight_rejects_output_that_aliases_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gate = Path(tmp) / "evidence_bundle.json"
+            write_passed_evidence_bundle(gate)
+            original = gate.read_bytes()
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle evidence_bundle.json",
+                        "--out",
+                        str(gate),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("trainer preflight output must not alias source file", stderr.getvalue())
+            self.assertEqual(gate.read_bytes(), original)
 
     def test_trainer_preflight_blocks_symlinked_training_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:

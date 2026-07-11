@@ -6,15 +6,30 @@ import hashlib
 import json
 import os
 import shlex
+import stat
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component
+from .reviewed_gate import ReviewedGateError, build_reviewed_export_source_artifact
 from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
+from .source_contract import inspect_artifact_source
 from .training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
 
 TRAINER_PREFLIGHT_SCHEMA_VERSION = "hfr.trainer_preflight.v1"
 TRAINER_LAUNCH_CHECK_SCHEMA_VERSION = "hfr.trainer_launch_check.v1"
 TRAINER_DIRECTORY_TREE_HASH_ALGORITHM = "sha256(sorted-relative-path-size-file-sha256)"
+TRAINER_PREFLIGHT_SOURCE_ARTIFACT_FIELDS = (
+    "path",
+    "kind",
+    "exists",
+    "regular_file",
+    "symlink",
+    "schema_version",
+    "size_bytes",
+    "sha256",
+)
 
 _TRAINING_EXPORT_BASE_FILES = (
     "manifest.json",
@@ -103,6 +118,17 @@ class TrainerPreflightError(ValueError):
     """Raised when a trainer preflight manifest cannot be built."""
 
 
+@dataclass(frozen=True)
+class TrainerPreflightSnapshot:
+    """Exact preflight payload and raw-file identity used by a launch check."""
+
+    source_path: Path
+    display_path: str
+    payload: dict[str, Any]
+    payload_sha256: str
+    source_artifact: dict[str, Any]
+
+
 def build_trainer_preflight(
     *,
     out_path: str | Path,
@@ -133,7 +159,8 @@ def build_trainer_preflight(
     required_dataset_versions = list(dict.fromkeys(required_dataset_versions or []))
     output_path = Path(out_path)
     validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths, output_path)
-    gates = [_gate_record(Path(path), preserve_paths, validation_targets, output_path) for path in gate_paths]
+    gate_sources = [Path(path) for path in gate_paths]
+    gates = [_gate_record(path, preserve_paths, validation_targets, output_path) for path in gate_sources]
     seen_gate_ids = {gate["id"] for gate in gates}
     for gate in gates:
         _add_bool_check(checks, "gate_passed", gate["passed"], {"gate": gate["id"], "path": gate["path"]})
@@ -149,6 +176,21 @@ def build_trainer_preflight(
                     "validation_error_count": str(_int_value(validation.get("error_count"))),
                 },
             )
+    review_gate_roles = {
+        "hfr.reviewed_gate.v1": "reviewed_gate",
+        "hfr.review_calibration.v1": "review_calibration",
+    }
+    for gate_path, gate in zip(gate_sources, gates, strict=True):
+        role = review_gate_roles.get(gate.get("schema_version"))
+        if role is None:
+            continue
+        inspection = inspect_artifact_source(gate_path, role)
+        _add_bool_check(
+            checks,
+            f"{role}_source_contract_passed",
+            inspection.get("ready") is True,
+            {"gate": gate["id"], "path": gate["path"]},
+        )
 
     for gate_id in require_gates or []:
         _add_bool_check(checks, "required_gate_present", gate_id in seen_gate_ids, {"gate": gate_id})
@@ -186,6 +228,20 @@ def build_trainer_preflight(
             output_path,
             required_dataset_versions,
         )
+        for gate_path, gate in zip(gate_sources, gates, strict=True):
+            role = review_gate_roles.get(gate.get("schema_version"))
+            if role is None:
+                continue
+            matches_export = _review_artifact_matches_export(
+                gate_path,
+                reviewed_root,
+            )
+            _add_bool_check(
+                checks,
+                f"{role}_matches_reviewed_export",
+                matches_export,
+                {"gate": gate["id"], "artifact": "reviewed_export"},
+            )
     if evidence_bundle_path is not None:
         bundle_path = Path(evidence_bundle_path)
         artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths, output_path)
@@ -245,11 +301,29 @@ def build_trainer_preflight(
     return preflight
 
 
+def _review_artifact_matches_export(artifact_path: Path, reviewed_root: Path) -> bool:
+    try:
+        artifact = _read_json_required(artifact_path, "review gate")
+        source_artifacts = artifact.get("source_artifacts")
+        source = source_artifacts.get("reviewed_export") if isinstance(source_artifacts, dict) else None
+        if not isinstance(source, dict) or not isinstance(source.get("path"), str):
+            return False
+        current = build_reviewed_export_source_artifact(
+            reviewed_root,
+            display_path=source["path"],
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ReviewedGateError, ValueError):
+        return False
+    return source == current
+
+
 def build_trainer_launch_check(
     *,
     preflight_path: str | Path,
     preflight: dict[str, Any],
     validation_summary: dict[str, Any],
+    preflight_snapshot: TrainerPreflightSnapshot | None = None,
+    out_path: str | Path | None = None,
     require_gates: list[str] | None = None,
     required_dataset_versions: list[str] | None = None,
     require_metadata: dict[str, str] | None = None,
@@ -259,8 +333,39 @@ def build_trainer_launch_check(
     if not isinstance(preflight, dict):
         raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {preflight_path}")
 
+    source_path = Path(preflight_path)
+    expected_display_path = _trainer_launch_preflight_display_path(
+        source_path,
+        Path(out_path) if out_path is not None else None,
+    )
+    if preflight_snapshot is None:
+        preflight_snapshot = snapshot_trainer_preflight(
+            source_path,
+            out_path=out_path,
+            preserve_paths=preserve_paths,
+        )
+    elif (
+        preflight_snapshot.source_path != source_path
+        or preflight_snapshot.display_path != expected_display_path
+    ):
+        raise TrainerPreflightError(
+            "trainer preflight snapshot does not match the requested source and launch-check output placement"
+        )
+    display_preflight_path = preflight_snapshot.display_path
+    current_preflight = preflight_snapshot.payload
+    source_before = preflight_snapshot.source_artifact
+    if (
+        _preflight_payload_sha256(current_preflight)
+        != preflight_snapshot.payload_sha256
+        or _preflight_payload_sha256(preflight)
+        != preflight_snapshot.payload_sha256
+        or current_preflight != preflight
+    ):
+        raise TrainerPreflightError(
+            f"trainer preflight changed after it was read: {preflight_path}"
+        )
+
     checks: list[dict[str, Any]] = []
-    display_preflight_path = _display_path(Path(preflight_path), preserve_paths)
     validation = _validation_record(validation_summary)
     gates = _launch_gate_records(preflight.get("gates"))
     metadata = _metadata(preflight.get("metadata") if isinstance(preflight.get("metadata"), dict) else None)
@@ -335,9 +440,10 @@ def build_trainer_launch_check(
     passed = failed_checks == 0
     command["approved"] = passed
     artifacts = preflight.get("artifacts") if isinstance(preflight.get("artifacts"), dict) else {}
-    return {
+    launch_check = {
         "schema_version": TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
         "preflight_path": display_preflight_path,
+        "source_artifacts": {"trainer_preflight": source_before},
         "passed": passed,
         "readiness": "ready" if passed else "blocked",
         "recommendation": "launch_allowed" if passed else "block_launch",
@@ -359,6 +465,159 @@ def build_trainer_launch_check(
             "A ready launch check means the preflight artifact, referenced hashes, required gates, and required metadata passed.",
             "Dataset selections are inherited from the trainer preflight and can be enforced again with --require-dataset-version.",
         ],
+    }
+    source_after = build_trainer_preflight_source_artifact(
+        source_path,
+        display_path=display_preflight_path,
+    )
+    if source_after != source_before:
+        raise TrainerPreflightError(
+            f"trainer preflight changed while the launch check was being built: {preflight_path}"
+        )
+    return launch_check
+
+
+def snapshot_trainer_preflight(
+    path: str | Path,
+    *,
+    out_path: str | Path | None,
+    preserve_paths: bool = False,
+) -> TrainerPreflightSnapshot:
+    """Attest a preflight once for exact-payload validation and launch binding."""
+    source_path = Path(path)
+    display_path = _trainer_launch_preflight_display_path(
+        source_path,
+        Path(out_path) if out_path is not None else None,
+    )
+    payload, source_artifact = _attested_trainer_preflight(
+        source_path,
+        display_path=display_path,
+    )
+    return TrainerPreflightSnapshot(
+        source_path=source_path,
+        display_path=display_path,
+        payload=payload,
+        payload_sha256=_preflight_payload_sha256(payload),
+        source_artifact=source_artifact,
+    )
+
+
+def _preflight_payload_sha256(payload: dict[str, Any]) -> str:
+    try:
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise TrainerPreflightError(
+            f"trainer preflight payload cannot be canonically bound: {exc}"
+        ) from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _trainer_launch_preflight_display_path(
+    source_path: Path,
+    output_path: Path | None,
+) -> str:
+    if output_path is None:
+        display_path = source_path.name
+    else:
+        display_path = _display_path_for_output_source(
+            source_path,
+            output_path,
+            False,
+        )
+    candidate = Path(display_path)
+    if (
+        not display_path
+        or display_path in {".", ".."}
+        or display_path.startswith("<redacted:")
+        or candidate.is_absolute()
+        or _is_windows_absolute(display_path)
+        or "\\" in display_path
+        or ".." in candidate.parts
+        or any(part in {"", "."} or part.startswith("~") for part in candidate.parts)
+    ):
+        raise TrainerPreflightError(
+            "trainer launch-check output must be placed so --preflight has a "
+            "normalized, non-traversing relative path"
+        )
+    return candidate.as_posix()
+
+
+def build_trainer_preflight_source_artifact(
+    path: str | Path,
+    *,
+    display_path: str,
+) -> dict[str, Any]:
+    """Fingerprint the exact regular preflight file bytes used by a launch check."""
+    _payload, record = _attested_trainer_preflight(
+        Path(path),
+        display_path=display_path,
+    )
+    return record
+
+
+def _attested_trainer_preflight(
+    path: Path,
+    *,
+    display_path: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if path_has_symlink_component(path, include_leaf=True):
+        raise TrainerPreflightError(
+            f"trainer preflight must resolve to a regular non-symlink file: {path}"
+        )
+    try:
+        with path.open("rb") as handle:
+            before = os.fstat(handle.fileno())
+            raw = handle.read()
+            after = os.fstat(handle.fileno())
+        path_after = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise TrainerPreflightError(f"could not attest trainer preflight {path}: {exc}") from exc
+    signatures = {
+        (
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_size,
+            item.st_mtime_ns,
+            item.st_ctime_ns,
+        )
+        for item in (before, after, path_after)
+    }
+    if (
+        len(signatures) != 1
+        or not stat.S_ISREG(before.st_mode)
+        or len(raw) != before.st_size
+        or path_has_symlink_component(path, include_leaf=True)
+    ):
+        raise TrainerPreflightError(
+            f"trainer preflight changed while it was being attested: {path}"
+        )
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TrainerPreflightError(f"trainer preflight is not valid UTF-8 JSON: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {path}")
+    schema_version = payload.get("schema_version")
+    return payload, {
+        "path": display_path,
+        "kind": "file",
+        "exists": True,
+        "regular_file": True,
+        "symlink": False,
+        "schema_version": (
+            schema_version
+            if isinstance(schema_version, str) and schema_version
+            else "unknown"
+        ),
+        "size_bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
     }
 
 

@@ -4,12 +4,31 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import shutil
+import stat
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from .path_safety import path_has_symlink_component as _path_has_symlink_component
+from .path_safety import (
+    AtomicNamespaceMutationError,
+    DirectoryCleanupOutcome,
+    DirectoryCleanupStatus,
+    DirectoryNamespaceAttestation,
+    atomic_exchange_entries,
+    atomic_rename_entry_noreplace,
+    attest_directory_namespace,
+    attest_directory_namespace_entry,
+    locked_output_path,
+    opened_directory_descriptor,
+    path_has_symlink_component as _path_has_symlink_component,
+    remove_directory_entry_tree_if_identity,
+    remove_directory_tree_if_identity,
+    sync_directory_tree,
+)
 from .training import (
     RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_LABEL_PROVENANCE_SCHEMA_VERSION,
@@ -18,6 +37,7 @@ from .training import (
     TrainingExportError,
     _fingerprint_identity,
     build_redaction_status,
+    episode_events_sha256,
     load_run_records,
     redaction_scan_artifacts,
 )
@@ -35,6 +55,29 @@ REVIEW_LABELS = ("accept", "reject", "needs_review", "unsafe", "incomplete")
 REVIEW_CONFIDENCE_LEVELS = ("high", "medium", "low", "unknown")
 TRAINING_NEGATIVE_LABELS = {"reject", "unsafe", "incomplete"}
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
+REVIEWED_EXPORT_FILES = frozenset(
+    {
+        "dataset_registry.json",
+        "manifest.json",
+        "reviewed_dpo.jsonl",
+        "reviewed_labels.jsonl",
+        "reviewed_preferences.jsonl",
+        "reviewed_reward_model.jsonl",
+        "reviewed_sft.jsonl",
+    }
+)
+REVIEWED_EXPORT_PROVENANCE_FILES = frozenset(
+    {
+        "completed_labels.jsonl",
+        "label_template.jsonl",
+        "review_items.jsonl",
+        "review_manifest.json",
+    }
+)
+ReviewedOutputAttestation = tuple[tuple[int, ...], DirectoryNamespaceAttestation]
+NamespaceEntryAttestation = (
+    ReviewedOutputAttestation | tuple[tuple[int, ...], str | None]
+)
 
 
 class ReviewExportError(ValueError):
@@ -108,7 +151,7 @@ def apply_review_labels(
     max_pairs_per_family: int = 0,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
-    """Turn completed human labels into reviewed trainer-ready evidence views."""
+    """Turn completed human labels into an atomically published reviewed export."""
     if max_pairs_per_family < 0:
         raise ReviewExportError("max_pairs_per_family must be non-negative")
     source = Path(review_export_dir)
@@ -117,14 +160,121 @@ def apply_review_labels(
     _require_output_dir(target, "reviewed export output")
     _require_regular_dir(source, "review export")
     _require_regular_file(source / "review_items.jsonl", "review_items.jsonl")
+    _require_regular_file(source / "label_template.jsonl", "label_template.jsonl")
+    _require_regular_file(source / "manifest.json", "review manifest")
     _require_regular_file(label_file, "review labels")
+    _require_separate_reviewed_output(source, label_file, target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with locked_output_path(target, label="reviewed export output"):
+        _require_output_dir(target, "reviewed export output")
+        expected_target = _owned_reviewed_output_attestation(target)
+        staging = Path(
+            tempfile.mkdtemp(prefix=f".{target.name}.staging-", dir=target.parent)
+        )
+        staging_stat = staging.stat(follow_symlinks=False)
+        staging_identity = (staging_stat.st_dev, staging_stat.st_ino)
+        try:
+            manifest = _build_reviewed_export(
+                source,
+                staging,
+                labels_path=label_file,
+                max_pairs_per_family=max_pairs_per_family,
+                preserve_paths=preserve_paths,
+                published_target=target,
+            )
+            _validate_staged_reviewed_export(staging)
+            sync_directory_tree(staging)
+            expected_staging = _reviewed_output_attestation(staging)
+            if expected_staging is None:
+                raise ReviewExportError(
+                    f"staged reviewed export disappeared before publication: {staging}"
+                )
+            _publish_reviewed_export(
+                staging,
+                target,
+                expected_target=expected_target,
+                expected_staging=expected_staging,
+            )
+            return manifest
+        finally:
+            try:
+                current = staging.stat(follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                if (current.st_dev, current.st_ino) == staging_identity:
+                    if not remove_directory_tree_if_identity(
+                        staging,
+                        staging_identity,
+                    ):
+                        raise ReviewExportError(
+                            f"unable to clean private reviewed-export staging tree safely: {staging}"
+                        )
+
+
+def _build_reviewed_export(
+    review_export_dir: str | Path,
+    out_dir: str | Path,
+    *,
+    labels_path: str | Path,
+    max_pairs_per_family: int,
+    preserve_paths: bool,
+    published_target: Path,
+) -> dict[str, Any]:
+    """Build a complete reviewed export in a private staging directory."""
+    source = Path(review_export_dir)
+    target = Path(out_dir)
+    label_file = Path(labels_path)
     items = _review_items_by_id(source / "review_items.jsonl")
+    label_template_rows = _read_jsonl(source / "label_template.jsonl", "label template")
+    review_manifest = _read_json_object(source / "manifest.json", "review manifest")
     labels = _read_jsonl(label_file, "review labels")
     reviewed_labels = _reviewed_labels(items, labels, label_file, preserve_paths)
     if not reviewed_labels:
         raise ReviewExportError("No completed human labels found; set human_label in the labels JSONL first")
 
     target.mkdir(parents=True, exist_ok=True)
+    provenance_dir = target / "provenance"
+    provenance_dir.mkdir(exist_ok=True)
+    provenance_paths = {
+        "review_items": provenance_dir / "review_items.jsonl",
+        "label_template": provenance_dir / "label_template.jsonl",
+        "review_manifest": provenance_dir / "review_manifest.json",
+        "completed_labels": provenance_dir / "completed_labels.jsonl",
+    }
+    shutil.copyfile(source / "review_items.jsonl", provenance_paths["review_items"])
+    shutil.copyfile(source / "label_template.jsonl", provenance_paths["label_template"])
+    shutil.copyfile(source / "manifest.json", provenance_paths["review_manifest"])
+    shutil.copyfile(label_file, provenance_paths["completed_labels"])
+    for reviewed_label in reviewed_labels:
+        reviewed_label["source_label_file"] = "provenance/completed_labels.jsonl"
+    copied_items_by_id = _review_items_by_id(provenance_paths["review_items"])
+    copied_label_template_rows = _read_jsonl(
+        provenance_paths["label_template"],
+        "copied label template",
+    )
+    copied_review_manifest = _read_json_object(
+        provenance_paths["review_manifest"],
+        "copied review manifest",
+    )
+    copied_label_rows = _read_jsonl(provenance_paths["completed_labels"], "copied review labels")
+    if (
+        copied_items_by_id != items
+        or copied_label_template_rows != label_template_rows
+        or copied_review_manifest != review_manifest
+        or copied_label_rows != labels
+    ):
+        raise ReviewExportError("review inputs changed while their provenance snapshot was being created")
+    copied_reviewed_labels = _reviewed_labels(
+        copied_items_by_id,
+        copied_label_rows,
+        provenance_paths["completed_labels"],
+        False,
+    )
+    for reviewed_label in copied_reviewed_labels:
+        reviewed_label["source_label_file"] = "provenance/completed_labels.jsonl"
+    if copied_reviewed_labels != reviewed_labels:
+        raise ReviewExportError("review inputs changed while their provenance snapshot was being created")
     sft = _reviewed_sft(reviewed_labels)
     reward_model = _reviewed_reward_model(reviewed_labels)
     preferences = _reviewed_preferences(reviewed_labels, max_pairs_per_family=max_pairs_per_family)
@@ -150,8 +300,18 @@ def apply_review_labels(
         "reviewed_reward_model": reward_model,
         "reviewed_preferences": preferences,
         "reviewed_dpo": dpo,
+        "provenance_review_items": list(copied_items_by_id.values()),
+        "provenance_label_template": copied_label_template_rows,
+        "provenance_completed_labels": copied_label_rows,
     }
-    redaction_status = build_redaction_status(redaction_scan_artifacts(rows_by_artifact))
+    redaction_status = build_redaction_status(
+        redaction_scan_artifacts(
+            rows_by_artifact,
+            extra_artifacts={
+                "provenance_review_manifest": copied_review_manifest,
+            },
+        )
+    )
     if redaction_status["passed"] is not True:
         raise ReviewExportError(
             "Reviewed export contains unredacted secret-like values; redact review labels or source traces before export."
@@ -159,15 +319,28 @@ def apply_review_labels(
     label_provenance = _reviewed_label_provenance_summary(reviewed_labels, sft, reward_model, preferences, dpo)
     source_review_artifacts = _artifact_fingerprints(
         {
-            "review_items": source / "review_items.jsonl",
-            "label_template": source / "label_template.jsonl",
-            "review_manifest": source / "manifest.json",
+            "review_items": provenance_paths["review_items"],
+            "label_template": provenance_paths["label_template"],
+            "review_manifest": provenance_paths["review_manifest"],
         },
-        preserve_paths,
+        False,
         exclude=set(),
+        relative_to=target,
+        published_root=published_target,
     )
-    labels_artifact = _file_fingerprint(label_file, preserve_paths)
-    pre_manifest_fingerprints = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
+    labels_artifact = _file_fingerprint(
+        provenance_paths["completed_labels"],
+        False,
+        relative_to=target,
+        published_root=published_target,
+    )
+    pre_manifest_fingerprints = _artifact_fingerprints(
+        paths,
+        preserve_paths,
+        exclude={"manifest", "dataset_registry"},
+        relative_to=target,
+        published_root=published_target,
+    )
     dataset_version = _reviewed_dataset_version_id(pre_manifest_fingerprints, source_review_artifacts, labels_artifact)
     trainer_views = _reviewed_trainer_views(sft, dpo, reward_model)
 
@@ -175,9 +348,9 @@ def apply_review_labels(
         "schema_version": REVIEWED_MANIFEST_SCHEMA_VERSION,
         "dataset_version": dataset_version,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "source_review_export": _display_path(source, preserve_paths),
-        "labels_path": _display_path(label_file, preserve_paths),
-        "output_dir": _display_path(target, preserve_paths),
+        "source_review_export": "provenance",
+        "labels_path": "provenance/completed_labels.jsonl",
+        "output_dir": ".",
         "max_pairs_per_family": max_pairs_per_family,
         "reviewed_label_count": len(reviewed_labels),
         "sft_count": len(sft),
@@ -191,7 +364,15 @@ def apply_review_labels(
         "low_confidence_label_count": confidence_counts["low"],
         "unknown_confidence_label_count": confidence_counts["unknown"],
         "task_families": sorted({str(row["task_family"]) for row in reviewed_labels}),
-        "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
+        "outputs": {
+            name: _display_reviewed_path(
+                path,
+                target,
+                preserve_paths,
+                published_root=published_target,
+            )
+            for name, path in paths.items()
+        },
         "source_review_artifacts": source_review_artifacts,
         "labels_artifact": labels_artifact,
         "redaction_status": redaction_status,
@@ -199,9 +380,19 @@ def apply_review_labels(
         "trainer_views": trainer_views,
         "registry": {
             "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
-            "path": _display_path(paths["dataset_registry"], preserve_paths),
+            "path": _display_reviewed_path(
+                paths["dataset_registry"],
+                target,
+                preserve_paths,
+                published_root=published_target,
+            ),
             "selection_key": dataset_version,
-            "manifest_path": _display_path(paths["manifest"], preserve_paths),
+            "manifest_path": _display_reviewed_path(
+                paths["manifest"],
+                target,
+                preserve_paths,
+                published_root=published_target,
+            ),
             "redaction_passed": redaction_status.get("passed") is True,
             "root_views": trainer_views["root_views"],
             "mode_to_view": trainer_views["mode_to_view"],
@@ -218,7 +409,13 @@ def apply_review_labels(
             "dataset_registry.json binds dataset_version to manifest SHA-256, source review artifacts, labels artifact, and redaction status.",
         ],
     }
-    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(
+        paths,
+        preserve_paths,
+        exclude={"manifest", "dataset_registry"},
+        relative_to=target,
+        published_root=published_target,
+    )
     _write_json(paths["manifest"], manifest)
     _write_json(paths["dataset_registry"], _reviewed_dataset_registry_record(manifest, paths, preserve_paths))
     return manifest
@@ -237,9 +434,14 @@ def _review_item(record: RunRecord, preserve_paths: bool) -> dict[str, Any]:
         "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
         "task_family": _task_family(scenario_id),
         "source_artifacts": _source_artifacts(record, preserve_paths),
+        "source_artifact_fingerprints": {
+            "normalized_trace": _canonical_json_source_fingerprint(trace),
+            "scorecard": _canonical_json_source_fingerprint(scorecard),
+        },
         "prompt": _prompt_from_trace(trace),
         "final_answer": str(trace.get("final_answer") or ""),
         "event_count": len(trace.get("events", [])) if isinstance(trace.get("events"), list) else 0,
+        "episode_events_sha256": episode_events_sha256(trace.get("events")),
         "scorecard": {
             "passed": passed,
             "score": _score(scorecard),
@@ -253,6 +455,21 @@ def _review_item(record: RunRecord, preserve_paths: bool) -> dict[str, Any]:
         "evidence_target_counts": _evidence_target_counts(scorecard),
         "suggested_human_label": "accept" if passed else "reject",
         "label_options": list(REVIEW_LABELS),
+    }
+
+
+def _canonical_json_source_fingerprint(value: Any) -> dict[str, Any]:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return {
+        "algorithm": "sha256-canonical-json-v1",
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "size_bytes": len(encoded),
     }
 
 
@@ -346,6 +563,12 @@ def _reviewed_labels(
             raise ReviewExportError(
                 f"label row {index + 1} has unsupported reviewer_confidence {reviewer_confidence!r}"
             )
+        reviewer = label.get("reviewer")
+        if not isinstance(reviewer, str) or not reviewer.strip():
+            raise ReviewExportError(f"label row {index + 1} missing reviewer identity")
+        reviewed_at = label.get("reviewed_at")
+        if not isinstance(reviewed_at, str) or not reviewed_at.strip():
+            raise ReviewExportError(f"label row {index + 1} missing reviewed_at timestamp")
         corrected_score = label.get("corrected_score")
         if corrected_score is not None and (
             not isinstance(corrected_score, int) or isinstance(corrected_score, bool) or corrected_score < 0 or corrected_score > 100
@@ -673,6 +896,7 @@ def _reviewed_label_provenance_summary(
     return {
         "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
         "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
+        "reviewer_identity_assurance": "self_asserted",
         "reviewed_label_count": len(reviewed_labels),
         "accepted_label_count": label_counts.get("accept", 0),
         "negative_label_count": sum(label_counts.get(label, 0) for label in sorted(TRAINING_NEGATIVE_LABELS)),
@@ -686,6 +910,7 @@ def _reviewed_label_provenance_summary(
         "notes": [
             "Reviewed SFT rows require human_label='accept'.",
             "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only.",
+            "Reviewer identifiers and timestamps are required but self-asserted; this receipt proves content integrity, not reviewer authentication.",
         ],
     }
 
@@ -789,7 +1014,7 @@ def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str,
         "dataset_version": str(manifest.get("dataset_version") or ""),
         "generated_at": str(manifest.get("generated_at") or ""),
         "artifact_type": "reviewed_export",
-        "manifest_path": _display_path(paths["manifest"], preserve_paths),
+        "manifest_path": str(manifest.get("registry", {}).get("manifest_path") or "manifest.json"),
         "manifest_sha256": _sha256_file(paths["manifest"]),
         "source_review_export": str(manifest.get("source_review_export") or ""),
         "labels_path": str(manifest.get("labels_path") or ""),
@@ -838,6 +1063,18 @@ def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _read_json_object(path: Path, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ReviewExportError(f"unable to read {label}: {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ReviewExportError(f"{label} contains invalid JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ReviewExportError(f"{label} must contain a JSON object")
+    return value
+
+
 def review_item_sha256(item: dict[str, Any]) -> str:
     """Return the stable content fingerprint for a review item."""
     payload = dict(item)
@@ -878,6 +1115,730 @@ def _require_output_dir(path: Path, label: str) -> None:
         raise ReviewExportError(f"{label} path is not a directory: {path}")
 
 
+def _require_separate_reviewed_output(source: Path, label_file: Path, target: Path) -> None:
+    try:
+        source_resolved = source.resolve(strict=True)
+        label_resolved = label_file.resolve(strict=True)
+        target_resolved = target.resolve(strict=False)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ReviewExportError(f"unable to verify reviewed export source/output separation: {exc}") from exc
+
+    if _path_contains(source_resolved, target_resolved) or _path_contains(target_resolved, source_resolved):
+        raise ReviewExportError("reviewed export output must not overlap the review export source directory")
+    if _path_contains(target_resolved, label_resolved):
+        raise ReviewExportError("reviewed export output must not contain the review labels source file")
+
+
+def _path_contains(parent: Path, child: Path) -> bool:
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _require_replaceable_reviewed_output(target: Path) -> None:
+    """Cheaply reject an obviously unrelated destination before full admission.
+
+    The filename allowlist is only an optimization.  Ownership is established by
+    ``_owned_reviewed_output_attestation`` from a stable, semantically valid prior
+    export (or an empty directory), never from names alone.
+    """
+    if not target.exists():
+        return
+    for child in target.iterdir():
+        if child.name in REVIEWED_EXPORT_FILES:
+            _require_output_file(child, "review output file")
+            continue
+        if child.name != "provenance":
+            raise ReviewExportError(f"reviewed export output contains an unrelated entry: {child}")
+        _require_output_dir(child, "reviewed export provenance directory")
+        for provenance_child in child.iterdir():
+            if provenance_child.name not in REVIEWED_EXPORT_PROVENANCE_FILES:
+                raise ReviewExportError(
+                    f"reviewed export output contains an unrelated provenance entry: {provenance_child}"
+                )
+            _require_output_file(provenance_child, "review output file")
+
+
+def _owned_reviewed_output_attestation(
+    target: Path,
+) -> ReviewedOutputAttestation | None:
+    """Return the exact CAS baseline only when the destination is owned.
+
+    A non-empty destination must be a complete, semantically valid reviewed
+    export.  Attesting both sides of semantic validation binds that ownership
+    decision to the exact tree later supplied to the atomic publisher.
+    """
+    _require_replaceable_reviewed_output(target)
+    before = _reviewed_output_attestation(target)
+    if before is None:
+        return None
+    if _reviewed_output_attestation_is_empty(before):
+        after = _reviewed_output_attestation(target)
+        if after != before:
+            raise ReviewExportError(
+                f"reviewed export output changed while ownership was being checked: {target}"
+            )
+        return after
+
+    errors = _reviewed_export_validation_errors(target)
+    after = _reviewed_output_attestation(target)
+    if after != before:
+        raise ReviewExportError(
+            f"reviewed export output changed while ownership was being checked: {target}"
+        )
+    if errors:
+        details = "; ".join(errors)
+        raise ReviewExportError(
+            "refusing to replace output that is not a semantically valid prior "
+            f"reviewed export: {target}: {details}"
+        )
+    return after
+
+
+def _reviewed_output_attestation_is_empty(
+    attestation: ReviewedOutputAttestation,
+) -> bool:
+    return attestation[1].entry_count == 0
+
+
+def _reviewed_export_validation_errors(path: Path) -> list[str]:
+    # Import lazily because validation imports the review builders used for replay.
+    from .validation import validate_reviewed_export
+
+    try:
+        validation = validate_reviewed_export(path)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        return [str(exc)]
+    return [str(error) for error in validation.errors]
+
+
+def _validate_staged_reviewed_export(staging: Path) -> None:
+    errors = _reviewed_export_validation_errors(staging)
+    if errors:
+        details = "; ".join(errors)
+        raise ReviewExportError(f"staged reviewed export failed validation: {details}")
+
+
+def _reviewed_output_attestation(target: Path) -> ReviewedOutputAttestation | None:
+    try:
+        before = target.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(before.st_mode):
+        raise ReviewExportError(f"reviewed export output is not a directory: {target}")
+    try:
+        tree = attest_directory_namespace(target)
+        after = target.stat(follow_symlinks=False)
+    except (OSError, ValueError) as exc:
+        raise ReviewExportError(
+            f"unable to attest reviewed export output at {target}: {exc}"
+        ) from exc
+    before_signature = _output_stat_signature(before)
+    after_signature = _output_stat_signature(after)
+    if before_signature != after_signature:
+        raise ReviewExportError(f"reviewed export output changed while being inspected: {target}")
+    return before_signature, tree
+
+
+def _reviewed_output_attestation_at(
+    parent_descriptor: int,
+    name: str,
+    *,
+    display_path: Path,
+) -> ReviewedOutputAttestation | None:
+    try:
+        before = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(before.st_mode):
+        raise ReviewExportError(
+            f"reviewed export output is not a directory: {display_path}"
+        )
+    try:
+        tree = attest_directory_namespace_entry(
+            parent_descriptor,
+            name,
+            display_path=display_path,
+        )
+        after = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except (OSError, ValueError) as exc:
+        raise ReviewExportError(
+            f"unable to attest reviewed export output at {display_path}: {exc}"
+        ) from exc
+    before_signature = _output_stat_signature(before)
+    if _output_stat_signature(after) != before_signature:
+        raise ReviewExportError(
+            f"reviewed export output changed while being inspected: {display_path}"
+        )
+    return before_signature, tree
+
+
+def _namespace_entry_attestation_at(
+    parent_descriptor: int,
+    name: str,
+    *,
+    display_path: Path,
+) -> NamespaceEntryAttestation | None:
+    try:
+        entry = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return None
+    signature = _output_stat_signature(entry)
+    if stat.S_ISDIR(entry.st_mode):
+        tree = attest_directory_namespace_entry(
+            parent_descriptor,
+            name,
+            display_path=display_path,
+        )
+        current = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if _output_stat_signature(current) != signature:
+            raise ReviewExportError(
+                f"namespace entry changed while being inspected: {display_path}"
+            )
+        return signature, tree
+    if stat.S_ISLNK(entry.st_mode):
+        try:
+            link_target = os.readlink(name, dir_fd=parent_descriptor)
+            current = os.stat(
+                name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            current_target = os.readlink(name, dir_fd=parent_descriptor)
+        except (NotImplementedError, OSError, TypeError) as exc:
+            raise ReviewExportError(
+                f"unable to inspect displaced symlink at {display_path}: {exc}"
+            ) from exc
+        if _output_stat_signature(current) != signature or current_target != link_target:
+            raise ReviewExportError(
+                f"namespace entry changed while being inspected: {display_path}"
+            )
+        return signature, link_target
+    try:
+        current = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except (OSError, TypeError) as exc:
+        raise ReviewExportError(
+            f"unable to inspect displaced namespace entry at {display_path}: {exc}"
+        ) from exc
+    if _output_stat_signature(current) != signature:
+        raise ReviewExportError(
+            f"namespace entry changed while being inspected: {display_path}"
+        )
+    return signature, None
+
+
+def _output_stat_signature(value: os.stat_result) -> tuple[int, ...]:
+    return (
+        value.st_mode,
+        value.st_dev,
+        value.st_ino,
+    )
+
+
+def _publish_reviewed_export(
+    staging: Path,
+    target: Path,
+    *,
+    expected_target: ReviewedOutputAttestation | None,
+    expected_staging: ReviewedOutputAttestation,
+) -> None:
+    """Publish a complete tree with a cooperative-lock CAS and atomic swap."""
+    with opened_directory_descriptor(target.parent) as parent_descriptor:
+        current_staging = _reviewed_output_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+        if current_staging != expected_staging:
+            raise ReviewExportError(
+                f"staged reviewed export changed before publication: {staging}"
+            )
+        current_target = _reviewed_output_attestation_at(
+            parent_descriptor,
+            target.name,
+            display_path=target,
+        )
+        if current_target != expected_target:
+            raise ReviewExportError(
+                f"reviewed export output changed before publication: {target}"
+            )
+        if expected_target is None:
+            try:
+                atomic_rename_entry_noreplace(
+                    parent_descriptor,
+                    staging.name,
+                    target.name,
+                )
+            except AtomicNamespaceMutationError as exc:
+                _reconcile_noreplace_durability_failure(
+                    parent_descriptor,
+                    staging=staging,
+                    target=target,
+                    expected_published=expected_staging,
+                    error=exc,
+                )
+            except (OSError, ValueError) as exc:
+                raise ReviewExportError(
+                    f"unable to publish reviewed export at {target}: {exc}"
+                ) from exc
+            published = _reviewed_output_attestation_at(
+                parent_descriptor,
+                target.name,
+                display_path=target,
+            )
+            if published != expected_staging:
+                raise ReviewExportError(
+                    f"published reviewed export identity changed unexpectedly: {target}"
+                )
+            return
+
+        try:
+            atomic_exchange_entries(
+                parent_descriptor,
+                staging.name,
+                target.name,
+            )
+        except AtomicNamespaceMutationError as exc:
+            _reconcile_exchange_durability_failure(
+                parent_descriptor,
+                staging=staging,
+                target=target,
+                expected_published=expected_staging,
+                expected_displaced=expected_target,
+                error=exc,
+            )
+        except (OSError, ValueError) as exc:
+            raise ReviewExportError(
+                f"unable to publish reviewed export at {target}: {exc}"
+            ) from exc
+
+        published = _namespace_entry_attestation_at(
+            parent_descriptor,
+            target.name,
+            display_path=target,
+        )
+        displaced = _namespace_entry_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+        if published != expected_staging or displaced != expected_target:
+            _rollback_reviewed_export_exchange(
+                parent_descriptor,
+                staging=staging,
+                target=target,
+                expected_published=expected_staging,
+                expected_displaced=displaced,
+            )
+            raise ReviewExportError(
+                f"reviewed export output changed during atomic publication: {target}"
+            )
+
+        ownership_error = _displaced_reviewed_output_ownership_error(
+            parent_descriptor,
+            staging=staging,
+            expected=expected_target,
+        )
+        displaced_before_delete = _namespace_entry_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+        if ownership_error is not None or displaced_before_delete != expected_target:
+            _rollback_reviewed_export_exchange(
+                parent_descriptor,
+                staging=staging,
+                target=target,
+                expected_published=expected_staging,
+                expected_displaced=displaced_before_delete,
+            )
+            reason = ownership_error or "the displaced tree changed before deletion"
+            raise ReviewExportError(
+                "refusing to delete displaced reviewed-export output because its "
+                f"ownership was not stable: {reason}"
+            )
+
+        displaced_identity = (
+            expected_target[0][1],
+            expected_target[0][2],
+        )
+        cleanup = remove_directory_entry_tree_if_identity(
+            parent_descriptor,
+            staging.name,
+            displaced_identity,
+            expected_target[1],
+        )
+        if not cleanup:
+            raise ReviewExportError(
+                _reviewed_cleanup_error(
+                    "reviewed export was published",
+                    cleanup,
+                    parent=target.parent,
+                    retained_label="the displaced prior version",
+                )
+            )
+
+
+def _reviewed_cleanup_error(
+    prefix: str,
+    outcome: DirectoryCleanupOutcome,
+    *,
+    parent: Path,
+    retained_label: str,
+) -> str:
+    """Render a cleanup failure without overstating what survived."""
+    recovery_paths = tuple(
+        parent / Path(relative_entry) for relative_entry in outcome.recovery_entries
+    )
+    artifact_paths = tuple(
+        parent / Path(relative_entry) for relative_entry in outcome.cleanup_artifacts
+    )
+    concurrent_paths = tuple(
+        parent / Path(relative_entry) for relative_entry in outcome.concurrent_entries
+    )
+    recovery_text = ", ".join(str(path) for path in recovery_paths)
+    artifact_text = ", ".join(str(path) for path in artifact_paths)
+    concurrent_text = ", ".join(str(path) for path in concurrent_paths)
+    detail_text = f"; detail: {outcome.detail}" if outcome.detail else ""
+    concurrent_suffix = (
+        f"; concurrent namespace entries: {concurrent_text}"
+        if concurrent_text
+        else ""
+    )
+
+    if outcome.status is DirectoryCleanupStatus.PARTIAL:
+        location_text = recovery_text or "no surviving recovery entry was discoverable"
+        artifact_suffix = (
+            f"; private cleanup vaults: {artifact_text}" if artifact_text else ""
+        )
+        return (
+            f"{prefix}, but cleanup of {retained_label} was partial after "
+            f"{outcome.removed_entry_count} approved entries were removed; "
+            f"surviving recovery entries: {location_text}{artifact_suffix}"
+            f"{concurrent_suffix}{detail_text}"
+        )
+    if outcome.status is DirectoryCleanupStatus.COMPLETE_DURABILITY_UNCONFIRMED:
+        artifact_suffix = (
+            f"; inspect private cleanup vaults: {artifact_text}" if artifact_text else ""
+        )
+        return (
+            f"{prefix}, and {retained_label} was completely removed, but cleanup "
+            f"durability could not be confirmed{artifact_suffix}{concurrent_suffix}"
+            f"{detail_text}"
+        )
+    if outcome.status is DirectoryCleanupStatus.COMPLETE:
+        return (
+            f"{prefix}, and {retained_label} was completely removed; the public "
+            "namespace changed again before reconciliation completed"
+            f"{concurrent_suffix}{detail_text}"
+        )
+    if recovery_text:
+        artifact_suffix = (
+            f"; private cleanup vaults: {artifact_text}" if artifact_text else ""
+        )
+        return (
+            f"{prefix}, but {retained_label} was retained for recovery at: "
+            f"{recovery_text}{artifact_suffix}{concurrent_suffix}{detail_text}"
+        )
+    artifact_suffix = (
+        f"; inspect private cleanup vaults: {artifact_text}" if artifact_text else ""
+    )
+    return (
+        f"{prefix}, but cleanup made no destructive changes and the exact recovery "
+        f"location could not be confirmed{artifact_suffix}{concurrent_suffix}"
+        f"{detail_text}"
+    )
+
+
+def _displaced_reviewed_output_ownership_error(
+    parent_descriptor: int,
+    *,
+    staging: Path,
+    expected: ReviewedOutputAttestation,
+) -> str | None:
+    """Validate the exact displaced tree before destructive cleanup."""
+    try:
+        descriptor_before = _reviewed_output_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+        path_before = _reviewed_output_attestation(staging)
+    except ReviewExportError as exc:
+        return str(exc)
+    if descriptor_before != expected or path_before != expected:
+        return "the displaced tree changed before ownership validation"
+
+    errors = (
+        []
+        if _reviewed_output_attestation_is_empty(expected)
+        else _reviewed_export_validation_errors(staging)
+    )
+    try:
+        path_after = _reviewed_output_attestation(staging)
+        descriptor_after = _reviewed_output_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+    except ReviewExportError as exc:
+        return str(exc)
+    if path_after != expected or descriptor_after != expected:
+        return "the displaced tree changed while ownership was being validated"
+    if errors:
+        return "the displaced tree is not a semantically valid prior reviewed export: " + "; ".join(errors)
+    return None
+
+
+def _reconcile_noreplace_durability_failure(
+    parent_descriptor: int,
+    *,
+    staging: Path,
+    target: Path,
+    expected_published: ReviewedOutputAttestation,
+    error: AtomicNamespaceMutationError,
+) -> None:
+    """Remove an acknowledged new publication after its post-rename fsync fails."""
+    try:
+        published = _namespace_entry_attestation_at(
+            parent_descriptor,
+            target.name,
+            display_path=target,
+        )
+        staged = _namespace_entry_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+    except ReviewExportError as exc:
+        raise ReviewExportError(
+            "atomic reviewed-export publication completed, but durability failed "
+            f"and its live state could not be reconciled: {target}"
+        ) from exc
+    if published != expected_published or staged is not None:
+        raise ReviewExportError(
+            "atomic reviewed-export publication completed, but durability failed; "
+            "the target changed concurrently and was retained for manual recovery: "
+            f"{target}"
+        ) from error
+
+    published_identity = (
+        expected_published[0][1],
+        expected_published[0][2],
+    )
+    cleanup = remove_directory_entry_tree_if_identity(
+        parent_descriptor,
+        target.name,
+        published_identity,
+        expected_published[1],
+    )
+    current = _namespace_entry_attestation_at(
+        parent_descriptor,
+        target.name,
+        display_path=target,
+    )
+    if (
+        current is not None
+        and target.name not in cleanup.recovery_entries
+        and target.name not in cleanup.concurrent_entries
+    ):
+        cleanup = DirectoryCleanupOutcome(
+            status=cleanup.status,
+            recovery_entries=cleanup.recovery_entries,
+            concurrent_entries=tuple(
+                sorted({*cleanup.concurrent_entries, target.name})
+            ),
+            cleanup_artifacts=cleanup.cleanup_artifacts,
+            removed_entry_count=cleanup.removed_entry_count,
+            durability_confirmed=cleanup.durability_confirmed,
+            detail=cleanup.detail,
+        )
+    if cleanup.status is DirectoryCleanupStatus.COMPLETE and current is None:
+        raise ReviewExportError(
+            "reviewed-export publication was rolled back after parent directory "
+            "durability confirmation failed"
+        ) from error
+    if cleanup.status is DirectoryCleanupStatus.COMPLETE_DURABILITY_UNCONFIRMED:
+        raise ReviewExportError(
+            _reviewed_cleanup_error(
+                "reviewed-export publication was removed after its durability failure",
+                cleanup,
+                parent=target.parent,
+                retained_label="the acknowledged publication",
+            )
+        ) from error
+    if cleanup.status is DirectoryCleanupStatus.PARTIAL:
+        raise ReviewExportError(
+            _reviewed_cleanup_error(
+                "reviewed-export publication rollback started",
+                cleanup,
+                parent=target.parent,
+                retained_label="the acknowledged publication",
+            )
+        ) from error
+    raise ReviewExportError(
+        _reviewed_cleanup_error(
+            "reviewed export is already published, but parent directory durability "
+            "could not be confirmed",
+            cleanup,
+            parent=target.parent,
+            retained_label="the acknowledged target",
+        )
+    ) from error
+
+
+def _reconcile_exchange_durability_failure(
+    parent_descriptor: int,
+    *,
+    staging: Path,
+    target: Path,
+    expected_published: ReviewedOutputAttestation,
+    expected_displaced: ReviewedOutputAttestation,
+    error: AtomicNamespaceMutationError,
+) -> None:
+    """Inspect and roll back an exchange whose post-rename fsync failed."""
+    try:
+        published = _namespace_entry_attestation_at(
+            parent_descriptor,
+            target.name,
+            display_path=target,
+        )
+        displaced = _namespace_entry_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+    except ReviewExportError as exc:
+        raise ReviewExportError(
+            "atomic reviewed-export exchange completed, but durability failed and "
+            f"its live state could not be reconciled; inspect {target} and {staging}"
+        ) from exc
+    if published == expected_published and displaced == expected_displaced:
+        try:
+            _rollback_reviewed_export_exchange(
+                parent_descriptor,
+                staging=staging,
+                target=target,
+                expected_published=expected_published,
+                expected_displaced=expected_displaced,
+            )
+        except ReviewExportError as exc:
+            raise ReviewExportError(
+                "atomic reviewed-export exchange completed, but durability failed "
+                f"and rollback could not be confirmed; inspect {target} and {staging}"
+            ) from exc
+        raise ReviewExportError(
+            "reviewed-export exchange was rolled back after parent directory "
+            "durability confirmation failed"
+        ) from error
+    if published == expected_displaced and displaced == expected_published:
+        raise ReviewExportError(
+            "reviewed-export exchange durability confirmation failed, but the live "
+            "namespace remains in its original state"
+        ) from error
+    raise ReviewExportError(
+        "atomic reviewed-export exchange completed, but durability failed and the "
+        f"namespace changed concurrently; inspect {target} and {staging}"
+    ) from error
+
+
+def _rollback_reviewed_export_exchange(
+    parent_descriptor: int,
+    *,
+    staging: Path,
+    target: Path,
+    expected_published: ReviewedOutputAttestation,
+    expected_displaced: NamespaceEntryAttestation | None,
+) -> None:
+    current_published = _namespace_entry_attestation_at(
+        parent_descriptor,
+        target.name,
+        display_path=target,
+    )
+    current_displaced = _namespace_entry_attestation_at(
+        parent_descriptor,
+        staging.name,
+        display_path=staging,
+    )
+    if (
+        current_published != expected_published
+        or current_displaced != expected_displaced
+        or current_displaced is None
+    ):
+        raise ReviewExportError(
+            "atomic reviewed-export rollback was unsafe; the displaced tree was "
+            f"retained for recovery at {staging}"
+        )
+    try:
+        atomic_exchange_entries(
+            parent_descriptor,
+            staging.name,
+            target.name,
+        )
+    except AtomicNamespaceMutationError as exc:
+        restored = _namespace_entry_attestation_at(
+            parent_descriptor,
+            target.name,
+            display_path=target,
+        )
+        staged = _namespace_entry_attestation_at(
+            parent_descriptor,
+            staging.name,
+            display_path=staging,
+        )
+        if restored == expected_displaced and staged == expected_published:
+            raise ReviewExportError(
+                "atomic reviewed-export rollback restored the live namespace, but "
+                "parent directory durability could not be confirmed"
+            ) from exc
+        raise ReviewExportError(
+            "atomic reviewed-export rollback mutated the namespace, but neither "
+            f"the restored state nor durability could be confirmed; inspect {target} "
+            f"and {staging}"
+        ) from exc
+    except (OSError, ValueError) as exc:
+        raise ReviewExportError(
+            "unable to rollback atomic reviewed-export publication; the prior "
+            f"tree was retained for recovery at {staging}: {exc}"
+        ) from exc
+    restored = _namespace_entry_attestation_at(
+        parent_descriptor,
+        target.name,
+        display_path=target,
+    )
+    staged = _namespace_entry_attestation_at(
+        parent_descriptor,
+        staging.name,
+        display_path=staging,
+    )
+    if restored != expected_displaced or staged != expected_published:
+        raise ReviewExportError(
+            f"atomic reviewed-export rollback could not be verified: {target}"
+        )
+
+
 def _require_output_file(path: Path, label: str) -> None:
     if _path_has_symlink_component(path, include_leaf=True):
         raise ReviewExportError(f"{label} must resolve to a regular non-symlink file: {path}")
@@ -897,20 +1858,43 @@ def _write_text(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
-def _artifact_fingerprints(paths: dict[str, Path], preserve_paths: bool, *, exclude: set[str]) -> dict[str, Any]:
+def _artifact_fingerprints(
+    paths: dict[str, Path],
+    preserve_paths: bool,
+    *,
+    exclude: set[str],
+    relative_to: Path | None = None,
+    published_root: Path | None = None,
+) -> dict[str, Any]:
     fingerprints: dict[str, Any] = {}
     for name, path in sorted(paths.items()):
         if name in exclude:
             continue
-        fingerprints[name] = _file_fingerprint(path, preserve_paths)
+        fingerprints[name] = _file_fingerprint(
+            path,
+            preserve_paths,
+            relative_to=relative_to,
+            published_root=published_root,
+        )
     return fingerprints
 
 
-def _file_fingerprint(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_fingerprint(
+    path: Path,
+    preserve_paths: bool,
+    *,
+    relative_to: Path | None = None,
+    published_root: Path | None = None,
+) -> dict[str, Any]:
     symlinked = _path_has_symlink_component(path, include_leaf=True)
     regular_file = path.exists() and path.is_file() and not symlinked
     record: dict[str, Any] = {
-        "path": _display_path(path, preserve_paths),
+        "path": _display_reviewed_path(
+            path,
+            relative_to,
+            preserve_paths,
+            published_root=published_root,
+        ),
         "exists": path.exists(),
         "regular_file": regular_file,
         "symlink": symlinked,
@@ -920,6 +1904,29 @@ def _file_fingerprint(path: Path, preserve_paths: bool) -> dict[str, Any]:
         record["size_bytes"] = stat.st_size
         record["sha256"] = _sha256_file(path)
     return record
+
+
+def _display_reviewed_path(
+    path: Path,
+    relative_to: Path | None,
+    preserve_paths: bool,
+    *,
+    published_root: Path | None = None,
+) -> str:
+    display_path = path
+    display_root = relative_to
+    if published_root is not None and relative_to is not None:
+        try:
+            display_path = published_root / path.relative_to(relative_to)
+            display_root = published_root
+        except ValueError:
+            pass
+    if preserve_paths or display_root is None:
+        return _display_path(display_path, preserve_paths)
+    try:
+        return os.path.relpath(display_path.resolve(), display_root.resolve())
+    except (OSError, ValueError):
+        return _display_path(display_path, preserve_paths)
 
 
 def _sha256_file(path: Path) -> str:

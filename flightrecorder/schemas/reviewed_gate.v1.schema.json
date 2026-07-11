@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_gate.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Gate result over an apply-review reviewed trainer handoff and optional reviewed-gate policy.",
   "properties": {
     "check_count": {
@@ -16,6 +16,9 @@
     },
     "decision": {
       "$ref": "#/$defs/decision"
+    },
+    "effective_policy": {
+      "$ref": "#/$defs/effective_policy"
     },
     "failed_check_count": {
       "minimum": 0,
@@ -36,6 +39,9 @@
     },
     "schema_version": {
       "const": "hfr.reviewed_gate.v1"
+    },
+    "source_artifacts": {
+      "$ref": "#/$defs/source_artifacts"
     }
   },
   "required": [
@@ -174,6 +180,103 @@
       ],
       "type": "object"
     },
+    "effective_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "forbid_labels": {
+          "items": {
+            "enum": [
+              "accept",
+              "reject",
+              "needs_review",
+              "unsafe",
+              "incomplete"
+            ]
+          },
+          "type": "array"
+        },
+        "max_low_confidence_labels": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "max_needs_review": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "max_unknown_confidence_labels": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_accepted": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_dpo": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_high_confidence_labels": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_medium_or_high_confidence_labels": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_preferences": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_rejected": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_reviewed_labels": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_reward_model": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "min_sft": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "require_task_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "require_valid_export": {
+          "type": "boolean"
+        },
+        "strict_validation": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "min_reviewed_labels",
+        "min_accepted",
+        "min_rejected",
+        "min_sft",
+        "min_reward_model",
+        "min_preferences",
+        "min_dpo",
+        "min_high_confidence_labels",
+        "min_medium_or_high_confidence_labels",
+        "max_needs_review",
+        "max_low_confidence_labels",
+        "max_unknown_confidence_labels",
+        "forbid_labels",
+        "require_task_families",
+        "require_valid_export",
+        "strict_validation"
+      ],
+      "type": "object"
+    },
     "metrics": {
       "additionalProperties": true,
       "properties": {
@@ -276,6 +379,82 @@
         "schema_version",
         "path",
         "effective"
+      ],
+      "type": "object"
+    },
+    "source_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "contains_symlinks": {
+          "const": false
+        },
+        "dataset_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "exists": {
+          "const": true
+        },
+        "file_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "directory"
+        },
+        "manifest_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "manifest_size_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "tree_hash_algorithm": {
+          "const": "hfr.sha256.file-tree.v1"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists",
+        "tree_hash_algorithm",
+        "sha256",
+        "file_count",
+        "size_bytes",
+        "contains_symlinks",
+        "manifest_path",
+        "manifest_sha256",
+        "manifest_size_bytes",
+        "dataset_version"
+      ],
+      "type": "object"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "reviewed_export": {
+          "$ref": "#/$defs/source_artifact"
+        }
+      },
+      "required": [
+        "reviewed_export"
       ],
       "type": "object"
     },

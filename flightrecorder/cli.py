@@ -144,13 +144,19 @@ from .agentic_training_flow import AgenticTrainingFlowError, build_agentic_train
 from .next_iteration_schedule import NextIterationScheduleError, build_next_iteration_schedule, write_next_iteration_schedule
 from .path_safety import (
     assert_output_does_not_alias_sources,
+    assert_output_outside_source_directories,
     locked_owned_output_directory,
     output_directory_lock_is_held,
     path_has_symlink_component,
     remove_directory_tree_if_identity,
 )
 from .redaction import sanitize_trace
-from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
+from .preflight import (
+    TrainerPreflightError,
+    build_trainer_launch_check,
+    build_trainer_preflight,
+    snapshot_trainer_preflight,
+)
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
 from .promotion_gate import (
     PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
@@ -166,9 +172,12 @@ from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
 from .reviewed_gate import (
     REVIEWED_GATE_POLICY_SCHEMA_VERSION,
+    ReviewedGateError,
     ReviewedGatePolicyError,
+    build_reviewed_export_source_artifact,
     evaluate_reviewed_gate,
     load_reviewed_gate_policy,
+    snapshot_reviewed_export,
 )
 from .rollout_generation import (
     RolloutGenerationError,
@@ -221,7 +230,12 @@ from .training_gate import (
     evaluate_training_gate,
     load_training_gate_policy,
 )
-from .validation import EVAL_SUITE_MANIFEST_SCHEMA_VERSION, validate_artifacts
+from .validation import (
+    EVAL_SUITE_MANIFEST_SCHEMA_VERSION,
+    VALIDATION_SCHEMA_VERSION,
+    validate_artifacts,
+    validate_trainer_preflight,
+)
 from .verifiers import VerifierError, capture_verified_state
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
@@ -293,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         SuiteGateError,
         SuiteGatePolicyError,
         ReviewExportError,
+        ReviewedGateError,
         ReviewedGatePolicyError,
         RolloutGenerationError,
         RepairQueueError,
@@ -1245,6 +1260,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         compare_export_dir=args.compare_export,
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
+        reviewed_gate_paths=args.reviewed_gate,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
         improvement_plan_paths=args.improvement_plan,
@@ -1922,6 +1938,26 @@ def cmd_agentic_rollout_receipt(args: argparse.Namespace) -> int:
 
 
 def cmd_rejection_sampling_gate(args: argparse.Namespace) -> int:
+    output_path = Path(args.out)
+    source_paths = [
+        Path(value)
+        for values in (
+            args.rollout_receipt,
+            args.model_grader_gate,
+            args.review_calibration,
+            args.reviewed_gate,
+        )
+        for value in values
+    ]
+    try:
+        assert_output_does_not_alias_sources(
+            output_path,
+            source_paths,
+            label="rejection sampling gate",
+        )
+    except ValueError as exc:
+        raise RejectionSamplingGateError(str(exc)) from exc
+    expected_output_sha256 = json_file_sha256(output_path)
     gate = build_rejection_sampling_gate(
         rollout_receipt_paths=args.rollout_receipt,
         model_grader_gate_paths=args.model_grader_gate,
@@ -1931,7 +1967,11 @@ def cmd_rejection_sampling_gate(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         created_at=args.created_at,
     )
-    write_rejection_sampling_gate(args.out, gate)
+    write_rejection_sampling_gate(
+        output_path,
+        gate,
+        expected_sha256=expected_output_sha256,
+    )
     print(
         f"wrote {args.out} readiness={gate['readiness']} "
         f"mock_rollouts={gate['rollout_summary']['mock_rollout_count']}"
@@ -1940,6 +1980,22 @@ def cmd_rejection_sampling_gate(args: argparse.Namespace) -> int:
 
 
 def cmd_dataset_curation_receipt(args: argparse.Namespace) -> int:
+    output_path = Path(args.out)
+    training_exports = [Path(value) for value in args.training_export]
+    try:
+        assert_output_outside_source_directories(
+            output_path,
+            training_exports,
+            label="dataset curation receipt",
+        )
+        assert_output_does_not_alias_sources(
+            output_path,
+            [Path(value) for value in args.rejection_sampling_gate],
+            label="dataset curation receipt",
+        )
+    except ValueError as exc:
+        raise DatasetCurationReceiptError(str(exc)) from exc
+    expected_output_sha256 = json_file_sha256(output_path)
     receipt = build_dataset_curation_receipt(
         rejection_sampling_gate_paths=args.rejection_sampling_gate,
         training_export_paths=args.training_export,
@@ -1947,7 +2003,11 @@ def cmd_dataset_curation_receipt(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         created_at=args.created_at,
     )
-    write_dataset_curation_receipt(args.out, receipt)
+    write_dataset_curation_receipt(
+        output_path,
+        receipt,
+        expected_sha256=expected_output_sha256,
+    )
     print(
         f"wrote {args.out} readiness={receipt['readiness']} "
         f"training_exports={receipt['curation_summary']['training_export_count']}"
@@ -1956,6 +2016,10 @@ def cmd_dataset_curation_receipt(args: argparse.Namespace) -> int:
 
 
 def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
+    output_path, expected_output_sha256 = _model_grader_output_guard(
+        args.out,
+        source_directories=[args.review_export],
+    )
     rubric = build_rubric_spec(
         review_export_dir=args.review_export,
         rubric_id=args.rubric_id,
@@ -1964,12 +2028,17 @@ def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_model_grader_artifact(args.out, rubric)
+    write_model_grader_artifact(output_path, rubric, expected_sha256=expected_output_sha256)
     print(f"wrote {args.out} review_items={rubric['review_item_count']} criteria={rubric['criterion_count']}")
     return 0
 
 
 def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
+    output_path, expected_output_sha256 = _model_grader_output_guard(
+        args.out,
+        source_directories=[args.review_export],
+        source_files=[args.rubric],
+    )
     receipt = build_model_grader_dry_run(
         review_export_dir=args.review_export,
         rubric_path=args.rubric,
@@ -1979,7 +2048,7 @@ def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_model_grader_artifact(args.out, receipt)
+    write_model_grader_artifact(output_path, receipt, expected_sha256=expected_output_sha256)
     print(
         f"wrote {args.out} readiness={receipt['readiness']} "
         f"graded_items={receipt['graded_item_count']}"
@@ -1988,13 +2057,17 @@ def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
 
 
 def cmd_model_grader_disagreement_queue(args: argparse.Namespace) -> int:
+    output_path, expected_output_sha256 = _model_grader_output_guard(
+        args.out,
+        source_files=[args.dry_run],
+    )
     queue = build_model_grader_disagreement_queue(
         dry_run_path=args.dry_run,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_model_grader_artifact(args.out, queue)
+    write_model_grader_artifact(output_path, queue, expected_sha256=expected_output_sha256)
     print(
         f"wrote {args.out} readiness={queue['readiness']} "
         f"queue_items={queue['queue_count']}"
@@ -2003,6 +2076,10 @@ def cmd_model_grader_disagreement_queue(args: argparse.Namespace) -> int:
 
 
 def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
+    output_path, expected_output_sha256 = _model_grader_output_guard(
+        args.out,
+        source_files=[args.dry_run, args.overrides],
+    )
     receipt = build_model_grader_override_receipt(
         dry_run_path=args.dry_run,
         overrides_path=args.overrides,
@@ -2010,7 +2087,7 @@ def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_model_grader_artifact(args.out, receipt)
+    write_model_grader_artifact(output_path, receipt, expected_sha256=expected_output_sha256)
     print(
         f"wrote {args.out} readiness={receipt['readiness']} "
         f"resolved={receipt['metrics']['resolved_queue_count']}/{receipt['queue']['dry_run_disagreement_queue_count']}"
@@ -2019,6 +2096,15 @@ def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
 
 
 def cmd_model_grader_gate(args: argparse.Namespace) -> int:
+    output_path, expected_output_sha256 = _model_grader_output_guard(
+        args.out,
+        source_files=[
+            args.dry_run,
+            args.rubric,
+            args.review_calibration,
+            args.override_receipt,
+        ],
+    )
     gate = build_model_grader_gate(
         dry_run_path=args.dry_run,
         rubric_path=args.rubric,
@@ -2030,12 +2116,35 @@ def cmd_model_grader_gate(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_model_grader_artifact(args.out, gate)
+    write_model_grader_artifact(output_path, gate, expected_sha256=expected_output_sha256)
     print(
         f"wrote {args.out} readiness={gate['readiness']} "
         f"checks={gate['check_count'] - gate['failed_check_count']}/{gate['check_count']}"
     )
     return 0 if gate["passed"] else 1
+
+
+def _model_grader_output_guard(
+    output: str | Path,
+    *,
+    source_directories: list[str | Path] | None = None,
+    source_files: list[str | Path | None] | None = None,
+) -> tuple[Path, str | None]:
+    output_path = Path(output)
+    try:
+        assert_output_outside_source_directories(
+            output_path,
+            [Path(value) for value in source_directories or []],
+            label="model-grader artifact",
+        )
+        assert_output_does_not_alias_sources(
+            output_path,
+            [Path(value) for value in source_files or [] if value is not None],
+            label="model-grader artifact",
+        )
+    except ValueError as exc:
+        raise ModelGraderError(str(exc)) from exc
+    return output_path, json_file_sha256(output_path)
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
@@ -2519,6 +2628,49 @@ def cmd_apply_review(args: argparse.Namespace) -> int:
 
 def cmd_review_calibration(args: argparse.Namespace) -> int:
     reviewed_dir = Path(args.reviewed_export)
+    output_path = Path(args.out)
+    try:
+        assert_output_outside_source_directories(
+            output_path,
+            [reviewed_dir],
+            label="review calibration",
+        )
+        assert_output_does_not_alias_sources(
+            output_path,
+            [
+                reviewed_dir / name
+                for name in (
+                    "manifest.json",
+                    "dataset_registry.json",
+                    "reviewed_labels.jsonl",
+                    "reviewed_sft.jsonl",
+                    "reviewed_reward_model.jsonl",
+                    "reviewed_preferences.jsonl",
+                    "reviewed_dpo.jsonl",
+                    "provenance/review_items.jsonl",
+                    "provenance/label_template.jsonl",
+                    "provenance/review_manifest.json",
+                    "provenance/completed_labels.jsonl",
+                )
+            ],
+            label="review calibration",
+        )
+    except ValueError as exc:
+        raise ReviewCalibrationError(str(exc)) from exc
+    expected_output_sha256 = json_file_sha256(output_path)
+    reviewed_export_display_path = os.path.relpath(
+        reviewed_dir.resolve(),
+        output_path.parent.resolve(),
+    )
+    reviewed_export_ref = Path(reviewed_export_display_path)
+    if reviewed_export_display_path in {"", "."} or ".." in reviewed_export_ref.parts:
+        raise ReviewCalibrationError(
+            "review calibration output must be placed so --reviewed-export has a normalized, non-traversing relative path"
+        )
+    source_before = build_reviewed_export_source_artifact(
+        reviewed_dir,
+        display_path=reviewed_export_display_path,
+    )
     validation_summary = (
         validate_artifacts(reviewed_export_dir=reviewed_dir, strict=args.strict_validation)
         if not args.skip_validation
@@ -2533,10 +2685,21 @@ def cmd_review_calibration(args: argparse.Namespace) -> int:
         min_comparable_labels=args.min_comparable_labels,
         validation_summary=validation_summary,
         require_valid_export=not args.skip_validation,
+        strict_validation=args.strict_validation,
         preserve_paths=args.preserve_paths,
         out_path=args.out,
     )
-    write_review_calibration(args.out, calibration)
+    source_after = build_reviewed_export_source_artifact(
+        reviewed_dir,
+        display_path=reviewed_export_display_path,
+    )
+    if source_before != source_after:
+        raise ReviewCalibrationError("reviewed export changed while calibration was being evaluated")
+    write_review_calibration(
+        args.out,
+        calibration,
+        expected_sha256=expected_output_sha256,
+    )
     metrics = calibration["metrics"]
     print(
         "wrote review calibration "
@@ -2669,8 +2832,64 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
 
 def cmd_gate_reviewed(args: argparse.Namespace) -> int:
     reviewed_dir = Path(args.reviewed_export)
-    manifest = _read_json(reviewed_dir / "manifest.json")
+    output_path = Path(args.out)
+    try:
+        assert_output_outside_source_directories(
+            output_path,
+            [reviewed_dir],
+            label="reviewed gate",
+        )
+        source_files = [
+            reviewed_dir / name
+            for name in (
+                "manifest.json",
+                "dataset_registry.json",
+                "reviewed_labels.jsonl",
+                "reviewed_sft.jsonl",
+                "reviewed_reward_model.jsonl",
+                "reviewed_preferences.jsonl",
+                "reviewed_dpo.jsonl",
+            )
+        ]
+        if args.policy:
+            source_files.append(Path(args.policy))
+        assert_output_does_not_alias_sources(
+            output_path,
+            source_files,
+            label="reviewed gate",
+        )
+    except ValueError as exc:
+        raise ReviewedGateError(str(exc)) from exc
+    expected_output_sha256 = json_file_sha256(output_path)
+    reviewed_export_display_path = _display_path_for_output_source(
+        reviewed_dir,
+        output_path,
+        False,
+    )
+    reviewed_export_ref = Path(reviewed_export_display_path)
+    if (
+        reviewed_export_ref.is_absolute()
+        or reviewed_export_display_path.startswith("<redacted:")
+        or reviewed_export_display_path in {"", "."}
+        or ".." in reviewed_export_ref.parts
+        or "\\" in reviewed_export_display_path
+    ):
+        raise ReviewedGateError(
+            "reviewed gate output must be placed so --reviewed-export has a normalized, non-traversing relative path"
+        )
+    reviewed_snapshot = snapshot_reviewed_export(
+        reviewed_dir,
+        display_path=reviewed_export_display_path,
+    )
+    source_before = reviewed_snapshot.source_artifact
+    manifest = reviewed_snapshot.manifest
     options = _reviewed_gate_options(args)
+    if args.policy:
+        options["policy_path"] = _display_path_for_output_source(
+            Path(args.policy),
+            output_path,
+            False,
+        )
     validation_summary = (
         validate_artifacts(reviewed_export_dir=reviewed_dir, strict=options["strict_validation"])
         if options["require_valid_export"]
@@ -2678,7 +2897,8 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
     )
     result = evaluate_reviewed_gate(
         manifest,
-        reviewed_export_path=_display_path(reviewed_dir, args.preserve_paths),
+        reviewed_export_path=reviewed_export_display_path,
+        reviewed_export_source=source_before,
         min_reviewed_labels=options["min_reviewed_labels"],
         min_accepted=options["min_accepted"],
         min_rejected=options["min_rejected"],
@@ -2695,16 +2915,23 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
         require_task_families=options["require_task_families"],
         validation_summary=validation_summary,
         require_valid_export=options["require_valid_export"],
+        strict_validation=options["strict_validation"],
     )
     if options["policy_path"]:
         result["policy"] = _reviewed_gate_policy_summary(options)
-    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(rendered, encoding="utf-8")
-        print(f"wrote {args.out}")
-    else:
-        print(rendered, end="")
+    source_after = build_reviewed_export_source_artifact(
+        reviewed_dir,
+        display_path=reviewed_export_display_path,
+    )
+    if source_before != source_after:
+        raise ReviewedGateError("reviewed export changed while its gate was being evaluated")
+    atomic_write_json_cas(
+        output_path,
+        result,
+        expected_sha256=expected_output_sha256,
+        new_file_mode=0o666,
+    )
+    print(f"wrote {args.out}")
     return 0 if result["passed"] else 1
 
 
@@ -2905,6 +3132,40 @@ def cmd_gate_decision(args: argparse.Namespace) -> int:
 
 
 def cmd_trainer_preflight(args: argparse.Namespace) -> int:
+    output_path = Path(args.out)
+    source_directories = [
+        Path(value)
+        for value in (
+            args.training_export,
+            args.compare_export,
+            args.reviewed_export,
+        )
+        if value
+    ]
+    source_files = [Path(value) for value in args.gate]
+    source_files.extend(
+        Path(value)
+        for value in (
+            args.evidence_bundle,
+            args.agentic_training_plan,
+        )
+        if value
+    )
+    source_files.extend(Path(value) for value in args.validation)
+    try:
+        assert_output_outside_source_directories(
+            output_path,
+            source_directories,
+            label="trainer preflight",
+        )
+        assert_output_does_not_alias_sources(
+            output_path,
+            source_files,
+            label="trainer preflight",
+        )
+    except ValueError as exc:
+        raise TrainerPreflightError(str(exc)) from exc
+    expected_output_sha256 = json_file_sha256(output_path)
     metadata = _metadata_options(args.metadata)
     preflight = build_trainer_preflight(
         out_path=args.out,
@@ -2922,7 +3183,12 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         metadata=metadata,
     )
-    _write_json(Path(args.out), preflight)
+    atomic_write_json_cas(
+        output_path,
+        preflight,
+        expected_sha256=expected_output_sha256,
+        new_file_mode=0o666,
+    )
     print(
         f"{'READY' if preflight['passed'] else 'BLOCKED'} trainer-preflight "
         f"gates={preflight['passed_gate_count']}/{preflight['gate_count']} out={args.out}"
@@ -2931,32 +3197,78 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
 
 
 def cmd_trainer_launch_check(args: argparse.Namespace) -> int:
+    if not args.out and not args.print_command:
+        raise TrainerPreflightError(
+            "trainer-launch-check requires --out unless --print-command is used"
+        )
     preflight_path = Path(args.preflight)
-    preflight = _read_json(preflight_path)
-    if not isinstance(preflight, dict):
-        raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {preflight_path}")
-    validation_summary = validate_artifacts(trainer_preflight_paths=[preflight_path], strict=args.strict)
+    output_path = Path(args.out) if args.out else None
+    if output_path is not None:
+        try:
+            assert_output_does_not_alias_sources(
+                output_path,
+                [preflight_path],
+                label="trainer launch check",
+            )
+        except ValueError as exc:
+            raise TrainerPreflightError(str(exc)) from exc
+    expected_output_sha256 = (
+        json_file_sha256(output_path) if output_path is not None else None
+    )
+    preflight_snapshot = snapshot_trainer_preflight(
+        preflight_path,
+        out_path=output_path,
+        preserve_paths=args.preserve_paths,
+    )
+    preflight = preflight_snapshot.payload
+    validation_target = validate_trainer_preflight(
+        preflight_path,
+        payload=preflight,
+    )
+    validation_error_count = len(validation_target.errors)
+    validation_warning_count = len(validation_target.warnings)
+    validation_summary = {
+        "schema_version": VALIDATION_SCHEMA_VERSION,
+        "passed": validation_error_count == 0
+        and (validation_warning_count == 0 or not args.strict),
+        "strict": args.strict,
+        "target_count": 1,
+        "error_count": validation_error_count,
+        "warning_count": validation_warning_count,
+        "targets": [validation_target.as_dict()],
+    }
     launch_check = build_trainer_launch_check(
         preflight_path=preflight_path,
         preflight=preflight,
+        preflight_snapshot=preflight_snapshot,
         validation_summary=validation_summary,
+        out_path=output_path,
         require_gates=args.require_gate,
         required_dataset_versions=args.require_dataset_version,
         require_metadata=_metadata_options(args.require_metadata),
         preserve_paths=args.preserve_paths,
     )
-    if args.out:
-        _write_json(Path(args.out), launch_check)
-    if args.print_command and launch_check["passed"]:
-        print(launch_check["approved_command"]["shell"])
-    elif args.out:
+    if output_path is not None:
+        atomic_write_json_cas(
+            output_path,
+            launch_check,
+            expected_sha256=expected_output_sha256,
+            new_file_mode=0o666,
+        )
+    if args.print_command:
+        if launch_check["passed"]:
+            print(launch_check["approved_command"]["shell"])
+        else:
+            print(
+                "BLOCKED trainer-launch-check: the preflight did not authorize a command",
+                file=sys.stderr,
+            )
+    else:
         print(
             f"{'READY' if launch_check['passed'] else 'BLOCKED'} trainer-launch-check "
             f"checks={launch_check['check_count'] - launch_check['failed_check_count']}/{launch_check['check_count']} "
             f"out={args.out}"
         )
-    else:
-        print(json.dumps(launch_check, indent=2, sort_keys=True, ensure_ascii=False))
     return 0 if launch_check["passed"] else 1
 
 
@@ -3319,6 +3631,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--compare-export", help="Validate an export-compare-rl output directory")
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
+    validate.add_argument("--reviewed-gate", action="append", default=[], help="Validate one reviewed_gate.json; may be repeated")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--improvement-plan", action="append", default=[], help="Validate one improvement_plan.json; may be repeated")
@@ -4704,7 +5017,7 @@ def _parser() -> argparse.ArgumentParser:
     gate_reviewed = subparsers.add_parser("gate-reviewed", help="Evaluate readiness thresholds against an apply-review export")
     gate_reviewed.add_argument("--reviewed-export", required=True, help="Directory containing apply-review artifacts")
     gate_reviewed.add_argument("--policy", help="Versioned reviewed gate policy JSON file with committed threshold defaults")
-    gate_reviewed.add_argument("--out", help="Write gate result JSON to this path")
+    gate_reviewed.add_argument("--out", required=True, help="Write the authoritative gate result JSON to this path")
     gate_reviewed.add_argument(
         "--strict-validation",
         action="store_true",
@@ -4755,7 +5068,11 @@ def _parser() -> argparse.ArgumentParser:
         help="Fail if this human label appears in the reviewed export",
     )
     gate_reviewed.add_argument("--require-task-family", action="append", default=[], help="Fail unless this task family is present")
-    gate_reviewed.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
+    gate_reviewed.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Deprecated compatibility flag; authoritative gate references remain output-relative",
+    )
     gate_reviewed.set_defaults(func=cmd_gate_reviewed)
 
     gate_compare = subparsers.add_parser("gate-compare-export", help="Evaluate readiness thresholds against an export-compare-rl dataset")
@@ -4880,7 +5197,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate a trainer preflight and emit the approved command without executing it",
     )
     trainer_launch_check.add_argument("--preflight", required=True, help="trainer_preflight.json to verify before trainer launch")
-    trainer_launch_check.add_argument("--out", help="Write trainer launch-check JSON to this path")
+    trainer_launch_check.add_argument(
+        "--out",
+        help="Write trainer launch-check JSON to this path; required unless --print-command is used",
+    )
     trainer_launch_check.add_argument("--require-gate", action="append", default=[], help="Require this preflight gate id to be present and passed")
     trainer_launch_check.add_argument(
         "--require-dataset-version",

@@ -2342,6 +2342,23 @@ def _event_record(index: int, event: Any) -> dict[str, Any]:
     return rendered
 
 
+def episode_events_sha256(events: Any) -> str:
+    """Return the canonical digest used to bind review items to episode behavior."""
+    source_events = events if isinstance(events, list) else []
+    normalized = [
+        _event_record(index, event)
+        for index, event in enumerate(source_events)
+    ]
+    encoded = json.dumps(
+        normalized,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _rule_reward(rule: dict[str, Any]) -> dict[str, Any]:
     penalty = int(rule.get("penalty", 0) or 0)
     passed = bool(rule.get("passed"))
