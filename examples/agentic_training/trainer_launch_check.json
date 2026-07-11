@@ -70,7 +70,7 @@
       "id": "preflight_validation_passed",
       "passed": true,
       "scope": {
-        "preflight": "examples/agentic_training/trainer_preflight.json"
+        "preflight": "trainer_preflight.json"
       },
       "summary": "preflight_validation_passed: passed=True"
     },
@@ -98,7 +98,7 @@
       "id": "preflight_passed",
       "passed": true,
       "scope": {
-        "preflight": "examples/agentic_training/trainer_preflight.json"
+        "preflight": "trainer_preflight.json"
       },
       "summary": "preflight_passed: passed=True"
     },
@@ -433,7 +433,7 @@
   ],
   "passed": true,
   "passed_gate_count": 1,
-  "preflight_path": "examples/agentic_training/trainer_preflight.json",
+  "preflight_path": "trainer_preflight.json",
   "readiness": "ready",
   "recommendation": "launch_allowed",
   "required_dataset_versions": [
@@ -446,6 +446,18 @@
     "launcher": "dry-run"
   },
   "schema_version": "hfr.trainer_launch_check.v1",
+  "source_artifacts": {
+    "trainer_preflight": {
+      "exists": true,
+      "kind": "file",
+      "path": "trainer_preflight.json",
+      "regular_file": true,
+      "schema_version": "hfr.trainer_preflight.v1",
+      "sha256": "895d74196b2ef6f298711d3d8cedba81ea77d4af70575bf28d1a4e04379717a2",
+      "size_bytes": 88398,
+      "symlink": false
+    }
+  },
   "validation": {
     "error_count": 0,
     "errors": [],

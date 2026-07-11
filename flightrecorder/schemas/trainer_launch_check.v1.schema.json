@@ -90,6 +90,9 @@
     "schema_version": {
       "const": "hfr.trainer_launch_check.v1"
     },
+    "source_artifacts": {
+      "$ref": "#/$defs/sourceArtifacts"
+    },
     "validation": {
       "$ref": "#/$defs/validation"
     }
@@ -224,6 +227,62 @@
         "path",
         "schema_version",
         "passed"
+      ],
+      "type": "object"
+    },
+    "sourceArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "trainer_preflight": {
+          "$ref": "#/$defs/trainerPreflightSourceArtifact"
+        }
+      },
+      "required": [
+        "trainer_preflight"
+      ],
+      "type": "object"
+    },
+    "trainerPreflightSourceArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "kind": {
+          "const": "file"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "const": true
+        },
+        "schema_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "const": false
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists",
+        "regular_file",
+        "symlink",
+        "schema_version",
+        "size_bytes",
+        "sha256"
       ],
       "type": "object"
     },

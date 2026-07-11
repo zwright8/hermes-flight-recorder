@@ -12,7 +12,7 @@
           "schema_errors": [],
           "schema_name": "model_grader_dry_run",
           "schema_passed": true,
-          "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+          "sha256": "4170dd311af0d9192027367a967ae88731d99ba26b2bab0cd8ee698f22f4c78a",
           "size_bytes": 5601,
           "source_passed": true,
           "source_recommendation": "gate_before_training_admission"
@@ -104,7 +104,7 @@
       "schema_errors": [],
       "schema_name": "model_grader_dry_run",
       "schema_passed": true,
-      "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+      "sha256": "4170dd311af0d9192027367a967ae88731d99ba26b2bab0cd8ee698f22f4c78a",
       "size_bytes": 5601,
       "source_passed": true,
       "source_recommendation": "gate_before_training_admission"

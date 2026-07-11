@@ -607,8 +607,15 @@ The preflight manifest and launch check are still evidence plumbing, not a
 trainer. They do not execute the command or update weights. `trainer-preflight`
 creates the signed-off evidence contract; `trainer-launch-check` is the
 consumer-side check an external training launcher can call immediately before it
-runs. It re-validates the preflight hashes and prints the approved command only
-when the launch contract still passes. Before public handoff, strict
+runs. JSON launch-check artifacts require `--out`, because that output location
+is the authoritative base for replaying the preflight reference. Use
+`--print-command` without `--out` only when a launcher needs the approved shell
+command and is not persisting a launch-check artifact. The check binds an
+output-relative preflight path, SHA-256, size, and schema,
+then revalidates and deterministically replays that exact current preflight
+before approving a command. Historical launch-check JSON without this source
+binding remains schema-readable but is non-authorizing under semantic
+validation. Before public handoff, strict
 trainer-preflight validation warns if the trainer-command raw string or argv
 tokens still carry absolute paths. Trainer-launch-check validation rejects
 approved-command raw, argv, or shell tokens that still carry local absolute
@@ -862,6 +869,19 @@ Dataset-curation receipts use the same public-safe replay boundary as
 rejection-sampling gates: gate refs, training-export directories, and manifest
 refs must resolve relative to the receipt directory. Unsafe absolute or
 traversal refs are redacted when generated and rejected during validation.
+The receipt also reopens the nested reviewed export and rollout receipt. Every
+selected training export must independently cover the complete admitted set;
+two partial exports cannot satisfy the check by union. Every human-reviewed
+item must match exactly one episode by episode/scenario identity, prompt,
+response, scorecard outcome, and a canonical SHA-256 over the normalized event
+sequence. The finalized human label must also agree with the trainer views:
+`accept` requires positive SFT and reward-model rows and cannot be a rejected
+DPO side; `reject`, `unsafe`, and `incomplete` are negative-only and cannot be
+SFT or chosen DPO rows; `needs_review` is excluded from SFT, reward-model, and
+DPO views. Every admitted rollout scenario must be present with the same
+scenario-content fingerprint. A semantically valid but unrelated, behavior-
+altered, or label-inverted training export is therefore blocked, and validation
+recomputes this convergence check instead of trusting the recorded pass bit.
 The committed closed-loop demo includes a real local `export-rl` bundle under
 `examples/agentic_training/training_export/` plus a
 `dataset_curation_receipt.json` that binds it to rejection sampling while
@@ -1288,8 +1308,11 @@ hand-authored into review or reviewed exports.
 Reviewers can also set `reviewer_confidence` to `high`, `medium`, `low`, or
 `unknown` so downstream gates can distinguish strongly grounded labels from
 labels that need another pass.
-Every review item and label template row carries `review_item_sha256`, a stable
-content fingerprint over the exact review item. `apply-review` refuses
+Every review item carries a canonical normalized-event digest plus path-
+independent canonical-JSON fingerprints of the source normalized trace and
+scorecard. The review item and label template also carry `review_item_sha256`,
+a stable content fingerprint over those identities and the rest of the exact
+review item. `apply-review` refuses
 completed labels when that fingerprint no longer matches the current review
 queue, so a stale or swapped review item cannot silently become training data.
 Review and reviewed manifests also fingerprint their generated JSONL/Markdown
@@ -1330,8 +1353,32 @@ letting trainers or CI jobs filter low-confidence labels without losing
 provenance. Reviewed manifests also carry `dataset_version`, redaction status,
 label provenance, and a registry pointer so `trainer-preflight
 --require-dataset-version` can select reviewed datasets exactly like automated
-training exports. Reviewed-label rows use the same public-safe path boundary for
-label-file paths and inherited review-item source artifact paths.
+training exports. Validation regenerates all four trainer views from the
+provenance-backed reviewed labels, using the recorded per-family pair limit,
+and requires exact row-for-row equality. Re-fingerprinting a poisoned, omitted,
+or duplicated trainer row therefore cannot make it authoritative. Reviewed-
+label rows use the same public-safe path boundary for label-file paths and
+inherited review-item source artifact paths.
+Reviewer identifiers and timestamps are required provenance, but they are
+self-asserted unless an external signed-review system authenticates them. The
+reviewed manifest therefore labels reviewer identity assurance as
+`self_asserted`: Flight Recorder proves the copied review content and its
+lineage, not the human's real-world identity.
+
+This v1 authorization path has an explicit **trusted-local-producer threat
+model**. Possession of write access to the review queue, completed-label file,
+reviewed export, or gate policy is treated as authorization to produce local
+training-control artifacts. The integrity checks defend against stale,
+partial, swapped, or accidentally mixed artifacts; they do not defend against
+a malicious process running as the same OS principal or a contributor who can
+rewrite both an artifact and its policy. Consequently, a `self_asserted`
+reviewed gate is authorizing only inside a single-principal workspace or CI job
+whose filesystem writers are already trusted. It is not portable proof of a
+reviewer's identity and must not cross a tenant, organization, or untrusted
+artifact boundary. Deployments with untrusted label producers must add an
+externally authenticated reviewer receipt and a separately administered trust
+policy before treating reviewed gates as authorizing; that identity system is
+outside the v1 contract.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed
@@ -1340,10 +1387,15 @@ medium/high-confidence labels, and no unresolved review labels before a trainer
 consumes `runs/reviewed_export`. It can also cap low-confidence and
 unknown-confidence labels. Current reviewed exports must include confidence
 fields; when an explicit legacy handoff uses `--skip-validation`, missing
-confidence is treated as `unknown`, which keeps older artifacts from
-accidentally passing a strict confidence policy. The gate validates the reviewed
+confidence is treated as `unknown` and the omitted validation check fails, so
+the artifact is explicitly advisory and non-authorizing. The gate validates the reviewed
 export by default, including artifact fingerprints, before it evaluates
-curation thresholds.
+curation thresholds. Authoritative `hfr.reviewed_gate.v1` artifacts now carry a
+closed reviewed-export tree identity and the complete effective policy.
+Historical v1 JSON can remain schema-readable, but semantic authorization
+requires both `source_artifacts` and `effective_policy`; unknown extension
+fields are rejected. Regenerate older gates with `gate-reviewed` before using
+them in rejection sampling, trainer preflight, or loop governance.
 
 `review-calibration` is the agreement check between deterministic scorecards and
 human labels. It reports agreement rate, false positives, false negatives,
@@ -1356,7 +1408,10 @@ reviewed labels cannot produce a passing calibration report unless validation
 is explicitly skipped. Calibration source refs must replay from the calibration
 artifact directory; unsafe absolute or traversal refs are redacted when
 generated, fail the `source_paths_replayable` check, and are rejected during
-validation before public calibration handoffs can pass.
+validation before public calibration handoffs can pass. Authoritative
+calibration artifacts likewise bind the reviewed-export tree and effective
+policy; legacy calibration JSON without those fields is non-authorizing and
+must be regenerated.
 
 Model-grader support is a control-plane contract, not a paid grader runner.
 Use `flightrecorder model-grader rubric` to bind a review queue to
@@ -1386,8 +1441,10 @@ absolute source refs before labels can reach a gate.
 `review-calibration` artifact it stays blocked and routes labels to human
 review or calibration. With a passing calibration artifact it can mark labels
 eligible for curated handoff only when the dry-run disagreement queue is empty
-and no mock label still requires human review. Write the portable queue before
-human adjudication:
+and no mock label still requires human review. The rubric, dry-run, and
+calibration must all bind the same `review_items.jsonl` content fingerprint;
+individually valid artifacts from different review queues cannot be combined
+into a passing gate. Write the portable queue before human adjudication:
 
 ```bash
 flightrecorder model-grader disagreement-queue \

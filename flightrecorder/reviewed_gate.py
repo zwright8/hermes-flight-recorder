@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import stat
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .gate_contract import build_gate_decision
+from .path_safety import (
+    _fingerprint_open_directory,
+    _open_directory_path_bound,
+)
 from .review import REVIEW_CONFIDENCE_LEVELS, REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
 
 REVIEWED_GATE_SCHEMA_VERSION = "hfr.reviewed_gate.v1"
@@ -31,10 +39,191 @@ _BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
 _POLICY_FIELDS = {"schema_version", "description", *_COUNT_POLICY_FIELDS, *_LIST_POLICY_FIELDS, *_BOOLEAN_POLICY_FIELDS}
 _REVIEW_LABEL_SET = set(REVIEW_LABELS)
 _REVIEW_CONFIDENCE_SET = set(REVIEW_CONFIDENCE_LEVELS)
+REVIEWED_EXPORT_SOURCE_ARTIFACT_FIELDS = frozenset(
+    {
+        "path",
+        "kind",
+        "exists",
+        "tree_hash_algorithm",
+        "sha256",
+        "file_count",
+        "size_bytes",
+        "contains_symlinks",
+        "manifest_path",
+        "manifest_sha256",
+        "manifest_size_bytes",
+        "dataset_version",
+    }
+)
+REVIEWED_EXPORT_CONTENT_FILES = (
+    "dataset_registry.json",
+    "manifest.json",
+    "provenance/completed_labels.jsonl",
+    "provenance/label_template.jsonl",
+    "provenance/review_items.jsonl",
+    "provenance/review_manifest.json",
+    "reviewed_dpo.jsonl",
+    "reviewed_labels.jsonl",
+    "reviewed_preferences.jsonl",
+    "reviewed_reward_model.jsonl",
+    "reviewed_sft.jsonl",
+)
 
 
 class ReviewedGatePolicyError(ValueError):
     """Raised when a reviewed-export gate policy file is malformed."""
+
+
+class ReviewedGateError(ValueError):
+    """Raised when a reviewed-export gate cannot be created safely."""
+
+
+@dataclass(frozen=True)
+class ReviewedExportSnapshot:
+    """One descriptor-attested reviewed-export source and its exact manifest."""
+
+    source_artifact: dict[str, Any]
+    manifest: dict[str, Any]
+
+
+def snapshot_reviewed_export(
+    reviewed_export_path: str | Path,
+    *,
+    display_path: str,
+) -> ReviewedExportSnapshot:
+    """Capture a reviewed tree and parse only the manifest bytes bound to it."""
+    export_path = Path(reviewed_export_path)
+    try:
+        with _open_directory_path_bound(export_path) as root_descriptor:
+            fingerprint = _fingerprint_open_directory(
+                root_descriptor,
+                display_path=export_path,
+                declared_files=frozenset(REVIEWED_EXPORT_CONTENT_FILES),
+                reject_undeclared=True,
+                selected_files=frozenset({"manifest.json"}),
+                expose_selected_files=True,
+            )
+            selected_file_sha256 = fingerprint.pop("selected_file_sha256", None)
+            descriptor_manifest_sha256 = (
+                selected_file_sha256.get("manifest.json")
+                if isinstance(selected_file_sha256, dict)
+                else None
+            )
+            if not isinstance(descriptor_manifest_sha256, str):
+                raise ValueError("tree fingerprint did not capture manifest.json")
+            manifest_bytes = _read_reviewed_manifest_bytes(root_descriptor)
+            fingerprint_after = _fingerprint_open_directory(
+                root_descriptor,
+                display_path=export_path,
+                declared_files=frozenset(REVIEWED_EXPORT_CONTENT_FILES),
+                reject_undeclared=True,
+            )
+    except (NotImplementedError, OSError, TypeError, ValueError) as exc:
+        raise ReviewedGateError(f"could not snapshot reviewed export {export_path}: {exc}") from exc
+    manifest_path = export_path / "manifest.json"
+    try:
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ReviewedGateError(f"could not parse reviewed export manifest {manifest_path}: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ReviewedGateError(f"reviewed export manifest must be a JSON object: {manifest_path}")
+    dataset_version = manifest.get("dataset_version")
+    if not isinstance(dataset_version, str) or not dataset_version:
+        raise ReviewedGateError(f"reviewed export manifest dataset_version must be a non-empty string: {manifest_path}")
+    manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    if manifest_sha256 != descriptor_manifest_sha256:
+        raise ReviewedGateError(
+            "reviewed export manifest bytes did not match the descriptor-bound "
+            f"tree fingerprint: {manifest_path}"
+        )
+    if fingerprint_after != fingerprint:
+        raise ReviewedGateError(
+            f"reviewed export changed while its manifest was being captured: {export_path}"
+        )
+    source_artifact = {
+        "path": display_path,
+        "kind": "directory",
+        "exists": True,
+        **fingerprint,
+        "manifest_path": f"{display_path.rstrip('/')}/manifest.json",
+        "manifest_sha256": manifest_sha256,
+        "manifest_size_bytes": len(manifest_bytes),
+        "dataset_version": dataset_version,
+    }
+    return ReviewedExportSnapshot(
+        source_artifact=source_artifact,
+        manifest=manifest,
+    )
+
+
+def build_reviewed_export_source_artifact(
+    reviewed_export_path: str | Path,
+    *,
+    display_path: str,
+) -> dict[str, Any]:
+    """Bind a reviewed gate to one exact, relocatable reviewed-export tree."""
+    return snapshot_reviewed_export(
+        reviewed_export_path,
+        display_path=display_path,
+    ).source_artifact
+
+
+def _read_reviewed_manifest_bytes(root_descriptor: int) -> bytes:
+    """Read manifest.json through the descriptor used for its tree fingerprint."""
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    before = os.stat(
+        "manifest.json",
+        dir_fd=root_descriptor,
+        follow_symlinks=False,
+    )
+    descriptor = os.open(
+        "manifest.json",
+        flags,
+        dir_fd=root_descriptor,
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            raise ValueError("manifest.json changed while being opened")
+        chunks: list[bytes] = []
+        captured = 0
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            captured += len(chunk)
+            if captured > before.st_size:
+                raise ValueError("manifest.json grew while being read")
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    namespace_after = os.stat(
+        "manifest.json",
+        dir_fd=root_descriptor,
+        follow_symlinks=False,
+    )
+    signatures = {
+        (
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_size,
+            item.st_mtime_ns,
+            item.st_ctime_ns,
+        )
+        for item in (before, opened, after, namespace_after)
+    }
+    if len(signatures) != 1 or captured != before.st_size:
+        raise ValueError("manifest.json changed while being read")
+    return b"".join(chunks)
 
 
 def load_reviewed_gate_policy(path: str | Path) -> dict[str, Any]:
@@ -94,6 +283,7 @@ def evaluate_reviewed_gate(
     manifest: dict[str, Any],
     *,
     reviewed_export_path: str | Path,
+    reviewed_export_source: dict[str, Any],
     min_reviewed_labels: int | None = None,
     min_accepted: int | None = None,
     min_rejected: int | None = None,
@@ -110,6 +300,7 @@ def evaluate_reviewed_gate(
     require_task_families: list[str] | None = None,
     validation_summary: dict[str, Any] | None = None,
     require_valid_export: bool = True,
+    strict_validation: bool = False,
 ) -> dict[str, Any]:
     """Evaluate readiness checks against an apply-review manifest."""
     label_counts = _label_counts(manifest.get("label_counts"))
@@ -124,8 +315,11 @@ def evaluate_reviewed_gate(
     unknown_confidence_count = confidence_counts.get("unknown", 0)
     checks: list[dict[str, Any]] = []
 
-    if require_valid_export:
-        _add_validation_check(checks, "valid_reviewed_export", validation_summary)
+    _add_validation_check(
+        checks,
+        "valid_reviewed_export",
+        validation_summary if require_valid_export else None,
+    )
 
     if min_reviewed_labels is not None:
         _add_min_check(checks, "min_reviewed_labels", _int_value(manifest.get("reviewed_label_count")), min_reviewed_labels)
@@ -193,6 +387,25 @@ def evaluate_reviewed_gate(
     return {
         "schema_version": REVIEWED_GATE_SCHEMA_VERSION,
         "reviewed_export": str(reviewed_export_path),
+        "source_artifacts": {"reviewed_export": dict(reviewed_export_source)},
+        "effective_policy": {
+            "min_reviewed_labels": min_reviewed_labels,
+            "min_accepted": min_accepted,
+            "min_rejected": min_rejected,
+            "min_sft": min_sft,
+            "min_reward_model": min_reward_model,
+            "min_preferences": min_preferences,
+            "min_dpo": min_dpo,
+            "min_high_confidence_labels": min_high_confidence_labels,
+            "min_medium_or_high_confidence_labels": min_medium_or_high_confidence_labels,
+            "max_needs_review": max_needs_review,
+            "max_low_confidence_labels": max_low_confidence_labels,
+            "max_unknown_confidence_labels": max_unknown_confidence_labels,
+            "forbid_labels": list(forbid_labels or []),
+            "require_task_families": list(require_task_families or []),
+            "require_valid_export": require_valid_export,
+            "strict_validation": strict_validation,
+        },
         "passed": passed,
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),

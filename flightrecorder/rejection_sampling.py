@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .atomic_json import atomic_write_json_cas, json_file_sha256
 from .source_contract import inspect_artifact_source
 
 REJECTION_SAMPLING_GATE_SCHEMA_VERSION = "hfr.rejection_sampling_gate.v1"
+_EXPECTED_SHA256_UNSET = object()
 
 
 class RejectionSamplingGateError(ValueError):
@@ -76,6 +77,18 @@ def build_rejection_sampling_gate(
         {"reviewed_gate_count": len(refs["reviewed_gate"]), "passing_count": _passing_ref_count(refs["reviewed_gate"])},
         {"reviewed_gate_count": ">=1", "all_passed": True},
     )
+    lineage_passed, lineage_actual = _review_lineage_status(
+        model_grader_gate_paths,
+        review_calibration_paths,
+        reviewed_gate_paths,
+    )
+    _add_check(
+        checks,
+        "review_dataset_lineage_converges",
+        lineage_passed,
+        lineage_actual,
+        {"one_reviewed_dataset_version": True, "model_grader_uses_supplied_calibration": True},
+    )
     _add_check(
         checks,
         "flight_recorder_did_not_write_training_rows",
@@ -131,17 +144,83 @@ def build_rejection_sampling_gate(
     }
 
 
-def write_rejection_sampling_gate(path: str | Path, gate: dict[str, Any]) -> None:
+def _review_lineage_status(
+    model_grader_gate_paths: list[str | Path],
+    review_calibration_paths: list[str | Path],
+    reviewed_gate_paths: list[str | Path],
+) -> tuple[bool, dict[str, Any]]:
+    calibration_payloads = [inspect_artifact_source(path, "review_calibration") for path in review_calibration_paths]
+    reviewed_payloads = [inspect_artifact_source(path, "reviewed_gate") for path in reviewed_gate_paths]
+    model_payloads = [inspect_artifact_source(path, "model_grader_gate") for path in model_grader_gate_paths]
+    calibration_versions = {
+        _reviewed_dataset_version(source.get("payload"))
+        for source in calibration_payloads
+        if source.get("ready") is True
+    }
+    reviewed_versions = {
+        _reviewed_dataset_version(source.get("payload"))
+        for source in reviewed_payloads
+        if source.get("ready") is True
+    }
+    calibration_versions.discard("")
+    reviewed_versions.discard("")
+    supplied_calibration_hashes = {
+        _sha256(Path(path))
+        for path, source in zip(review_calibration_paths, calibration_payloads, strict=True)
+        if source.get("ready") is True and Path(path).is_file()
+    }
+    model_calibration_hashes: set[str] = set()
+    for source in model_payloads:
+        payload = source.get("payload") if source.get("ready") is True else None
+        artifacts = payload.get("source_artifacts") if isinstance(payload, dict) else None
+        calibration = artifacts.get("review_calibration") if isinstance(artifacts, dict) else None
+        if isinstance(calibration, dict) and isinstance(calibration.get("sha256"), str):
+            model_calibration_hashes.add(calibration["sha256"])
+    versions = calibration_versions | reviewed_versions
+    passed = (
+        len(versions) == 1
+        and calibration_versions == versions
+        and reviewed_versions == versions
+        and bool(supplied_calibration_hashes)
+        and model_calibration_hashes == supplied_calibration_hashes
+    )
+    return passed, {
+        "dataset_versions": sorted(versions),
+        "calibration_artifact_count": len(supplied_calibration_hashes),
+        "model_grader_calibration_artifact_count": len(model_calibration_hashes),
+        "model_grader_uses_supplied_calibration": model_calibration_hashes == supplied_calibration_hashes,
+    }
+
+
+def _reviewed_dataset_version(value: Any) -> str:
+    payload = value if isinstance(value, dict) else {}
+    sources = payload.get("source_artifacts")
+    reviewed_export = sources.get("reviewed_export") if isinstance(sources, dict) else None
+    version = reviewed_export.get("dataset_version") if isinstance(reviewed_export, dict) else None
+    return version if isinstance(version, str) else ""
+
+
+def write_rejection_sampling_gate(
+    path: str | Path,
+    gate: dict[str, Any],
+    *,
+    expected_sha256: str | None | object = _EXPECTED_SHA256_UNSET,
+) -> None:
+    """Publish a rejection-sampling gate with compare-and-swap semantics."""
     out_path = Path(path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.loads(json.dumps(gate))
-    payload["gate_path"] = _output_relative_path(payload.get("gate_path"), out_path.parent)
-    for rows in payload.get("input_artifacts", {}).values():
-        if isinstance(rows, list):
-            for row in rows:
-                if isinstance(row, dict):
-                    row["path"] = _output_relative_path(row.get("path"), out_path.parent)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    effective_expected = (
+        json_file_sha256(out_path)
+        if expected_sha256 is _EXPECTED_SHA256_UNSET
+        else expected_sha256
+    )
+    if effective_expected is not None and not isinstance(effective_expected, str):
+        raise RejectionSamplingGateError("expected_sha256 must be a SHA-256 string or null")
+    atomic_write_json_cas(
+        out_path,
+        gate,
+        expected_sha256=effective_expected,
+        new_file_mode=0o666,
+    )
 
 
 def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, output_dir: Path | None = None) -> dict[str, Any]:
@@ -216,25 +295,6 @@ def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = No
     except (OSError, ValueError):
         return f"<redacted:{_basename(raw)}>"
     return relative if _is_public_rejection_sampling_ref_path(relative) else f"<redacted:{_basename(raw)}>"
-
-
-def _output_relative_path(value: Any, output_dir: Path) -> Any:
-    if not isinstance(value, str) or not value:
-        return value
-    if value.startswith("<redacted:"):
-        return value
-    path = Path(value)
-    if not path.is_absolute():
-        if not _is_public_rejection_sampling_ref_path(value):
-            return f"<redacted:{_basename(value)}>"
-        if not path.exists():
-            return value
-        path = path.resolve()
-    try:
-        relative = os.path.relpath(path.resolve(), output_dir.resolve())
-    except OSError:
-        return f"<redacted:{_basename(value)}>"
-    return relative if _is_public_rejection_sampling_ref_path(relative) else f"<redacted:{_basename(value)}>"
 
 
 def _is_public_rejection_sampling_ref_path(value: str) -> bool:

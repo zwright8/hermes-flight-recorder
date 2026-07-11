@@ -12,7 +12,7 @@
       "exists": true,
       "path": "examples/model_grader/review/label_template.jsonl",
       "regular_file": true,
-      "sha256": "25cca03d14251b85cc5100e9d3ce4cc797deec70165ba4c1469de5ef7406646b",
+      "sha256": "b92ae18eda635fddf59d9dd9593dd1084b4327e749136da778db5bfdfec88106",
       "size_bytes": 949,
       "symlink": false
     },
@@ -20,8 +20,8 @@
       "exists": true,
       "path": "examples/model_grader/review/review_items.jsonl",
       "regular_file": true,
-      "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
-      "size_bytes": 7556,
+      "sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+      "size_bytes": 8344,
       "symlink": false
     }
   },

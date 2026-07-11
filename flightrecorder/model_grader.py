@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .atomic_json import atomic_write_json_cas, json_file_sha256
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .review import REVIEW_LABELS, review_item_sha256
 from .schema_registry import SchemaRegistryError, check_schema_file
@@ -19,6 +20,7 @@ MODEL_GRADER_DRY_RUN_SCHEMA_VERSION = "hfr.model_grader_dry_run.v1"
 MODEL_GRADER_DISAGREEMENT_QUEUE_SCHEMA_VERSION = "hfr.model_grader_disagreement_queue.v1"
 MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION = "hfr.model_grader_override_receipt.v1"
 MODEL_GRADER_GATE_SCHEMA_VERSION = "hfr.model_grader_gate.v1"
+_EXPECTED_SHA256_UNSET = object()
 
 
 class ModelGraderError(ValueError):
@@ -289,6 +291,11 @@ def build_model_grader_gate(
     dry_run = _read_json(dry_file)
     override_receipt = _read_json(override_receipt_file) if override_receipt_file is not None else {}
     calibration = _read_json(calibration_file) if calibration_file is not None else {}
+    review_lineage_matches, review_lineage = _model_grader_review_lineage_status(
+        dry_file,
+        rubric_file,
+        calibration_file,
+    )
     labels_requiring_human_review = _labels_requiring_human_review_count(dry_run)
     dry_run_disagreement_queue_count = _dry_run_disagreement_queue_count(dry_run)
     overrides_required = labels_requiring_human_review > 0 or dry_run_disagreement_queue_count > 0
@@ -334,6 +341,13 @@ def build_model_grader_gate(
         and calibration.get("passed") is True,
         {"artifact": calibration_ref, "source_passed": calibration_ref.get("source_passed")},
         {"schema": "review_calibration", "passed": True, "source_passed": True},
+    )
+    _add_check(
+        checks,
+        "review_calibration_matches_dry_run_review_items",
+        review_lineage_matches,
+        review_lineage,
+        {"same_review_items": True},
     )
     agreement_rate = _calibration_agreement_rate(calibration)
     _add_check(
@@ -418,10 +432,161 @@ def build_model_grader_gate(
         "notes": [
             "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",
             "Missing or failing calibration blocks by default.",
+            "Calibration must derive from the same review-items fingerprint as the dry-run and rubric.",
             "Dry-run disagreement queues or labels requiring human review block until resolved by a future override contract.",
             "The gate records no provider calls and admits zero uncalibrated labels.",
         ],
     }
+
+
+def _model_grader_review_lineage_status(
+    dry_run_path: str | Path,
+    rubric_path: str | Path,
+    calibration_path: str | Path | None,
+) -> tuple[bool, dict[str, Any]]:
+    """Require dry-run, rubric, and calibration to use one review-items file."""
+    dry_run = _read_json(Path(dry_run_path))
+    rubric = _read_json(Path(rubric_path))
+    calibration_file = Path(calibration_path) if calibration_path is not None else None
+    calibration = _read_json(calibration_file) if calibration_file is not None else {}
+
+    dry_sources = dry_run.get("source_artifacts")
+    dry_export = dry_sources.get("review_export") if isinstance(dry_sources, dict) else None
+    dry_record = dry_export.get("review_items") if isinstance(dry_export, dict) else None
+    dry_identity = _model_grader_file_identity(dry_record)
+
+    rubric_export = rubric.get("review_export")
+    rubric_record = (
+        rubric_export.get("review_items")
+        if isinstance(rubric_export, dict)
+        else None
+    )
+    rubric_identity = _model_grader_file_identity(rubric_record)
+
+    calibration_record: Any = None
+    manifest_path = _review_calibration_manifest_path(calibration_file, calibration)
+    if manifest_path is not None:
+        calibration_sources = calibration.get("source_artifacts")
+        reviewed_source = (
+            calibration_sources.get("reviewed_export")
+            if isinstance(calibration_sources, dict)
+            else None
+        )
+        if _reviewed_manifest_matches_source_record(manifest_path, reviewed_source):
+            manifest = _read_json(manifest_path)
+            source_review_artifacts = manifest.get("source_review_artifacts")
+            calibration_record = (
+                source_review_artifacts.get("review_items")
+                if isinstance(source_review_artifacts, dict)
+                else None
+            )
+    calibration_identity = _model_grader_file_identity(calibration_record)
+    matches = (
+        dry_identity is not None
+        and rubric_identity is not None
+        and calibration_identity is not None
+        and dry_identity == rubric_identity == calibration_identity
+    )
+    return matches, {
+        "same_review_items": matches,
+        "dry_run_review_items_sha256": dry_identity[0] if dry_identity is not None else "",
+        "dry_run_review_items_size_bytes": dry_identity[1] if dry_identity is not None else 0,
+        "rubric_review_items_sha256": (
+            rubric_identity[0] if rubric_identity is not None else ""
+        ),
+        "rubric_review_items_size_bytes": (
+            rubric_identity[1] if rubric_identity is not None else 0
+        ),
+        "calibration_review_items_sha256": (
+            calibration_identity[0] if calibration_identity is not None else ""
+        ),
+        "calibration_review_items_size_bytes": (
+            calibration_identity[1] if calibration_identity is not None else 0
+        ),
+    }
+
+
+def _review_calibration_manifest_path(
+    calibration_path: Path | None,
+    calibration: dict[str, Any],
+) -> Path | None:
+    if calibration_path is None:
+        return None
+    source_artifacts = calibration.get("source_artifacts")
+    reviewed_source = (
+        source_artifacts.get("reviewed_export")
+        if isinstance(source_artifacts, dict)
+        else None
+    )
+    value = reviewed_source.get("manifest_path") if isinstance(reviewed_source, dict) else None
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return None
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    if (
+        path.is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "\\" in value
+        or "\x00" in value
+        or "://" in value
+        or ".." in path.parts
+        or any(part in {"", "."} or part.startswith("~") for part in path.parts)
+    ):
+        return None
+    manifest_path = calibration_path.parent / path
+    if (
+        _path_has_symlink_component(manifest_path, include_leaf=True)
+        or not manifest_path.exists()
+        or not manifest_path.is_file()
+    ):
+        return None
+    return manifest_path
+
+
+def _reviewed_manifest_matches_source_record(
+    manifest_path: Path,
+    reviewed_source: Any,
+) -> bool:
+    if not isinstance(reviewed_source, dict):
+        return False
+    expected_sha256 = reviewed_source.get("manifest_sha256")
+    expected_size = reviewed_source.get("manifest_size_bytes")
+    if (
+        not _is_lowercase_sha256(expected_sha256)
+        or isinstance(expected_size, bool)
+        or not isinstance(expected_size, int)
+        or expected_size < 0
+    ):
+        return False
+    try:
+        return manifest_path.stat().st_size == expected_size and _sha256(manifest_path) == expected_sha256
+    except OSError:
+        return False
+
+
+def _model_grader_file_identity(value: Any) -> tuple[str, int] | None:
+    if not isinstance(value, dict) or value.get("exists") is not True:
+        return None
+    sha256 = value.get("sha256")
+    size_bytes = value.get("size_bytes")
+    if (
+        not _is_lowercase_sha256(sha256)
+        or isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+    ):
+        return None
+    return sha256, size_bytes
+
+
+def _is_lowercase_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and value == value.lower()
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def build_model_grader_override_receipt(
@@ -535,12 +700,28 @@ def build_model_grader_override_receipt(
     }
 
 
-def write_model_grader_artifact(path: str | Path, payload: dict[str, Any]) -> None:
-    """Write stable JSON for any model-grader contract."""
+def write_model_grader_artifact(
+    path: str | Path,
+    payload: dict[str, Any],
+    *,
+    expected_sha256: str | None | object = _EXPECTED_SHA256_UNSET,
+) -> None:
+    """Publish a model-grader contract with compare-and-swap semantics."""
     out_path = Path(path)
     _require_output_file(out_path, "model-grader artifact output")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    effective_expected = (
+        json_file_sha256(out_path)
+        if expected_sha256 is _EXPECTED_SHA256_UNSET
+        else expected_sha256
+    )
+    if effective_expected is not None and not isinstance(effective_expected, str):
+        raise ModelGraderError("expected_sha256 must be a SHA-256 string or null")
+    atomic_write_json_cas(
+        out_path,
+        payload,
+        expected_sha256=effective_expected,
+        new_file_mode=0o666,
+    )
 
 
 def _read_review_items(review_export_dir: Path) -> list[dict[str, Any]]:

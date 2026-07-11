@@ -6,8 +6,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flightrecorder.dataset_curation import build_dataset_curation_receipt, write_dataset_curation_receipt
+from flightrecorder.dataset_curation import (
+    build_dataset_curation_receipt,
+    training_export_lineage_status,
+    write_dataset_curation_receipt,
+)
+from flightrecorder.review import review_item_sha256
 from flightrecorder.schema_registry import check_schema_file, list_schema_records
+from flightrecorder.training import episode_events_sha256
 from flightrecorder.validation import validate_artifacts
 
 
@@ -174,6 +180,211 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             validation = validate_artifacts(dataset_curation_receipt_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_receipt_blocks_training_export_from_unrelated_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(
+                root / "rejection_sampling_gate.json"
+            )
+            runs = root / "unrelated_runs"
+            export_dir = root / "unrelated_training_export"
+            scenario = ROOT / "scenarios" / "email_reply_completion_good.json"
+            for command in (
+                [
+                    sys.executable,
+                    "-m",
+                    "flightrecorder",
+                    "run",
+                    "--scenario",
+                    str(scenario),
+                    "--out",
+                    str(runs / "email"),
+                ],
+                [
+                    sys.executable,
+                    "-m",
+                    "flightrecorder",
+                    "export-rl",
+                    "--runs",
+                    str(runs),
+                    "--out",
+                    str(export_dir),
+                ],
+            ):
+                completed = subprocess.run(
+                    command,
+                    cwd=ROOT,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(
+                    completed.returncode,
+                    0,
+                    completed.stderr + completed.stdout,
+                )
+
+            out = root / "receipt.json"
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            lineage = next(
+                check
+                for check in receipt["checks"]
+                if check["id"] == "training_exports_cover_admitted_lineage"
+            )
+            self.assertFalse(receipt["passed"])
+            self.assertFalse(lineage["passed"])
+            self.assertGreater(lineage["actual"]["reviewed_item_missing_count"], 0)
+
+            lineage["passed"] = True
+            lineage["summary"] = (
+                "training_exports_cover_admitted_lineage: passed=True"
+            )
+            receipt["passed"] = True
+            receipt["failed_check_count"] = 0
+            receipt["blocked_reasons"] = []
+            receipt["readiness"] = "ready_for_external_trainer_handoff"
+            receipt["recommendation"] = "run_training_gate_and_trainer_preflight"
+            write_dataset_curation_receipt(out, receipt)
+
+            validation = validate_artifacts(
+                dataset_curation_receipt_paths=[out],
+                strict=True,
+            )
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(
+                error
+                for target in validation["targets"]
+                for error in target["errors"]
+            )
+            self.assertIn(
+                "training_exports_cover_admitted_lineage check must match",
+                errors,
+            )
+
+    def test_lineage_rejects_same_count_mutated_episode_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(
+                root / "rejection_sampling_gate.json"
+            )
+            export_dir = self.write_training_export(root / "training_export")
+            self.prepare_lineage_fixture(root, export_dir)
+            episodes_path = export_dir / "episodes.jsonl"
+            episodes = self.read_jsonl(episodes_path)
+            episode = next(
+                row
+                for row in episodes
+                if row["episode_id"] == "prompt_injection_good"
+            )
+            episode["events"][0]["text"] = "mutated behavior with unchanged event count"
+            self.write_jsonl(episodes_path, episodes)
+
+            passed, actual = training_export_lineage_status([gate], [export_dir])
+            replay_passed, replay_actual = training_export_lineage_status(
+                [gate], [export_dir]
+            )
+
+            self.assertFalse(passed)
+            self.assertEqual((passed, actual), (replay_passed, replay_actual))
+            self.assertIn(
+                "prompt_injection_good",
+                actual["mismatched_reviewed_item_ids"],
+            )
+            self.assertEqual(actual["training_exports"][0]["export_index"], 0)
+            self.assertGreater(
+                actual["training_exports"][0]["reviewed_item_mismatch_count"],
+                0,
+            )
+
+    def test_lineage_preserves_human_rejection_of_scorecard_positive_episode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(
+                root / "rejection_sampling_gate.json"
+            )
+            export_dir = self.write_training_export(root / "training_export")
+            self.prepare_lineage_fixture(root, export_dir)
+            labels_path = root / "model_grader" / "reviewed" / "reviewed_labels.jsonl"
+            labels = self.read_jsonl(labels_path)
+            accepted = next(
+                row
+                for row in labels
+                if row["review_item_id"] == "prompt_injection_good"
+            )
+            self.assertTrue(accepted["scorecard"]["passed"])
+            accepted["human_label"] = "reject"
+            self.write_jsonl(labels_path, labels)
+
+            passed, actual = training_export_lineage_status([gate], [export_dir])
+
+            self.assertFalse(passed)
+            export_actual = actual["training_exports"][0]
+            mismatch = next(
+                row
+                for row in export_actual["reviewed_label_mismatches"]
+                if row["review_item_id"] == "prompt_injection_good"
+            )
+            self.assertEqual(mismatch["human_label"], "reject")
+            self.assertIn("negative_label_forbids_sft_rows", mismatch["reasons"])
+            self.assertIn(
+                "negative_label_requires_one_negative_reward_model_row",
+                mismatch["reasons"],
+            )
+            self.assertIn(
+                "negative_label_forbids_chosen_dpo_role",
+                mismatch["reasons"],
+            )
+
+    def test_lineage_requires_every_export_to_cover_every_admitted_item(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(
+                root / "rejection_sampling_gate.json"
+            )
+            first = self.write_training_export(root / "training_export_a")
+            second = self.write_training_export(root / "training_export_b")
+            self.prepare_lineage_fixture(root, first)
+            first_episodes = self.read_jsonl(first / "episodes.jsonl")
+            second_episodes = self.read_jsonl(second / "episodes.jsonl")
+            self.write_jsonl(
+                first / "episodes.jsonl",
+                [
+                    row
+                    for row in first_episodes
+                    if row["episode_id"] != "prompt_injection_bad"
+                ],
+            )
+            self.write_jsonl(
+                second / "episodes.jsonl",
+                [
+                    row
+                    for row in second_episodes
+                    if row["episode_id"] != "prompt_injection_good"
+                ],
+            )
+
+            passed, actual = training_export_lineage_status(
+                [gate], [first, second]
+            )
+
+            self.assertFalse(passed)
+            self.assertEqual(actual["training_export_count"], 2)
+            self.assertEqual(
+                actual["training_exports"][0]["missing_reviewed_item_ids"],
+                ["prompt_injection_bad"],
+            )
+            self.assertEqual(
+                actual["training_exports"][1]["missing_reviewed_item_ids"],
+                ["prompt_injection_good"],
+            )
+            self.assertEqual(actual["reviewed_item_missing_count"], 2)
 
     def test_receipt_redacts_unreplayable_external_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -350,6 +561,28 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertIn("dataset_curation_receipt.input_artifacts.rejection_sampling_gate[0].size_bytes does not match", errors)
             self.assertIn("dataset_curation_receipt.input_artifacts.rejection_sampling_gate[0].sha256 does not match", errors)
 
+    def test_validation_rejects_transitively_stale_reviewed_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
+            export_dir = self.write_training_export(root / "training_export")
+            out = root / "receipt.json"
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_dataset_curation_receipt(out, receipt)
+            reviewed_sft = root / "model_grader" / "reviewed" / "reviewed_sft.jsonl"
+            reviewed_sft.write_bytes(reviewed_sft.read_bytes() + b"\n")
+
+            validation = validate_artifacts(dataset_curation_receipt_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("must remain semantically ready for role 'rejection_sampling_gate'", errors)
+
     def test_validation_rejects_stale_training_export_manifest_ref(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -393,6 +626,41 @@ class DatasetCurationReceiptTests(unittest.TestCase):
     def write_training_export(self, path: Path) -> Path:
         shutil.copytree(ROOT / "examples" / "agentic_training" / "training_export", path)
         return path
+
+    def prepare_lineage_fixture(self, root: Path, export_dir: Path) -> None:
+        episodes = {
+            row["episode_id"]: row
+            for row in self.read_jsonl(export_dir / "episodes.jsonl")
+        }
+        items_path = root / "model_grader" / "reviewed" / "provenance" / "review_items.jsonl"
+        labels_path = root / "model_grader" / "reviewed" / "reviewed_labels.jsonl"
+        items = self.read_jsonl(items_path)
+        item_hashes: dict[str, str] = {}
+        for item in items:
+            episode = episodes[item["episode_id"]]
+            item["episode_events_sha256"] = episode_events_sha256(episode["events"])
+            item["review_item_sha256"] = review_item_sha256(item)
+            item_hashes[item["review_item_id"]] = item["review_item_sha256"]
+        labels = self.read_jsonl(labels_path)
+        for label in labels:
+            label["review_item_sha256"] = item_hashes[label["review_item_id"]]
+        self.write_jsonl(items_path, items)
+        self.write_jsonl(labels_path, labels)
+
+    @staticmethod
+    def read_jsonl(path: Path) -> list[dict]:
+        return [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    @staticmethod
+    def write_jsonl(path: Path, rows: list[dict]) -> None:
+        path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":

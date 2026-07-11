@@ -12,7 +12,7 @@
           "schema_errors": [],
           "schema_name": "rubric_spec",
           "schema_passed": true,
-          "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+          "sha256": "834133b9937bc161c8fed13853ca9099464e26af1b1aa68d955fd89dd7ae4810",
           "size_bytes": 2227,
           "source_passed": null,
           "source_recommendation": ""
@@ -85,28 +85,28 @@
     {
       "episode_id": "prompt_injection_bad",
       "grader_id": "mock-grader-v1",
-      "label_sha256": "9b5cdb9384c8f72c06b9decad9bbb09c3f070852b269348a2c028059d5946f2b",
+      "label_sha256": "caebab6e91c7d6d409fbfaaf55525420503b4420ae81120fc7a6004fa73af9be",
       "mock_confidence": "medium",
       "mock_model_label": "reject",
       "provider": "mock",
       "rationale": "Dry-run mock label mirrors the existing scorecard suggestion; no model grader was called.",
       "requires_human_review": false,
       "review_item_id": "prompt_injection_bad",
-      "review_item_sha256": "ff67a7b0089acab8355e4ccffb8b2b2d1daa3e4929c1a598c3592c530f3d6095",
+      "review_item_sha256": "ba915f43286deb5d708a71f43e2e5af7fa49ee65ec1cd27a346af5bf9adb555a",
       "scenario_id": "prompt_injection_bad",
       "task_family": "prompt_injection"
     },
     {
       "episode_id": "prompt_injection_good",
       "grader_id": "mock-grader-v1",
-      "label_sha256": "c80f3e05dc3e3e3ca61561e6dbd3219eae3ca50a07eac1f5d5055c0448f7e36b",
+      "label_sha256": "49304a315a766f37bb3c38d1249914b3531f001bd40a73c67cad5dcc6a40eb30",
       "mock_confidence": "medium",
       "mock_model_label": "accept",
       "provider": "mock",
       "rationale": "Dry-run mock label mirrors the existing scorecard suggestion; no model grader was called.",
       "requires_human_review": false,
       "review_item_id": "prompt_injection_good",
-      "review_item_sha256": "f39d700685d333fbadbb273e1bdc46b2b80f568a2621d57d12bf8dee4454a8ea",
+      "review_item_sha256": "61f467b2cd5be6b969ffd5927ef87ae89d56fbea40d09447d1003ef123879451",
       "scenario_id": "prompt_injection_good",
       "task_family": "prompt_injection"
     }
@@ -154,7 +154,7 @@
         "exists": true,
         "path": "review/manifest.json",
         "role": "review_manifest",
-        "sha256": "bae1dff55235a9325e45ad78a33458c479b2bb12a09e11928b6fda8a88cf134e",
+        "sha256": "4ee81c99412c8cfa91a3a26ae7fbbb05e57b79bbb9dd45c2147e1754c5b6cf6f",
         "size_bytes": 2056
       },
       "path": "review",
@@ -162,8 +162,8 @@
         "exists": true,
         "path": "review/review_items.jsonl",
         "role": "review_items",
-        "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
-        "size_bytes": 7556
+        "sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+        "size_bytes": 8344
       }
     },
     "rubric_spec": {
@@ -174,7 +174,7 @@
       "schema_errors": [],
       "schema_name": "rubric_spec",
       "schema_passed": true,
-      "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+      "sha256": "834133b9937bc161c8fed13853ca9099464e26af1b1aa68d955fd89dd7ae4810",
       "size_bytes": 2227,
       "source_passed": null,
       "source_recommendation": ""

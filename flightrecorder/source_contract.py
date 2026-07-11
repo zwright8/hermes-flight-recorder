@@ -157,6 +157,18 @@ _MAX_SEMANTIC_SNAPSHOT_REFERENCE_COMPONENTS = 64
 _MAX_SEMANTIC_SNAPSHOT_REFERENCE_RESOLUTION_STEPS = 65536
 _MAX_SEMANTIC_SNAPSHOT_BOUNDARY_EXPANSIONS = 4
 
+# Reviewed datasets contain line-oriented training material rather than
+# control-plane JSON. A typed, content-authenticated reviewed-export record may
+# admit those JSONL files above the generic per-file ceiling, but only under the
+# same 16 MiB aggregate bound as generic semantic snapshots and only through
+# the exact reviewed-export layout. This permits useful >4 MiB JSONL records
+# without allowing validation to spool or later materialize hundreds of MiB.
+_MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES = 16 * 1024 * 1024
+_REVIEWED_EXPORT_RECORD_SCHEMA_VERSIONS = {
+    "hfr.review_calibration.v1",
+    "hfr.reviewed_gate.v1",
+}
+
 
 @dataclass(frozen=True)
 class _FileAttestation:
@@ -164,6 +176,7 @@ class _FileAttestation:
     metadata: tuple[int, int, int, int, int]
     sha256: str
     content: bytes
+    spool_path: Path | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -178,6 +191,42 @@ class _CapturedDirectoryTree:
     directories: tuple[tuple[str, tuple[int, ...]], ...]
     files: tuple[tuple[str, _FileAttestation], ...]
     referenced_path_count: int = 0
+    exact_directory_entries: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+
+@dataclass
+class _ReviewedExportSpoolStore:
+    directory: tempfile.TemporaryDirectory[str] | None = None
+    aggregate_bytes: int = 0
+    file_count: int = 0
+
+    def allocate(self, size_bytes: int) -> Path | None:
+        if (
+            size_bytes < 0
+            or self.aggregate_bytes + size_bytes > _MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES
+        ):
+            return None
+        if self.directory is None:
+            self.directory = tempfile.TemporaryDirectory(prefix="hfr-reviewed-snapshot-")
+        path = Path(self.directory.name) / f"{self.file_count:04d}.jsonl"
+        self.aggregate_bytes += size_bytes
+        self.file_count += 1
+        return path
+
+    def release(self, size_bytes: int, path: Path) -> None:
+        self.aggregate_bytes -= size_bytes
+        self.file_count -= 1
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def close(self) -> None:
+        if self.directory is None:
+            return
+        directory = self.directory
+        self.directory = None
+        directory.cleanup()
 
 
 @dataclass
@@ -206,6 +255,20 @@ class _SnapshotResourceBudget:
             return False
         self.files.add(key)
         self.aggregate_bytes += size_bytes
+        return True
+
+    def reserve_spooled_file(self, relative: PurePosixPath) -> bool:
+        """Count a reviewed JSONL file without charging the generic byte cap."""
+        if not _is_safe_snapshot_relative_path(relative.as_posix()):
+            return False
+        key = relative.as_posix()
+        if key in self.files:
+            return True
+        if len(self.files) + 1 > _MAX_SEMANTIC_SNAPSHOT_FILES:
+            return False
+        if not self.reserve_directory(relative.parent):
+            return False
+        self.files.add(key)
         return True
 
     def reserve_directory(self, relative: PurePosixPath) -> bool:
@@ -265,6 +328,18 @@ class _PrivateSemanticSnapshot:
     source_attestation: _FileAttestation
     tree: _CapturedDirectoryTree
     repository_boundary: bool
+    spool_store: _ReviewedExportSpoolStore | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
+
+    def close(self) -> None:
+        if self.spool_store is not None:
+            self.spool_store.close()
+
+    def __del__(self) -> None:
+        self.close()
 
 
 class _SnapshotBoundaryExpansion(Exception):
@@ -400,26 +475,30 @@ def inspect_json_source(
                     and _semantic_contract_valid(path, contract_role)
                 )
 
-    after = _attest_regular_file(path) if before is not None else None
-    stable = before is not None and before == after
-    if private_snapshot is not None:
-        try:
-            recaptured_tree = _recapture_private_semantic_snapshot(private_snapshot)
-        except (MemoryError, RecursionError):
-            recaptured_tree = None
-        stable = stable and private_snapshot.tree == recaptured_tree
-    semantic_valid = stable and semantic_valid
-    return {
-        "path": path,
-        "physical_exists": physical_exists,
-        "regular_file": regular_file,
-        "parse_valid": parse_valid,
-        "schema_valid": schema_valid,
-        "semantic_valid": semantic_valid,
-        "stable": stable,
-        "ready": regular_file and parse_valid and schema_valid and semantic_valid and stable,
-        "payload": payload,
-    }
+    try:
+        after = _attest_regular_file(path) if before is not None else None
+        stable = before is not None and before == after
+        if private_snapshot is not None:
+            try:
+                recaptured_tree = _recapture_private_semantic_snapshot(private_snapshot)
+            except (MemoryError, RecursionError):
+                recaptured_tree = None
+            stable = stable and private_snapshot.tree == recaptured_tree
+        semantic_valid = stable and semantic_valid
+        return {
+            "path": path,
+            "physical_exists": physical_exists,
+            "regular_file": regular_file,
+            "parse_valid": parse_valid,
+            "schema_valid": schema_valid,
+            "semantic_valid": semantic_valid,
+            "stable": stable,
+            "ready": regular_file and parse_valid and schema_valid and semantic_valid and stable,
+            "payload": payload,
+        }
+    finally:
+        if private_snapshot is not None:
+            private_snapshot.close()
 
 
 def _requires_path_semantic_validation(role: str) -> bool:
@@ -533,6 +612,8 @@ def _capture_private_semantic_snapshot(
         return None
 
     boundary_descriptor: int | None = None
+    spool_store: _ReviewedExportSpoolStore | None = None
+    spool_transferred = False
     try:
         source_attestation = _attest_regular_file_at(parent_descriptor, absolute_path.name)
         if source_attestation is None:
@@ -580,6 +661,9 @@ def _capture_private_semantic_snapshot(
                 return None
             repository_boundary = repository_root is not None and boundary_path == repository_root
             source_relative_path = absolute_path.relative_to(boundary_path)
+            if spool_store is not None:
+                spool_store.close()
+            spool_store = _ReviewedExportSpoolStore()
             try:
                 tree = _capture_referenced_tree_fd(
                     boundary_descriptor,
@@ -587,8 +671,11 @@ def _capture_private_semantic_snapshot(
                     repository_boundary=repository_boundary,
                     allow_parent_expansion=parent_depth < maximum_parent_depth,
                     budget=capture_budget,
+                    spool_store=spool_store,
                 )
             except _SnapshotBoundaryExpansion as expansion:
+                spool_store.close()
+                spool_store = None
                 boundary_expansion_count += 1
                 if (
                     expansion.parent_levels <= 0
@@ -612,16 +699,24 @@ def _capture_private_semantic_snapshot(
         captured_source = dict(tree.files).get(source_relative_path.as_posix())
         if captured_source != source_attestation:
             return None
-        return _PrivateSemanticSnapshot(
+        retained_spool = spool_store if spool_store.directory is not None else None
+        if retained_spool is None:
+            spool_store.close()
+        snapshot = _PrivateSemanticSnapshot(
             boundary_path=boundary_path,
             source_relative_path=source_relative_path,
             source_attestation=source_attestation,
             tree=tree,
             repository_boundary=repository_boundary,
+            spool_store=retained_spool,
         )
+        spool_transferred = retained_spool is not None
+        return snapshot
     except (MemoryError, OSError, RecursionError, UnicodeError, ValueError):
         return None
     finally:
+        if spool_store is not None and not spool_transferred:
+            spool_store.close()
         if boundary_descriptor is not None:
             os.close(boundary_descriptor)
         os.close(parent_descriptor)
@@ -733,8 +828,7 @@ def _materialize_private_semantic_snapshot(
             for relative, file_attestation in snapshot.tree.files:
                 destination = snapshot_root / relative
                 destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                with destination.open("xb") as handle:
-                    handle.write(file_attestation.content)
+                _materialize_attested_file(destination, file_attestation)
                 destination.chmod(0o400)
             for directory in sorted(set(directories), key=lambda item: len(item.parts), reverse=True):
                 directory.chmod(0o500)
@@ -754,6 +848,7 @@ def _captured_tree_within_resource_budgets(tree: _CapturedDirectoryTree) -> bool
         return False
     budget = _SnapshotResourceBudget()
     budget.referenced_path_count = tree.referenced_path_count
+    spooled_bytes = 0
     seen_directories: set[str] = set()
     for relative, _signature in tree.directories:
         if relative in seen_directories:
@@ -767,13 +862,124 @@ def _captured_tree_within_resource_budgets(tree: _CapturedDirectoryTree) -> bool
             return False
         seen_files.add(relative)
         size_bytes = attestation.metadata[2]
+        if attestation.spool_path is None:
+            if (
+                size_bytes != len(attestation.content)
+                or hashlib.sha256(attestation.content).hexdigest() != attestation.sha256
+                or not budget.reserve_file(PurePosixPath(relative), size_bytes)
+            ):
+                return False
+        else:
+            spooled_bytes += size_bytes
+            if (
+                attestation.content
+                or spooled_bytes > _MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES
+                or not budget.reserve_spooled_file(PurePosixPath(relative))
+                or not _spool_matches_attestation(attestation)
+            ):
+                return False
+    directory_keys = {".", *seen_directories}
+    seen_exact_directories: set[str] = set()
+    for relative, names in tree.exact_directory_entries:
         if (
-            size_bytes != len(attestation.content)
-            or hashlib.sha256(attestation.content).hexdigest() != attestation.sha256
-            or not budget.reserve_file(PurePosixPath(relative), size_bytes)
+            relative in seen_exact_directories
+            or relative not in directory_keys
+            or tuple(sorted(names)) != names
+            or len(set(names)) != len(names)
+            or any(
+                not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name
+                for name in names
+            )
         ):
             return False
+        seen_exact_directories.add(relative)
+        for _name in names:
+            if not budget.record_directory_entry():
+                return False
     return True
+
+
+def _materialize_attested_file(destination: Path, attestation: _FileAttestation) -> None:
+    if attestation.spool_path is None:
+        with destination.open("xb") as handle:
+            handle.write(attestation.content)
+        return
+    spool_path = attestation.spool_path
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(spool_path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size != attestation.metadata[2]:
+            raise ValueError("reviewed snapshot spool metadata changed")
+        digest = hashlib.sha256()
+        copied_bytes = 0
+        with destination.open("xb") as handle:
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                copied_bytes += len(chunk)
+                if copied_bytes > _MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES:
+                    raise ValueError("reviewed snapshot spool exceeds resource budget")
+                digest.update(chunk)
+                handle.write(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    if (
+        _file_stat_signature(before) != _file_stat_signature(after)
+        or copied_bytes != attestation.metadata[2]
+        or digest.hexdigest() != attestation.sha256
+    ):
+        raise ValueError("reviewed snapshot spool changed while being materialized")
+
+
+def _spool_matches_attestation(attestation: _FileAttestation) -> bool:
+    spool_path = attestation.spool_path
+    if spool_path is None:
+        return False
+    try:
+        before = spool_path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(before.st_mode) or before.st_size != attestation.metadata[2]:
+            return False
+        digest = hashlib.sha256()
+        captured = 0
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        descriptor = os.open(spool_path, flags)
+        try:
+            opened = os.fstat(descriptor)
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                captured += len(chunk)
+                if captured > _MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES:
+                    return False
+                digest.update(chunk)
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        pathname_after = spool_path.stat(follow_symlinks=False)
+    except (MemoryError, OSError):
+        return False
+    return (
+        _file_stat_signature(before)
+        == _file_stat_signature(opened)
+        == _file_stat_signature(after)
+        == _file_stat_signature(pathname_after)
+        and captured == attestation.metadata[2]
+        and digest.hexdigest() == attestation.sha256
+    )
 
 
 def _validate_private_semantic_snapshot(snapshot: _PrivateSemanticSnapshot, role: str) -> bool:
@@ -876,65 +1082,111 @@ def _attest_regular_file_at(
     *,
     max_bytes: int = _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES,
 ) -> _FileAttestation | None:
+    return _stream_attest_regular_file_at(
+        directory_descriptor,
+        name,
+        max_bytes=min(max_bytes, _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES),
+        retain_content=True,
+    )
+
+
+def _attest_regular_file_at_to_spool(
+    directory_descriptor: int,
+    name: str,
+    *,
+    max_bytes: int,
+    spool_path: Path,
+) -> _FileAttestation | None:
+    return _stream_attest_regular_file_at(
+        directory_descriptor,
+        name,
+        max_bytes=max_bytes,
+        retain_content=False,
+        spool_path=spool_path,
+    )
+
+
+def _attest_regular_file_at_digest(
+    directory_descriptor: int,
+    name: str,
+    *,
+    max_bytes: int,
+) -> _FileAttestation | None:
+    return _stream_attest_regular_file_at(
+        directory_descriptor,
+        name,
+        max_bytes=max_bytes,
+        retain_content=False,
+    )
+
+
+def _stream_attest_regular_file_at(
+    directory_descriptor: int,
+    name: str,
+    *,
+    max_bytes: int,
+    retain_content: bool,
+    spool_path: Path | None = None,
+) -> _FileAttestation | None:
+    spool_created = False
     try:
         pathname_before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-    except (MemoryError, OSError):
-        return None
-    effective_max_bytes = min(max_bytes, _MAX_SEMANTIC_SNAPSHOT_FILE_BYTES)
-    if (
-        effective_max_bytes < 0
-        or not stat.S_ISREG(pathname_before.st_mode)
-        or pathname_before.st_size > effective_max_bytes
-    ):
-        return None
-
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_NONBLOCK", 0)
-    )
-    try:
-        descriptor = os.open(name, flags, dir_fd=directory_descriptor)
-    except (MemoryError, OSError):
-        return None
-
-    chunks: list[bytes] = []
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_size > effective_max_bytes:
+        if (
+            max_bytes < 0
+            or not stat.S_ISREG(pathname_before.st_mode)
+            or pathname_before.st_size > max_bytes
+            or (retain_content and spool_path is not None)
+        ):
             return None
-        captured_bytes = 0
-        while True:
-            remaining = effective_max_bytes - captured_bytes
-            chunk = os.read(descriptor, min(1024 * 1024, remaining + 1))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            captured_bytes += len(chunk)
-            if captured_bytes > effective_max_bytes:
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        descriptor = os.open(name, flags, dir_fd=directory_descriptor)
+        chunks: list[bytes] = []
+        digest = hashlib.sha256()
+        spool_handle = None
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_size > max_bytes:
                 return None
-        after = os.fstat(descriptor)
-    except (MemoryError, OSError):
-        return None
-    finally:
-        os.close(descriptor)
-
-    try:
+            if spool_path is not None:
+                spool_handle = spool_path.open("xb")
+                spool_created = True
+            captured_bytes = 0
+            while True:
+                remaining = max_bytes - captured_bytes
+                chunk = os.read(descriptor, min(1024 * 1024, remaining + 1))
+                if not chunk:
+                    break
+                captured_bytes += len(chunk)
+                if captured_bytes > max_bytes:
+                    return None
+                digest.update(chunk)
+                if retain_content:
+                    chunks.append(chunk)
+                if spool_handle is not None:
+                    spool_handle.write(chunk)
+            if spool_handle is not None:
+                spool_handle.flush()
+                os.fsync(spool_handle.fileno())
+            after = os.fstat(descriptor)
+        finally:
+            if spool_handle is not None:
+                spool_handle.close()
+            os.close(descriptor)
         pathname_after = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-    except (MemoryError, OSError):
-        return None
-    if not (
-        _file_stat_signature(pathname_before)
-        == _file_stat_signature(before)
-        == _file_stat_signature(after)
-        == _file_stat_signature(pathname_after)
-    ):
-        return None
-
-    try:
-        content = b"".join(chunks)
-        return _FileAttestation(
+        if not (
+            _file_stat_signature(pathname_before)
+            == _file_stat_signature(before)
+            == _file_stat_signature(after)
+            == _file_stat_signature(pathname_after)
+        ):
+            return None
+        content = b"".join(chunks) if retain_content else b""
+        attestation = _FileAttestation(
             identity=(after.st_dev, after.st_ino),
             metadata=(
                 after.st_mode,
@@ -943,11 +1195,20 @@ def _attest_regular_file_at(
                 after.st_mtime_ns,
                 after.st_ctime_ns,
             ),
-            sha256=hashlib.sha256(content).hexdigest(),
+            sha256=digest.hexdigest(),
             content=content,
+            spool_path=spool_path,
         )
-    except MemoryError:
+        spool_created = False
+        return attestation
+    except (MemoryError, OSError):
         return None
+    finally:
+        if spool_created and spool_path is not None:
+            try:
+                spool_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _directory_open_flags() -> int:
@@ -1034,6 +1295,7 @@ def _recapture_private_semantic_snapshot(
             return None
         budget = _SnapshotResourceBudget()
         budget.referenced_path_count = snapshot.tree.referenced_path_count
+        spooled_bytes = 0
         directories: list[tuple[str, tuple[int, ...]]] = []
         for relative, expected_signature in snapshot.tree.directories:
             relative_path = PurePosixPath(relative)
@@ -1048,21 +1310,47 @@ def _recapture_private_semantic_snapshot(
                 else _file_stat_signature(directory_stat)
             )
             directories.append((relative, signature))
+        exact_directory_entries: list[tuple[str, tuple[str, ...]]] = []
+        for relative, expected_names in snapshot.tree.exact_directory_entries:
+            relative_path = PurePosixPath(relative)
+            directory_descriptor = _open_relative_directory(descriptor, relative_path)
+            if directory_descriptor is None:
+                return None
+            try:
+                names = _bounded_directory_names(directory_descriptor, budget)
+            finally:
+                os.close(directory_descriptor)
+            if names is None or tuple(names) != expected_names:
+                return None
+            exact_directory_entries.append((relative, tuple(names)))
         files: list[tuple[str, _FileAttestation]] = []
-        for relative, _expected_attestation in snapshot.tree.files:
+        for relative, expected_attestation in snapshot.tree.files:
             relative_path = PurePosixPath(relative)
             file_stat = _relative_path_stat(descriptor, relative_path)
-            if (
-                file_stat is None
-                or not budget.reserve_file(relative_path, file_stat.st_size)
-                or not budget.reserve_read(file_stat.st_size)
-            ):
+            if file_stat is None:
                 return None
-            attestation = _attest_relative_file(
-                descriptor,
-                relative_path,
-                max_bytes=file_stat.st_size,
-            )
+            if expected_attestation.spool_path is None:
+                if not budget.reserve_file(relative_path, file_stat.st_size) or not budget.reserve_read(
+                    file_stat.st_size
+                ):
+                    return None
+                attestation = _attest_relative_file(
+                    descriptor,
+                    relative_path,
+                    max_bytes=file_stat.st_size,
+                )
+            else:
+                spooled_bytes += file_stat.st_size
+                if (
+                    spooled_bytes > _MAX_REVIEWED_EXPORT_SNAPSHOT_BYTES
+                    or not budget.reserve_spooled_file(relative_path)
+                ):
+                    return None
+                attestation = _attest_relative_file_digest(
+                    descriptor,
+                    relative_path,
+                    max_bytes=file_stat.st_size,
+                )
             if attestation is None:
                 return None
             files.append((relative, attestation))
@@ -1071,6 +1359,7 @@ def _recapture_private_semantic_snapshot(
             directories=tuple(directories),
             files=tuple(files),
             referenced_path_count=snapshot.tree.referenced_path_count,
+            exact_directory_entries=tuple(exact_directory_entries),
         )
     except (MemoryError, RecursionError):
         return None
@@ -1085,12 +1374,15 @@ def _capture_referenced_tree_fd(
     repository_boundary: bool,
     allow_parent_expansion: bool = False,
     budget: _SnapshotResourceBudget | None = None,
+    spool_store: _ReviewedExportSpoolStore | None = None,
 ) -> _CapturedDirectoryTree | None:
     files: dict[str, _FileAttestation] = {}
     directories: dict[str, tuple[int, ...]] = {}
     pending_json: list[PurePosixPath] = []
     scanned_json: set[str] = set()
     captured_directory_roots: set[PurePosixPath] = set()
+    authenticated_reviewed_exports: dict[str, dict[str, Any]] = {}
+    exact_directory_entries: dict[str, tuple[str, ...]] = {}
     budget = budget or _SnapshotResourceBudget()
 
     def add_file(relative: PurePosixPath) -> bool:
@@ -1190,6 +1482,34 @@ def _capture_referenced_tree_fd(
             continue
         if not _json_structure_within_resource_budgets(payload):
             return None
+        if isinstance(payload, dict):
+            reviewed_record = _typed_reviewed_export_source_record(payload)
+            if reviewed_record is not None:
+                reviewed_relative = _normalized_relative_path(
+                    current.parent,
+                    reviewed_record["path"],
+                )
+                if reviewed_relative is None:
+                    return None
+                reviewed_key = reviewed_relative.as_posix()
+                prior_record = authenticated_reviewed_exports.get(reviewed_key)
+                if prior_record is not None:
+                    if prior_record != reviewed_record:
+                        return None
+                elif _relative_path_kind(root_descriptor, reviewed_relative) == "directory":
+                    if spool_store is None or not _capture_authenticated_reviewed_export_fd(
+                        root_descriptor,
+                        reviewed_relative,
+                        reviewed_record,
+                        files=files,
+                        directories=directories,
+                        exact_directory_entries=exact_directory_entries,
+                        budget=budget,
+                        spool_store=spool_store,
+                    ):
+                        return None
+                    authenticated_reviewed_exports[reviewed_key] = reviewed_record
+                    captured_directory_roots.add(reviewed_relative)
         if isinstance(payload, dict) and payload.get("schema_version") == "hfr.rl.manifest.v1":
             split_directory = _normalized_relative_path(current.parent, "splits")
             if (
@@ -1228,7 +1548,191 @@ def _capture_referenced_tree_fd(
         directories=tuple(sorted(directories.items())),
         files=tuple(sorted(files.items())),
         referenced_path_count=budget.referenced_path_count,
+        exact_directory_entries=tuple(sorted(exact_directory_entries.items())),
     )
+
+
+def _typed_reviewed_export_source_record(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if payload.get("schema_version") not in _REVIEWED_EXPORT_RECORD_SCHEMA_VERSIONS:
+        return None
+    source_artifacts = payload.get("source_artifacts")
+    if not isinstance(source_artifacts, dict):
+        return None
+    record = source_artifacts.get("reviewed_export")
+    if not isinstance(record, dict) or not isinstance(record.get("path"), str):
+        return None
+    return dict(record)
+
+
+def _capture_authenticated_reviewed_export_fd(
+    root_descriptor: int,
+    reviewed_relative: PurePosixPath,
+    record: dict[str, Any],
+    *,
+    files: dict[str, _FileAttestation],
+    directories: dict[str, tuple[int, ...]],
+    exact_directory_entries: dict[str, tuple[str, ...]],
+    budget: _SnapshotResourceBudget,
+    spool_store: _ReviewedExportSpoolStore,
+) -> bool:
+    """Capture one exact typed reviewed export without loading large JSONL files."""
+    try:
+        from .path_safety import DIRECTORY_CONTENT_HASH_ALGORITHM
+        from .reviewed_gate import (
+            REVIEWED_EXPORT_CONTENT_FILES,
+            REVIEWED_EXPORT_SOURCE_ARTIFACT_FIELDS,
+        )
+    except ImportError:
+        return False
+
+    raw_path = record.get("path")
+    if (
+        set(record) != set(REVIEWED_EXPORT_SOURCE_ARTIFACT_FIELDS)
+        or not isinstance(raw_path, str)
+        or not _is_safe_snapshot_relative_path(raw_path)
+    ):
+        return False
+
+    expected_files = tuple(sorted(REVIEWED_EXPORT_CONTENT_FILES))
+    expected_root_names = tuple(
+        sorted({PurePosixPath(relative).parts[0] for relative in expected_files})
+    )
+    expected_provenance_names = tuple(
+        sorted(
+            PurePosixPath(relative).name
+            for relative in expected_files
+            if PurePosixPath(relative).parent == PurePosixPath("provenance")
+        )
+    )
+    export_descriptor = _open_relative_directory(root_descriptor, reviewed_relative)
+    if export_descriptor is None:
+        return False
+    provenance_descriptor: int | None = None
+    try:
+        export_before = os.fstat(export_descriptor)
+        if not stat.S_ISDIR(export_before.st_mode) or not budget.reserve_directory(reviewed_relative):
+            return False
+        root_names_before = _bounded_directory_names(export_descriptor, budget)
+        if root_names_before is None or tuple(root_names_before) != expected_root_names:
+            return False
+        provenance_descriptor = _open_child_directory(export_descriptor, "provenance")
+        if provenance_descriptor is None:
+            return False
+        provenance_relative = reviewed_relative / "provenance"
+        provenance_before = os.fstat(provenance_descriptor)
+        if not stat.S_ISDIR(provenance_before.st_mode) or not budget.reserve_directory(
+            provenance_relative
+        ):
+            return False
+        provenance_names_before = _bounded_directory_names(provenance_descriptor, budget)
+        if (
+            provenance_names_before is None
+            or tuple(provenance_names_before) != expected_provenance_names
+        ):
+            return False
+
+        directories[reviewed_relative.as_posix()] = _file_stat_signature(export_before)
+        directories[provenance_relative.as_posix()] = _file_stat_signature(provenance_before)
+        exact_directory_entries[reviewed_relative.as_posix()] = expected_root_names
+        exact_directory_entries[provenance_relative.as_posix()] = expected_provenance_names
+
+        reviewed_attestations: dict[str, _FileAttestation] = {}
+        for relative_value in expected_files:
+            artifact_relative = PurePosixPath(relative_value)
+            snapshot_relative = reviewed_relative / artifact_relative
+            key = snapshot_relative.as_posix()
+            file_stat = _relative_path_stat(root_descriptor, snapshot_relative)
+            if file_stat is None or not stat.S_ISREG(file_stat.st_mode):
+                return False
+            attestation = files.get(key)
+            if attestation is None:
+                if artifact_relative.suffix != ".jsonl":
+                    if not budget.reserve_file(
+                        snapshot_relative,
+                        file_stat.st_size,
+                    ) or not budget.reserve_read(file_stat.st_size):
+                        return False
+                    attestation = _attest_relative_file(
+                        root_descriptor,
+                        snapshot_relative,
+                        max_bytes=file_stat.st_size,
+                    )
+                else:
+                    if not budget.reserve_spooled_file(snapshot_relative):
+                        return False
+                    spool_path = spool_store.allocate(file_stat.st_size)
+                    if spool_path is None:
+                        return False
+                    attestation = _attest_relative_file_to_spool(
+                        root_descriptor,
+                        snapshot_relative,
+                        max_bytes=file_stat.st_size,
+                        spool_path=spool_path,
+                    )
+                    if attestation is None:
+                        spool_store.release(file_stat.st_size, spool_path)
+                        return False
+                if attestation is None:
+                    return False
+                files[key] = attestation
+            reviewed_attestations[relative_value] = attestation
+
+        root_names_after = _bounded_directory_names(export_descriptor, budget)
+        provenance_names_after = _bounded_directory_names(provenance_descriptor, budget)
+        export_after = os.fstat(export_descriptor)
+        provenance_after = os.fstat(provenance_descriptor)
+        if (
+            tuple(root_names_after or ()) != expected_root_names
+            or tuple(provenance_names_after or ()) != expected_provenance_names
+            or _file_stat_signature(export_before) != _file_stat_signature(export_after)
+            or _file_stat_signature(provenance_before) != _file_stat_signature(provenance_after)
+        ):
+            return False
+    except (MemoryError, OSError, RecursionError, UnicodeError, ValueError):
+        return False
+    finally:
+        if provenance_descriptor is not None:
+            os.close(provenance_descriptor)
+        os.close(export_descriptor)
+
+    tree_digest = hashlib.sha256()
+    total_size = 0
+    for relative_value in expected_files:
+        attestation = reviewed_attestations[relative_value]
+        size_bytes = attestation.metadata[2]
+        tree_digest.update(relative_value.encode("utf-8"))
+        tree_digest.update(b"\0")
+        tree_digest.update(str(size_bytes).encode("ascii"))
+        tree_digest.update(b"\0")
+        tree_digest.update(attestation.sha256.encode("ascii"))
+        tree_digest.update(b"\0")
+        total_size += size_bytes
+
+    manifest_attestation = reviewed_attestations["manifest.json"]
+    try:
+        if not _json_bytes_within_lexical_budgets(manifest_attestation.content):
+            return False
+        manifest = json.loads(manifest_attestation.content.decode("utf-8"))
+    except (MemoryError, RecursionError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return False
+    dataset_version = manifest.get("dataset_version") if isinstance(manifest, dict) else None
+    if not isinstance(dataset_version, str) or not dataset_version:
+        return False
+    expected_record = {
+        "path": raw_path,
+        "kind": "directory",
+        "exists": True,
+        "tree_hash_algorithm": DIRECTORY_CONTENT_HASH_ALGORITHM,
+        "sha256": tree_digest.hexdigest(),
+        "file_count": len(expected_files),
+        "size_bytes": total_size,
+        "contains_symlinks": False,
+        "manifest_path": (PurePosixPath(raw_path) / "manifest.json").as_posix(),
+        "manifest_sha256": manifest_attestation.sha256,
+        "manifest_size_bytes": manifest_attestation.metadata[2],
+        "dataset_version": dataset_version,
+    }
+    return record == expected_record
 
 
 _EXPLICIT_PATH_FIELD_NAMES = {
@@ -1442,6 +1946,46 @@ def _attest_relative_file(
         return None
     try:
         return _attest_regular_file_at(
+            parent_descriptor,
+            relative.name,
+            max_bytes=max_bytes,
+        )
+    finally:
+        os.close(parent_descriptor)
+
+
+def _attest_relative_file_to_spool(
+    root_descriptor: int,
+    relative: PurePosixPath,
+    *,
+    max_bytes: int,
+    spool_path: Path,
+) -> _FileAttestation | None:
+    parent_descriptor = _open_relative_directory(root_descriptor, relative.parent)
+    if parent_descriptor is None:
+        return None
+    try:
+        return _attest_regular_file_at_to_spool(
+            parent_descriptor,
+            relative.name,
+            max_bytes=max_bytes,
+            spool_path=spool_path,
+        )
+    finally:
+        os.close(parent_descriptor)
+
+
+def _attest_relative_file_digest(
+    root_descriptor: int,
+    relative: PurePosixPath,
+    *,
+    max_bytes: int,
+) -> _FileAttestation | None:
+    parent_descriptor = _open_relative_directory(root_descriptor, relative.parent)
+    if parent_descriptor is None:
+        return None
+    try:
+        return _attest_regular_file_at_digest(
             parent_descriptor,
             relative.name,
             max_bytes=max_bytes,
@@ -1836,11 +2380,27 @@ def _semantic_contract_valid(path: Path, role: str) -> bool:
             return False
         checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
         decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
-        return (
+        gate_contract_valid = (
             summary.get("valid") is True
             and payload.get("check_count") == len(checks)
             and decision.get("key_metrics") == payload.get("metrics")
         )
+        if role != "reviewed_gate" or not gate_contract_valid:
+            return gate_contract_valid
+        try:
+            from .validation import validate_reviewed_gate
+
+            return not validate_reviewed_gate(path).errors
+        except (
+            MemoryError,
+            OSError,
+            RecursionError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+            json.JSONDecodeError,
+        ):
+            return False
     validator_name = _SEMANTIC_VALIDATOR_NAMES.get(role)
     if validator_name is None:
         return True

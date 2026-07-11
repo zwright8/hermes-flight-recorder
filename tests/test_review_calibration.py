@@ -98,7 +98,7 @@ class ReviewCalibrationTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
                 main(["review-calibration", "--reviewed-export", str(linked), "--out", str(Path(tmp) / "linked_calibration.json")])
             self.assertEqual(raised.exception.code, 2)
-            self.assertIn("reviewed export must resolve to a regular non-symlink directory", stderr.getvalue())
+            self.assertIn("must not contain symlink components", stderr.getvalue())
 
             redirected = Path(tmp) / "redirected_calibration.json"
             redirected.write_text("{}\n", encoding="utf-8")
@@ -108,7 +108,7 @@ class ReviewCalibrationTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
                 main(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(output_link)])
             self.assertEqual(raised.exception.code, 2)
-            self.assertIn("review calibration output must resolve to a regular non-symlink file", stderr.getvalue())
+            self.assertIn("review calibration output must not contain symlink components", stderr.getvalue())
 
     def test_preserve_paths_keeps_calibration_refs_public_safe(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -144,26 +144,31 @@ class ReviewCalibrationTests(unittest.TestCase):
             reviewed = make_reviewed_export(str(external))
             out = root / "public" / "review_calibration.json"
 
-            code = run_cli(
-                [
-                    "review-calibration",
-                    "--reviewed-export",
-                    str(reviewed),
-                    "--out",
-                    str(out),
-                    "--preserve-paths",
-                ]
-            )
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                main(
+                    [
+                        "review-calibration",
+                        "--reviewed-export",
+                        str(reviewed),
+                        "--out",
+                        str(out),
+                        "--preserve-paths",
+                    ]
+                )
 
-            self.assertEqual(code, 1)
-            calibration = json.loads(out.read_text(encoding="utf-8"))
-            self.assertNotIn(str(external), json.dumps(calibration, sort_keys=True))
-            self.assertFalse(calibration["passed"])
-            self.assertEqual(calibration["reviewed_export"], "<redacted:reviewed>")
-            self.assertEqual(calibration["source"]["reviewed_labels"], "<redacted:reviewed_labels.jsonl>")
-            failed_checks = {check["id"] for check in calibration["checks"] if not check["passed"]}
-            self.assertIn("source_paths_replayable", failed_checks)
-            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 1)
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(out.exists())
+
+    def test_review_calibration_rejects_output_inside_reviewed_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            out = reviewed / "review_calibration.json"
+
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                main(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(out.exists())
 
     def test_review_calibration_blocks_scorecard_human_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -271,6 +276,27 @@ class ReviewCalibrationTests(unittest.TestCase):
                 errors,
             )
 
+    def test_validate_review_calibration_rejects_reviewed_source_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            out = Path(tmp) / "review_calibration.json"
+            self.assertEqual(run_cli(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(out)]), 0)
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
+
+            sft_path = reviewed / "reviewed_sft.jsonl"
+            sft_path.write_text(sft_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            summary_path = Path(tmp) / "validation.json"
+
+            code = run_cli(["validate", "--review-calibration", str(out), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "review_calibration.source_artifacts.reviewed_export must match the current reviewed-export tree, manifest, and dataset version.",
+                errors,
+            )
+
     def test_review_calibration_fails_invalid_reviewed_export_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp)
@@ -290,6 +316,31 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertGreater(calibration["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
+
+    def test_review_calibration_skip_validation_is_explicitly_non_authorizing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            out = Path(tmp) / "review_calibration.json"
+
+            code = run_cli(
+                [
+                    "review-calibration",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(out),
+                    "--skip-validation",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            calibration = json.loads(out.read_text(encoding="utf-8"))
+            self.assertFalse(calibration["passed"])
+            self.assertFalse(calibration["effective_policy"]["require_valid_export"])
+            validation_check = next(check for check in calibration["checks"] if check["id"] == "valid_reviewed_export")
+            self.assertFalse(validation_check["passed"])
+            self.assertFalse(validation_check["actual"]["available"])
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 1)
 
 
 if __name__ == "__main__":

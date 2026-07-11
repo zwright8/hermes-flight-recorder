@@ -7,13 +7,16 @@ import os
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .atomic_json import atomic_write_json_cas, json_file_sha256
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .review import REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
+from .reviewed_gate import build_reviewed_export_source_artifact
 
 REVIEW_CALIBRATION_SCHEMA_VERSION = "hfr.review_calibration.v1"
 HUMAN_POSITIVE_LABELS = {"accept"}
 HUMAN_NEGATIVE_LABELS = set(TRAINING_NEGATIVE_LABELS)
 COMPARABLE_LABELS = HUMAN_POSITIVE_LABELS | HUMAN_NEGATIVE_LABELS
+_EXPECTED_SHA256_UNSET = object()
 
 
 class ReviewCalibrationError(ValueError):
@@ -30,10 +33,13 @@ def build_review_calibration(
     min_comparable_labels: int | None = None,
     validation_summary: dict[str, Any] | None = None,
     require_valid_export: bool = True,
+    strict_validation: bool = False,
     preserve_paths: bool = False,
     out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Compare reviewed human labels with deterministic scorecard outcomes."""
+    if out_path is None:
+        raise ReviewCalibrationError("out_path is required so calibration source references have an authoritative base")
     export_dir = Path(reviewed_export_dir)
     _require_regular_dir(export_dir, "reviewed export")
     labels_path = export_dir / "reviewed_labels.jsonl"
@@ -45,9 +51,16 @@ def build_review_calibration(
     output_dir = Path(out_path).parent if out_path else None
     reviewed_export_ref = _display_path(export_dir, preserve_paths, output_dir)
     reviewed_labels_ref = _display_path(labels_path, preserve_paths, output_dir)
+    reviewed_export_source = build_reviewed_export_source_artifact(
+        export_dir,
+        display_path=reviewed_export_ref,
+    )
     _add_source_paths_check(checks, reviewed_export_ref, reviewed_labels_ref)
-    if require_valid_export:
-        _add_validation_check(checks, "valid_reviewed_export", validation_summary)
+    _add_validation_check(
+        checks,
+        "valid_reviewed_export",
+        validation_summary if require_valid_export else None,
+    )
     if min_comparable_labels is not None:
         _add_min_check(checks, "min_comparable_labels", metrics["comparable_label_count"], min_comparable_labels)
     if min_agreement_rate is not None:
@@ -66,6 +79,16 @@ def build_review_calibration(
         "source": {
             "reviewed_labels": reviewed_labels_ref,
         },
+        "source_artifacts": {"reviewed_export": reviewed_export_source},
+        "effective_policy": {
+            "min_agreement_rate": min_agreement_rate,
+            "max_disagreements": max_disagreements,
+            "max_false_positives": max_false_positives,
+            "max_false_negatives": max_false_negatives,
+            "min_comparable_labels": min_comparable_labels,
+            "require_valid_export": require_valid_export,
+            "strict_validation": strict_validation,
+        },
         "passed": failed_check_count == 0,
         "check_count": len(checks),
         "failed_check_count": failed_check_count,
@@ -81,16 +104,28 @@ def build_review_calibration(
     }
 
 
-def write_review_calibration(path: str | Path, payload: dict[str, Any]) -> None:
+def write_review_calibration(
+    path: str | Path,
+    payload: dict[str, Any],
+    *,
+    expected_sha256: str | None | object = _EXPECTED_SHA256_UNSET,
+) -> None:
     """Write a review-calibration report without following symlinked outputs."""
     out_path = Path(path)
     _require_output_file(out_path, "review calibration output")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    safe_payload = json.loads(json.dumps(payload))
-    safe_payload["reviewed_export"] = _output_relative_path(safe_payload.get("reviewed_export"), out_path.parent)
-    if isinstance(safe_payload.get("source"), dict):
-        safe_payload["source"]["reviewed_labels"] = _output_relative_path(safe_payload["source"].get("reviewed_labels"), out_path.parent)
-    out_path.write_text(json.dumps(safe_payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    effective_expected = (
+        json_file_sha256(out_path)
+        if expected_sha256 is _EXPECTED_SHA256_UNSET
+        else expected_sha256
+    )
+    if effective_expected is not None and not isinstance(effective_expected, str):
+        raise ReviewCalibrationError("expected_sha256 must be a SHA-256 string or null")
+    atomic_write_json_cas(
+        out_path,
+        payload,
+        expected_sha256=effective_expected,
+        new_file_mode=0o666,
+    )
 
 
 def _calibration_metrics(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -357,25 +392,6 @@ def _display_path(path: Path, preserve_paths: bool = False, output_dir: Path | N
     except (OSError, ValueError):
         return f"<redacted:{_basename(raw)}>"
     return relative if _is_public_review_calibration_ref_path(relative) else f"<redacted:{_basename(raw)}>"
-
-
-def _output_relative_path(value: Any, output_dir: Path) -> Any:
-    if not isinstance(value, str) or not value:
-        return value
-    if value.startswith("<redacted:"):
-        return value
-    path = Path(value)
-    if not path.is_absolute():
-        if not _is_public_review_calibration_ref_path(value):
-            return f"<redacted:{_basename(value)}>"
-        if not path.exists():
-            return value
-        path = path.resolve()
-    try:
-        relative = os.path.relpath(path.resolve(), output_dir.resolve())
-    except OSError:
-        return f"<redacted:{_basename(value)}>"
-    return relative if _is_public_review_calibration_ref_path(relative) else f"<redacted:{_basename(value)}>"
 
 
 def _is_public_review_calibration_ref_path(value: str) -> bool:

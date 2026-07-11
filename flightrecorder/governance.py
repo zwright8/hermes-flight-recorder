@@ -2198,16 +2198,12 @@ def _promotion_trainer_launch_replay_errors(
         "warning_count": len(validation.warnings),
         "targets": [validation.as_dict()],
     }
-    recorded_preflight_path = launch_check.get("preflight_path")
     try:
         replay = build_trainer_launch_check(
-            preflight_path=(
-                recorded_preflight_path
-                if isinstance(recorded_preflight_path, str)
-                else preflight_path
-            ),
+            preflight_path=preflight_path,
             preflight=preflight,
             validation_summary=validation_summary,
+            out_path=launch_check_path,
             require_gates=(
                 launch_check.get("required_gates")
                 if isinstance(launch_check.get("required_gates"), list)
@@ -2225,7 +2221,7 @@ def _promotion_trainer_launch_replay_errors(
                 if isinstance(launch_check.get("required_metadata"), dict)
                 else {}
             ),
-            preserve_paths=True,
+            preserve_paths=False,
         )
     except (OSError, TypeError, ValueError) as exc:
         return [f"trainer launch check could not be replayed: {exc}"]

@@ -59,6 +59,15 @@
     }
   ],
   "disagreements": [],
+  "effective_policy": {
+    "max_disagreements": 0,
+    "max_false_negatives": null,
+    "max_false_positives": null,
+    "min_agreement_rate": 1.0,
+    "min_comparable_labels": 2,
+    "require_valid_export": true,
+    "strict_validation": false
+  },
   "failed_check_count": 0,
   "metrics": {
     "agreement_count": 2,
@@ -130,5 +139,21 @@
   "schema_version": "hfr.review_calibration.v1",
   "source": {
     "reviewed_labels": "reviewed/reviewed_labels.jsonl"
+  },
+  "source_artifacts": {
+    "reviewed_export": {
+      "contains_symlinks": false,
+      "dataset_version": "hfrds-16791825cc955df1",
+      "exists": true,
+      "file_count": 11,
+      "kind": "directory",
+      "manifest_path": "reviewed/manifest.json",
+      "manifest_sha256": "f5e08e334c4aa7826600cf8f4d1ed1109312a65a06acdedc49609a94e60da26d",
+      "manifest_size_bytes": 8643,
+      "path": "reviewed",
+      "sha256": "1b9b9292b62a864f57760fda9aee904e54d08be4720a71c257be819017f4067b",
+      "size_bytes": 36756,
+      "tree_hash_algorithm": "hfr.sha256.file-tree.v1"
+    }
   }
 }

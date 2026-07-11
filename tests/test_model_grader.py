@@ -33,8 +33,17 @@ def model_grader_row_sha256(row: dict) -> str:
 
 def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
     rows = read_jsonl(review_dir / "label_template.jsonl")
+    items_by_id = {
+        row["review_item_id"]: row
+        for row in read_jsonl(review_dir / "review_items.jsonl")
+    }
     for row in rows:
-        row["human_label"] = row["suggested_human_label"]
+        suggested_label = row["suggested_human_label"]
+        if suggested_label == "needs_review":
+            scorecard_passed = items_by_id[row["review_item_id"]]["scorecard"]["passed"]
+            row["human_label"] = "accept" if scorecard_passed else "reject"
+        else:
+            row["human_label"] = suggested_label
         row["notes"] = "Accepted suggested label for model-grader fixture coverage."
         row["reviewer"] = "model-grader-test"
         row["reviewer_confidence"] = "high"
@@ -50,8 +59,28 @@ def mark_first_review_item_needs_review(review_dir: Path) -> None:
     rows[0]["review_item_sha256"] = review_item_sha256(rows[0])
     items_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
+    labels_path = review_dir / "label_template.jsonl"
+    labels = read_jsonl(labels_path)
+    for label in labels:
+        if label["review_item_id"] == rows[0]["review_item_id"]:
+            label["suggested_human_label"] = rows[0]["suggested_human_label"]
+            label["review_item_sha256"] = rows[0]["review_item_sha256"]
+            break
+    labels_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in labels),
+        encoding="utf-8",
+    )
 
-def make_review_flow(tmp: str) -> tuple[Path, Path]:
+    manifest_path = review_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for name, path in (("review_items", items_path), ("label_template", labels_path)):
+        fingerprint = manifest["artifact_fingerprints"][name]
+        fingerprint["size_bytes"] = path.stat().st_size
+        fingerprint["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def make_review_flow(tmp: str, *, needs_review: bool = False) -> tuple[Path, Path]:
     root = Path(tmp)
     runs = root / "runs"
     review = root / "review"
@@ -61,6 +90,8 @@ def make_review_flow(tmp: str) -> tuple[Path, Path]:
     run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
     run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
     run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+    if needs_review:
+        mark_first_review_item_needs_review(review)
     write_completed_labels(review, labels)
     run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels), "--out", str(reviewed)])
     run_cli(
@@ -81,7 +112,160 @@ def make_review_flow(tmp: str) -> tuple[Path, Path]:
     return review, calibration
 
 
+def make_single_scenario_review_flow(root: Path, scenario_name: str) -> tuple[Path, Path]:
+    runs = root / "runs"
+    review = root / "review"
+    labels = root / "completed_labels.jsonl"
+    reviewed = root / "reviewed"
+    calibration = root / "review_calibration.json"
+    run_cli(
+        [
+            "run",
+            "--scenario",
+            str(ROOT / "scenarios" / scenario_name),
+            "--out",
+            str(runs / "single"),
+        ]
+    )
+    run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+    write_completed_labels(review, labels)
+    run_cli(
+        [
+            "apply-review",
+            "--review-export",
+            str(review),
+            "--labels",
+            str(labels),
+            "--out",
+            str(reviewed),
+        ]
+    )
+    run_cli(
+        [
+            "review-calibration",
+            "--reviewed-export",
+            str(reviewed),
+            "--out",
+            str(calibration),
+        ]
+    )
+    return review, calibration
+
+
 class ModelGraderTests(unittest.TestCase):
+    def test_gate_blocks_calibration_from_a_different_review_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            review_a, _calibration_a = make_single_scenario_review_flow(
+                root / "queue_a",
+                "prompt_injection_good.json",
+            )
+            _review_b, calibration_b = make_single_scenario_review_flow(
+                root / "queue_b",
+                "prompt_injection_bad.json",
+            )
+            rubric = root / "rubric_a.json"
+            dry_run = root / "dry_run_a.json"
+            gate = root / "cross_dataset_gate.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "rubric",
+                        "--review-export",
+                        str(review_a),
+                        "--rubric-id",
+                        "cross-dataset-lineage",
+                        "--out",
+                        str(rubric),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "dry-run",
+                        "--review-export",
+                        str(review_a),
+                        "--rubric",
+                        str(rubric),
+                        "--grader-id",
+                        "cross-dataset-mock-grader",
+                        "--out",
+                        str(dry_run),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(dry_run),
+                        "--rubric",
+                        str(rubric),
+                        "--review-calibration",
+                        str(calibration_b),
+                        "--out",
+                        str(gate),
+                    ]
+                ),
+                1,
+            )
+
+            payload = json.loads(gate.read_text(encoding="utf-8"))
+            lineage_check = next(
+                check
+                for check in payload["checks"]
+                if check["id"] == "review_calibration_matches_dry_run_review_items"
+            )
+            self.assertFalse(lineage_check["passed"])
+            self.assertEqual(
+                lineage_check["actual"]["dry_run_review_items_sha256"],
+                lineage_check["actual"]["rubric_review_items_sha256"],
+            )
+            self.assertNotEqual(
+                lineage_check["actual"]["dry_run_review_items_sha256"],
+                lineage_check["actual"]["calibration_review_items_sha256"],
+            )
+            self.assertFalse(payload["admission"]["labels_allowed_for_training"])
+            self.assert_schema_and_validate(gate, "model_grader_gate")
+
+            forged = json.loads(json.dumps(payload))
+            lineage_check = next(
+                check
+                for check in forged["checks"]
+                if check["id"] == "review_calibration_matches_dry_run_review_items"
+            )
+            lineage_check["passed"] = True
+            lineage_check["actual"]["same_review_items"] = True
+            lineage_check["summary"] = (
+                "review_calibration_matches_dry_run_review_items: passed"
+            )
+            forged["passed"] = True
+            forged["readiness"] = "labels_calibrated_for_curated_handoff"
+            forged["recommendation"] = "allow_curated_grader_labels"
+            forged["failed_check_count"] = 0
+            forged["blocked_reasons"] = []
+            forged["admission"]["labels_allowed_for_training"] = True
+            forged["admission"]["labels_admitted_count"] = forged["metrics"][
+                "graded_item_count"
+            ]
+            gate.write_text(
+                json.dumps(forged, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                gate,
+                "model_grader_gate",
+                "review calibration must derive from the same review items",
+            )
+
     def test_disagreement_queue_blocks_schema_valid_semantically_forged_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "model_grader"
@@ -108,6 +292,81 @@ class ModelGraderTests(unittest.TestCase):
             payload = json.loads(out.read_text(encoding="utf-8"))
             self.assertFalse(payload["passed"])
             self.assertIn("dry_run_receipt_valid", {check["id"] for check in payload["checks"] if not check["passed"]})
+
+    def test_gate_replay_rejects_schema_valid_forged_sources_checks_and_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "model_grader"
+            shutil.copytree(ROOT / "examples" / "agentic_training" / "model_grader", root)
+            passing_gate = root / "passing_gate.json"
+            passing_payload = json.loads(passing_gate.read_text(encoding="utf-8"))
+            blocked_payload = json.loads((root / "blocked_gate.json").read_text(encoding="utf-8"))
+
+            missing_calibration_gate = root / "forged_missing_calibration_gate.json"
+            missing_calibration_payload = json.loads(json.dumps(passing_payload))
+            missing_calibration_payload["source_artifacts"]["review_calibration"] = blocked_payload[
+                "source_artifacts"
+            ]["review_calibration"]
+            missing_calibration_gate.write_text(
+                json.dumps(missing_calibration_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(check_schema_file(missing_calibration_gate)["passed"])
+            self.assert_validation_error(
+                missing_calibration_gate,
+                "model_grader_gate",
+                "must match deterministic replay of its recorded sources, policy, and created_at",
+            )
+
+            forged_metrics_gate = root / "forged_metrics_gate.json"
+            forged_metrics_payload = json.loads(json.dumps(passing_payload))
+            forged_metrics_payload["metrics"]["agreement_rate"] = 0.9
+            minimum_check = next(
+                check
+                for check in forged_metrics_payload["checks"]
+                if check["id"] == "min_calibration_agreement_rate"
+            )
+            minimum_check["actual"]["agreement_rate"] = 0.9
+            forged_metrics_gate.write_text(
+                json.dumps(forged_metrics_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(check_schema_file(forged_metrics_gate)["passed"])
+            self.assert_validation_error(
+                forged_metrics_gate,
+                "model_grader_gate",
+                "must match deterministic replay of its recorded sources, policy, and created_at",
+            )
+
+            blocked_validation = validate_artifacts(model_grader_gate_paths=[root / "blocked_gate.json"], strict=True)
+            self.assertTrue(blocked_validation["passed"], blocked_validation)
+
+    def test_model_grader_gate_rejects_output_that_aliases_calibration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "model_grader"
+            shutil.copytree(ROOT / "examples" / "agentic_training" / "model_grader", root)
+            calibration = root / "review_calibration.json"
+            original = calibration.read_bytes()
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(root / "dry_run.json"),
+                        "--rubric",
+                        str(root / "rubric.json"),
+                        "--review-calibration",
+                        str(calibration),
+                        "--out",
+                        str(calibration),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("model-grader artifact output must not alias source file", stderr.getvalue())
+            self.assertEqual(calibration.read_bytes(), original)
 
     def test_cli_emits_fail_closed_model_grader_flow(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -217,7 +476,7 @@ class ModelGraderTests(unittest.TestCase):
                     "--out",
                     str(rubric_output_link),
                 ],
-                "model-grader artifact output must resolve to a regular non-symlink file",
+                "model-grader artifact output must not contain symlink components",
             )
 
             review_link = artifact_dir / "review_link"
@@ -233,7 +492,7 @@ class ModelGraderTests(unittest.TestCase):
                     "--out",
                     str(artifact_dir / "rubric_from_symlinked_review.json"),
                 ],
-                "review export must resolve to a regular non-symlink directory",
+                "model-grader artifact source directory must not contain symlink components",
             )
 
             self.assertEqual(
@@ -671,8 +930,7 @@ class ModelGraderTests(unittest.TestCase):
 
     def test_gate_blocks_unresolved_model_grader_disagreement_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
-            review, calibration = make_review_flow(tmp)
-            mark_first_review_item_needs_review(review)
+            review, calibration = make_review_flow(tmp, needs_review=True)
             root = Path(tmp)
             rubric = root / "rubric.json"
             dry_run = root / "dry_run.json"

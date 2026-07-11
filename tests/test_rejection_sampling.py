@@ -4,8 +4,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
+from flightrecorder.cli import main
 from flightrecorder.rejection_sampling import build_rejection_sampling_gate, write_rejection_sampling_gate
 from flightrecorder.rollout_generation import (
     build_agentic_rollout_plan,
@@ -19,6 +22,11 @@ from flightrecorder.validation import validate_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "scenarios" / "prompt_injection_good.json"
+
+
+def run_cli(args):
+    with redirect_stdout(StringIO()):
+        return main(args)
 
 
 class RejectionSamplingGateTests(unittest.TestCase):
@@ -181,6 +189,35 @@ class RejectionSamplingGateTests(unittest.TestCase):
             validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
 
+    def test_cli_rejects_rejection_sampling_output_that_aliases_an_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            model_grader_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            original = model_grader_gate.read_bytes()
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "rejection-sampling-gate",
+                        "--rollout-receipt",
+                        str(rollout_receipt),
+                        "--model-grader-gate",
+                        str(model_grader_gate),
+                        "--review-calibration",
+                        str(review_calibration),
+                        "--reviewed-gate",
+                        str(reviewed_gate),
+                        "--out",
+                        str(model_grader_gate),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(model_grader_gate.read_bytes(), original)
+
     def test_validation_rejects_absolute_rejection_sampling_gate_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -259,6 +296,126 @@ class RejectionSamplingGateTests(unittest.TestCase):
             self.assertEqual(gate["readiness"], "blocked")
             self.assertIn("review_calibration_present_and_passing", {check["id"] for check in gate["checks"] if not check["passed"]})
             self.assertFalse(gate["execution_boundary"]["dataset_rows_written"])
+
+    def test_gate_blocks_multiple_review_inputs_from_mixed_dataset_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            example = ROOT / "examples" / "agentic_training" / "model_grader"
+            first = root / "first"
+            second = root / "second"
+            shutil.copytree(example, first)
+            shutil.copytree(example, second)
+
+            completed_labels = second / "review" / "completed_labels.jsonl"
+            rows = [json.loads(line) for line in completed_labels.read_text(encoding="utf-8").splitlines() if line]
+            rows[0]["notes"] = "Equivalent adjudication with distinct reviewed-dataset provenance."
+            completed_labels.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            shutil.rmtree(second / "reviewed")
+            self.assertEqual(
+                run_cli(
+                    [
+                        "apply-review",
+                        "--review-export",
+                        str(second / "review"),
+                        "--labels",
+                        str(completed_labels),
+                        "--out",
+                        str(second / "reviewed"),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "review-calibration",
+                        "--reviewed-export",
+                        str(second / "reviewed"),
+                        "--min-comparable-labels",
+                        "2",
+                        "--min-agreement-rate",
+                        "1.0",
+                        "--max-disagreements",
+                        "0",
+                        "--out",
+                        str(second / "review_calibration.json"),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-reviewed",
+                        "--reviewed-export",
+                        str(second / "reviewed"),
+                        "--min-reviewed-labels",
+                        "2",
+                        "--min-accepted",
+                        "1",
+                        "--min-rejected",
+                        "1",
+                        "--min-sft",
+                        "1",
+                        "--min-reward-model",
+                        "2",
+                        "--min-preferences",
+                        "1",
+                        "--min-dpo",
+                        "1",
+                        "--min-medium-or-high-confidence-labels",
+                        "2",
+                        "--max-needs-review",
+                        "0",
+                        "--max-low-confidence-labels",
+                        "0",
+                        "--max-unknown-confidence-labels",
+                        "0",
+                        "--out",
+                        str(second / "reviewed_gate.json"),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(second / "dry_run.json"),
+                        "--rubric",
+                        str(second / "rubric.json"),
+                        "--review-calibration",
+                        str(second / "review_calibration.json"),
+                        "--min-calibration-agreement-rate",
+                        "1.0",
+                        "--max-disagreements",
+                        "0",
+                        "--out",
+                        str(second / "passing_gate.json"),
+                    ]
+                ),
+                0,
+            )
+
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[self.write_rollout_receipt(root)],
+                model_grader_gate_paths=[first / "passing_gate.json", second / "passing_gate.json"],
+                review_calibration_paths=[first / "review_calibration.json", second / "review_calibration.json"],
+                reviewed_gate_paths=[first / "reviewed_gate.json", second / "reviewed_gate.json"],
+                out_path=root / "rejection_sampling_gate.json",
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            lineage_check = next(check for check in gate["checks"] if check["id"] == "review_dataset_lineage_converges")
+            self.assertFalse(gate["passed"])
+            self.assertEqual(gate["readiness"], "blocked")
+            self.assertFalse(lineage_check["passed"])
+            self.assertEqual(len(lineage_check["actual"]["dataset_versions"]), 2)
 
     def test_gate_rejects_schema_valid_semantically_forged_review_calibration(self):
         with tempfile.TemporaryDirectory() as tmp:

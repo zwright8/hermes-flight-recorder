@@ -2,58 +2,60 @@
   "artifact_fingerprints": {
     "reviewed_dpo": {
       "exists": true,
-      "path": "examples/model_grader/reviewed/reviewed_dpo.jsonl",
+      "path": "reviewed_dpo.jsonl",
       "regular_file": true,
-      "sha256": "35c47c576b9239c292846ce5a77c7e4f738c7beab0d3ea53488584f28489b91c",
+      "sha256": "2b3f62914e03ab1eae8d0c7108ed28a2518d186ce03c3409d8e37a5b626b7cd7",
       "size_bytes": 1026,
       "symlink": false
     },
     "reviewed_labels": {
       "exists": true,
-      "path": "examples/model_grader/reviewed/reviewed_labels.jsonl",
+      "path": "reviewed_labels.jsonl",
       "regular_file": true,
-      "sha256": "f0157fadda76ee7feccfcd9da206fcfe69cab42fe9f91390ecc473673237d54e",
-      "size_bytes": 3636,
+      "sha256": "f926b0d674035280012d25d62a87324c6ce725e701634b2cd0765dd3504496ce",
+      "size_bytes": 3600,
       "symlink": false
     },
     "reviewed_preferences": {
       "exists": true,
-      "path": "examples/model_grader/reviewed/reviewed_preferences.jsonl",
+      "path": "reviewed_preferences.jsonl",
       "regular_file": true,
-      "sha256": "f78168fd56498f97b6b9c7a983bdba7907b97322f269508c479196d208d85a26",
+      "sha256": "82746532bd3f91d3d8cd35c495cffa557c5d8196a19ed0ca681b88f4c749ae45",
       "size_bytes": 1626,
       "symlink": false
     },
     "reviewed_reward_model": {
       "exists": true,
-      "path": "examples/model_grader/reviewed/reviewed_reward_model.jsonl",
+      "path": "reviewed_reward_model.jsonl",
       "regular_file": true,
-      "sha256": "213d4d8744eff7ca1f537b9d9eb6c712034a92c5de7dd6246d664d5f566dd5f8",
+      "sha256": "2e0eb4c44721bbef0ed3a276b33ef59d06676728976fb4ebffe3ed974eef3d7f",
       "size_bytes": 1316,
       "symlink": false
     },
     "reviewed_sft": {
       "exists": true,
-      "path": "examples/model_grader/reviewed/reviewed_sft.jsonl",
+      "path": "reviewed_sft.jsonl",
       "regular_file": true,
-      "sha256": "cfa1abd8d3bcaf4ae172cb6bdd69b281881c6dae620666c63b0fcdf1d0a9da62",
+      "sha256": "d121f92c8aeed560397f4329c1bbf25bbc1572aba50aa0d996deba84a8dc795f",
       "size_bytes": 683,
       "symlink": false
     }
   },
   "artifact_type": "reviewed_export",
-  "dataset_version": "hfrds-4fde3fee61ba0c98",
-  "generated_at": "2026-07-04T13:43:33.358806+00:00",
+  "dataset_version": "hfrds-16791825cc955df1",
+  "generated_at": "2026-07-10T22:32:50.136305+00:00",
   "label_provenance": {
     "accepted_label_count": 1,
     "needs_review_excluded_count": 0,
     "negative_label_count": 1,
     "notes": [
       "Reviewed SFT rows require human_label='accept'.",
-      "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only."
+      "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only.",
+      "Reviewer identifiers and timestamps are required but self-asserted; this receipt proves content integrity, not reviewer authentication."
     ],
     "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
     "reviewed_label_count": 2,
+    "reviewer_identity_assurance": "self_asserted",
     "schema_version": "hfr.rl.label_provenance.v1",
     "trainer_view_counts": {
       "reviewed_dpo": 1,
@@ -64,26 +66,26 @@
   },
   "labels_artifact": {
     "exists": true,
-    "path": "examples/model_grader/review/completed_labels.jsonl",
+    "path": "provenance/completed_labels.jsonl",
     "regular_file": true,
-    "sha256": "cb29bf5fc87f2e1d35b15e498d3a055976c0fa9ad9990dc4425232848f2cfd98",
+    "sha256": "d0b1a1f142e5db64bdb831b92c737c1a0d2062c523433e58ecbd5b8848a28e58",
     "size_bytes": 1153,
     "symlink": false
   },
-  "labels_path": "examples/model_grader/review/completed_labels.jsonl",
-  "manifest_path": "examples/model_grader/reviewed/manifest.json",
-  "manifest_sha256": "c763b3250f559ed0ac7aba471666bf55eb053cff05647645a8da7238e577d4ec",
+  "labels_path": "provenance/completed_labels.jsonl",
+  "manifest_path": "manifest.json",
+  "manifest_sha256": "f5e08e334c4aa7826600cf8f4d1ed1109312a65a06acdedc49609a94e60da26d",
   "notes": [
     "Select this reviewed dataset by dataset_version and verify manifest_sha256 before launching training."
   ],
   "outputs": {
-    "dataset_registry": "examples/model_grader/reviewed/dataset_registry.json",
-    "manifest": "examples/model_grader/reviewed/manifest.json",
-    "reviewed_dpo": "examples/model_grader/reviewed/reviewed_dpo.jsonl",
-    "reviewed_labels": "examples/model_grader/reviewed/reviewed_labels.jsonl",
-    "reviewed_preferences": "examples/model_grader/reviewed/reviewed_preferences.jsonl",
-    "reviewed_reward_model": "examples/model_grader/reviewed/reviewed_reward_model.jsonl",
-    "reviewed_sft": "examples/model_grader/reviewed/reviewed_sft.jsonl"
+    "dataset_registry": "dataset_registry.json",
+    "manifest": "manifest.json",
+    "reviewed_dpo": "reviewed_dpo.jsonl",
+    "reviewed_labels": "reviewed_labels.jsonl",
+    "reviewed_preferences": "reviewed_preferences.jsonl",
+    "reviewed_reward_model": "reviewed_reward_model.jsonl",
+    "reviewed_sft": "reviewed_sft.jsonl"
   },
   "redaction_status": {
     "findings": [],
@@ -97,7 +99,7 @@
   },
   "schema_version": "hfr.rl.dataset_registry.v1",
   "selection": {
-    "key": "hfrds-4fde3fee61ba0c98",
+    "key": "hfrds-16791825cc955df1",
     "mode_to_view": {
       "action_sft": "reviewed_sft",
       "dpo": "reviewed_dpo",
@@ -109,35 +111,35 @@
       "reviewed_dpo.jsonl",
       "reviewed_reward_model.jsonl"
     ],
-    "trainer_preflight_arg": "--require-dataset-version hfrds-4fde3fee61ba0c98"
+    "trainer_preflight_arg": "--require-dataset-version hfrds-16791825cc955df1"
   },
   "source_review_artifacts": {
     "label_template": {
       "exists": true,
-      "path": "examples/model_grader/review/label_template.jsonl",
+      "path": "provenance/label_template.jsonl",
       "regular_file": true,
-      "sha256": "25cca03d14251b85cc5100e9d3ce4cc797deec70165ba4c1469de5ef7406646b",
+      "sha256": "b92ae18eda635fddf59d9dd9593dd1084b4327e749136da778db5bfdfec88106",
       "size_bytes": 949,
       "symlink": false
     },
     "review_items": {
       "exists": true,
-      "path": "examples/model_grader/review/review_items.jsonl",
+      "path": "provenance/review_items.jsonl",
       "regular_file": true,
-      "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
-      "size_bytes": 7556,
+      "sha256": "3c6e4d923d2e5347ced184b9a8f2f920fa8ec037e56d726b86639842c73c00c0",
+      "size_bytes": 8344,
       "symlink": false
     },
     "review_manifest": {
       "exists": true,
-      "path": "examples/model_grader/review/manifest.json",
+      "path": "provenance/review_manifest.json",
       "regular_file": true,
-      "sha256": "bae1dff55235a9325e45ad78a33458c479b2bb12a09e11928b6fda8a88cf134e",
+      "sha256": "4ee81c99412c8cfa91a3a26ae7fbbb05e57b79bbb9dd45c2147e1754c5b6cf6f",
       "size_bytes": 2056,
       "symlink": false
     }
   },
-  "source_review_export": "examples/model_grader/review",
+  "source_review_export": "provenance",
   "trainer_views": {
     "contract_version": "hfr.rl.trainer_views.v1",
     "mode_to_view": {

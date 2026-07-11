@@ -145,8 +145,8 @@
       "path": "../trainer_launch_check.json",
       "role": "trainer_launch_check",
       "schema_version": "hfr.trainer_launch_check.v1",
-      "sha256": "638222b0f75d99ec7c15dd723c4032076be68de24c225452522b876f16db20e8",
-      "size_bytes": 14354
+      "sha256": "507ee309a521973f0c11bca1c5b5fd052825530c52cfd94cd931ce16d5eb6c03",
+      "size_bytes": 14636
     }
   },
   "check_count": 93,

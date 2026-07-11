@@ -1,3 +1,4 @@
+import errno
 import json
 import hashlib
 import tempfile
@@ -5,10 +6,25 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
+import flightrecorder.review as review_module
+import flightrecorder.path_safety as path_safety_module
 from flightrecorder.cli import main
-from flightrecorder.review import _reviewed_dataset_version_id, review_item_sha256
+from flightrecorder.path_safety import (
+    AtomicNamespaceMutationError,
+    DirectoryCleanupStatus,
+    output_directory_lock_is_held,
+)
+from flightrecorder.review import (
+    ReviewExportError,
+    _reviewed_dataset_version_id,
+    apply_review_labels,
+    review_item_sha256,
+)
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
+from flightrecorder.training import episode_events_sha256
+from flightrecorder.validation import validate_reviewed_export
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +48,113 @@ def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
         row["reviewed_at"] = "2026-06-26T00:00:00Z"
         row["notes"] = "Accepted suggested label for fixture coverage."
     labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+
+def refresh_reviewed_export_metadata(reviewed: Path) -> None:
+    """Make a tampered trainer view internally self-consistent for adversarial tests."""
+    manifest_path = reviewed / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifact_names = (
+        "reviewed_labels",
+        "reviewed_sft",
+        "reviewed_reward_model",
+        "reviewed_preferences",
+        "reviewed_dpo",
+    )
+    row_counts: dict[str, int] = {}
+    for artifact_name in artifact_names:
+        artifact_path = reviewed / f"{artifact_name}.jsonl"
+        content = artifact_path.read_bytes()
+        row_counts[artifact_name] = len(read_jsonl(artifact_path))
+        fingerprint = manifest["artifact_fingerprints"][artifact_name]
+        fingerprint["sha256"] = hashlib.sha256(content).hexdigest()
+        fingerprint["size_bytes"] = len(content)
+
+    for field_name, artifact_name in (
+        ("reviewed_label_count", "reviewed_labels"),
+        ("sft_count", "reviewed_sft"),
+        ("reward_model_count", "reviewed_reward_model"),
+        ("preference_count", "reviewed_preferences"),
+        ("dpo_count", "reviewed_dpo"),
+    ):
+        manifest[field_name] = row_counts[artifact_name]
+    manifest["label_provenance"]["trainer_view_counts"] = {
+        artifact_name: row_counts[artifact_name]
+        for artifact_name in (
+            "reviewed_sft",
+            "reviewed_reward_model",
+            "reviewed_preferences",
+            "reviewed_dpo",
+        )
+    }
+    for view in manifest["trainer_views"]["views"]:
+        view["row_count"] = row_counts[view["artifact"]]
+
+    dataset_version = _reviewed_dataset_version_id(
+        manifest["artifact_fingerprints"],
+        manifest["source_review_artifacts"],
+        manifest["labels_artifact"],
+    )
+    manifest["dataset_version"] = dataset_version
+    manifest["registry"]["selection_key"] = dataset_version
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    registry_path = reviewed / "dataset_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["dataset_version"] = dataset_version
+    registry["selection"]["key"] = dataset_version
+    registry["selection"]["trainer_preflight_arg"] = (
+        f"--require-dataset-version {dataset_version}"
+    )
+    registry["trainer_views"] = json.loads(
+        json.dumps(manifest["trainer_views"])
+    )
+    registry["label_provenance"] = json.loads(
+        json.dumps(manifest["label_provenance"])
+    )
+    registry["artifact_fingerprints"] = json.loads(
+        json.dumps(manifest["artifact_fingerprints"])
+    )
+    registry["manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    registry_path.write_text(
+        json.dumps(registry, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def make_reviewed_export(tmp: str, *, include_bad: bool = False) -> Path:
+    root = Path(tmp)
+    runs = root / "runs"
+    review = root / "review"
+    labels = root / "completed_labels.jsonl"
+    reviewed = root / "reviewed"
+    run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+    if include_bad:
+        run_cli(
+            [
+                "run",
+                "--scenario",
+                str(ROOT / "scenarios" / "prompt_injection_bad.json"),
+                "--out",
+                str(runs / "bad"),
+            ]
+        )
+    run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+    write_completed_labels(review, labels)
+    run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels), "--out", str(reviewed)])
+    return reviewed
 
 
 class ReviewExportTests(unittest.TestCase):
@@ -63,6 +186,50 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual({item["schema_version"] for item in items}, {"hfr.review.item.v1"})
             self.assertEqual({label["schema_version"] for label in labels}, {"hfr.review.label.v1"})
             self.assertTrue(all(len(item["review_item_sha256"]) == 64 for item in items))
+            self.assertTrue(all(len(item["episode_events_sha256"]) == 64 for item in items))
+            self.assertTrue(
+                all(
+                    set(item["source_artifact_fingerprints"])
+                    == {"normalized_trace", "scorecard"}
+                    for item in items
+                )
+            )
+            self.assertTrue(
+                all(
+                    fingerprint["algorithm"] == "sha256-canonical-json-v1"
+                    and len(fingerprint["sha256"]) == 64
+                    and fingerprint["sha256"] == fingerprint["sha256"].lower()
+                    and fingerprint["size_bytes"] > 0
+                    for item in items
+                    for fingerprint in item["source_artifact_fingerprints"].values()
+                )
+            )
+            for item in items:
+                run_dir = runs / item["episode_id"]
+                trace = json.loads(
+                    (run_dir / "normalized_trace.json").read_text(encoding="utf-8")
+                )
+                scorecard = json.loads(
+                    (run_dir / "scorecard.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    item["episode_events_sha256"],
+                    episode_events_sha256(trace["events"]),
+                )
+                for artifact_name, source in (
+                    ("normalized_trace", trace),
+                    ("scorecard", scorecard),
+                ):
+                    encoded = json.dumps(
+                        source,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ).encode("utf-8")
+                    fingerprint = item["source_artifact_fingerprints"][artifact_name]
+                    self.assertEqual(fingerprint["sha256"], hashlib.sha256(encoded).hexdigest())
+                    self.assertEqual(fingerprint["size_bytes"], len(encoded))
             self.assertEqual(
                 {label["review_item_sha256"] for label in labels},
                 {item["review_item_sha256"] for item in items},
@@ -153,9 +320,9 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(code, 0)
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             reviewed_labels = read_jsonl(out / "reviewed_labels.jsonl")
-            self.assertTrue(manifest["source_review_export"].startswith("<redacted:"))
-            self.assertTrue(manifest["labels_path"].startswith("<redacted:"))
-            self.assertTrue(reviewed_labels[0]["source_label_file"].startswith("<redacted:"))
+            self.assertEqual(manifest["source_review_export"], "provenance")
+            self.assertEqual(manifest["labels_path"], "provenance/completed_labels.jsonl")
+            self.assertEqual(reviewed_labels[0]["source_label_file"], "provenance/completed_labels.jsonl")
             self.assertTrue(reviewed_labels[0]["source_artifacts"]["run_dir"].startswith("<redacted:"))
             self.assertTrue(reviewed_labels[0]["source_artifacts"]["report"].startswith("<redacted:"))
             self.assertFalse(Path(reviewed_labels[0]["source_label_file"]).is_absolute())
@@ -347,6 +514,27 @@ class ReviewExportTests(unittest.TestCase):
             self.assertIn("review_item_sha256 does not match review item contents", errors)
             self.assertIn("review_item_sha256 does not match referenced review item", errors)
 
+    def test_validate_review_export_requires_behavior_and_source_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            item_path = out / "review_items.jsonl"
+            item = read_jsonl(item_path)[0]
+            item.pop("episode_events_sha256")
+            item["source_artifact_fingerprints"].pop("scorecard")
+            item_path.write_text(json.dumps(item, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--review-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("episode_events_sha256 must be a lowercase SHA-256", errors)
+            self.assertIn("source_artifact_fingerprints.scorecard must be an object", errors)
+
     def test_review_item_sha256_ignores_source_artifact_display_paths(self):
         item = {
             "schema_version": "hfr.review.item.v1",
@@ -355,6 +543,18 @@ class ReviewExportTests(unittest.TestCase):
                 "run_dir": "runs/case-1",
                 "normalized_trace": "runs/case-1/normalized_trace.json",
                 "scorecard": "runs/case-1/scorecard.json",
+            },
+            "source_artifact_fingerprints": {
+                "normalized_trace": {
+                    "algorithm": "sha256-canonical-json-v1",
+                    "sha256": "1" * 64,
+                    "size_bytes": 10,
+                },
+                "scorecard": {
+                    "algorithm": "sha256-canonical-json-v1",
+                    "sha256": "2" * 64,
+                    "size_bytes": 20,
+                },
             },
             "prompt": "Summarize the issue.",
             "final_answer": "Done.",
@@ -365,9 +565,12 @@ class ReviewExportTests(unittest.TestCase):
         moved["source_artifacts"]["scorecard"] = "elsewhere/scorecard.json"
         missing_role = json.loads(json.dumps(item))
         missing_role["source_artifacts"].pop("scorecard")
+        changed_content = json.loads(json.dumps(item))
+        changed_content["source_artifact_fingerprints"]["scorecard"]["sha256"] = "3" * 64
 
         self.assertEqual(review_item_sha256(item), review_item_sha256(moved))
         self.assertNotEqual(review_item_sha256(item), review_item_sha256(missing_role))
+        self.assertNotEqual(review_item_sha256(item), review_item_sha256(changed_content))
 
     def test_validate_review_export_rejects_missing_confidence_options(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -579,6 +782,849 @@ class ReviewExportTests(unittest.TestCase):
             self.assertFalse(bad_schema["passed"])
             self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
 
+    def test_apply_review_rerun_replaces_existing_reviewed_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            labels = read_jsonl(labels_path)
+            labels[0]["notes"] = "Updated on a reviewed-export rerun."
+            labels_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in labels),
+                encoding="utf-8",
+            )
+
+            manifest = apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(manifest, json.loads((reviewed / "manifest.json").read_text(encoding="utf-8")))
+            self.assertEqual(
+                read_jsonl(reviewed / "provenance" / "completed_labels.jsonl")[0]["notes"],
+                "Updated on a reviewed-export rerun.",
+            )
+            self.assertFalse(list(Path(tmp).glob(".reviewed.staging-*")))
+            self.assertFalse(list(Path(tmp).glob(".reviewed.backup-*")))
+
+    def test_apply_review_rejects_manifest_only_unowned_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            target = root / "manifest-only"
+            target.mkdir()
+            personal_manifest = target / "manifest.json"
+            original = b"personal notes, not a reviewed-export manifest\n"
+            personal_manifest.write_bytes(original)
+
+            with self.assertRaisesRegex(
+                ReviewExportError,
+                "not a semantically valid prior reviewed export",
+            ):
+                apply_review_labels(review, target, labels_path=labels_path)
+
+            self.assertEqual(personal_manifest.read_bytes(), original)
+            self.assertEqual(list(target.iterdir()), [personal_manifest])
+
+    def test_apply_review_rejects_unowned_replacement_between_check_and_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            saved_reviewed = root / "saved-reviewed"
+            sentinel = reviewed / "unrelated-private-data.txt"
+            actual_attestation = review_module._reviewed_output_attestation
+            replaced = False
+
+            def replace_before_baseline(path: Path):
+                nonlocal replaced
+                if path == reviewed and not replaced:
+                    replaced = True
+                    reviewed.rename(saved_reviewed)
+                    reviewed.mkdir()
+                    sentinel.write_text("must survive\n", encoding="utf-8")
+                return actual_attestation(path)
+
+            with (
+                patch.object(
+                    review_module,
+                    "_reviewed_output_attestation",
+                    side_effect=replace_before_baseline,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "not a semantically valid prior reviewed export",
+                ),
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertTrue(replaced)
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "must survive\n")
+            self.assertTrue((saved_reviewed / "manifest.json").is_file())
+
+    def test_apply_review_rolls_back_new_target_after_post_rename_fsync_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            target = root / "new-reviewed"
+            actual_rename = review_module.atomic_rename_entry_noreplace
+
+            def rename_then_fail(parent_descriptor, source_name, target_name):
+                actual_rename(parent_descriptor, source_name, target_name)
+                raise AtomicNamespaceMutationError(
+                    "injected post-rename fsync failure"
+                )
+
+            with (
+                patch.object(
+                    review_module,
+                    "atomic_rename_entry_noreplace",
+                    side_effect=rename_then_fail,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "publication was rolled back",
+                ),
+            ):
+                apply_review_labels(review, target, labels_path=labels_path)
+
+            self.assertFalse(target.exists())
+            self.assertFalse(list(root.glob(".new-reviewed.staging-*")))
+
+    def test_apply_review_reports_target_reinserted_after_noreplace_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            target = root / "new-reviewed"
+            actual_rename = review_module.atomic_rename_entry_noreplace
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            outcomes = []
+
+            def rename_then_fail(parent_descriptor, source_name, target_name):
+                actual_rename(parent_descriptor, source_name, target_name)
+                raise AtomicNamespaceMutationError(
+                    "injected post-rename fsync failure"
+                )
+
+            def remove_then_reinsert(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                outcome = actual_remove(
+                    parent_descriptor,
+                    name,
+                    expected_identity,
+                    expected_namespace,
+                )
+                outcomes.append(outcome)
+                target.mkdir()
+                (target / "concurrent.txt").write_text(
+                    "concurrent\n",
+                    encoding="utf-8",
+                )
+                return outcome
+
+            with (
+                patch.object(
+                    review_module,
+                    "atomic_rename_entry_noreplace",
+                    side_effect=rename_then_fail,
+                ),
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=remove_then_reinsert,
+                ),
+                self.assertRaises(ReviewExportError) as raised,
+            ):
+                apply_review_labels(review, target, labels_path=labels_path)
+
+            self.assertEqual(len(outcomes), 1)
+            self.assertEqual(outcomes[0].status, DirectoryCleanupStatus.COMPLETE)
+            self.assertIn(str(target), str(raised.exception))
+            self.assertIn("concurrent namespace entries", str(raised.exception))
+            self.assertNotIn("was retained for recovery", str(raised.exception))
+            self.assertEqual(
+                (target / "concurrent.txt").read_text(encoding="utf-8"),
+                "concurrent\n",
+            )
+
+    def test_apply_review_reports_target_reinserted_after_unconfirmed_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            target = root / "new-reviewed"
+            actual_rename = review_module.atomic_rename_entry_noreplace
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            outcomes = []
+
+            def rename_then_fail(parent_descriptor, source_name, target_name):
+                actual_rename(parent_descriptor, source_name, target_name)
+                raise AtomicNamespaceMutationError(
+                    "injected post-rename fsync failure"
+                )
+
+            def remove_unconfirmed_then_reinsert(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                actual_sync = path_safety_module._sync_directory_descriptor
+                sync_count = 0
+
+                def fail_first_sync(descriptor):
+                    nonlocal sync_count
+                    sync_count += 1
+                    if sync_count == 1:
+                        raise OSError(
+                            errno.EIO,
+                            "injected post-root-removal sync failure",
+                        )
+                    return actual_sync(descriptor)
+
+                with patch.object(
+                    path_safety_module,
+                    "_sync_directory_descriptor",
+                    side_effect=fail_first_sync,
+                ):
+                    outcome = actual_remove(
+                        parent_descriptor,
+                        name,
+                        expected_identity,
+                        expected_namespace,
+                    )
+                outcomes.append(outcome)
+                target.mkdir()
+                (target / "concurrent.txt").write_text(
+                    "concurrent\n",
+                    encoding="utf-8",
+                )
+                return outcome
+
+            with (
+                patch.object(
+                    review_module,
+                    "atomic_rename_entry_noreplace",
+                    side_effect=rename_then_fail,
+                ),
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=remove_unconfirmed_then_reinsert,
+                ),
+                self.assertRaises(ReviewExportError) as raised,
+            ):
+                apply_review_labels(review, target, labels_path=labels_path)
+
+            self.assertEqual(len(outcomes), 1)
+            self.assertEqual(
+                outcomes[0].status,
+                DirectoryCleanupStatus.COMPLETE_DURABILITY_UNCONFIRMED,
+            )
+            self.assertIn(str(target), str(raised.exception))
+            self.assertIn("concurrent namespace entries", str(raised.exception))
+            self.assertNotIn("was retained for recovery", str(raised.exception))
+            self.assertEqual(
+                (target / "concurrent.txt").read_text(encoding="utf-8"),
+                "concurrent\n",
+            )
+
+    def test_apply_review_rolls_back_exchange_after_post_fsync_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            before = {
+                path.relative_to(reviewed): path.read_bytes()
+                for path in reviewed.rglob("*")
+                if path.is_file()
+            }
+            actual_exchange = review_module.atomic_exchange_entries
+            exchange_count = 0
+
+            def exchange_then_fail_once(parent_descriptor, left_name, right_name):
+                nonlocal exchange_count
+                exchange_count += 1
+                actual_exchange(parent_descriptor, left_name, right_name)
+                if exchange_count == 1:
+                    raise AtomicNamespaceMutationError(
+                        "injected post-exchange fsync failure"
+                    )
+
+            with (
+                patch.object(
+                    review_module,
+                    "atomic_exchange_entries",
+                    side_effect=exchange_then_fail_once,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "exchange was rolled back",
+                ),
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            after = {
+                path.relative_to(reviewed): path.read_bytes()
+                for path in reviewed.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(exchange_count, 2)
+            self.assertEqual(after, before)
+            self.assertFalse(list(root.glob(".reviewed.staging-*")))
+
+    def test_apply_review_validation_failure_preserves_existing_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            before = {
+                path.relative_to(reviewed): path.read_bytes()
+                for path in reviewed.rglob("*")
+                if path.is_file()
+            }
+
+            with patch(
+                "flightrecorder.review._validate_staged_reviewed_export",
+                side_effect=ReviewExportError("forced staged validation failure"),
+            ):
+                with self.assertRaisesRegex(ReviewExportError, "forced staged validation failure"):
+                    apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            after = {
+                path.relative_to(reviewed): path.read_bytes()
+                for path in reviewed.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(after, before)
+            self.assertFalse(list(Path(tmp).glob(".reviewed.staging-*")))
+
+    def test_apply_review_rejects_concurrent_existing_export_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            manifest_path = reviewed / "manifest.json"
+            original = manifest_path.read_bytes()
+
+            def mutate_before_publish(staging: Path) -> None:
+                manifest_path.write_bytes(original + b" ")
+
+            with patch(
+                "flightrecorder.review._validate_staged_reviewed_export",
+                side_effect=mutate_before_publish,
+            ):
+                with self.assertRaisesRegex(ReviewExportError, "changed before publication"):
+                    apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(manifest_path.read_bytes(), original + b" ")
+            self.assertFalse(list(Path(tmp).glob(".reviewed.staging-*")))
+
+    def test_apply_review_rolls_back_post_check_atomic_swap_race(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            manifest_path = reviewed / "manifest.json"
+            competing = manifest_path.read_bytes() + b" "
+            actual_exchange = review_module.atomic_exchange_entries
+            exchanged = False
+
+            def compete_then_exchange(parent_descriptor, left_name, right_name):
+                nonlocal exchanged
+                if not exchanged:
+                    manifest_path.write_bytes(competing)
+                    exchanged = True
+                return actual_exchange(parent_descriptor, left_name, right_name)
+
+            with patch(
+                "flightrecorder.review.atomic_exchange_entries",
+                side_effect=compete_then_exchange,
+            ):
+                with self.assertRaisesRegex(
+                    ReviewExportError,
+                    "changed during atomic publication",
+                ):
+                    apply_review_labels(
+                        review,
+                        reviewed,
+                        labels_path=labels_path,
+                    )
+
+            self.assertEqual(manifest_path.read_bytes(), competing)
+            self.assertFalse(list(Path(tmp).glob(".reviewed.staging-*")))
+
+    def test_apply_review_rolls_back_concurrent_empty_directory_and_preserves_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            concurrent = reviewed / "concurrent-empty-directory"
+            actual_exchange = review_module.atomic_exchange_entries
+            exchanged = False
+
+            def compete_then_exchange(parent_descriptor, left_name, right_name):
+                nonlocal exchanged
+                if not exchanged:
+                    concurrent.mkdir()
+                    exchanged = True
+                return actual_exchange(parent_descriptor, left_name, right_name)
+
+            with patch(
+                "flightrecorder.review.atomic_exchange_entries",
+                side_effect=compete_then_exchange,
+            ):
+                with self.assertRaisesRegex(
+                    ReviewExportError,
+                    "changed during atomic publication",
+                ):
+                    apply_review_labels(
+                        review,
+                        reviewed,
+                        labels_path=labels_path,
+                    )
+
+            self.assertTrue(concurrent.is_dir())
+            self.assertEqual(list(concurrent.iterdir()), [])
+            self.assertFalse(list(Path(tmp).glob(".reviewed.staging-*")))
+
+    def test_apply_review_cleanup_preserves_file_added_after_ownership_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            injected: list[tuple[Path, bool]] = []
+
+            def inject_then_remove(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                sentinel = root / name / "concurrent-unowned.txt"
+                sentinel.write_text("must survive concurrent cleanup\n", encoding="utf-8")
+                removed = actual_remove(
+                    parent_descriptor,
+                    name,
+                    expected_identity,
+                    expected_namespace,
+                )
+                injected.append((sentinel, removed))
+                return removed
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=inject_then_remove,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "displaced prior version was retained for recovery",
+                ),
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(injected), 1)
+            sentinel, removed = injected[0]
+            self.assertFalse(removed)
+            self.assertEqual(
+                sentinel.read_text(encoding="utf-8"),
+                "must survive concurrent cleanup\n",
+            )
+            self.assertTrue(reviewed.is_dir())
+
+    def test_apply_review_cleanup_preserves_replaced_file_after_ownership_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            saved_manifest = root / "approved-manifest-before-race.json"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            replacement_paths: list[Path] = []
+
+            def replace_then_remove(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                manifest = root / name / "manifest.json"
+                manifest.rename(saved_manifest)
+                manifest.write_text("unowned replacement\n", encoding="utf-8")
+                replacement_paths.append(manifest)
+                return actual_remove(
+                    parent_descriptor,
+                    name,
+                    expected_identity,
+                    expected_namespace,
+                )
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=replace_then_remove,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "displaced prior version was retained for recovery",
+                ),
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(replacement_paths), 1)
+            self.assertEqual(
+                replacement_paths[0].read_text(encoding="utf-8"),
+                "unowned replacement\n",
+            )
+            self.assertTrue(saved_manifest.is_file())
+            self.assertTrue(reviewed.is_dir())
+
+    def test_apply_review_cleanup_preserves_empty_directory_added_after_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            injected: list[tuple[Path, bool]] = []
+
+            def inject_then_remove(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                directory = root / name / "concurrent-empty-directory"
+                directory.mkdir()
+                removed = actual_remove(
+                    parent_descriptor,
+                    name,
+                    expected_identity,
+                    expected_namespace,
+                )
+                injected.append((directory, removed))
+                return removed
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=inject_then_remove,
+                ),
+                self.assertRaisesRegex(
+                    ReviewExportError,
+                    "displaced prior version was retained for recovery",
+                ),
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(injected), 1)
+            directory, removed = injected[0]
+            self.assertFalse(removed)
+            self.assertTrue(directory.is_dir())
+            self.assertEqual(list(directory.iterdir()), [])
+            self.assertTrue(reviewed.is_dir())
+
+    def test_apply_review_reports_partial_cleanup_after_second_unlink_eio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            outcomes = []
+
+            def remove_with_second_unlink_failure(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                actual_unlink = path_safety_module.os.unlink
+                unlink_count = 0
+
+                def fail_second_private_unlink(entry_name, *, dir_fd=None):
+                    nonlocal unlink_count
+                    if str(entry_name).startswith(".hfr-remove-"):
+                        unlink_count += 1
+                        if unlink_count == 2:
+                            raise OSError(
+                                errno.EIO,
+                                "injected second unlink failure",
+                            )
+                    return actual_unlink(entry_name, dir_fd=dir_fd)
+
+                with patch.object(
+                    path_safety_module.os,
+                    "unlink",
+                    side_effect=fail_second_private_unlink,
+                ):
+                    outcome = actual_remove(
+                        parent_descriptor,
+                        name,
+                        expected_identity,
+                        expected_namespace,
+                    )
+                outcomes.append(outcome)
+                return outcome
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=remove_with_second_unlink_failure,
+                ),
+                self.assertRaises(ReviewExportError) as raised,
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(outcomes), 1)
+            outcome = outcomes[0]
+            self.assertEqual(outcome.status, DirectoryCleanupStatus.PARTIAL)
+            self.assertFalse(outcome.durability_confirmed)
+            self.assertIn("cleanup of the displaced prior version was partial", str(raised.exception))
+            self.assertNotIn("was retained for recovery", str(raised.exception))
+            self.assertTrue(outcome.recovery_entries)
+            for relative_entry in outcome.recovery_entries:
+                recovery_path = root / relative_entry
+                self.assertIn(str(recovery_path), str(raised.exception))
+                self.assertTrue(recovery_path.exists())
+            self.assertTrue(reviewed.is_dir())
+
+    def test_apply_review_reports_complete_cleanup_with_unconfirmed_durability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            outcomes = []
+
+            def remove_with_post_root_sync_failure(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                actual_sync = path_safety_module._sync_directory_descriptor
+                sync_count = 0
+
+                def fail_first_sync(descriptor):
+                    nonlocal sync_count
+                    sync_count += 1
+                    if sync_count == 1:
+                        raise OSError(
+                            errno.EIO,
+                            "injected post-root-removal sync failure",
+                        )
+                    return actual_sync(descriptor)
+
+                with patch.object(
+                    path_safety_module,
+                    "_sync_directory_descriptor",
+                    side_effect=fail_first_sync,
+                ):
+                    outcome = actual_remove(
+                        parent_descriptor,
+                        name,
+                        expected_identity,
+                        expected_namespace,
+                    )
+                outcomes.append(outcome)
+                return outcome
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=remove_with_post_root_sync_failure,
+                ),
+                self.assertRaises(ReviewExportError) as raised,
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(outcomes), 1)
+            outcome = outcomes[0]
+            self.assertEqual(
+                outcome.status,
+                DirectoryCleanupStatus.COMPLETE_DURABILITY_UNCONFIRMED,
+            )
+            self.assertFalse(outcome.durability_confirmed)
+            self.assertIn("was completely removed", str(raised.exception))
+            self.assertIn("durability could not be confirmed", str(raised.exception))
+            self.assertNotIn("was retained for recovery", str(raised.exception))
+            self.assertEqual(outcome.recovery_entries, ())
+            self.assertTrue(reviewed.is_dir())
+            self.assertFalse(list(root.glob(".reviewed.staging-*")))
+
+    def test_apply_review_reports_vault_recovery_path_after_public_reinsertion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(tmp)
+            review = root / "review"
+            labels_path = root / "completed_labels.jsonl"
+            actual_remove = review_module.remove_directory_entry_tree_if_identity
+            outcomes = []
+            public_reinsertions = []
+
+            def remove_after_public_reinsertion(
+                parent_descriptor,
+                name,
+                expected_identity,
+                expected_namespace,
+            ):
+                actual_unlink = path_safety_module.os.unlink
+                unlink_count = 0
+                public_path = root / name
+
+                def reinsert_then_fail(entry_name, *, dir_fd=None):
+                    nonlocal unlink_count
+                    if str(entry_name).startswith(".hfr-remove-"):
+                        unlink_count += 1
+                        if unlink_count == 2:
+                            public_path.mkdir()
+                            (public_path / "concurrent.txt").write_text(
+                                "concurrent\n",
+                                encoding="utf-8",
+                            )
+                            public_reinsertions.append(public_path)
+                            raise OSError(
+                                errno.EIO,
+                                "injected second unlink failure",
+                            )
+                    return actual_unlink(entry_name, dir_fd=dir_fd)
+
+                with patch.object(
+                    path_safety_module.os,
+                    "unlink",
+                    side_effect=reinsert_then_fail,
+                ):
+                    outcome = actual_remove(
+                        parent_descriptor,
+                        name,
+                        expected_identity,
+                        expected_namespace,
+                    )
+                outcomes.append(outcome)
+                return outcome
+
+            with (
+                patch.object(
+                    review_module,
+                    "remove_directory_entry_tree_if_identity",
+                    side_effect=remove_after_public_reinsertion,
+                ),
+                self.assertRaises(ReviewExportError) as raised,
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(len(outcomes), 1)
+            outcome = outcomes[0]
+            self.assertEqual(outcome.status, DirectoryCleanupStatus.PARTIAL)
+            self.assertFalse(outcome.durability_confirmed)
+            self.assertEqual(len(outcome.cleanup_artifacts), 1)
+            self.assertTrue(outcome.recovery_entries)
+            self.assertEqual(len(outcome.concurrent_entries), 1)
+            self.assertNotIn("was retained for recovery", str(raised.exception))
+            for relative_entry in outcome.recovery_entries:
+                recovery_path = root / relative_entry
+                self.assertIn(str(recovery_path), str(raised.exception))
+                self.assertTrue(recovery_path.exists())
+            for relative_entry in outcome.concurrent_entries:
+                concurrent_path = root / relative_entry
+                self.assertIn(str(concurrent_path), str(raised.exception))
+                self.assertTrue(concurrent_path.exists())
+            self.assertEqual(len(public_reinsertions), 1)
+            self.assertEqual(
+                (public_reinsertions[0] / "concurrent.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "concurrent\n",
+            )
+
+    def test_apply_review_holds_canonical_lock_through_staged_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            actual_validate = review_module._validate_staged_reviewed_export
+
+            def assert_locked(staging):
+                self.assertTrue(output_directory_lock_is_held(reviewed))
+                actual_validate(staging)
+
+            with patch(
+                "flightrecorder.review._validate_staged_reviewed_export",
+                side_effect=assert_locked,
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+    def test_apply_review_rejects_corrupt_source_review_manifest_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            manifest_path = review / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["item_count"] = 999
+            manifest["artifact_fingerprints"] = {}
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            existing = (reviewed / "manifest.json").read_bytes()
+
+            with self.assertRaisesRegex(
+                ReviewExportError,
+                "staged reviewed export failed validation",
+            ):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual((reviewed / "manifest.json").read_bytes(), existing)
+
+    def test_apply_review_rejects_unrelated_existing_output_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            unrelated = reviewed / "operator-notes.txt"
+            unrelated.write_text("do not replace", encoding="utf-8")
+            manifest_before = (reviewed / "manifest.json").read_bytes()
+
+            with self.assertRaisesRegex(ReviewExportError, "unrelated entry"):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "do not replace")
+            self.assertEqual((reviewed / "manifest.json").read_bytes(), manifest_before)
+
+    def test_apply_review_rejects_review_source_output_overlap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            review_manifest_before = (review / "manifest.json").read_bytes()
+
+            with self.assertRaisesRegex(ReviewExportError, "must not overlap"):
+                apply_review_labels(review, review / "reviewed", labels_path=labels_path)
+
+            self.assertEqual((review / "manifest.json").read_bytes(), review_manifest_before)
+            self.assertFalse((review / "reviewed").exists())
+
     def test_reviewed_dataset_version_ignores_fingerprint_display_paths(self):
         artifacts = {
             "reviewed_labels": {
@@ -688,6 +1734,107 @@ class ReviewExportTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
             self.assertIn("review output file must resolve to a regular non-symlink file", stderr.getvalue())
+
+    def test_validate_reviewed_export_rejects_provenance_label_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            provenance_labels = reviewed / "provenance" / "completed_labels.jsonl"
+            rows = read_jsonl(provenance_labels)
+            rows[0]["human_label"] = "reject"
+            provenance_labels.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            summary_path = Path(tmp) / "validation.json"
+
+            code = run_cli(["validate", "--reviewed-export", str(reviewed), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "reviewed_labels.jsonl must match deterministic replay of provenance review_items and completed_labels.",
+                errors,
+            )
+
+    def test_validate_reviewed_export_rejects_self_consistent_poisoned_sft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            sft_path = reviewed / "reviewed_sft.jsonl"
+            rows = read_jsonl(sft_path)
+            rows[0]["response"] = "Unapproved response injected after human review."
+            write_jsonl(sft_path, rows)
+            refresh_reviewed_export_metadata(reviewed)
+
+            validation = validate_reviewed_export(reviewed)
+
+            self.assertIn(
+                "reviewed_sft.jsonl must match deterministic replay of reviewed_labels.jsonl.",
+                validation.errors,
+            )
+
+    def test_validate_reviewed_export_rejects_missing_and_duplicate_trainer_rows(self):
+        cases = (
+            ("reviewed_sft", "missing"),
+            ("reviewed_sft", "duplicate"),
+            ("reviewed_reward_model", "missing"),
+            ("reviewed_reward_model", "duplicate"),
+            ("reviewed_preferences", "missing"),
+            ("reviewed_preferences", "duplicate"),
+            ("reviewed_dpo", "missing"),
+            ("reviewed_dpo", "duplicate"),
+        )
+        for artifact_name, mutation in cases:
+            with self.subTest(artifact=artifact_name, mutation=mutation):
+                with tempfile.TemporaryDirectory() as tmp:
+                    reviewed = make_reviewed_export(tmp, include_bad=True)
+                    artifact_path = reviewed / f"{artifact_name}.jsonl"
+                    rows = read_jsonl(artifact_path)
+                    self.assertTrue(rows)
+                    mutated_rows = [] if mutation == "missing" else [*rows, dict(rows[0])]
+                    write_jsonl(artifact_path, mutated_rows)
+                    refresh_reviewed_export_metadata(reviewed)
+
+                    validation = validate_reviewed_export(reviewed)
+
+                    self.assertIn(
+                        f"{artifact_name}.jsonl must match deterministic replay of reviewed_labels.jsonl.",
+                        validation.errors,
+                    )
+
+    def test_validate_reviewed_export_requires_replay_pair_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            manifest_path = reviewed / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.pop("max_pairs_per_family")
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_reviewed_export(reviewed)
+
+            self.assertIn(
+                "manifest.max_pairs_per_family must be a non-negative integer for reviewed trainer-view replay.",
+                validation.errors,
+            )
+
+    def test_validate_reviewed_export_rejects_secret_like_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            provenance_manifest = reviewed / "provenance" / "review_manifest.json"
+            payload = json.loads(provenance_manifest.read_text(encoding="utf-8"))
+            payload["api_token"] = "unredacted-test-credential"
+            provenance_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            summary_path = Path(tmp) / "validation.json"
+
+            code = run_cli(["validate", "--reviewed-export", str(reviewed), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("reviewed export contains unredacted secret-like values.", errors)
 
     def test_validate_reviewed_export_rejects_dataset_registry_hash_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -875,6 +2022,30 @@ class ReviewExportTests(unittest.TestCase):
                 main(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
 
             self.assertEqual(raised.exception.code, 2)
+
+    def test_apply_review_requires_reviewer_identity_and_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            rows = read_jsonl(labels_path)
+            rows[0]["reviewer"] = ""
+            labels_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ReviewExportError, "missing reviewer identity"):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
+
+            rows[0]["reviewer"] = "test-reviewer"
+            rows[0]["reviewed_at"] = ""
+            labels_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReviewExportError, "missing reviewed_at timestamp"):
+                apply_review_labels(review, reviewed, labels_path=labels_path)
 
     def test_validate_reviewed_export_rejects_stripped_confidence_fields(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
+import stat
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
@@ -78,7 +80,7 @@ from .bundle import (
     _decision_text as _build_evidence_bundle_decision_text,
     _next_actions as _build_evidence_bundle_next_actions,
 )
-from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
+from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION, build_review_calibration
 from .cloud_training import (
     CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
@@ -92,7 +94,10 @@ from .cloud_training import (
 from .schema_registry import SchemaRegistryError, check_schema_contract, check_schema_file
 from .source_contract import inspect_artifact_source
 from .compare_gate import compare_movement_summary
-from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
+from .dataset_curation import (
+    DATASET_CURATION_RECEIPT_SCHEMA_VERSION,
+    training_export_lineage_status,
+)
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION, decision_gate_source_contract_errors
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
@@ -168,12 +173,19 @@ from .model_grader import (
     MODEL_GRADER_GATE_SCHEMA_VERSION,
     MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION,
     RUBRIC_SPEC_SCHEMA_VERSION,
+    ModelGraderError,
+    _model_grader_review_lineage_status,
+    build_model_grader_gate,
 )
 from .next_iteration_schedule import NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
     TRAINER_PREFLIGHT_SCHEMA_VERSION,
+    TRAINER_PREFLIGHT_SOURCE_ARTIFACT_FIELDS,
+    TrainerPreflightError,
+    build_trainer_launch_check,
+    build_trainer_preflight_source_artifact,
 )
 from .governance import (
     PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
@@ -205,7 +217,7 @@ from .promotion_gate import (
 )
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
-from .rejection_sampling import REJECTION_SAMPLING_GATE_SCHEMA_VERSION
+from .rejection_sampling import REJECTION_SAMPLING_GATE_SCHEMA_VERSION, _review_lineage_status
 from .review import (
     REVIEW_CONFIDENCE_LEVELS,
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -214,12 +226,25 @@ from .review import (
     REVIEW_MANIFEST_SCHEMA_VERSION,
     TRAINING_NEGATIVE_LABELS,
     review_item_sha256,
+    _reviewed_dpo as _build_reviewed_dpo,
+    _reviewed_labels as _build_reviewed_labels,
+    _reviewed_preferences as _build_reviewed_preferences,
+    _reviewed_reward_model as _build_reviewed_reward_model,
+    _reviewed_sft as _build_reviewed_sft,
     REVIEWED_DPO_SCHEMA_VERSION,
     REVIEWED_LABEL_SCHEMA_VERSION,
     REVIEWED_MANIFEST_SCHEMA_VERSION,
     REVIEWED_PREFERENCE_SCHEMA_VERSION,
     REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
     REVIEWED_SFT_SCHEMA_VERSION,
+    _reviewed_dataset_version_id,
+)
+from .reviewed_gate import (
+    REVIEWED_EXPORT_SOURCE_ARTIFACT_FIELDS,
+    REVIEWED_GATE_SCHEMA_VERSION,
+    ReviewedGateError,
+    build_reviewed_export_source_artifact,
+    evaluate_reviewed_gate,
 )
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
 from .path_safety import (
@@ -309,6 +334,7 @@ def validate_artifacts(
     compare_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
+    reviewed_gate_paths: list[str | Path] | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
     improvement_plan_paths: list[str | Path] | None = None,
@@ -406,6 +432,8 @@ def validate_artifacts(
         targets.append(validate_review_export(review_export_dir))
     if reviewed_export_dir is not None:
         targets.append(validate_reviewed_export(reviewed_export_dir))
+    for reviewed_gate_path in reviewed_gate_paths or []:
+        targets.append(validate_reviewed_gate(reviewed_gate_path))
     for evidence_coverage_path in evidence_coverage_paths or []:
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
@@ -958,6 +986,26 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     reward_model = _read_jsonl_objects(export_dir / "reviewed_reward_model.jsonl", target, "reviewed_reward_model.jsonl")
     preferences = _read_jsonl_objects(export_dir / "reviewed_preferences.jsonl", target, "reviewed_preferences.jsonl")
     dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
+    provenance_items = _read_jsonl_objects(
+        export_dir / "provenance" / "review_items.jsonl",
+        target,
+        "provenance/review_items.jsonl",
+    )
+    provenance_labels = _read_jsonl_objects(
+        export_dir / "provenance" / "completed_labels.jsonl",
+        target,
+        "provenance/completed_labels.jsonl",
+    )
+    provenance_label_template = _read_jsonl_objects(
+        export_dir / "provenance" / "label_template.jsonl",
+        target,
+        "provenance/label_template.jsonl",
+    )
+    provenance_review_manifest = _read_object(
+        export_dir / "provenance" / "review_manifest.json",
+        target,
+        "provenance/review_manifest.json",
+    )
     dataset_registry_path = export_dir / "dataset_registry.json"
     dataset_registry = (
         None
@@ -975,6 +1023,9 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
         "reviewed_reward_model": reward_model,
         "reviewed_preferences": preferences,
         "reviewed_dpo": dpo,
+        "provenance_review_items": provenance_items,
+        "provenance_label_template": provenance_label_template,
+        "provenance_completed_labels": provenance_labels,
     }
     expected_redaction_status = build_redaction_status(
         redaction_scan_artifacts(
@@ -982,6 +1033,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
             extra_artifacts={
                 "manifest": manifest or {},
                 "dataset_registry": dataset_registry or {},
+                "provenance_review_manifest": provenance_review_manifest or {},
             },
         )
     )
@@ -1008,11 +1060,83 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
             "manifest.artifact_fingerprints",
             _reviewed_export_artifact_paths(export_dir),
         )
+    if provenance_review_manifest is not None:
+        _validate_review_manifest(
+            provenance_review_manifest,
+            target,
+            provenance_items,
+            provenance_label_template,
+        )
+        provenance_fingerprints = provenance_review_manifest.get(
+            "artifact_fingerprints"
+        )
+        if isinstance(provenance_fingerprints, dict):
+            replayable_fingerprints = {
+                name: provenance_fingerprints.get(name)
+                for name in ("review_items", "label_template")
+            }
+        else:
+            replayable_fingerprints = provenance_fingerprints
+        _validate_manifest_artifact_fingerprints(
+            replayable_fingerprints,
+            target,
+            "provenance/review_manifest.json.artifact_fingerprints",
+            {
+                "review_items": export_dir / "provenance" / "review_items.jsonl",
+                "label_template": export_dir
+                / "provenance"
+                / "label_template.jsonl",
+            },
+        )
+    _validate_review_items(provenance_items, target)
+    _validate_review_labels(
+        provenance_label_template,
+        target,
+        provenance_items,
+    )
+    _validate_review_labels(
+        provenance_labels,
+        target,
+        provenance_items,
+    )
     _validate_reviewed_labels(labels, target)
     _validate_reviewed_sft(sft, target, labels)
     _validate_reviewed_reward_model(reward_model, target, labels)
     _validate_reviewed_preferences(preferences, target, labels)
     _validate_reviewed_dpo(dpo, target, preferences)
+    item_ids = [item.get("review_item_id") for item in provenance_items if isinstance(item.get("review_item_id"), str)]
+    if len(item_ids) != len(set(item_ids)):
+        target.errors.append("provenance/review_items.jsonl must not contain duplicate review_item_id values.")
+    expected_reviewed_labels: list[dict[str, Any]] | None = None
+    try:
+        expected_reviewed_labels = _build_reviewed_labels(
+            {
+                item["review_item_id"]: item
+                for item in provenance_items
+                if isinstance(item.get("review_item_id"), str) and item.get("review_item_id")
+            },
+            provenance_labels,
+            export_dir / "provenance" / "completed_labels.jsonl",
+            False,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        target.errors.append(f"reviewed export provenance could not replay human labels: {exc}")
+    else:
+        for row in expected_reviewed_labels:
+            row["source_label_file"] = "provenance/completed_labels.jsonl"
+        if labels != expected_reviewed_labels:
+            target.errors.append(
+                "reviewed_labels.jsonl must match deterministic replay of provenance review_items and completed_labels."
+            )
+    _validate_reviewed_trainer_view_replay(
+        manifest,
+        expected_reviewed_labels,
+        sft,
+        reward_model,
+        preferences,
+        dpo,
+        target,
+    )
     target.details.update(
         {
             "reviewed_label_count": len(labels),
@@ -1023,6 +1147,291 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
         }
     )
     return target
+
+
+def _validate_reviewed_trainer_view_replay(
+    manifest: dict[str, Any] | None,
+    reviewed_labels: list[dict[str, Any]] | None,
+    sft: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    target: ValidationTarget,
+) -> None:
+    """Require every trainer view to be the canonical projection of human labels."""
+    if manifest is None:
+        target.errors.append(
+            "reviewed trainer views could not be replayed because manifest.json is unavailable."
+        )
+        return
+    max_pairs_per_family = manifest.get("max_pairs_per_family")
+    if (
+        not isinstance(max_pairs_per_family, int)
+        or isinstance(max_pairs_per_family, bool)
+        or max_pairs_per_family < 0
+    ):
+        target.errors.append(
+            "manifest.max_pairs_per_family must be a non-negative integer for reviewed trainer-view replay."
+        )
+        return
+    if reviewed_labels is None:
+        target.errors.append(
+            "reviewed trainer views could not be replayed because provenance labels did not produce a valid reviewed-label projection."
+        )
+        return
+
+    try:
+        expected_sft = _build_reviewed_sft(reviewed_labels)
+        expected_reward_model = _build_reviewed_reward_model(reviewed_labels)
+        expected_preferences = _build_reviewed_preferences(
+            reviewed_labels,
+            max_pairs_per_family=max_pairs_per_family,
+        )
+        expected_dpo = _build_reviewed_dpo(expected_preferences)
+    except (KeyError, TypeError, ValueError) as exc:
+        target.errors.append(f"reviewed trainer views could not be replayed: {exc}")
+        return
+
+    for artifact_name, actual, expected in (
+        ("reviewed_sft.jsonl", sft, expected_sft),
+        ("reviewed_reward_model.jsonl", reward_model, expected_reward_model),
+        ("reviewed_preferences.jsonl", preferences, expected_preferences),
+        ("reviewed_dpo.jsonl", dpo, expected_dpo),
+    ):
+        if actual != expected:
+            target.errors.append(
+                f"{artifact_name} must match deterministic replay of reviewed_labels.jsonl."
+            )
+
+
+_REVIEWED_GATE_KEYS = {
+    "schema_version",
+    "reviewed_export",
+    "source_artifacts",
+    "effective_policy",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "decision",
+    "policy",
+}
+_REVIEWED_GATE_EFFECTIVE_POLICY_KEYS = {
+    "min_reviewed_labels",
+    "min_accepted",
+    "min_rejected",
+    "min_sft",
+    "min_reward_model",
+    "min_preferences",
+    "min_dpo",
+    "min_high_confidence_labels",
+    "min_medium_or_high_confidence_labels",
+    "max_needs_review",
+    "max_low_confidence_labels",
+    "max_unknown_confidence_labels",
+    "forbid_labels",
+    "require_task_families",
+    "require_valid_export",
+    "strict_validation",
+}
+
+
+def validate_reviewed_gate(path: str | Path) -> ValidationTarget:
+    """Validate a reviewed gate against its exact current reviewed export."""
+    source_path = Path(path)
+    target = ValidationTarget("reviewed_gate", str(source_path))
+    if _reject_symlinked_validation_path(source_path, target, "reviewed_gate", "file"):
+        return target
+    gate = _read_object(source_path, target, "reviewed_gate.json")
+    if gate is None:
+        return target
+
+    try:
+        schema = check_schema_contract(gate, name_or_id="reviewed_gate")
+    except (SchemaRegistryError, TypeError, ValueError) as exc:
+        target.errors.append(f"reviewed_gate schema contract could not be checked: {exc}")
+    else:
+        for error in schema.get("errors", []):
+            target.errors.append(f"reviewed_gate schema: {error}")
+    _validate_allowed_keys(gate, _REVIEWED_GATE_KEYS, target, "reviewed_gate")
+    _require_equal(gate, "schema_version", REVIEWED_GATE_SCHEMA_VERSION, target, prefix="reviewed_gate.")
+
+    source_artifacts = gate.get("source_artifacts")
+    if not isinstance(source_artifacts, dict):
+        target.errors.append("reviewed_gate.source_artifacts must be an object.")
+        return target
+    _validate_allowed_keys(source_artifacts, {"reviewed_export"}, target, "reviewed_gate.source_artifacts")
+    source_record = source_artifacts.get("reviewed_export")
+    if not isinstance(source_record, dict):
+        target.errors.append("reviewed_gate.source_artifacts.reviewed_export must be an object.")
+        return target
+    _validate_allowed_keys(
+        source_record,
+        set(REVIEWED_EXPORT_SOURCE_ARTIFACT_FIELDS),
+        target,
+        "reviewed_gate.source_artifacts.reviewed_export",
+    )
+    path_value = source_record.get("path")
+    if gate.get("reviewed_export") != path_value:
+        target.errors.append("reviewed_gate.reviewed_export must match source_artifacts.reviewed_export.path.")
+    export_path = _reviewed_gate_export_path(path_value, source_path, target)
+    if export_path is None:
+        return target
+
+    try:
+        source_before = build_reviewed_export_source_artifact(
+            export_path,
+            display_path=str(path_value),
+        )
+    except (OSError, ReviewedGateError, ValueError) as exc:
+        target.errors.append(f"reviewed_gate reviewed export could not be fingerprinted: {exc}")
+        return target
+
+    current_validation = validate_artifacts(
+        reviewed_export_dir=export_path,
+        strict=bool(
+            isinstance(gate.get("effective_policy"), dict)
+            and gate["effective_policy"].get("strict_validation") is True
+        ),
+    )
+    for validation_target in current_validation.get("targets", []):
+        if not isinstance(validation_target, dict):
+            continue
+        for error in validation_target.get("errors", []):
+            target.errors.append(f"reviewed_gate reviewed export: {error}")
+
+    try:
+        expected_source = build_reviewed_export_source_artifact(
+            export_path,
+            display_path=str(path_value),
+        )
+    except (OSError, ReviewedGateError, ValueError) as exc:
+        target.errors.append(f"reviewed_gate reviewed export could not be fingerprinted: {exc}")
+        return target
+    if source_record != expected_source:
+        target.errors.append(
+            "reviewed_gate.source_artifacts.reviewed_export must match the current reviewed-export tree, manifest, and dataset version."
+        )
+    if source_before != expected_source:
+        target.errors.append("reviewed_gate reviewed export changed while validation was running.")
+
+    effective_policy = gate.get("effective_policy")
+    if not isinstance(effective_policy, dict):
+        target.errors.append("reviewed_gate.effective_policy must be an object.")
+        return target
+    _validate_allowed_keys(
+        effective_policy,
+        _REVIEWED_GATE_EFFECTIVE_POLICY_KEYS,
+        target,
+        "reviewed_gate.effective_policy",
+    )
+    missing_policy_fields = sorted(_REVIEWED_GATE_EFFECTIVE_POLICY_KEYS - set(effective_policy))
+    if missing_policy_fields:
+        target.errors.append(
+            "reviewed_gate.effective_policy is missing field(s): " + ", ".join(missing_policy_fields) + "."
+        )
+        return target
+    if effective_policy.get("require_valid_export") is not True:
+        target.errors.append(
+            "reviewed_gate.effective_policy.require_valid_export must be true before the gate can authorize downstream work."
+        )
+
+    manifest = _read_object(export_path / "manifest.json", target, "reviewed export manifest.json")
+    if manifest is None:
+        return target
+    validation_summary = current_validation if effective_policy.get("require_valid_export") is True else None
+    try:
+        replayed = evaluate_reviewed_gate(
+            manifest,
+            reviewed_export_path=str(path_value),
+            reviewed_export_source=expected_source,
+            min_reviewed_labels=effective_policy.get("min_reviewed_labels"),
+            min_accepted=effective_policy.get("min_accepted"),
+            min_rejected=effective_policy.get("min_rejected"),
+            min_sft=effective_policy.get("min_sft"),
+            min_reward_model=effective_policy.get("min_reward_model"),
+            min_preferences=effective_policy.get("min_preferences"),
+            min_dpo=effective_policy.get("min_dpo"),
+            min_high_confidence_labels=effective_policy.get("min_high_confidence_labels"),
+            min_medium_or_high_confidence_labels=effective_policy.get("min_medium_or_high_confidence_labels"),
+            max_needs_review=effective_policy.get("max_needs_review"),
+            max_low_confidence_labels=effective_policy.get("max_low_confidence_labels"),
+            max_unknown_confidence_labels=effective_policy.get("max_unknown_confidence_labels"),
+            forbid_labels=effective_policy.get("forbid_labels"),
+            require_task_families=effective_policy.get("require_task_families"),
+            validation_summary=validation_summary,
+            require_valid_export=effective_policy.get("require_valid_export") is True,
+            strict_validation=effective_policy.get("strict_validation") is True,
+        )
+    except (TypeError, ValueError) as exc:
+        target.errors.append(f"reviewed_gate could not replay its effective policy: {exc}")
+        return target
+
+    policy = gate.get("policy")
+    if policy is not None:
+        if not isinstance(policy, dict):
+            target.errors.append("reviewed_gate.policy must be an object when present.")
+        else:
+            expected_effective = {
+                field: effective_policy[field]
+                for field in _REVIEWED_GATE_EFFECTIVE_POLICY_KEYS
+                if effective_policy[field] is not None and effective_policy[field] != []
+            }
+            if policy.get("effective") != expected_effective:
+                target.errors.append("reviewed_gate.policy.effective must match effective_policy.")
+            replayed["policy"] = policy
+    if gate != replayed:
+        target.errors.append("reviewed_gate must match deterministic replay of its current source and effective policy exactly.")
+    try:
+        source_after = build_reviewed_export_source_artifact(
+            export_path,
+            display_path=str(path_value),
+        )
+    except (OSError, ReviewedGateError, ValueError) as exc:
+        target.errors.append(f"reviewed_gate reviewed export could not be reattested: {exc}")
+    else:
+        if source_after != expected_source:
+            target.errors.append("reviewed_gate reviewed export changed while replay was running.")
+
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "dataset_version": source_record.get("dataset_version"),
+            "reviewed_export": str(path_value),
+        }
+    )
+    return target
+
+
+def _reviewed_gate_export_path(value: Any, source_path: Path, target: ValidationTarget) -> Path | None:
+    label = "reviewed_gate.source_artifacts.reviewed_export.path"
+    if not isinstance(value, str) or not value:
+        target.errors.append(f"{label} must be a non-empty string.")
+        return None
+    windows_path = PureWindowsPath(value)
+    if (
+        Path(value).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "\\" in value
+        or "\x00" in value
+        or "://" in value
+        or value.startswith("<redacted:")
+        or value in {".", ".."}
+        or ".." in Path(value).parts
+        or "." in Path(value).parts
+        or any(part.startswith("~") for part in Path(value).parts)
+    ):
+        target.errors.append(f"{label} must be a resolvable relative path.")
+        return None
+    export_path = source_path.parent / value
+    if _reject_symlinked_validation_path(export_path, target, label, "directory"):
+        return None
+    if not export_path.exists() or not export_path.is_dir():
+        target.errors.append(f"{label} does not resolve to an existing directory: {export_path}")
+        return None
+    return export_path
 
 
 def validate_suite_summary(path: str | Path) -> ValidationTarget:
@@ -1399,9 +1808,16 @@ def validate_trainer_launch_check(
     """Validate a trainer launch-check consumer artifact."""
     launch_check_path = Path(path)
     target = ValidationTarget("trainer_launch_check", str(launch_check_path))
+    if _reject_symlinked_validation_path(
+        launch_check_path,
+        target,
+        "trainer_launch_check.path",
+        "file",
+    ):
+        return target
     launch_check = payload if isinstance(payload, dict) else _read_object(launch_check_path, target, "trainer_launch_check.json")
     if launch_check is not None:
-        _validate_trainer_launch_check(launch_check, target)
+        _validate_trainer_launch_check(launch_check, target, launch_check_path)
     return target
 
 
@@ -9617,6 +10033,7 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
                 schema_version,
                 source_path,
             )
+    _validate_rejection_sampling_review_lineage(artifacts, checks, target, source_path)
 
     summary = gate.get("rollout_summary")
     if not isinstance(summary, dict):
@@ -9744,6 +10161,67 @@ def _validate_rejection_sampling_gate_file_ref(
         target.errors.append(f"{label}.size_bytes does not match the current file.")
     if _is_sha256(row.get("sha256")) and _sha256(file_path) != row.get("sha256"):
         target.errors.append(f"{label}.sha256 does not match the current file.")
+    role = row.get("role")
+    if isinstance(role, str) and role:
+        inspection = inspect_artifact_source(file_path, role)
+        if inspection.get("ready") is not True:
+            target.errors.append(f"{label}.path does not reference a semantically ready {role} artifact.")
+
+
+def _validate_rejection_sampling_review_lineage(
+    artifacts: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    resolved: dict[str, list[Path]] = {}
+    for role in ("model_grader_gate", "review_calibration", "reviewed_gate"):
+        paths: list[Path] = []
+        rows = artifacts.get(role)
+        for row in rows if isinstance(rows, list) else []:
+            path = (
+                _resolve_rejection_sampling_gate_ref_path(row.get("path"), source_path)
+                if isinstance(row, dict)
+                else None
+            )
+            if path is not None:
+                paths.append(path)
+        resolved[role] = paths
+    passed, actual = _review_lineage_status(
+        resolved["model_grader_gate"],
+        resolved["review_calibration"],
+        resolved["reviewed_gate"],
+    )
+    expected = {
+        "one_reviewed_dataset_version": True,
+        "model_grader_uses_supplied_calibration": True,
+    }
+    expected_check = {
+        "id": "review_dataset_lineage_converges",
+        "passed": passed,
+        "actual": actual,
+        "expected": expected,
+        "summary": f"review_dataset_lineage_converges: passed={passed}",
+    }
+    matching_checks = [
+        check
+        for check in checks
+        if isinstance(check, dict) and check.get("id") == "review_dataset_lineage_converges"
+    ]
+    if matching_checks != [expected_check]:
+        target.errors.append(
+            "rejection_sampling_gate review_dataset_lineage_converges check must match current review inputs exactly."
+        )
+    if not passed:
+        target.errors.append(
+            "rejection_sampling_gate review inputs must converge on one reviewed dataset and calibration artifact."
+        )
+
+
+def _reviewed_export_source_record(payload: dict[str, Any]) -> dict[str, Any]:
+    sources = payload.get("source_artifacts")
+    record = sources.get("reviewed_export") if isinstance(sources, dict) else None
+    return record if isinstance(record, dict) else {}
 
 
 def _resolve_rejection_sampling_gate_ref_path(value: Any, source_path: Path) -> Path | None:
@@ -9832,6 +10310,13 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
                 "",
                 source_path,
             )
+    _validate_dataset_curation_lineage(
+        gate_rows,
+        export_rows,
+        checks,
+        target,
+        source_path,
+    )
 
     summary = receipt.get("curation_summary")
     if not isinstance(summary, dict):
@@ -9882,6 +10367,65 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
     )
 
 
+def _validate_dataset_curation_lineage(
+    gate_rows: Any,
+    export_rows: Any,
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    gate_paths: list[Path] = []
+    for row in gate_rows if isinstance(gate_rows, list) else []:
+        path = (
+            _resolve_dataset_curation_ref_path(row.get("path"), source_path)
+            if isinstance(row, dict)
+            else None
+        )
+        if path is not None:
+            gate_paths.append(path)
+    export_paths: list[Path] = []
+    for row in export_rows if isinstance(export_rows, list) else []:
+        path = (
+            _resolve_dataset_curation_ref_path(row.get("path"), source_path)
+            if isinstance(row, dict)
+            else None
+        )
+        if path is not None:
+            export_paths.append(path)
+    passed, actual = training_export_lineage_status(gate_paths, export_paths)
+    expected = {
+        "training_exports_all_complete": True,
+        "reviewed_item_missing_count": 0,
+        "reviewed_item_mismatch_count": 0,
+        "reviewed_label_mismatch_count": 0,
+        "rollout_scenario_missing_count": 0,
+        "rollout_scenario_mismatch_count": 0,
+    }
+    expected_check = {
+        "id": "training_exports_cover_admitted_lineage",
+        "passed": passed,
+        "actual": actual,
+        "expected": expected,
+        "summary": f"training_exports_cover_admitted_lineage: passed={passed}",
+    }
+    matching = [
+        check
+        for check in checks
+        if isinstance(check, dict)
+        and check.get("id") == "training_exports_cover_admitted_lineage"
+    ]
+    if matching != [expected_check]:
+        target.errors.append(
+            "dataset_curation_receipt training_exports_cover_admitted_lineage "
+            "check must match current rejection and training-export inputs exactly."
+        )
+    if not passed:
+        target.errors.append(
+            "dataset_curation_receipt training exports must cover every reviewed "
+            "item and rollout scenario admitted by rejection sampling."
+        )
+
+
 def _validate_dataset_curation_ref(
     row: Any,
     target: ValidationTarget,
@@ -9923,7 +10467,7 @@ def _validate_dataset_curation_ref(
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for file refs.")
         if not _is_non_negative_int(row.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for file refs.")
-        _validate_dataset_curation_file_ref(row, target, label, source_path)
+        _validate_dataset_curation_file_ref(row, target, label, source_path, role)
     if row.get("kind") == "directory":
         if not isinstance(row.get("manifest_path"), str) or not row.get("manifest_path"):
             target.errors.append(f"{label}.manifest_path must be a non-empty string for directory refs.")
@@ -9939,10 +10483,16 @@ def _validate_dataset_curation_ref(
             target.errors.append(f"{label}.manifest_sha256 must be a SHA-256 hex string for directory refs.")
         if not _is_non_negative_int(row.get("manifest_size_bytes")):
             target.errors.append(f"{label}.manifest_size_bytes must be a non-negative integer for directory refs.")
-        _validate_dataset_curation_directory_ref(row, target, label, source_path)
+        _validate_dataset_curation_directory_ref(row, target, label, source_path, role)
 
 
-def _validate_dataset_curation_file_ref(row: dict[str, Any], target: ValidationTarget, label: str, source_path: Path) -> None:
+def _validate_dataset_curation_file_ref(
+    row: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+    role: str,
+) -> None:
     if row.get("exists") is not True:
         return
     file_path = _resolve_dataset_curation_ref_path(row.get("path"), source_path)
@@ -9958,9 +10508,18 @@ def _validate_dataset_curation_file_ref(row: dict[str, Any], target: ValidationT
         target.errors.append(f"{label}.size_bytes does not match the current file.")
     if _is_sha256(row.get("sha256")) and _sha256(file_path) != row.get("sha256"):
         target.errors.append(f"{label}.sha256 does not match the current file.")
+    source = inspect_artifact_source(file_path, role)
+    if source.get("ready") is not True:
+        target.errors.append(f"{label}.path must remain semantically ready for role {role!r}.")
 
 
-def _validate_dataset_curation_directory_ref(row: dict[str, Any], target: ValidationTarget, label: str, source_path: Path) -> None:
+def _validate_dataset_curation_directory_ref(
+    row: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+    role: str,
+) -> None:
     if row.get("exists") is not True:
         return
     directory_path = _resolve_dataset_curation_ref_path(row.get("path"), source_path)
@@ -9986,6 +10545,10 @@ def _validate_dataset_curation_directory_ref(row: dict[str, Any], target: Valida
         target.errors.append(f"{label}.manifest_size_bytes does not match the current file.")
     if _is_sha256(row.get("manifest_sha256")) and _sha256(manifest_path) != row.get("manifest_sha256"):
         target.errors.append(f"{label}.manifest_sha256 does not match the current file.")
+    if directory_path is not None:
+        source = inspect_artifact_source(directory_path, role)
+        if source.get("ready") is not True:
+            target.errors.append(f"{label}.path must remain semantically ready for role {role!r}.")
 
 
 def _resolve_dataset_curation_ref_path(value: Any, source_path: Path) -> Path | None:
@@ -10656,7 +11219,7 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, 
     _require_equal(gate, "schema_version", MODEL_GRADER_GATE_SCHEMA_VERSION, target, prefix="model_grader_gate.")
     failed_checks = _validate_model_grader_checked_artifact(gate, target, "model_grader_gate")
     _validate_model_grader_check_keys(gate.get("checks"), target, "model_grader_gate.checks")
-    _validate_model_grader_gate_sources(gate.get("source_artifacts"), target, source_path)
+    source_paths = _validate_model_grader_gate_sources(gate.get("source_artifacts"), target, source_path)
     expected_readiness = "labels_calibrated_for_curated_handoff" if failed_checks == 0 else "blocked"
     if gate.get("readiness") != expected_readiness:
         target.errors.append(f"model_grader_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
@@ -10703,6 +11266,7 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, 
     if isinstance(gate.get("metrics"), dict):
         _validate_allowed_keys(metrics, _MODEL_GRADER_GATE_METRICS_KEYS, target, "model_grader_gate.metrics")
     _validate_model_grader_boundary(gate.get("execution_boundary"), target, "model_grader_gate")
+    _replay_model_grader_gate(gate, target, source_path, source_paths)
     target.details.update(
         {
             "readiness": gate.get("readiness"),
@@ -10710,6 +11274,145 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, 
             "admitted_count": admission.get("labels_admitted_count"),
         }
     )
+
+
+def _replay_model_grader_gate(
+    gate: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    source_paths: dict[str, Path | None],
+) -> None:
+    dry_run_path = source_paths.get("dry_run_receipt")
+    rubric_path = source_paths.get("rubric_spec")
+    if dry_run_path is None or rubric_path is None:
+        return
+    policy = _model_grader_gate_replay_policy(gate, target)
+    if policy is None:
+        return
+    calibration_path = source_paths.get("review_calibration")
+    if calibration_path is not None:
+        lineage_matches, _lineage = _model_grader_review_lineage_status(
+            dry_run_path,
+            rubric_path,
+            calibration_path,
+        )
+        if not lineage_matches and gate.get("passed") is True:
+            target.errors.append(
+                "model_grader_gate review calibration must derive from the same review items as its dry-run and rubric."
+            )
+    created_at = gate.get("created_at")
+    if not isinstance(created_at, str) or not created_at:
+        target.errors.append("model_grader_gate.created_at must be a non-empty string for deterministic replay.")
+        return
+
+    source_before = _model_grader_gate_source_attestations(source_paths, target)
+    replayed: dict[str, Any] | None = None
+    try:
+        replayed = build_model_grader_gate(
+            dry_run_path=dry_run_path,
+            rubric_path=rubric_path,
+            calibration_path=source_paths.get("review_calibration"),
+            override_receipt_path=source_paths.get("model_grader_override_receipt"),
+            min_calibration_agreement_rate=policy[0],
+            max_disagreements=policy[1],
+            created_at=created_at,
+            preserve_paths=False,
+            out_path=source_path,
+        )
+    except (ModelGraderError, OSError, TypeError, ValueError) as exc:
+        target.errors.append(f"model_grader_gate could not replay its recorded sources and policy: {exc}")
+    source_after = _model_grader_gate_source_attestations(source_paths, target)
+    if source_before is not None and source_after is not None and source_before != source_after:
+        target.errors.append("model_grader_gate source artifacts changed while validation was running.")
+    if replayed is not None and gate != replayed:
+        target.errors.append(
+            "model_grader_gate must match deterministic replay of its recorded sources, policy, and created_at."
+        )
+
+
+def _model_grader_gate_replay_policy(
+    gate: dict[str, Any],
+    target: ValidationTarget,
+) -> tuple[float, int | None] | None:
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        return None
+    minimum_checks = [
+        check
+        for check in checks
+        if isinstance(check, dict) and check.get("id") == "min_calibration_agreement_rate"
+    ]
+    if len(minimum_checks) != 1:
+        target.errors.append(
+            "model_grader_gate.checks must contain exactly one min_calibration_agreement_rate policy check."
+        )
+        return None
+    minimum_expected = minimum_checks[0].get("expected")
+    minimum = minimum_expected.get("min") if isinstance(minimum_expected, dict) else None
+    if isinstance(minimum, bool) or not isinstance(minimum, (int, float)) or not 0 <= minimum <= 1:
+        target.errors.append(
+            "model_grader_gate min_calibration_agreement_rate expected.min must be a number from 0 to 1."
+        )
+        return None
+
+    maximum_checks = [
+        check
+        for check in checks
+        if isinstance(check, dict) and check.get("id") == "max_calibration_disagreements"
+    ]
+    if len(maximum_checks) > 1:
+        target.errors.append(
+            "model_grader_gate.checks may contain at most one max_calibration_disagreements policy check."
+        )
+        return None
+    maximum: int | None = None
+    if maximum_checks:
+        maximum_expected = maximum_checks[0].get("expected")
+        maximum = maximum_expected.get("max") if isinstance(maximum_expected, dict) else None
+        if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 0:
+            target.errors.append(
+                "model_grader_gate max_calibration_disagreements expected.max must be a non-negative integer."
+            )
+            return None
+    return float(minimum), maximum
+
+
+def _model_grader_gate_source_attestations(
+    source_paths: dict[str, Path | None],
+    target: ValidationTarget,
+) -> dict[str, tuple[int | str, ...] | None] | None:
+    attestations: dict[str, tuple[int | str, ...] | None] = {}
+    for role, source_path in source_paths.items():
+        if source_path is None:
+            attestations[role] = None
+            continue
+        try:
+            digest = hashlib.sha256()
+            with source_path.open("rb") as handle:
+                stat_before = os.fstat(handle.fileno())
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                stat_after = os.fstat(handle.fileno())
+            pathname_after = source_path.stat(follow_symlinks=False)
+        except OSError as exc:
+            target.errors.append(f"model_grader_gate source artifact {role!r} could not be reattested: {exc}")
+            return None
+        signatures = {
+            (
+                item.st_mode,
+                item.st_dev,
+                item.st_ino,
+                item.st_size,
+                item.st_mtime_ns,
+                item.st_ctime_ns,
+            )
+            for item in (stat_before, stat_after, pathname_after)
+        }
+        if len(signatures) != 1 or not stat.S_ISREG(stat_before.st_mode):
+            target.errors.append(f"model_grader_gate source artifact {role!r} changed while it was being reattested.")
+            return None
+        attestations[role] = (*next(iter(signatures)), digest.hexdigest())
+    return attestations
 
 
 def _validate_model_grader_checked_artifact(payload: dict[str, Any], target: ValidationTarget, label: str) -> int:
@@ -10947,12 +11650,17 @@ def _model_grader_row_sha256(row: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+def _validate_model_grader_gate_sources(
+    value: Any,
+    target: ValidationTarget,
+    source_path: Path,
+) -> dict[str, Path | None]:
+    paths: dict[str, Path | None] = {}
     if not isinstance(value, dict):
         target.errors.append("model_grader_gate.source_artifacts must be an object.")
-        return
+        return paths
     _validate_allowed_keys(value, _MODEL_GRADER_GATE_SOURCE_KEYS, target, "model_grader_gate.source_artifacts")
-    _validate_model_grader_referenced_artifact(
+    paths["dry_run_receipt"] = _validate_model_grader_referenced_artifact(
         value.get("dry_run_receipt"),
         target,
         "model_grader_gate.source_artifacts.dry_run_receipt",
@@ -10960,7 +11668,7 @@ def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, so
         validate_model_grader_dry_run,
         allow_missing=False,
     )
-    _validate_model_grader_referenced_artifact(
+    paths["rubric_spec"] = _validate_model_grader_referenced_artifact(
         value.get("rubric_spec"),
         target,
         "model_grader_gate.source_artifacts.rubric_spec",
@@ -10968,7 +11676,7 @@ def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, so
         validate_rubric_spec,
         allow_missing=False,
     )
-    _validate_model_grader_referenced_artifact(
+    paths["review_calibration"] = _validate_model_grader_referenced_artifact(
         value.get("review_calibration"),
         target,
         "model_grader_gate.source_artifacts.review_calibration",
@@ -10976,7 +11684,7 @@ def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, so
         validate_review_calibration,
         allow_missing=True,
     )
-    _validate_model_grader_referenced_artifact(
+    paths["model_grader_override_receipt"] = _validate_model_grader_referenced_artifact(
         value.get("model_grader_override_receipt"),
         target,
         "model_grader_gate.source_artifacts.model_grader_override_receipt",
@@ -10984,6 +11692,7 @@ def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, so
         validate_model_grader_override_receipt,
         allow_missing=True,
     )
+    return paths
 
 
 def _validate_model_grader_override_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
@@ -13709,6 +14418,10 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
             target.errors.append(f"review_items[{index}].label_options must be {list(REVIEW_LABELS)!r}.")
         if not isinstance(item.get("event_count"), int) or isinstance(item.get("event_count"), bool) or item.get("event_count") < 0:
             target.errors.append(f"review_items[{index}].event_count must be a non-negative integer.")
+        if not _is_lowercase_sha256(item.get("episode_events_sha256")):
+            target.errors.append(
+                f"review_items[{index}].episode_events_sha256 must be a lowercase SHA-256 hex string."
+            )
         source_artifacts = item.get("source_artifacts")
         if not isinstance(source_artifacts, dict):
             target.errors.append(f"review_items[{index}].source_artifacts must be an object.")
@@ -13732,6 +14445,38 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
                             f"review_items[{index}].source_artifacts.{artifact_name}",
                             source_artifacts.get(artifact_name),
                         )
+        source_fingerprints = item.get("source_artifact_fingerprints")
+        if not isinstance(source_fingerprints, dict):
+            target.errors.append(
+                f"review_items[{index}].source_artifact_fingerprints must be an object."
+            )
+        else:
+            for artifact_name in ("normalized_trace", "scorecard"):
+                fingerprint = source_fingerprints.get(artifact_name)
+                label = (
+                    f"review_items[{index}].source_artifact_fingerprints."
+                    f"{artifact_name}"
+                )
+                if not isinstance(fingerprint, dict):
+                    target.errors.append(f"{label} must be an object.")
+                    continue
+                if fingerprint.get("algorithm") != "sha256-canonical-json-v1":
+                    target.errors.append(
+                        f"{label}.algorithm must be 'sha256-canonical-json-v1'."
+                    )
+                if not _is_lowercase_sha256(fingerprint.get("sha256")):
+                    target.errors.append(
+                        f"{label}.sha256 must be a lowercase SHA-256 hex string."
+                    )
+                size_bytes = fingerprint.get("size_bytes")
+                if (
+                    not isinstance(size_bytes, int)
+                    or isinstance(size_bytes, bool)
+                    or size_bytes < 0
+                ):
+                    target.errors.append(
+                        f"{label}.size_bytes must be a non-negative integer."
+                    )
         scorecard = item.get("scorecard")
         if not isinstance(scorecard, dict):
             target.errors.append(f"review_items[{index}].scorecard must be an object.")
@@ -13798,6 +14543,11 @@ def _validate_review_labels(labels: list[dict[str, Any]], target: ValidationTarg
             target.errors.append(
                 f"label_template[{index}].reviewer_confidence must be null or one of {list(REVIEW_CONFIDENCE_LEVELS)!r}."
             )
+        if human_label is not None:
+            if not isinstance(label.get("reviewer"), str) or not label.get("reviewer", "").strip():
+                target.errors.append(f"label_template[{index}].reviewer must be a non-empty string when human_label is set.")
+            if not isinstance(label.get("reviewed_at"), str) or not label.get("reviewed_at", "").strip():
+                target.errors.append(f"label_template[{index}].reviewed_at must be a non-empty string when human_label is set.")
         corrected_score = label.get("corrected_score")
         if corrected_score is not None and not _is_int_between(corrected_score, 0, 100):
             target.errors.append(f"label_template[{index}].corrected_score must be null or an integer from 0 to 100.")
@@ -13832,6 +14582,49 @@ def _validate_reviewed_manifest(
     _require_equal(manifest, "schema_version", REVIEWED_MANIFEST_SCHEMA_VERSION, target)
     if not _is_dataset_version(manifest.get("dataset_version")):
         target.errors.append("manifest.dataset_version must be a non-empty hfrds-* dataset selection key.")
+    artifact_fingerprints = manifest.get("artifact_fingerprints")
+    source_review_artifacts = manifest.get("source_review_artifacts")
+    labels_artifact = manifest.get("labels_artifact")
+    if all(isinstance(value, dict) for value in (artifact_fingerprints, source_review_artifacts, labels_artifact)):
+        expected_dataset_version = _reviewed_dataset_version_id(
+            artifact_fingerprints,
+            source_review_artifacts,
+            labels_artifact,
+        )
+        if manifest.get("dataset_version") != expected_dataset_version:
+            target.errors.append(
+                f"manifest.dataset_version expected {expected_dataset_version!r} from reviewed artifact fingerprints, "
+                f"got {manifest.get('dataset_version')!r}."
+            )
+    provenance_paths = {
+        "review_items": export_dir / "provenance" / "review_items.jsonl",
+        "label_template": export_dir / "provenance" / "label_template.jsonl",
+        "review_manifest": export_dir / "provenance" / "review_manifest.json",
+    }
+    _validate_manifest_artifact_fingerprints(
+        source_review_artifacts,
+        target,
+        "manifest.source_review_artifacts",
+        provenance_paths,
+    )
+    _validate_manifest_artifact_fingerprints(
+        {"labels_artifact": labels_artifact} if isinstance(labels_artifact, dict) else labels_artifact,
+        target,
+        "manifest.labels_artifact_binding",
+        {"labels_artifact": export_dir / "provenance" / "completed_labels.jsonl"},
+    )
+    expected_provenance_paths = {
+        "review_items": "provenance/review_items.jsonl",
+        "label_template": "provenance/label_template.jsonl",
+        "review_manifest": "provenance/review_manifest.json",
+    }
+    if isinstance(source_review_artifacts, dict):
+        for name, expected_path in expected_provenance_paths.items():
+            record = source_review_artifacts.get(name)
+            if isinstance(record, dict) and record.get("path") != expected_path:
+                target.errors.append(f"manifest.source_review_artifacts.{name}.path must be {expected_path!r}.")
+    if isinstance(labels_artifact, dict) and labels_artifact.get("path") != "provenance/completed_labels.jsonl":
+        target.errors.append("manifest.labels_artifact.path must be 'provenance/completed_labels.jsonl'.")
     expected_counts = {
         "reviewed_label_count": len(labels),
         "sft_count": len(sft),
@@ -13946,6 +14739,7 @@ def _expected_reviewed_label_provenance(
     return {
         "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
         "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
+        "reviewer_identity_assurance": "self_asserted",
         "reviewed_label_count": len(labels),
         "accepted_label_count": label_counts.get("accept", 0),
         "negative_label_count": sum(label_counts.get(label, 0) for label in sorted(TRAINING_NEGATIVE_LABELS)),
@@ -13959,6 +14753,7 @@ def _expected_reviewed_label_provenance(
         "notes": [
             "Reviewed SFT rows require human_label='accept'.",
             "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only.",
+            "Reviewer identifiers and timestamps are required but self-asserted; this receipt proves content integrity, not reviewer authentication.",
         ],
     }
 
@@ -14098,6 +14893,10 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
             target.errors.append(
                 f"reviewed_labels[{index}].reviewer_confidence must be one of {list(REVIEW_CONFIDENCE_LEVELS)!r}."
             )
+        if not isinstance(row.get("reviewer"), str) or not row.get("reviewer", "").strip():
+            target.errors.append(f"reviewed_labels[{index}].reviewer must be a non-empty string.")
+        if not isinstance(row.get("reviewed_at"), str) or not row.get("reviewed_at", "").strip():
+            target.errors.append(f"reviewed_labels[{index}].reviewed_at must be a non-empty string.")
         if not _is_int_between(row.get("score"), 0, 100):
             target.errors.append(f"reviewed_labels[{index}].score must be an integer from 0 to 100.")
         if not isinstance(row.get("reward"), (int, float)):
@@ -27345,6 +28144,7 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         _validate_trainer_preflight_schema_contract_record(name, record, target, source_path)
     dataset_selection = preflight.get("dataset_selection", [])
     _validate_trainer_preflight_dataset_selection(dataset_selection, target)
+    _validate_trainer_preflight_reviewed_binding(gates, artifacts, target, source_path)
     _validate_trainer_command(preflight.get("trainer_command"), target)
     target.details.update(
         {
@@ -27362,6 +28162,7 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
 _TRAINER_LAUNCH_CHECK_KEYS = {
     "schema_version",
     "preflight_path",
+    "source_artifacts",
     "passed",
     "readiness",
     "recommendation",
@@ -27402,7 +28203,11 @@ _TRAINER_LAUNCH_CHECK_APPROVED_COMMAND_KEYS = {
 }
 
 
-def _validate_trainer_launch_check(launch_check: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_trainer_launch_check(
+    launch_check: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
     _require_equal(launch_check, "schema_version", TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, target)
     _validate_allowed_keys(launch_check, _TRAINER_LAUNCH_CHECK_KEYS, target, "trainer_launch_check")
     if not isinstance(launch_check.get("preflight_path"), str) or not launch_check.get("preflight_path"):
@@ -27467,6 +28272,7 @@ def _validate_trainer_launch_check(launch_check: dict[str, Any], target: Validat
     _validate_approved_command(launch_check.get("approved_command"), target, expected_passed)
     if not _is_string_list(launch_check.get("notes")):
         target.errors.append("trainer_launch_check.notes must be a list of strings.")
+    _validate_trainer_launch_source_and_replay(launch_check, target, source_path)
     target.details.update(
         {
             "readiness": launch_check.get("readiness"),
@@ -27474,6 +28280,201 @@ def _validate_trainer_launch_check(launch_check: dict[str, Any], target: Validat
             "failed_check_count": failed_checks,
         }
     )
+
+
+def _validate_trainer_launch_source_and_replay(
+    launch_check: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    source_artifacts = launch_check.get("source_artifacts")
+    if not isinstance(source_artifacts, dict):
+        target.errors.append("trainer_launch_check.source_artifacts must be an object.")
+        return
+    _validate_allowed_keys(
+        source_artifacts,
+        {"trainer_preflight"},
+        target,
+        "trainer_launch_check.source_artifacts",
+    )
+    source_record = source_artifacts.get("trainer_preflight")
+    if not isinstance(source_record, dict):
+        target.errors.append(
+            "trainer_launch_check.source_artifacts.trainer_preflight must be an object."
+        )
+        return
+    label = "trainer_launch_check.source_artifacts.trainer_preflight"
+    _validate_allowed_keys(
+        source_record,
+        set(TRAINER_PREFLIGHT_SOURCE_ARTIFACT_FIELDS),
+        target,
+        label,
+    )
+    if launch_check.get("preflight_path") != source_record.get("path"):
+        target.errors.append(
+            "trainer_launch_check.preflight_path must match source_artifacts.trainer_preflight.path."
+        )
+    for field_name, expected in (
+        ("kind", "file"),
+        ("exists", True),
+        ("regular_file", True),
+        ("symlink", False),
+        ("schema_version", TRAINER_PREFLIGHT_SCHEMA_VERSION),
+    ):
+        if source_record.get(field_name) != expected:
+            target.errors.append(f"{label}.{field_name} must be {expected!r}.")
+    if not _is_non_negative_int(source_record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if not _is_lowercase_sha256(source_record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string.")
+
+    preflight_path = _resolve_trainer_launch_preflight_path(
+        source_record.get("path"),
+        source_path,
+        target,
+    )
+    if preflight_path is None:
+        return
+    display_path = str(source_record.get("path"))
+    try:
+        source_before = build_trainer_preflight_source_artifact(
+            preflight_path,
+            display_path=display_path,
+        )
+    except TrainerPreflightError as exc:
+        target.errors.append(f"trainer_launch_check trainer preflight could not be attested: {exc}")
+        return
+    if source_record != source_before:
+        target.errors.append(
+            "trainer_launch_check.source_artifacts.trainer_preflight must match the current trainer-preflight bytes."
+        )
+
+    current_preflight = _read_object(
+        preflight_path,
+        target,
+        "trainer_launch_check trainer_preflight.json",
+    )
+    if current_preflight is None:
+        return
+    validation_record = launch_check.get("validation")
+    strict = bool(
+        isinstance(validation_record, dict)
+        and validation_record.get("strict") is True
+    )
+    current_validation = validate_artifacts(
+        trainer_preflight_paths=[preflight_path],
+        strict=strict,
+    )
+    for validation_target in current_validation.get("targets", []):
+        if not isinstance(validation_target, dict):
+            continue
+        for error in validation_target.get("errors", []):
+            if isinstance(error, str):
+                target.errors.append(f"trainer_launch_check trainer preflight: {error}")
+
+    required_gates = launch_check.get("required_gates")
+    required_dataset_versions = launch_check.get("required_dataset_versions")
+    required_metadata = launch_check.get("required_metadata")
+    try:
+        replayed = build_trainer_launch_check(
+            preflight_path=preflight_path,
+            preflight=current_preflight,
+            validation_summary=current_validation,
+            out_path=source_path,
+            require_gates=(
+                [item for item in required_gates if isinstance(item, str)]
+                if isinstance(required_gates, list)
+                else []
+            ),
+            required_dataset_versions=(
+                [item for item in required_dataset_versions if isinstance(item, str)]
+                if isinstance(required_dataset_versions, list)
+                else []
+            ),
+            require_metadata=(
+                {
+                    str(key): str(value)
+                    for key, value in required_metadata.items()
+                    if isinstance(key, str) and isinstance(value, str)
+                }
+                if isinstance(required_metadata, dict)
+                else {}
+            ),
+            preserve_paths=False,
+        )
+    except TrainerPreflightError as exc:
+        target.errors.append(
+            f"trainer_launch_check could not replay its current trainer preflight: {exc}"
+        )
+    else:
+        if launch_check != replayed:
+            target.errors.append(
+                "trainer_launch_check must match deterministic replay of its current trainer preflight, requirements, and strictness exactly."
+            )
+
+    try:
+        source_after = build_trainer_preflight_source_artifact(
+            preflight_path,
+            display_path=display_path,
+        )
+    except TrainerPreflightError as exc:
+        target.errors.append(f"trainer_launch_check trainer preflight could not be reattested: {exc}")
+    else:
+        if source_after != source_before:
+            target.errors.append(
+                "trainer_launch_check trainer preflight changed while validation was running."
+            )
+    target.details.update(
+        {
+            "preflight_sha256": source_record.get("sha256"),
+            "preflight_schema_version": source_record.get("schema_version"),
+        }
+    )
+
+
+def _resolve_trainer_launch_preflight_path(
+    value: Any,
+    source_path: Path,
+    target: ValidationTarget,
+) -> Path | None:
+    label = "trainer_launch_check.source_artifacts.trainer_preflight.path"
+    if not isinstance(value, str) or not value:
+        target.errors.append(f"{label} must be a non-empty string.")
+        return None
+    windows_path = PureWindowsPath(value)
+    parts = value.split("/")
+    seen_named_part = False
+    canonical = True
+    for part in parts:
+        if part in {"", "."} or part.startswith("~"):
+            canonical = False
+            break
+        if part == "..":
+            if seen_named_part:
+                canonical = False
+                break
+        else:
+            seen_named_part = True
+    if (
+        Path(value).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "\\" in value
+        or "\x00" in value
+        or "://" in value
+        or value.startswith("<redacted:")
+        or not canonical
+        or not seen_named_part
+    ):
+        target.errors.append(f"{label} must be a canonical output-relative path.")
+        return None
+    preflight_path = source_path.parent.joinpath(*parts)
+    if _reject_symlinked_validation_path(preflight_path, target, label, "file"):
+        return None
+    if not preflight_path.exists() or not preflight_path.is_file():
+        target.errors.append(f"{label} does not resolve to an existing file.")
+        return None
+    return preflight_path
 
 
 def _validate_launch_check_gate(gate: Any, target: ValidationTarget, label: str) -> bool:
@@ -27615,7 +28616,97 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
             for field_name in ("error_count", "warning_count"):
                 if not _is_non_negative_int(validation.get(field_name)):
                     target.errors.append(f"{label}.validation.{field_name} must be a non-negative integer.")
-    return gate.get("passed") is True
+    semantic_ready = True
+    semantic_roles = {
+        "hfr.reviewed_gate.v1": "reviewed_gate",
+        "hfr.review_calibration.v1": "review_calibration",
+    }
+    role = semantic_roles.get(gate.get("schema_version"))
+    gate_path = _resolve_gate_source_path(gate.get("path"), source_path)
+    if role is not None:
+        if gate.get("id") != role:
+            target.errors.append(
+                f"{label}.id must be {role!r} for schema_version {gate.get('schema_version')!r}."
+            )
+        semantic_ready = bool(
+            gate_path is not None
+            and inspect_artifact_source(gate_path, role).get("ready") is True
+        )
+        if not semantic_ready:
+            target.errors.append(f"{label}.path must reference a semantically ready {role} artifact.")
+    return gate.get("passed") is True and semantic_ready
+
+
+def _validate_trainer_preflight_reviewed_binding(
+    gates: list[Any],
+    artifacts: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    review_roles = {
+        "hfr.reviewed_gate.v1": "reviewed_gate",
+        "hfr.review_calibration.v1": "review_calibration",
+    }
+    gate_records = [
+        (index, gate, review_roles[gate["schema_version"]])
+        for index, gate in enumerate(gates)
+        if isinstance(gate, dict)
+        and gate.get("schema_version") in review_roles
+    ]
+    export_record = artifacts.get("reviewed_export")
+    if not gate_records or export_record is None:
+        return
+    export_path = _resolve_gate_source_path(
+        export_record.get("path") if isinstance(export_record, dict) else None,
+        source_path,
+    )
+    if export_path is None:
+        target.errors.append(
+            "trainer_preflight review gate and reviewed export paths must be resolvable."
+        )
+        return
+
+    seen_gate_paths: dict[str, set[Path]] = {
+        role: set() for role in review_roles.values()
+    }
+    for index, gate_record, role in gate_records:
+        gate_path = _resolve_gate_source_path(gate_record.get("path"), source_path)
+        if gate_path is None:
+            target.errors.append(
+                f"trainer_preflight.gates[{index}] {role} path must be resolvable."
+            )
+            continue
+        canonical_gate_path = gate_path.resolve(strict=False)
+        if canonical_gate_path in seen_gate_paths[role]:
+            target.errors.append(
+                f"trainer_preflight must not contain duplicate {role} paths."
+            )
+            continue
+        seen_gate_paths[role].add(canonical_gate_path)
+        try:
+            gate_payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            gate_source = _reviewed_export_source_record(
+                gate_payload if isinstance(gate_payload, dict) else {}
+            )
+            expected_source = build_reviewed_export_source_artifact(
+                export_path,
+                display_path=str(gate_source.get("path") or ""),
+            )
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            ReviewedGateError,
+            ValueError,
+        ):
+            target.errors.append(
+                f"trainer_preflight.gates[{index}] could not verify {role} to reviewed export binding."
+            )
+            continue
+        if gate_source != expected_source:
+            target.errors.append(
+                f"trainer_preflight {role} must bind the selected reviewed_export exactly."
+            )
 
 
 def _validate_trainer_preflight_validation_summaries(value: Any, target: ValidationTarget, source_path: Path) -> None:
@@ -29400,6 +30491,8 @@ _REVIEW_CALIBRATION_KEYS = {
     "schema_version",
     "reviewed_export",
     "source",
+    "source_artifacts",
+    "effective_policy",
     "passed",
     "check_count",
     "failed_check_count",
@@ -29407,6 +30500,15 @@ _REVIEW_CALIBRATION_KEYS = {
     "metrics",
     "disagreements",
     "notes",
+}
+_REVIEW_CALIBRATION_EFFECTIVE_POLICY_KEYS = {
+    "min_agreement_rate",
+    "max_disagreements",
+    "max_false_positives",
+    "max_false_negatives",
+    "min_comparable_labels",
+    "require_valid_export",
+    "strict_validation",
 }
 _REVIEW_CALIBRATION_SOURCE_KEYS = {"reviewed_labels"}
 _REVIEW_CALIBRATION_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
@@ -29457,12 +30559,18 @@ _REVIEW_CALIBRATION_VALIDATION_KEYS = {"available", "passed", "strict", "target_
 def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _validate_allowed_keys(calibration, _REVIEW_CALIBRATION_KEYS, target, "review_calibration")
     _require_equal(calibration, "schema_version", REVIEW_CALIBRATION_SCHEMA_VERSION, target)
+    export_path: Path | None = None
     if not isinstance(calibration.get("reviewed_export"), str) or not calibration.get("reviewed_export"):
         target.errors.append("review_calibration.reviewed_export must be a non-empty string.")
     elif not _is_public_review_calibration_ref_path(calibration.get("reviewed_export")):
         target.errors.append("review_calibration.reviewed_export must be a safe relative path.")
     else:
-        _validate_review_calibration_export_ref(calibration.get("reviewed_export"), target, "review_calibration.reviewed_export", source_path)
+        export_path = _validate_review_calibration_export_ref(
+            calibration.get("reviewed_export"),
+            target,
+            "review_calibration.reviewed_export",
+            source_path,
+        )
     source = calibration.get("source")
     if not isinstance(source, dict):
         target.errors.append("review_calibration.source must be an object.")
@@ -29516,6 +30624,102 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
     notes = calibration.get("notes")
     if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
         target.errors.append("review_calibration.notes must be a list of strings.")
+
+    source_artifacts = calibration.get("source_artifacts")
+    source_record = source_artifacts.get("reviewed_export") if isinstance(source_artifacts, dict) else None
+    if not isinstance(source_artifacts, dict) or set(source_artifacts) != {"reviewed_export"}:
+        target.errors.append("review_calibration.source_artifacts must contain only reviewed_export.")
+    if not isinstance(source_record, dict):
+        target.errors.append("review_calibration.source_artifacts.reviewed_export must be an object.")
+
+    effective_policy = calibration.get("effective_policy")
+    if not isinstance(effective_policy, dict):
+        target.errors.append("review_calibration.effective_policy must be an object.")
+    else:
+        _validate_allowed_keys(
+            effective_policy,
+            _REVIEW_CALIBRATION_EFFECTIVE_POLICY_KEYS,
+            target,
+            "review_calibration.effective_policy",
+        )
+        missing = sorted(_REVIEW_CALIBRATION_EFFECTIVE_POLICY_KEYS - set(effective_policy))
+        if missing:
+            target.errors.append(
+                "review_calibration.effective_policy is missing field(s): " + ", ".join(missing) + "."
+            )
+        if effective_policy.get("require_valid_export") is not True:
+            target.errors.append(
+                "review_calibration.effective_policy.require_valid_export must be true before calibration can authorize downstream work."
+            )
+
+    if (
+        isinstance(export_path, Path)
+        and isinstance(source_record, dict)
+        and isinstance(effective_policy, dict)
+        and not (_REVIEW_CALIBRATION_EFFECTIVE_POLICY_KEYS - set(effective_policy))
+    ):
+        try:
+            source_before_validation = build_reviewed_export_source_artifact(
+                export_path,
+                display_path=str(calibration.get("reviewed_export")),
+            )
+        except (OSError, ReviewedGateError, ValueError) as exc:
+            target.errors.append(f"review_calibration reviewed export could not be fingerprinted: {exc}")
+        else:
+            if source_record != source_before_validation:
+                target.errors.append(
+                    "review_calibration.source_artifacts.reviewed_export must match the current reviewed-export tree, manifest, and dataset version."
+                )
+            current_validation = validate_artifacts(
+                reviewed_export_dir=export_path,
+                strict=effective_policy.get("strict_validation") is True,
+            )
+            try:
+                source_after_validation = build_reviewed_export_source_artifact(
+                    export_path,
+                    display_path=str(calibration.get("reviewed_export")),
+                )
+            except (OSError, ReviewedGateError, ValueError) as exc:
+                target.errors.append(
+                    f"review_calibration reviewed export could not be reattested after validation: {exc}"
+                )
+            else:
+                if source_after_validation != source_before_validation:
+                    target.errors.append(
+                        "review_calibration reviewed export changed while its current source was being validated."
+                    )
+                else:
+                    try:
+                        replayed = build_review_calibration(
+                            export_path,
+                            min_agreement_rate=effective_policy.get("min_agreement_rate"),
+                            max_disagreements=effective_policy.get("max_disagreements"),
+                            max_false_positives=effective_policy.get("max_false_positives"),
+                            max_false_negatives=effective_policy.get("max_false_negatives"),
+                            min_comparable_labels=effective_policy.get("min_comparable_labels"),
+                            validation_summary=(
+                                current_validation if effective_policy.get("require_valid_export") is True else None
+                            ),
+                            require_valid_export=effective_policy.get("require_valid_export") is True,
+                            strict_validation=effective_policy.get("strict_validation") is True,
+                            preserve_paths=False,
+                            out_path=source_path,
+                        )
+                        source_after_replay = build_reviewed_export_source_artifact(
+                            export_path,
+                            display_path=str(calibration.get("reviewed_export")),
+                        )
+                    except (OSError, ReviewedGateError, TypeError, ValueError) as exc:
+                        target.errors.append(f"review_calibration could not replay its current source and policy: {exc}")
+                    else:
+                        if source_after_replay != source_before_validation:
+                            target.errors.append(
+                                "review_calibration reviewed export changed while its policy was being replayed."
+                            )
+                        elif calibration != replayed:
+                            target.errors.append(
+                                "review_calibration must match deterministic replay of its current source and effective policy exactly."
+                            )
     target.details.update(
         {
             "reviewed_label_count": metrics.get("reviewed_label_count"),
@@ -29525,13 +30729,20 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
     )
 
 
-def _validate_review_calibration_export_ref(value: str, target: ValidationTarget, label: str, source_path: Path) -> None:
+def _validate_review_calibration_export_ref(
+    value: str,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> Path | None:
     export_path = source_path.parent / value
     if _path_has_symlink_component(export_path, include_leaf=True):
         target.errors.append(f"{label} must resolve to a regular non-symlink directory.")
-        return
+        return None
     if not export_path.exists() or not export_path.is_dir():
         target.errors.append(f"{label} must resolve to an existing directory.")
+        return None
+    return export_path
 
 
 def _validate_review_calibration_label_ref(value: str, target: ValidationTarget, label: str, source_path: Path) -> None:
