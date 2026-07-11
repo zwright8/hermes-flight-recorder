@@ -52,21 +52,21 @@
     "exists": true,
     "kind": "file",
     "path": "promotion_decision.json",
-    "sha256": "4bea2dc224fe3a7f40240df51e2c793f473cdfafbfbdb732aaba9e498f0973c8",
-    "size_bytes": 46528
+    "sha256": "ed7806370c83694bd29ae4df3cee692dea920401d50ca26c9aa6817a69473e39",
+    "size_bytes": 51947
   },
   "source_decision": {
     "blocking_check_count": 0,
     "key_metrics": {
       "baseline_win_count": 0,
-      "check_count": 93,
+      "check_count": 103,
       "contract_drift_count": 0,
       "external_eval_result_count": 1,
       "failed_check_count": 0,
       "new_critical_failure_count": 0,
       "policy_release_required_artifact_count": 6,
-      "policy_required_artifact_count": 15,
-      "required_artifact_count": 15,
+      "policy_required_artifact_count": 16,
+      "required_artifact_count": 16,
       "rule_regression_count": 0,
       "task_completion_regression_count": 0,
       "unverified_contract_count": 0

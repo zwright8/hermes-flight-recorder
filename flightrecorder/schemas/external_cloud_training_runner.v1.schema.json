@@ -1,0 +1,183 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/external_cloud_training_runner.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["completed", "failed"]
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "exit_code": {"type": "integer"},
+          "finished_at": {"format": "date-time", "minLength": 1, "type": "string"},
+          "terminal": {"const": true}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["incomplete", "unknown"]
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "exit_code": {"type": "null"},
+          "finished_at": {"type": "null"},
+          "terminal": {"const": false}
+        }
+      }
+    }
+  ],
+  "description": "Public, fail-closed metadata envelope produced by an external cloud-training runner and consumed by import-completion.",
+  "properties": {
+    "candidate_model_id": {"$ref": "#/$defs/publicIdentifier"},
+    "execution_id": {"$ref": "#/$defs/publicIdentifier"},
+    "exit_code": {"type": ["integer", "null"]},
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "enum": ["none", "provider", "runner", "capacity", "timeout", "cancelled", "artifact", "unknown"],
+          "type": "string"
+        },
+        "message": {"$ref": "#/$defs/publicMessage"}
+      },
+      "required": ["class", "message"],
+      "type": "object"
+    },
+    "finished_at": {"format": "date-time", "minLength": 1, "type": ["string", "null"]},
+    "observed_at": {"format": "date-time", "minLength": 1, "type": "string"},
+    "provider_constraints": {
+      "additionalProperties": false,
+      "properties": {
+        "gpu_class": {"$ref": "#/$defs/publicIdentifier"},
+        "region": {"$ref": "#/$defs/publicIdentifier"},
+        "reported_cost_usd": {"minimum": 0, "type": "number"}
+      },
+      "required": ["region", "gpu_class", "reported_cost_usd"],
+      "type": "object"
+    },
+    "provider_id": {"$ref": "#/$defs/publicIdentifier"},
+    "provider_job_id": {"$ref": "#/$defs/publicIdentifier"},
+    "result_run_id": {"$ref": "#/$defs/publicIdentifier"},
+    "runner": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/publicIdentifier"},
+        "version": {"$ref": "#/$defs/publicIdentifier"}
+      },
+      "required": ["id", "version"],
+      "type": "object"
+    },
+    "schema_version": {"const": "hfr.external_cloud_training_runner.v1"},
+    "side_effects": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts_downloaded_by_flight_recorder": {"type": "boolean"},
+        "artifacts_uploaded_by_flight_recorder": {"type": "boolean"},
+        "cloud_job_started_by_flight_recorder": {"type": "boolean"},
+        "credential_values_recorded": {
+          "enum": ["observed", "not_observed", "unknown"],
+          "type": "string"
+        },
+        "external_artifacts_downloaded": {"type": "boolean"},
+        "external_artifacts_uploaded": {"type": "boolean"},
+        "external_cloud_job_started": {"type": "boolean"},
+        "external_provider_api_called": {"type": "boolean"},
+        "model_downloads_started_by_flight_recorder": {"type": "boolean"},
+        "provider_api_called_by_flight_recorder": {"type": "boolean"},
+        "provider_modules_imported_by_flight_recorder": {"type": "boolean"},
+        "provider_status_polled_by_flight_recorder": {"type": "boolean"},
+        "weights_updated_by_flight_recorder": {"type": "boolean"}
+      },
+      "required": [
+        "external_provider_api_called",
+        "external_cloud_job_started",
+        "external_artifacts_uploaded",
+        "external_artifacts_downloaded",
+        "credential_values_recorded",
+        "provider_api_called_by_flight_recorder",
+        "cloud_job_started_by_flight_recorder",
+        "provider_status_polled_by_flight_recorder",
+        "artifacts_uploaded_by_flight_recorder",
+        "artifacts_downloaded_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "weights_updated_by_flight_recorder",
+        "provider_modules_imported_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "source_sha256": {
+      "additionalProperties": false,
+      "properties": {
+        "launch_plan": {"$ref": "#/$defs/sha256"},
+        "launch_receipt": {"$ref": "#/$defs/sha256"},
+        "output_artifact_manifest": {"$ref": "#/$defs/sha256"},
+        "raw_provider_result": {"$ref": "#/$defs/sha256"},
+        "status_receipt": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["launch_plan", "launch_receipt", "status_receipt", "raw_provider_result", "output_artifact_manifest"],
+      "type": "object"
+    },
+    "started_at": {"format": "date-time", "minLength": 1, "type": "string"},
+    "status": {
+      "enum": ["completed", "failed", "incomplete", "unknown"],
+      "type": "string"
+    },
+    "terminal": {"type": "boolean"}
+  },
+  "required": [
+    "schema_version",
+    "provider_id",
+    "provider_job_id",
+    "execution_id",
+    "result_run_id",
+    "candidate_model_id",
+    "status",
+    "terminal",
+    "failure",
+    "runner",
+    "started_at",
+    "finished_at",
+    "observed_at",
+    "exit_code",
+    "provider_constraints",
+    "source_sha256",
+    "side_effects"
+  ],
+  "title": "Hermes Flight Recorder External Cloud Training Runner Metadata",
+  "type": "object",
+  "$defs": {
+    "noSecretLike": {
+      "pattern": "^(?!.*(?:[Bb][Ee][Aa][Rr][Ee][Rr]\\s+[0-9A-Za-z._-]+|[Bb][Aa][Ss][Ii][Cc]\\s+[0-9A-Za-z._-]+|[Ss][Kk]-[0-9A-Za-z]{8,}|[Ss][Kk]_(?:[Ll][Ii][Vv][Ee]|[Tt][Ee][Ss][Tt])_[0-9A-Za-z]{10,}|[Hh][Ff]_[0-9A-Za-z]{20,}|[Gg][Hh][PpOoUuSsRr]_[0-9A-Za-z]{20,}|[Gg][Ii][Tt][Hh][Uu][Bb]_[Pp][Aa][Tt]_[0-9A-Za-z_]{20,}|[Xx][Oo][Xx][BbAaPpRrSs]-[0-9A-Za-z-]{10,}|[Aa][Ii][Zz][Aa][0-9A-Za-z_-]{20,}|[Aa][Kk][Ii][Aa][0-9A-Za-z]{16}|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\\s*[:=]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]\\s*[:=]|[Tt][Oo][Kk][Ee][Nn]\\s*[:=]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn])).*$",
+      "type": "string"
+    },
+    "publicIdentifier": {
+      "allOf": [{"$ref": "#/$defs/noSecretLike"}],
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?![~/\\\\])(?!.*[\\s\\\"'()=:\\[]/)(?!.*[A-Za-z]:[/\\\\])(?!.*://)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.|~)(?:/|$))[^\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "publicMessage": {
+      "allOf": [{"$ref": "#/$defs/noSecretLike"}],
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*[\\s\\\"'()=:\\[]/)(?!.*[A-Za-z]:[/\\\\])(?!.*\\\\)[^\\u0000-\\u0008\\u000a-\\u001f]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

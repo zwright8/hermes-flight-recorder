@@ -7,6 +7,9 @@ download models, or update weights.
 Each provider record includes an `adapter_contract` that names the implemented
 receipt surfaces and attests that live launch is unsupported while live
 preflight remains metadata-only.
+Regenerated artifacts use adapter contract v2 so the exact receipt list includes
+the import-only completion receipt; existing v1 artifacts with the original six
+receipt types remain valid.
 The artifact manifest includes a `transfer_plan` for upload/download counts,
 provider protocols, and explicit no-transfer/no-provider-call side-effect
 flags.

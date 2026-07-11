@@ -31,7 +31,10 @@ from flightrecorder.validation import (
     validate_promotion_decision,
     validate_promotion_release_record,
 )
-from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
+from tests.agentic_loop_fixtures import (
+    copy_valid_loop_artifacts,
+    write_cloud_completion_fixture,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMOTION_CANDIDATE_ID = "local/mock-candidate"
@@ -823,6 +826,7 @@ class PromotionDecisionTests(unittest.TestCase):
             "trainer_launch_check",
             "model_registry_entry",
             "agentic_training_result",
+            "cloud_training_completion_receipt",
             "serving_profile",
         )
         for role in roles:
@@ -3932,6 +3936,7 @@ class PromotionDecisionTests(unittest.TestCase):
             artifacts = write_governance_artifacts(root)
             artifacts["model_registry_entry"] = None
             artifacts["agentic_training_result"] = None
+            artifacts["cloud_training_completion_receipt"] = None
             artifacts["serving_profile"] = None
             decision_path = root / "promotion_decision.json"
 
@@ -3942,6 +3947,7 @@ class PromotionDecisionTests(unittest.TestCase):
             failed_ids = failed_check_ids(decision)
             self.assertIn("model_registry_entry_present", failed_ids)
             self.assertIn("agentic_training_result_present", failed_ids)
+            self.assertIn("cloud_training_completion_receipt_present", failed_ids)
             self.assertIn("serving_profile_present", failed_ids)
             self.assertIn("agentic_training_result_passed", failed_ids)
             self.assertIn("model_registry_entry_matches_candidate", failed_ids)
@@ -3953,6 +3959,36 @@ class PromotionDecisionTests(unittest.TestCase):
                 ),
                 0,
             )
+
+    def test_promotion_decision_blocks_integrity_valid_failed_cloud_completion(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            artifacts["cloud_training_completion_receipt"].unlink()
+            artifacts["cloud_training_completion_receipt"] = (
+                write_cloud_completion_fixture(
+                    root,
+                    artifacts["agentic_training_result"],
+                    PROMOTION_CANDIDATE_ID,
+                    status="failed",
+                )
+            )
+            decision_path = root / "promotion_decision.json"
+
+            self.assertEqual(
+                run_cli(promotion_decision_args(artifacts, decision_path)),
+                1,
+            )
+            decision = _read_json_object(decision_path)
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("cloud_training_completion_succeeded", failed_ids)
+            self.assertNotIn(
+                "cloud_training_completion_receipt_semantically_valid",
+                failed_ids,
+            )
+            self.assertFalse(decision["alias_update"]["authorized"])
 
     def test_promotion_decision_blocks_unknown_license(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -5390,6 +5426,11 @@ def write_governance_artifacts(
         root,
         PROMOTION_CANDIDATE_ID,
     )
+    cloud_training_completion_receipt = write_cloud_completion_fixture(
+        root,
+        agentic_training_result,
+        PROMOTION_CANDIDATE_ID,
+    )
     registry_entry_payload = _read_json_object(
         example_root / "promotion_governance" / "model_registry_entry.json"
     )
@@ -5457,6 +5498,7 @@ def write_governance_artifacts(
         "trainer_launch_check": trainer_launch_check,
         "model_registry_entry": model_registry_entry,
         "agentic_training_result": agentic_training_result,
+        "cloud_training_completion_receipt": cloud_training_completion_receipt,
         "model_card": model_card,
         "dataset_card": dataset_card,
         "rollback_metadata": rollback_metadata,
@@ -5744,6 +5786,7 @@ def promotion_decision_required_artifacts() -> list[str]:
         "trainer_launch_check",
         "model_registry_entry",
         "agentic_training_result",
+        "cloud_training_completion_receipt",
         "model_card",
         "dataset_card",
         "rollback_metadata",
@@ -5894,6 +5937,7 @@ def promotion_decision_args(
         "trainer_launch_check": "--trainer-launch-check",
         "model_registry_entry": "--model-registry-entry",
         "agentic_training_result": "--agentic-training-result",
+        "cloud_training_completion_receipt": "--cloud-training-completion-receipt",
         "model_card": "--model-card",
         "dataset_card": "--dataset-card",
         "rollback_metadata": "--rollback-metadata",

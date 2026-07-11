@@ -34,6 +34,8 @@ PLAN_READINESS_CHECK_IDS = frozenset(
 )
 
 PLAN_REQUIRED_ARTIFACT_ROLES = frozenset(
+    # Post-execution completion evidence must not become a prerequisite for
+    # deciding whether the external trainer handoff is ready to execute.
     {
         "agentic_rollout_plan",
         "agentic_rollout_receipt",
@@ -110,12 +112,46 @@ CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
         "source_ref": "launch_receipt",
         "target_role": "cloud_training_launch_receipt",
     },
+    {
+        "id": "completion_receipt_links_launch_plan",
+        "source_role": "cloud_training_completion_receipt",
+        "source_ref": "launch_plan",
+        "target_role": "cloud_training_launch_plan",
+    },
+    {
+        "id": "completion_receipt_links_launch_receipt",
+        "source_role": "cloud_training_completion_receipt",
+        "source_ref": "launch_receipt",
+        "target_role": "cloud_training_launch_receipt",
+    },
+    {
+        "id": "completion_receipt_links_status_receipt",
+        "source_role": "cloud_training_completion_receipt",
+        "source_ref": "status_receipt",
+        "target_role": "cloud_training_status_receipt",
+    },
+    {
+        "id": "completion_receipt_links_output_artifact_manifest",
+        "source_role": "cloud_training_completion_receipt",
+        "source_ref": "output_artifact_manifest",
+        "target_role": "agentic_training_result",
+    },
+)
+CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS: tuple[dict[str, str], ...] = tuple(
+    link
+    for link in CLOUD_TRAINING_LINEAGE_LINKS
+    if link["source_role"] != "cloud_training_completion_receipt"
+)
+CLOUD_TRAINING_COMPLETION_LINEAGE_LINKS: tuple[dict[str, str], ...] = tuple(
+    link
+    for link in CLOUD_TRAINING_LINEAGE_LINKS
+    if link["source_role"] == "cloud_training_completion_receipt"
 )
 CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES: tuple[str, ...] = tuple(
     sorted(
         {"cloud_training_provider_registry"}
-        | {link["source_role"] for link in CLOUD_TRAINING_LINEAGE_LINKS}
-        | {link["target_role"] for link in CLOUD_TRAINING_LINEAGE_LINKS}
+        | {link["source_role"] for link in CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS}
+        | {link["target_role"] for link in CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS}
     )
 )
 
@@ -181,9 +217,15 @@ PHASES: tuple[dict[str, Any], ...] = (
             "cloud_training_launch_plan",
             "cloud_training_launch_receipt",
             "cloud_training_status_receipt",
+            "cloud_training_completion_receipt",
             "agentic_training_result",
         ),
-        "produces": ("agentic_training_runtime_preflight", "agentic_training_flow", "agentic_training_result"),
+        "produces": (
+            "agentic_training_runtime_preflight",
+            "agentic_training_flow",
+            "cloud_training_completion_receipt",
+            "agentic_training_result",
+        ),
         "gate": "live trainer launch requires explicit opt-in, credentials, cloud-provider receipts, and a passing preflight.",
     },
     {
@@ -245,6 +287,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "agentic_training_result": "agentic_training_result",
     "agentic_training_runtime_preflight": "agentic_training_runtime_preflight",
     "cloud_training_artifact_manifest": "cloud_training_artifact_manifest",
+    "cloud_training_completion_receipt": "cloud_training_completion_receipt",
     "cloud_training_launch_plan": "cloud_training_launch_plan",
     "cloud_training_launch_receipt": "cloud_training_launch_receipt",
     "cloud_training_preflight": "cloud_training_preflight",
@@ -325,6 +368,11 @@ def build_agentic_training_loop_plan(
     promotion_governance_state = _promotion_governance_state(normalized_artifact_paths)
     cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
+    cloud_training_completion_state = _cloud_training_completion_state(
+        normalized_artifact_paths,
+        refs,
+        loop_candidate_model_id=candidate,
+    )
     training_result_status = _execution_result_status(
         normalized_artifact_paths,
         "agentic_training_result",
@@ -335,8 +383,10 @@ def build_agentic_training_loop_plan(
         "external_eval_result",
         refs,
     )
+    cloud_training_completion_status = _cloud_training_completion_status(cloud_training_completion_state)
     execution_result_statuses = {
         "agentic_training_result": training_result_status,
+        "cloud_training_completion_receipt": cloud_training_completion_status,
         "external_eval_result": external_eval_result_status,
     }
     execution_completion = _execution_completion(execution_result_statuses)
@@ -432,18 +482,52 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "external_trainer_execution_completed",
-        training_result_status == "completed" and training_result_plan_bound,
+        training_result_status == "completed"
+        and training_result_plan_bound
+        and cloud_training_completion_status == "completed",
         {
             "agentic_training_result_present": _role_ready(refs, "agentic_training_result"),
             "agentic_training_result_count": len(normalized_artifact_paths.get("agentic_training_result", [])),
             "training_result_status": training_result_status,
             "training_result_plan_bound": training_result_plan_bound,
+            "cloud_training_completion_receipt_present": _role_ready(
+                refs,
+                "cloud_training_completion_receipt",
+            ),
+            "cloud_training_completion_receipt_count": len(
+                normalized_artifact_paths.get("cloud_training_completion_receipt", [])
+            ),
+            "cloud_training_completion_status": cloud_training_completion_status,
         },
         {
             "agentic_training_result_present": True,
             "agentic_training_result_count": 1,
             "training_result_status": "completed",
             "training_result_plan_bound": True,
+            "cloud_training_completion_receipt_present": True,
+            "cloud_training_completion_receipt_count": 1,
+            "cloud_training_completion_status": "completed",
+        },
+    )
+    _add_check(
+        checks,
+        "external_cloud_training_completion_imported",
+        cloud_training_completion_state["successful"],
+        {"cloud_training_completion_state": cloud_training_completion_state},
+        {
+            "receipt_count": 1,
+            "integrity_passed": True,
+            "execution_status": "completed",
+            "execution_terminal": True,
+            "successful": True,
+            "governance_readiness": "ready_for_review",
+            "cloud_training_completion_claims_allowed": True,
+            "provider_matches_pipeline": True,
+            "candidate_matches_loop": True,
+            "candidate_matches_training_result": True,
+            "source_bindings_complete": True,
+            "output_artifact_manifest_bound": True,
+            "output_artifact_set_bound": True,
         },
     )
     _add_check(
@@ -679,6 +763,7 @@ def build_agentic_training_loop_plan(
         "provider_constraints": _provider_constraints(provider_constraints or {}),
         "cloud_training": cloud_training,
         "cloud_training_receipt_state": cloud_training_receipt_state,
+        "cloud_training_completion_state": cloud_training_completion_state,
         "cloud_training_lineage": cloud_training_lineage,
         "external_eval_receipt_state": external_eval_receipt_state,
         "execution_boundary": {
@@ -715,7 +800,7 @@ def build_agentic_training_loop_plan(
             "This artifact is a closed-loop iteration contract; it does not call graders, trainers, cloud APIs, or benchmarks.",
             "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
             "Dry-run trainer and external-eval receipts establish plan readiness only; they never count as completed execution.",
-            "Governance review requires completed external training and external-eval result artifacts in addition to passing gates.",
+            "Governance review requires an integrity-valid cloud-training completion receipt bound to the completed training result, plus completed external-eval result artifacts and passing gates.",
             "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived.",
         ],
     }
@@ -753,12 +838,16 @@ def _artifact_refs(
 
 def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     source = inspect_artifact_source(path, role)
-    exists = source.get("ready") is True
+    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+    exists = (
+        _cloud_training_completion_integrity_passed(source, payload)
+        if role == "cloud_training_completion_receipt"
+        else source.get("ready") is True
+    )
     is_file = exists and source.get("regular_file") is True
     is_dir = source.get("regular_directory") is True
     directory_fingerprint = _directory_tree_fingerprint(path) if exists and is_dir else {}
     directory_contains_symlinks = _directory_contains_symlink(path) if exists and is_dir else None
-    payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
     return {
         "role": role,
         "path": _display_source_path(path, output_path, preserve_paths),
@@ -982,6 +1071,203 @@ def _execution_result_payload_status(role: str, payload: dict[str, Any]) -> str:
             return "completed"
         return "incomplete"
     return "incomplete"
+
+
+def _cloud_training_completion_status(state: dict[str, Any]) -> str:
+    """Classify execution separately from the receipt's integrity signal."""
+    if state.get("successful") is True:
+        return "completed"
+    if state.get("integrity_passed") is True and state.get("execution_status") == "failed":
+        return "failed"
+    return "incomplete"
+
+
+def _cloud_training_completion_state(
+    artifact_paths: dict[str, list[Path]],
+    refs: dict[str, list[dict[str, Any]]],
+    *,
+    loop_candidate_model_id: str | None = None,
+) -> dict[str, Any]:
+    paths = artifact_paths.get("cloud_training_completion_receipt", [])
+    integrity_records: list[dict[str, Any]] = []
+    for path in paths:
+        source = inspect_artifact_source(
+            path,
+            "cloud_training_completion_receipt",
+        )
+        payload = source["payload"] if isinstance(source.get("payload"), dict) else {}
+        if _cloud_training_completion_integrity_passed(source, payload):
+            integrity_records.append(payload)
+
+    integrity_passed = len(paths) == 1 and len(integrity_records) == 1
+    payload = integrity_records[0] if integrity_passed else {}
+    execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
+    identity = payload.get("identity") if isinstance(payload.get("identity"), dict) else {}
+    sources = payload.get("sources") if isinstance(payload.get("sources"), dict) else {}
+    outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
+    governance = payload.get("governance") if isinstance(payload.get("governance"), dict) else {}
+
+    execution_status = execution.get("status")
+    if execution_status not in {"completed", "failed", "incomplete", "unknown"}:
+        execution_status = "missing"
+    execution_terminal = execution.get("terminal") is True
+
+    provider_id = _string_value(identity.get("provider_id"))
+    provider_job_id = _string_value(identity.get("provider_job_id"))
+    execution_id = _string_value(identity.get("execution_id"))
+    candidate_model_id = _string_value(identity.get("candidate_model_id"))
+    normalized_loop_candidate_model_id = _string_value(loop_candidate_model_id)
+    candidate_matches_loop = (
+        bool(candidate_model_id and normalized_loop_candidate_model_id)
+        and candidate_model_id == normalized_loop_candidate_model_id
+    )
+    provider_lineage = _cloud_training_provider_lineage(artifact_paths)
+    pipeline_provider_id = _string_value(provider_lineage.get("pipeline_provider_id"))
+    provider_matches_pipeline = bool(provider_id and pipeline_provider_id) and provider_id == pipeline_provider_id
+
+    training_result = _single_payload(artifact_paths, "agentic_training_result")
+    registry_update = (
+        training_result.get("registry_update")
+        if isinstance(training_result.get("registry_update"), dict)
+        else {}
+    )
+    training_result_candidate_model_id = _string_value(registry_update.get("target_model_id"))
+    outputs_candidate_model_id = _string_value(outputs.get("candidate_model_id"))
+    candidate_matches_training_result = (
+        bool(candidate_model_id and training_result_candidate_model_id and outputs_candidate_model_id)
+        and candidate_model_id == training_result_candidate_model_id == outputs_candidate_model_id
+    )
+
+    launch_plan_bound = _completion_source_bound(
+        sources,
+        "launch_plan",
+        _single_ref_sha256(refs, "cloud_training_launch_plan"),
+    )
+    launch_receipt_bound = _completion_source_bound(
+        sources,
+        "launch_receipt",
+        _single_ref_sha256(refs, "cloud_training_launch_receipt"),
+    )
+    status_receipt_bound = _completion_source_bound(
+        sources,
+        "status_receipt",
+        _single_ref_sha256(refs, "cloud_training_status_receipt"),
+    )
+    expected_output_manifest_sha256 = _single_ref_sha256(refs, "agentic_training_result")
+    source_output_manifest_sha256 = _completion_source_sha256(sources, "output_artifact_manifest")
+    identity_output_manifest_sha256 = _string_value(identity.get("output_artifact_manifest_sha256"))
+    outputs_manifest_sha256 = _string_value(outputs.get("manifest_sha256"))
+    output_artifact_manifest_bound = bool(expected_output_manifest_sha256) and all(
+        value == expected_output_manifest_sha256
+        for value in (
+            source_output_manifest_sha256,
+            identity_output_manifest_sha256,
+            outputs_manifest_sha256,
+        )
+    )
+    source_bindings_complete = (
+        launch_plan_bound
+        and launch_receipt_bound
+        and status_receipt_bound
+        and output_artifact_manifest_bound
+    )
+
+    artifact_count = _non_negative_int_or_zero(outputs.get("artifact_count"))
+    regular_artifact_count = _non_negative_int_or_zero(outputs.get("regular_artifact_count"))
+    output_artifact_count = _non_negative_int_or_zero(outputs.get("output_artifact_count"))
+    output_artifact_set_sha256 = _string_value(outputs.get("artifact_set_sha256"))
+    identity_output_artifact_set_sha256 = _string_value(identity.get("output_artifact_set_sha256"))
+    output_counts_valid = (
+        output_artifact_count > 0
+        and output_artifact_count <= regular_artifact_count
+        and artifact_count == regular_artifact_count
+    )
+    output_artifact_set_bound = (
+        _is_sha256(output_artifact_set_sha256)
+        and identity_output_artifact_set_sha256 == output_artifact_set_sha256
+        and output_counts_valid
+    )
+    governance_readiness = _string_value(governance.get("readiness"))
+    claims_allowed = governance.get("cloud_training_completion_claims_allowed") is True
+    provider_identity_complete = bool(provider_id and provider_job_id and execution_id)
+
+    successful = (
+        integrity_passed
+        and execution_status == "completed"
+        and execution_terminal
+        and provider_identity_complete
+        and provider_matches_pipeline
+        and candidate_matches_loop
+        and candidate_matches_training_result
+        and source_bindings_complete
+        and output_artifact_set_bound
+        and governance_readiness == "ready_for_review"
+        and claims_allowed
+    )
+    return {
+        "receipt_count": len(paths),
+        "integrity_passed": integrity_passed,
+        "execution_status": execution_status,
+        "execution_terminal": execution_terminal,
+        "successful": successful,
+        "governance_readiness": governance_readiness,
+        "cloud_training_completion_claims_allowed": claims_allowed,
+        "provider_id": provider_id,
+        "provider_job_id": provider_job_id,
+        "execution_id": execution_id,
+        "provider_identity_complete": provider_identity_complete,
+        "pipeline_provider_id": pipeline_provider_id,
+        "provider_matches_pipeline": provider_matches_pipeline,
+        "candidate_model_id": candidate_model_id,
+        "loop_candidate_model_id": normalized_loop_candidate_model_id,
+        "candidate_matches_loop": candidate_matches_loop,
+        "training_result_candidate_model_id": training_result_candidate_model_id,
+        "candidate_matches_training_result": candidate_matches_training_result,
+        "launch_plan_bound": launch_plan_bound,
+        "launch_receipt_bound": launch_receipt_bound,
+        "status_receipt_bound": status_receipt_bound,
+        "source_bindings_complete": source_bindings_complete,
+        "output_artifact_manifest_sha256": outputs_manifest_sha256,
+        "output_artifact_manifest_bound": output_artifact_manifest_bound,
+        "output_artifact_set_sha256": output_artifact_set_sha256,
+        "output_artifact_set_bound": output_artifact_set_bound,
+        "artifact_count": artifact_count,
+        "regular_artifact_count": regular_artifact_count,
+        "output_artifact_count": output_artifact_count,
+    }
+
+
+def _cloud_training_completion_integrity_passed(source: dict[str, Any], payload: dict[str, Any]) -> bool:
+    # Completion ``passed`` attests a replayable receipt contract; the external
+    # execution outcome remains in ``execution.status`` and may still be failed.
+    return (
+        source.get("physical_exists") is True
+        and source.get("regular_file") is True
+        and source.get("parse_valid") is True
+        and source.get("schema_valid") is True
+        and source.get("semantic_valid") is True
+        and source.get("stable") is True
+        and source.get("ready") is True
+        and payload.get("schema_version") == "hfr.cloud_training_completion_receipt.v1"
+        and payload.get("passed") is True
+    )
+
+
+def _completion_source_bound(sources: dict[str, Any], name: str, expected_sha256: str) -> bool:
+    return bool(expected_sha256) and _completion_source_sha256(sources, name) == expected_sha256
+
+
+def _completion_source_sha256(sources: dict[str, Any], name: str) -> str:
+    source = sources.get(name) if isinstance(sources.get(name), dict) else {}
+    return _string_value(source.get("sha256"))
+
+
+def _string_value(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
 def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]], receipt_state: dict[str, Any]) -> dict[str, Any]:
@@ -1392,12 +1678,25 @@ def _external_eval_adapter_contract(row: dict[str, Any]) -> dict[str, Any]:
 
 def _cloud_training_lineage(refs: dict[str, list[dict[str, Any]]], artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
     provider = _cloud_training_provider_lineage(artifact_paths)
-    links = [_cloud_training_lineage_link(refs, artifact_paths, spec) for spec in CLOUD_TRAINING_LINEAGE_LINKS]
+    # Provider-handoff lineage is immutable after planning. Completion lineage
+    # is evaluated separately by ``_cloud_training_completion_state`` so bad
+    # execution evidence cannot retroactively change plan readiness.
+    link_specs = CLOUD_TRAINING_HANDOFF_LINEAGE_LINKS
+    links = [_cloud_training_lineage_link(refs, artifact_paths, spec) for spec in link_specs]
     missing_links = [link["id"] for link in links if link["status"].startswith("missing_")]
     mismatched_links = [link["id"] for link in links if link["status"] == "mismatched_sha256"]
     ambiguous_links = [link["id"] for link in links if link["status"].startswith("ambiguous_")]
     role_counts = _cloud_training_lineage_role_counts(refs)
-    duplicate_roles = [row["role"] for row in role_counts if row["count"] > 1]
+    active_roles = (
+        {"cloud_training_provider_registry"}
+        | {spec["source_role"] for spec in link_specs}
+        | {spec["target_role"] for spec in link_specs}
+    )
+    duplicate_roles = [
+        row["role"]
+        for row in role_counts
+        if row["role"] in active_roles and row["count"] > 1
+    ]
     matched_link_count = sum(1 for link in links if link["passed"])
     passed = (
         provider["provider_consistent"]
@@ -1463,7 +1762,12 @@ def _cloud_training_lineage_link(
     source_ref = _first_ref(refs, source_role)
     target_ref = _first_ref(refs, target_role)
     source_payload = _first_payload(artifact_paths, source_role)
-    source_artifacts = source_payload.get("source_artifacts") if isinstance(source_payload.get("source_artifacts"), dict) else {}
+    source_container_name = "sources" if source_role == "cloud_training_completion_receipt" else "source_artifacts"
+    source_artifacts = (
+        source_payload.get(source_container_name)
+        if isinstance(source_payload.get(source_container_name), dict)
+        else {}
+    )
     nested_ref = source_artifacts.get(source_ref_name) if isinstance(source_artifacts, dict) else None
     nested_ref = nested_ref if isinstance(nested_ref, dict) else {}
     nested_sha = nested_ref.get("sha256") if isinstance(nested_ref.get("sha256"), str) else ""

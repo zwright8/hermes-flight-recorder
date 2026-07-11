@@ -136,13 +136,14 @@
         "hfr.cloud_training_artifact_manifest.v1",
         "hfr.cloud_training_launch_plan.v1",
         "hfr.cloud_training_launch_receipt.v1",
-        "hfr.cloud_training_status_receipt.v1"
+        "hfr.cloud_training_status_receipt.v1",
+        "hfr.cloud_training_completion_receipt.v1"
       ],
       "requires_cost_limit": true,
       "requires_environment_credentials_for_live": true,
       "requires_explicit_live_opt_in": true,
       "requires_region_and_gpu_constraints": true,
-      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "schema_version": "hfr.cloud_training_provider_adapter.v2",
       "status_cancel_receipts_supported": true,
       "weights_updated_by_flight_recorder": false
     },

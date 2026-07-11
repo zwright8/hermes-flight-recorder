@@ -66,7 +66,7 @@ and handoff receipts that make those systems auditable.
 | Review/grading | Bind rubrics, mock model-grader dry runs, disagreement queues, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader disagreement-queue`, `model-grader override-receipt`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
-| Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
+| Cloud training | Record provider capabilities, constraints, dry-run launch/status receipts, and import-only completion evidence from external runners. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch`, `cloud-training import-completion` |
 | Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, governance-action, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `agentic-loop governance`, `next-iteration-schedule`, `validate --agentic-loop-governance-receipt` |
 | Eval | Require identical held-out scenarios, adapter contracts, imported per-case execution evidence, and separation between raw movement and governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `external-eval-result`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
@@ -373,6 +373,7 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan runs/cloud_launch_plan.json \
   --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
   --cloud-training-status-receipt runs/cloud_status_receipt.json \
+  --cloud-training-completion-receipt runs/cloud_completion_receipt.json \
   --heldout-manifest runs/heldout_scenarios.json \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \
@@ -460,7 +461,7 @@ fail-closed.
 
 Cloud provider integration is provider-neutral and fail-closed. The current
 `cloud-training` commands emit registry, preflight, artifact-manifest,
-launch-plan, launch-receipt, and status/cancel receipts for providers such as
+launch-plan, launch-receipt, status/cancel, and imported completion receipts for providers such as
 Hugging Face Jobs, Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks,
 Replicate, SageMaker, Vertex AI, Azure ML, Databricks/Mosaic, NVIDIA DGX
 Cloud, and Brev. They do not import provider SDKs, call provider APIs, create jobs,
@@ -480,6 +481,9 @@ provider `live_status` to `preflight_only`; any future live-launch adapter must
 change that contract deliberately alongside schema and validator updates.
 Adapter `receipt_types` are exact allowlists, so unsupported provider/live
 receipt names fail validation instead of silently expanding the contract.
+New artifacts emit provider adapter contract v2, whose exact allowlist adds the
+import-only completion receipt. Validators retain the original six-receipt v1
+contract for backward compatibility and reject receipt sets that mix versions.
 The committed example registry at
 `examples/agentic_training/cloud_training/provider_registry.json` covers the
 full fail-closed partner set.
@@ -506,6 +510,36 @@ flightrecorder cloud-training preflight \
 Live launch receipts remain blocked in this implementation. Future provider
 transports must keep the same receipt boundary and require explicit opt-in plus
 environment-variable credentials.
+
+After an external runner owns the provider job, import its public metadata,
+opaque raw result, and direct `agentic_training_result` output manifest. This
+command never imports a provider SDK, polls a job, uploads/downloads artifacts,
+or updates weights:
+
+```bash
+flightrecorder cloud-training import-completion \
+  --launch-plan runs/cloud_launch_plan.json \
+  --launch-receipt runs/cloud_launch_receipt.json \
+  --status-receipt runs/cloud_status_receipt.json \
+  --runner-metadata runs/cloud_runner_metadata.json \
+  --raw-provider-result runs/cloud_raw_result.json \
+  --output-artifact-manifest runs/agentic_training_result.json \
+  --out runs/cloud_completion_receipt.json
+```
+
+Receipt integrity is separate from outcome: coherent failed, incomplete, or
+unknown executions remain auditable, while only a completed candidate-bound
+receipt with an exact output set can unlock loop governance or promotion.
+The partner-authored runner envelope is itself registered as
+`hfr.external_cloud_training_runner.v1`. Its `result_run_id` must match the
+training-result run, and the result timestamp must fall between terminal runner
+completion and receipt import. Nonterminal snapshots use `observed_at` with
+null `finished_at` and `exit_code` values.
+Adapter/checkpoint leaves are hashed through descriptor-bound streaming rather
+than copied into semantic snapshots. Admission is deliberately bounded to 32
+outputs, 8 GiB per output, and 32 GiB total; the opaque raw-provider result is
+bounded to 64 MiB. Larger payloads remain external and must be represented by a
+smaller content-addressed handoff artifact.
 
 ## Model-Grader Review Gates
 
@@ -697,6 +731,7 @@ flightrecorder promotion-decision \
   --trainer-launch-check runs/trainer_launch_check.json \
   --model-registry-entry runs/model_registry_entry.json \
   --agentic-training-result runs/agentic_training_result.json \
+  --cloud-training-completion-receipt runs/cloud_completion_receipt.json \
   --model-card runs/promotion_cards/MODEL_CARD.md \
   --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \

@@ -1,0 +1,319 @@
+{
+  "artifact_path": "cloud_training_completion_receipt.json",
+  "created_at": "2026-07-03T00:30:00+00:00",
+  "execution": {
+    "failure": {
+      "class": "none",
+      "classified": true,
+      "message": ""
+    },
+    "status": "completed",
+    "terminal": true
+  },
+  "execution_boundary": {
+    "artifacts_downloaded_by_flight_recorder": false,
+    "artifacts_uploaded_by_flight_recorder": false,
+    "cloud_job_started_by_flight_recorder": false,
+    "credential_values_recorded_by_flight_recorder": false,
+    "external_runner_owns_execution": true,
+    "import_only": true,
+    "model_downloads_started_by_flight_recorder": false,
+    "provider_api_called_by_flight_recorder": false,
+    "provider_modules_imported_by_flight_recorder": false,
+    "provider_status_polled_by_flight_recorder": false,
+    "raw_provider_result_embedded": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "governance": {
+    "blocking_reasons": [],
+    "cloud_training_completion_claims_allowed": true,
+    "readiness": "ready_for_review",
+    "recommendation": "review_cloud_training_completion"
+  },
+  "identity": {
+    "agentic_training_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+    "candidate_model_id": "local/synthetic-agentic-candidate",
+    "digest_sha256": "6cee535cc82362cd404ba323f25692d8d7d498acbafd1e7bd7795d7a687002b0",
+    "execution_id": "synthetic-cloud-training-001",
+    "launch_plan_sha256": "7b9476f9fd8d36bd2ac8a1fa30092140752c026d744c913ad2b2eff7ab980a4f",
+    "launch_receipt_sha256": "30c933ebda010b75fb8afb4efe15a4546035313061a275a23d450ca08949aeb8",
+    "output_artifact_manifest_sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+    "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
+    "provider_id": "modal",
+    "provider_job_id": "synthetic-modal-job-001",
+    "raw_provider_result_sha256": "bb4a372af81100af8af77fb66bc9dd312a5a1e545a0fb7c34eb5c808b48d3e3c",
+    "result_run_id": "synthetic-completed-001",
+    "runner_id": "synthetic-external-cloud-runner",
+    "runner_metadata_sha256": "271aae3dc4a033e95724f04be90efb89290de284ef4036fc1dbc2c9c5546eece",
+    "runner_version": "1",
+    "status_receipt_sha256": "1619635781b45a90c3264d55890166f30a1200922629b951e6ce791b5953681b"
+  },
+  "integrity": {
+    "blocking_reasons": [],
+    "check_count": 31,
+    "checks": [
+      {
+        "id": "direct_sources_replayable",
+        "passed": true,
+        "summary": "all direct evidence sources must be stable replayable regular files"
+      },
+      {
+        "id": "direct_sources_distinct",
+        "passed": true,
+        "summary": "direct evidence sources must not alias one another"
+      },
+      {
+        "id": "source_json_duplicate_free",
+        "passed": true,
+        "summary": "control-plane JSON sources must be duplicate-free finite JSON objects"
+      },
+      {
+        "id": "upstream_schemas_valid",
+        "passed": true,
+        "summary": "cloud launch/status and output-manifest schemas must validate"
+      },
+      {
+        "id": "upstream_semantics_valid",
+        "passed": true,
+        "summary": "cloud launch/status and output-manifest semantic validators must pass"
+      },
+      {
+        "id": "linked_control_source_closure_bounded",
+        "passed": true,
+        "summary": "linked control evidence must remain a bounded replayable JSON closure"
+      },
+      {
+        "id": "launch_receipt_binds_launch_plan",
+        "passed": true,
+        "summary": "launch receipt must bind the supplied launch plan by SHA-256"
+      },
+      {
+        "id": "status_receipt_binds_launch_receipt",
+        "passed": true,
+        "summary": "status receipt must bind the supplied launch receipt by SHA-256"
+      },
+      {
+        "id": "runner_metadata_valid",
+        "passed": true,
+        "summary": "runner metadata must use the public import envelope"
+      },
+      {
+        "id": "runner_binds_all_sources",
+        "passed": true,
+        "summary": "runner metadata must bind every supplied evidence source by SHA-256"
+      },
+      {
+        "id": "provider_identity_matches",
+        "passed": true,
+        "summary": "runner provider identity must match the launch-plan provider"
+      },
+      {
+        "id": "training_plan_lineage_converges",
+        "passed": true,
+        "summary": "cloud preflight and agentic training result must bind the same training plan"
+      },
+      {
+        "id": "provider_constraints_match",
+        "passed": true,
+        "summary": "reported region, GPU class, and cost must satisfy the preflight limits"
+      },
+      {
+        "id": "execution_failure_coherent",
+        "passed": true,
+        "summary": "terminal outcomes and classified failures must be coherent"
+      },
+      {
+        "id": "runner_started_after_launch_handoff",
+        "passed": true,
+        "summary": "runner execution must not predate the launch plan and launch receipt"
+      },
+      {
+        "id": "completion_after_status_receipt",
+        "passed": true,
+        "summary": "completion import must not predate its status receipt"
+      },
+      {
+        "id": "flight_recorder_import_only",
+        "passed": true,
+        "summary": "runner metadata must attest that Flight Recorder performed no provider or training side effects"
+      },
+      {
+        "id": "credential_values_not_recorded",
+        "passed": true,
+        "summary": "runner must explicitly attest that credential values were not recorded"
+      },
+      {
+        "id": "output_artifacts_current",
+        "passed": true,
+        "summary": "every output artifact must remain current, unique, nonempty when executable, and inside the declared output root"
+      },
+      {
+        "id": "output_artifacts_disjoint_from_evidence",
+        "passed": true,
+        "summary": "output artifacts must not alias direct or linked control evidence"
+      },
+      {
+        "id": "completed_external_provider_api_called",
+        "passed": true,
+        "summary": "completed execution requires externally owned provider API activity"
+      },
+      {
+        "id": "completed_external_cloud_job_started",
+        "passed": true,
+        "summary": "completed execution requires an externally owned cloud job"
+      },
+      {
+        "id": "completed_external_artifacts_downloaded",
+        "passed": true,
+        "summary": "completed execution requires the external runner to materialize the declared local outputs"
+      },
+      {
+        "id": "completed_runner_exit_zero",
+        "passed": true,
+        "summary": "completed execution requires runner exit code zero"
+      },
+      {
+        "id": "completed_result_manifest_passed",
+        "passed": true,
+        "summary": "completed execution requires a passing completed agentic training result"
+      },
+      {
+        "id": "completed_candidate_matches",
+        "passed": true,
+        "summary": "completed execution candidate must match the agentic result registry target"
+      },
+      {
+        "id": "completed_result_run_id_matches",
+        "passed": true,
+        "summary": "runner metadata and agentic training result must identify the same result run"
+      },
+      {
+        "id": "completed_result_after_runner_finish",
+        "passed": true,
+        "summary": "terminal agentic training result must not predate runner completion"
+      },
+      {
+        "id": "completed_result_before_completion_import",
+        "passed": true,
+        "summary": "agentic training result must not postdate completion import"
+      },
+      {
+        "id": "completed_outputs_nonempty",
+        "passed": true,
+        "summary": "completed execution requires at least one adapter or checkpoint"
+      },
+      {
+        "id": "sources_stable_after_validation",
+        "passed": true,
+        "summary": "direct evidence sources must remain stable throughout semantic validation"
+      }
+    ],
+    "failed_check_count": 0,
+    "passed": true
+  },
+  "notes": [
+    "This receipt imports externally reported evidence; it does not verify provider authenticity.",
+    "Flight Recorder does not call or poll providers, upload or download artifacts, import provider SDKs, start cloud jobs, or update weights while building this receipt.",
+    "Receipt integrity is independent from execution outcome; valid failed, incomplete, and unknown outcomes remain auditable but cannot enable completion claims."
+  ],
+  "outputs": {
+    "artifact_count": 4,
+    "artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
+    "candidate_model_id": "local/synthetic-agentic-candidate",
+    "created_at": "2026-07-03T00:20:00+00:00",
+    "manifest_schema_version": "hfr.agentic_training_result.v1",
+    "manifest_sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+    "output_artifact_count": 1,
+    "regular_artifact_count": 4,
+    "run_id": "synthetic-completed-001"
+  },
+  "passed": true,
+  "provider_constraints": {
+    "cost_within_limit": true,
+    "gpu_class": "a100",
+    "max_cost_usd": 0.0,
+    "region": "provider_default",
+    "reported_cost_usd": 0
+  },
+  "runner_observation": {
+    "exit_code": 0,
+    "finished_at": "2026-07-03T00:20:00+00:00",
+    "observed_at": "2026-07-03T00:20:00+00:00",
+    "result_run_id": "synthetic-completed-001",
+    "runner_id": "synthetic-external-cloud-runner",
+    "runner_version": "1",
+    "side_effects": {
+      "artifacts_downloaded_by_flight_recorder": false,
+      "artifacts_uploaded_by_flight_recorder": false,
+      "cloud_job_started_by_flight_recorder": false,
+      "credential_values_recorded": "not_observed",
+      "external_artifacts_downloaded": true,
+      "external_artifacts_uploaded": true,
+      "external_cloud_job_started": true,
+      "external_provider_api_called": true,
+      "model_downloads_started_by_flight_recorder": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_modules_imported_by_flight_recorder": false,
+      "provider_status_polled_by_flight_recorder": false,
+      "weights_updated_by_flight_recorder": false
+    },
+    "started_at": "2026-07-03T00:10:00+00:00"
+  },
+  "schema_version": "hfr.cloud_training_completion_receipt.v1",
+  "sources": {
+    "launch_plan": {
+      "exists": true,
+      "path": "cloud_training/launch_plan.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": "hfr.cloud_training_launch_plan.v1",
+      "sha256": "7b9476f9fd8d36bd2ac8a1fa30092140752c026d744c913ad2b2eff7ab980a4f",
+      "size_bytes": 6682
+    },
+    "launch_receipt": {
+      "exists": true,
+      "path": "cloud_training/launch_receipt.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": "hfr.cloud_training_launch_receipt.v1",
+      "sha256": "30c933ebda010b75fb8afb4efe15a4546035313061a275a23d450ca08949aeb8",
+      "size_bytes": 2628
+    },
+    "output_artifact_manifest": {
+      "exists": true,
+      "path": "completed_result.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": "hfr.agentic_training_result.v1",
+      "sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+      "size_bytes": 11554
+    },
+    "raw_provider_result": {
+      "exists": true,
+      "path": "cloud_training/raw_provider_result.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": null,
+      "sha256": "bb4a372af81100af8af77fb66bc9dd312a5a1e545a0fb7c34eb5c808b48d3e3c",
+      "size_bytes": 222
+    },
+    "runner_metadata": {
+      "exists": true,
+      "path": "cloud_training/runner_metadata.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": "hfr.external_cloud_training_runner.v1",
+      "sha256": "271aae3dc4a033e95724f04be90efb89290de284ef4036fc1dbc2c9c5546eece",
+      "size_bytes": 1914
+    },
+    "status_receipt": {
+      "exists": true,
+      "path": "cloud_training/status_receipt.json",
+      "regular_file": true,
+      "replayable": true,
+      "schema_version": "hfr.cloud_training_status_receipt.v1",
+      "sha256": "1619635781b45a90c3264d55890166f30a1200922629b951e6ce791b5953681b",
+      "size_bytes": 2698
+    }
+  }
+}

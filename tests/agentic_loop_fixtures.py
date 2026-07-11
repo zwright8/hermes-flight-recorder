@@ -4,6 +4,10 @@ import shutil
 from pathlib import Path
 
 from flightrecorder.bundle import build_evidence_bundle
+from flightrecorder.cloud_training_completion import (
+    build_cloud_training_completion_receipt,
+    write_cloud_training_completion_receipt,
+)
 from flightrecorder.eval_summary import build_eval_summary
 from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
 from flightrecorder.external_eval_result import build_external_eval_result, write_external_eval_result
@@ -13,6 +17,97 @@ from flightrecorder.model_grader import build_model_grader_override_receipt
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMOTION_CANDIDATE_ID = "local/mock-candidate"
+
+
+def write_cloud_completion_fixture(
+    root: Path,
+    agentic_training_result_path: Path,
+    candidate_id: str,
+    *,
+    status: str = "completed",
+) -> Path:
+    """Write deterministic import-only cloud completion evidence for tests."""
+    cloud_root = root / "cloud_training"
+    shutil.copytree(
+        ROOT / "examples" / "agentic_training" / "cloud_training",
+        cloud_root,
+        dirs_exist_ok=True,
+    )
+    raw_result_path = cloud_root / "raw_provider_result.json"
+    launch_plan_path = cloud_root / "launch_plan.json"
+    launch_receipt_path = cloud_root / "launch_receipt.json"
+    status_receipt_path = cloud_root / "status_receipt.json"
+    runner_metadata_path = cloud_root / "runner_metadata.json"
+    failed = status != "completed"
+    failure_class = "provider" if failed else "none"
+    failure_message = "external provider reported failure" if failed else ""
+    result_payload = _read_json_object(agentic_training_result_path)
+    training_result = result_payload.get("training_result")
+    if not isinstance(training_result, dict) or not isinstance(
+        training_result.get("run_id"), str
+    ):
+        raise AssertionError("agentic training result fixture must declare a run id")
+    terminal = status in {"completed", "failed"}
+    metadata = {
+        "schema_version": "hfr.external_cloud_training_runner.v1",
+        "provider_id": "modal",
+        "provider_job_id": "fixture-modal-job-001",
+        "execution_id": "fixture-cloud-training-001",
+        "result_run_id": training_result["run_id"],
+        "candidate_model_id": candidate_id,
+        "status": status,
+        "terminal": terminal,
+        "failure": {"class": failure_class, "message": failure_message},
+        "runner": {"id": "fixture-external-cloud-runner", "version": "1"},
+        "started_at": "2026-07-03T00:10:00+00:00",
+        "observed_at": "2026-07-03T00:20:00+00:00",
+        "finished_at": "2026-07-03T00:20:00+00:00" if terminal else None,
+        "exit_code": (1 if failed else 0) if terminal else None,
+        "provider_constraints": {
+            "region": "provider_default",
+            "gpu_class": "a100",
+            "reported_cost_usd": 0,
+        },
+        "source_sha256": {
+            "launch_plan": _sha256(launch_plan_path),
+            "launch_receipt": _sha256(launch_receipt_path),
+            "status_receipt": _sha256(status_receipt_path),
+            "raw_provider_result": _sha256(raw_result_path),
+            "output_artifact_manifest": _sha256(agentic_training_result_path),
+        },
+        "side_effects": {
+            "external_provider_api_called": True,
+            "external_cloud_job_started": True,
+            "external_artifacts_uploaded": True,
+            "external_artifacts_downloaded": True,
+            "credential_values_recorded": "not_observed",
+            "provider_api_called_by_flight_recorder": False,
+            "cloud_job_started_by_flight_recorder": False,
+            "provider_status_polled_by_flight_recorder": False,
+            "artifacts_uploaded_by_flight_recorder": False,
+            "artifacts_downloaded_by_flight_recorder": False,
+            "model_downloads_started_by_flight_recorder": False,
+            "weights_updated_by_flight_recorder": False,
+            "provider_modules_imported_by_flight_recorder": False,
+        },
+    }
+    runner_metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    completion_path = root / "cloud_training_completion_receipt.json"
+    receipt = build_cloud_training_completion_receipt(
+        launch_plan_path=launch_plan_path,
+        launch_receipt_path=launch_receipt_path,
+        status_receipt_path=status_receipt_path,
+        runner_metadata_path=runner_metadata_path,
+        raw_provider_result_path=raw_result_path,
+        output_artifact_manifest_path=agentic_training_result_path,
+        out_path=completion_path,
+        created_at="2026-07-03T00:30:00+00:00",
+    )
+    write_cloud_training_completion_receipt(receipt, completion_path)
+    return completion_path
 
 
 def copy_valid_loop_artifacts(root: Path) -> dict[str, list[Path]]:
@@ -69,6 +164,9 @@ def write_valid_promotion_decision(root: Path) -> Path:
         trainer_launch_check_path=artifacts["trainer_launch_check"],
         model_registry_entry_path=artifacts["model_registry_entry"],
         agentic_training_result_path=artifacts["agentic_training_result"],
+        cloud_training_completion_receipt_path=artifacts[
+            "cloud_training_completion_receipt"
+        ],
         model_card_path=artifacts["model_card"],
         dataset_card_path=artifacts["dataset_card"],
         rollback_metadata_path=artifacts["rollback_metadata"],
@@ -195,6 +293,11 @@ def _write_promotion_decision_sources(root: Path) -> dict[str, Path | list[Path]
     paths["agentic_training_result"] = _write_candidate_training_result(
         root, PROMOTION_CANDIDATE_ID
     )
+    paths["cloud_training_completion_receipt"] = write_cloud_completion_fixture(
+        root,
+        paths["agentic_training_result"],
+        PROMOTION_CANDIDATE_ID,
+    )
     _bind_registry_entry_links(
         registry_entry_payload,
         {
@@ -301,6 +404,7 @@ def _write_candidate_training_result(root: Path, candidate_id: str) -> Path:
         shutil.copyfile(example_root / filename, root / filename)
     payload = _read_json_object(example_root / "completed_result.json")
     result_path = root / "agentic_training_result.json"
+    payload["created_at"] = "2026-07-03T00:20:00+00:00"
     payload["artifact_path"] = result_path.name
     payload["registry_update"]["target_model_id"] = candidate_id
     payload["registry_update"]["links"][0]["path"] = result_path.name
@@ -333,3 +437,7 @@ def _read_json_object(path: Path) -> dict[str, object]:
 def _write_source_json(path: Path, payload: dict[str, object]) -> Path:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()

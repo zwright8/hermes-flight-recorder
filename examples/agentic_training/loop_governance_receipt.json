@@ -1,5 +1,5 @@
 {
-  "check_count": 9,
+  "check_count": 10,
   "checks": [
     {
       "actual": {
@@ -117,6 +117,53 @@
       "id": "approval_requires_completed_governance_ready_execution",
       "passed": true,
       "summary": "approval_requires_completed_governance_ready_execution: passed=True"
+    },
+    {
+      "actual": {
+        "action": "approve",
+        "cloud_training_completion_candidate_matches_loop": true,
+        "cloud_training_completion_candidate_matches_training_result": true,
+        "cloud_training_completion_candidate_model_id": "local/mock-candidate",
+        "cloud_training_completion_claims_allowed": true,
+        "cloud_training_completion_execution_id": "promotion-cloud-training-001",
+        "cloud_training_completion_execution_status": "completed",
+        "cloud_training_completion_execution_terminal": true,
+        "cloud_training_completion_governance_readiness": "ready_for_review",
+        "cloud_training_completion_integrity_passed": true,
+        "cloud_training_completion_loop_candidate_model_id": "local/mock-candidate",
+        "cloud_training_completion_output_artifact_count": 1,
+        "cloud_training_completion_output_artifact_manifest_bound": true,
+        "cloud_training_completion_output_artifact_set_bound": true,
+        "cloud_training_completion_provider_id": "modal",
+        "cloud_training_completion_provider_job_id": "promotion-modal-job-001",
+        "cloud_training_completion_provider_matches_pipeline": true,
+        "cloud_training_completion_source_bindings_complete": true,
+        "cloud_training_completion_successful": true
+      },
+      "expected": {
+        "action": "approve",
+        "cloud_training_completion_candidate_matches_loop": true,
+        "cloud_training_completion_candidate_matches_training_result": true,
+        "cloud_training_completion_candidate_model_id": "<non-empty>",
+        "cloud_training_completion_claims_allowed": true,
+        "cloud_training_completion_execution_id": "<non-empty>",
+        "cloud_training_completion_execution_status": "completed",
+        "cloud_training_completion_execution_terminal": true,
+        "cloud_training_completion_governance_readiness": "ready_for_review",
+        "cloud_training_completion_integrity_passed": true,
+        "cloud_training_completion_loop_candidate_model_id": "<non-empty>",
+        "cloud_training_completion_output_artifact_count": 1,
+        "cloud_training_completion_output_artifact_manifest_bound": true,
+        "cloud_training_completion_output_artifact_set_bound": true,
+        "cloud_training_completion_provider_id": "<non-empty>",
+        "cloud_training_completion_provider_job_id": "<non-empty>",
+        "cloud_training_completion_provider_matches_pipeline": true,
+        "cloud_training_completion_source_bindings_complete": true,
+        "cloud_training_completion_successful": true
+      },
+      "id": "approval_requires_successful_cloud_training_completion",
+      "passed": true,
+      "summary": "approval_requires_successful_cloud_training_completion: passed=True"
     },
     {
       "actual": {
@@ -240,6 +287,24 @@
     "passed": true,
     "path": "loop_ledger.json",
     "readiness_digest": {
+      "cloud_training_completion_candidate_matches_loop": true,
+      "cloud_training_completion_candidate_matches_training_result": true,
+      "cloud_training_completion_candidate_model_id": "local/mock-candidate",
+      "cloud_training_completion_claims_allowed": true,
+      "cloud_training_completion_execution_id": "promotion-cloud-training-001",
+      "cloud_training_completion_execution_status": "completed",
+      "cloud_training_completion_execution_terminal": true,
+      "cloud_training_completion_governance_readiness": "ready_for_review",
+      "cloud_training_completion_integrity_passed": true,
+      "cloud_training_completion_loop_candidate_model_id": "local/mock-candidate",
+      "cloud_training_completion_output_artifact_count": 1,
+      "cloud_training_completion_output_artifact_manifest_bound": true,
+      "cloud_training_completion_output_artifact_set_bound": true,
+      "cloud_training_completion_provider_id": "modal",
+      "cloud_training_completion_provider_job_id": "promotion-modal-job-001",
+      "cloud_training_completion_provider_matches_pipeline": true,
+      "cloud_training_completion_source_bindings_complete": true,
+      "cloud_training_completion_successful": true,
       "execution_completion": "completed",
       "governance_readiness": "ready_for_review",
       "latest_iteration_id": "demo-loop-001",
@@ -257,7 +322,7 @@
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "1109256f06b0c8c4482240b1e75be35b01b9526192564d4aeb7b69854f533b0f",
-    "size_bytes": 22904
+    "sha256": "4f83456bfda52272231720b5c22a9aefd15332132928f31883ee48a78c906da7",
+    "size_bytes": 25704
   }
 }

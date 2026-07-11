@@ -12,8 +12,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "fec5c60e4b6a9adf7b622235d3d399d85340c87f9cf4199c3a0194b1a39dbe5e",
-          "size_bytes": 11410,
+          "sha256": "ab6c6988dca9172ef487b64d5a3c218253ed48ca4c710602fc13bc004b01a710",
+          "size_bytes": 11462,
           "source_passed": true,
           "source_recommendation": "build_dry_run_launch_plan"
         }
@@ -36,8 +36,8 @@
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "254f73cb19c13360fc28cddcb310f38a6be564cf3ef69526a3932cff1ad2e30a",
-          "size_bytes": 6834,
+          "sha256": "2ad1d0a7b5d24101b64995491133999e42e00feff21e6a5b596b6ae38d57fa88",
+          "size_bytes": 6886,
           "source_passed": true,
           "source_recommendation": ""
         }
@@ -136,13 +136,14 @@
         "hfr.cloud_training_artifact_manifest.v1",
         "hfr.cloud_training_launch_plan.v1",
         "hfr.cloud_training_launch_receipt.v1",
-        "hfr.cloud_training_status_receipt.v1"
+        "hfr.cloud_training_status_receipt.v1",
+        "hfr.cloud_training_completion_receipt.v1"
       ],
       "requires_cost_limit": true,
       "requires_environment_credentials_for_live": true,
       "requires_explicit_live_opt_in": true,
       "requires_region_and_gpu_constraints": true,
-      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "schema_version": "hfr.cloud_training_provider_adapter.v2",
       "status_cancel_receipts_supported": true,
       "weights_updated_by_flight_recorder": false
     },
@@ -199,8 +200,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "254f73cb19c13360fc28cddcb310f38a6be564cf3ef69526a3932cff1ad2e30a",
-      "size_bytes": 6834,
+      "sha256": "2ad1d0a7b5d24101b64995491133999e42e00feff21e6a5b596b6ae38d57fa88",
+      "size_bytes": 6886,
       "source_passed": true,
       "source_recommendation": ""
     },
@@ -212,8 +213,8 @@
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "fec5c60e4b6a9adf7b622235d3d399d85340c87f9cf4199c3a0194b1a39dbe5e",
-      "size_bytes": 11410,
+      "sha256": "ab6c6988dca9172ef487b64d5a3c218253ed48ca4c710602fc13bc004b01a710",
+      "size_bytes": 11462,
       "source_passed": true,
       "source_recommendation": "build_dry_run_launch_plan"
     }

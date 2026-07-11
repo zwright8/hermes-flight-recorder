@@ -65,6 +65,7 @@
       "additionalProperties": false,
       "properties": {
         "agentic_training_result": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "cloud_training_completion_receipt": {"$ref": "#/$defs/fingerprintedArtifact"},
         "compare_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
         "dataset_card": {"$ref": "#/$defs/fingerprintedArtifact"},
         "evidence_bundle": {"$ref": "#/$defs/evidenceBundleArtifact"},
@@ -88,6 +89,7 @@
         "trainer_launch_check",
         "model_registry_entry",
         "agentic_training_result",
+        "cloud_training_completion_receipt",
         "model_card",
         "dataset_card",
         "rollback_metadata",

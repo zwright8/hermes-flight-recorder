@@ -1,0 +1,7 @@
+{
+  "candidate_model_id": "local/synthetic-agentic-candidate",
+  "execution_id": "synthetic-cloud-training-001",
+  "provider_id": "modal",
+  "provider_job_id": "synthetic-modal-job-001",
+  "reported_status": "completed"
+}

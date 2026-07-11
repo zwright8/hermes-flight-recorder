@@ -68,6 +68,8 @@ Every loop should read and write stable artifacts. The minimum set:
   and compute assumptions
 - `training_result`: metrics, checkpoint ids, adapter locations, logs, and
   failure diagnostics
+- `cloud_training_completion_receipt`: import-only external provider/job
+  identity, launch lineage, normalized outcome, and exact training-output set
 - `model_candidate`: base model, adapter/full model reference, license,
   quantization, context length, serving profile, and compatibility tags
 - `eval_summary`: per-suite pass rate, score, critical failures, cost, latency,
@@ -562,8 +564,8 @@ rollback target.
 ### Phase 0: Freeze The Contract
 
 - keep Flight Recorder as the artifact authority
-- define `model_candidate`, `training_plan`, `training_result`, and
-  `promotion_decision` schemas
+- define `model_candidate`, `training_plan`, `training_result`,
+  `cloud_training_completion_receipt`, and `promotion_decision` schemas
 - create a local registry directory or SQLite database
 - make all loops write plans before doing expensive work
 

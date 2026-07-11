@@ -9,6 +9,10 @@ from unittest.mock import patch
 
 from flightrecorder import source_contract, validation
 from flightrecorder.agentic_training_loop_plan import PHASES
+from flightrecorder.cloud_training_completion import (
+    build_cloud_training_completion_receipt,
+    write_cloud_training_completion_receipt,
+)
 from flightrecorder.reviewed_gate import REVIEWED_EXPORT_CONTENT_FILES
 from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.source_contract import (
@@ -17,7 +21,11 @@ from flightrecorder.source_contract import (
     _SEMANTIC_VALIDATOR_NAMES,
     inspect_artifact_source,
 )
-from tests.agentic_loop_fixtures import copy_valid_loop_artifacts
+from tests.agentic_loop_fixtures import (
+    _write_candidate_training_result,
+    copy_valid_loop_artifacts,
+    write_cloud_completion_fixture,
+)
 from tests.test_review_calibration import (
     make_reviewed_export,
     read_jsonl,
@@ -58,6 +66,204 @@ def make_large_reviewed_export(tmp: str) -> Path:
 
 
 class SourceContractTests(unittest.TestCase):
+    def test_typed_training_output_uses_bounded_digest_only_attestation(self):
+        self.assertEqual(source_contract.MAX_OPAQUE_TRAINING_OUTPUT_FILES, 32)
+        self.assertEqual(
+            source_contract.MAX_OPAQUE_TRAINING_OUTPUT_BYTES,
+            8 * 1024 * 1024 * 1024,
+        )
+        self.assertEqual(
+            source_contract.MAX_OPAQUE_TRAINING_OUTPUT_TOTAL_BYTES,
+            32 * 1024 * 1024 * 1024,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = _write_candidate_training_result(root, "local/mock-candidate")
+            result, adapter_path = self._enlarge_training_artifact(
+                result_path,
+                "adapter",
+            )
+
+            snapshot = source_contract._capture_private_semantic_snapshot(
+                result_path,
+                result,
+            )
+            self.assertIsNotNone(snapshot)
+            try:
+                opaque = {
+                    relative: (role, attestation)
+                    for relative, role, attestation in snapshot.tree.opaque_files
+                }
+                relative = adapter_path.relative_to(root).as_posix()
+                self.assertIn(relative, opaque)
+                role, attestation = opaque[relative]
+                self.assertEqual(role, "adapter")
+                self.assertEqual(attestation.content, b"")
+                self.assertIsNone(attestation.spool_path)
+                self.assertNotIn(relative, dict(snapshot.tree.files))
+            finally:
+                snapshot.close()
+
+            observed: list[source_contract.OpaqueOutputAttestation | None] = []
+            contract_validator = source_contract._semantic_contract_valid
+
+            def observe_attestation(path: Path, role: str) -> bool:
+                if role == "agentic_training_result":
+                    observed.append(
+                        source_contract.get_active_opaque_output_attestation(
+                            path.parent / adapter_path.relative_to(root)
+                        )
+                    )
+                return contract_validator(path, role)
+
+            with patch(
+                "flightrecorder.source_contract._semantic_contract_valid",
+                side_effect=observe_attestation,
+            ):
+                inspection = inspect_artifact_source(
+                    result_path,
+                    "agentic_training_result",
+                )
+            self.assertTrue(inspection["ready"], inspection)
+            self.assertTrue(observed)
+            self.assertTrue(all(item is not None for item in observed))
+            self.assertIsNone(
+                source_contract.get_active_opaque_output_attestation(adapter_path)
+            )
+
+    def test_typed_training_output_replacement_during_validation_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = _write_candidate_training_result(root, "local/mock-candidate")
+            _result, adapter_path = self._enlarge_training_artifact(
+                result_path,
+                "adapter",
+            )
+            contract_validator = source_contract._semantic_contract_valid
+
+            def replace_output(path: Path, role: str) -> bool:
+                replacement = adapter_path.with_suffix(".replacement")
+                replacement.write_bytes(adapter_path.read_bytes())
+                replacement.replace(adapter_path)
+                return contract_validator(path, role)
+
+            with patch(
+                "flightrecorder.source_contract._semantic_contract_valid",
+                side_effect=replace_output,
+            ):
+                inspection = inspect_artifact_source(
+                    result_path,
+                    "agentic_training_result",
+                )
+
+            self.assertTrue(inspection["schema_valid"])
+            self.assertFalse(inspection["stable"])
+            self.assertFalse(inspection["semantic_valid"])
+            self.assertFalse(inspection["ready"])
+
+    def test_unrelated_large_training_result_reference_keeps_generic_cap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = _write_candidate_training_result(root, "local/mock-candidate")
+            self._enlarge_training_artifact(result_path, "config")
+
+            inspection = inspect_artifact_source(
+                result_path,
+                "agentic_training_result",
+            )
+
+            self.assertTrue(inspection["schema_valid"])
+            self.assertFalse(inspection["semantic_valid"])
+            self.assertFalse(inspection["ready"])
+
+    def test_typed_raw_provider_result_uses_existing_64_mib_opaque_cap(self):
+        self.assertEqual(
+            source_contract.MAX_OPAQUE_RAW_PROVIDER_RESULT_BYTES,
+            64 * 1024 * 1024,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = _write_candidate_training_result(root, "local/mock-candidate")
+            completion_path = write_cloud_completion_fixture(
+                root,
+                result_path,
+                "local/mock-candidate",
+            )
+            cloud_root = root / "cloud_training"
+            raw_path = cloud_root / "raw_provider_result.json"
+            raw_path.write_bytes(
+                b"opaque-provider-result\n"
+                + b"x" * source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES
+            )
+            runner_path = cloud_root / "runner_metadata.json"
+            runner = json.loads(runner_path.read_text(encoding="utf-8"))
+            runner["source_sha256"]["raw_provider_result"] = hashlib.sha256(
+                raw_path.read_bytes()
+            ).hexdigest()
+            runner_path.write_text(
+                json.dumps(runner, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            completion_path.unlink()
+            receipt = build_cloud_training_completion_receipt(
+                launch_plan_path=cloud_root / "launch_plan.json",
+                launch_receipt_path=cloud_root / "launch_receipt.json",
+                status_receipt_path=cloud_root / "status_receipt.json",
+                runner_metadata_path=runner_path,
+                raw_provider_result_path=raw_path,
+                output_artifact_manifest_path=result_path,
+                out_path=completion_path,
+                created_at="2026-07-03T00:30:00+00:00",
+            )
+            write_cloud_training_completion_receipt(receipt, completion_path)
+
+            snapshot = source_contract._capture_private_semantic_snapshot(
+                completion_path,
+                dict(receipt),
+            )
+            self.assertIsNotNone(snapshot)
+            try:
+                raw_attestations = [
+                    attestation
+                    for _relative, role, attestation in snapshot.tree.opaque_files
+                    if role == "raw_provider_result"
+                ]
+                self.assertEqual(len(raw_attestations), 1)
+                self.assertEqual(raw_attestations[0].content, b"")
+                self.assertIsNone(raw_attestations[0].spool_path)
+            finally:
+                snapshot.close()
+
+            inspection = inspect_artifact_source(
+                completion_path,
+                "cloud_training_completion_receipt",
+            )
+            self.assertTrue(inspection["ready"], inspection)
+
+    def _enlarge_training_artifact(
+        self,
+        result_path: Path,
+        role: str,
+    ) -> tuple[dict[str, object], Path]:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        row = next(item for item in result["artifacts"] if item["role"] == role)
+        artifact_path = result_path.parent / row["path"]
+        artifact_path.write_bytes(
+            b"x" * (source_contract._MAX_SEMANTIC_SNAPSHOT_FILE_BYTES + 1024)
+        )
+        content = artifact_path.read_bytes()
+        row["sha256"] = hashlib.sha256(content).hexdigest()
+        row["size_bytes"] = len(content)
+        for link in result["registry_update"]["links"]:
+            if link.get("path") == row["path"]:
+                link["sha256"] = row["sha256"]
+                link["size_bytes"] = row["size_bytes"]
+        result_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return result, artifact_path
+
     def test_reviewed_export_snapshot_cap_allows_large_jsonl_but_stays_bounded(self):
         cap = 16 * 1024 * 1024
         self.assertEqual(
