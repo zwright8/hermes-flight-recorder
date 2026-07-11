@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.cloud_training import (
+    CLOUD_TRAINING_LEGACY_PROVIDER_ADAPTER_CONTRACT_VERSION,
+    CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION,
+    LEGACY_PROVIDER_ADAPTER_RECEIPT_TYPES,
     PROVIDER_ADAPTER_RECEIPT_TYPES,
     build_cloud_training_artifact_manifest,
     build_cloud_training_launch_plan,
@@ -129,6 +132,88 @@ class CloudTrainingTests(unittest.TestCase):
         schema = check_schema_file(registry_path)
         self.assertTrue(schema["passed"], schema["errors"])
         validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
+        self.assertTrue(validation["passed"], validation)
+
+    def test_provider_adapter_v1_remains_compatible_and_v2_is_shape_strict(self):
+        cloud_root = ROOT / "examples" / "agentic_training" / "cloud_training"
+        artifacts = (
+            (cloud_root / "provider_registry.json", ("providers", 0, "adapter_contract")),
+            (cloud_root / "preflight.json", ("provider", "adapter_contract")),
+            (cloud_root / "artifact_manifest.json", ("provider", "adapter_contract")),
+            (cloud_root / "launch_plan.json", ("provider", "adapter_contract")),
+        )
+
+        def contract_at(payload, path):
+            contract = payload
+            for segment in path:
+                contract = contract[segment]
+            return contract
+
+        for artifact_path, contract_path in artifacts:
+            with self.subTest(artifact=artifact_path.name):
+                current = json.loads(artifact_path.read_text(encoding="utf-8"))
+                current_contract = contract_at(current, contract_path)
+                self.assertEqual(
+                    current_contract["schema_version"],
+                    CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION,
+                )
+                self.assertTrue(check_schema_contract(current)["passed"])
+
+                legacy = json.loads(json.dumps(current))
+                legacy_contract = contract_at(legacy, contract_path)
+                legacy_contract["schema_version"] = (
+                    CLOUD_TRAINING_LEGACY_PROVIDER_ADAPTER_CONTRACT_VERSION
+                )
+                legacy_contract["receipt_types"] = list(
+                    LEGACY_PROVIDER_ADAPTER_RECEIPT_TYPES
+                )
+                legacy_schema = check_schema_contract(legacy)
+                self.assertTrue(legacy_schema["passed"], legacy_schema["errors"])
+
+                legacy_with_completion = json.loads(json.dumps(legacy))
+                contract_at(legacy_with_completion, contract_path)[
+                    "receipt_types"
+                ] = list(PROVIDER_ADAPTER_RECEIPT_TYPES)
+                self.assertFalse(
+                    check_schema_contract(legacy_with_completion)["passed"]
+                )
+
+                legacy_with_replacement = json.loads(json.dumps(legacy))
+                replacement_receipt_types = list(
+                    LEGACY_PROVIDER_ADAPTER_RECEIPT_TYPES
+                )
+                replacement_receipt_types[-1] = (
+                    "hfr.cloud_training_completion_receipt.v1"
+                )
+                contract_at(legacy_with_replacement, contract_path)[
+                    "receipt_types"
+                ] = replacement_receipt_types
+                self.assertFalse(
+                    check_schema_contract(legacy_with_replacement)["passed"]
+                )
+
+                v2_without_completion = json.loads(json.dumps(current))
+                contract_at(v2_without_completion, contract_path)[
+                    "receipt_types"
+                ] = list(LEGACY_PROVIDER_ADAPTER_RECEIPT_TYPES)
+                self.assertFalse(
+                    check_schema_contract(v2_without_completion)["passed"]
+                )
+
+        registry = json.loads(artifacts[0][0].read_text(encoding="utf-8"))
+        registry_contract = registry["providers"][0]["adapter_contract"]
+        registry_contract["schema_version"] = (
+            CLOUD_TRAINING_LEGACY_PROVIDER_ADAPTER_CONTRACT_VERSION
+        )
+        registry_contract["receipt_types"] = list(
+            LEGACY_PROVIDER_ADAPTER_RECEIPT_TYPES
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            registry_path = Path(tmp) / "provider_registry.json"
+            write_cloud_training_artifact(registry_path, registry)
+            validation = validate_artifacts(
+                cloud_training_provider_registry_paths=[registry_path], strict=True
+            )
         self.assertTrue(validation["passed"], validation)
 
     def test_committed_agentic_training_cloud_handoff_binds_trainer_sources(self):

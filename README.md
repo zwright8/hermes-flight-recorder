@@ -481,6 +481,9 @@ provider `live_status` to `preflight_only`; any future live-launch adapter must
 change that contract deliberately alongside schema and validator updates.
 Adapter `receipt_types` are exact allowlists, so unsupported provider/live
 receipt names fail validation instead of silently expanding the contract.
+New artifacts emit provider adapter contract v2, whose exact allowlist adds the
+import-only completion receipt. Validators retain the original six-receipt v1
+contract for backward compatibility and reject receipt sets that mix versions.
 The committed example registry at
 `examples/agentic_training/cloud_training/provider_registry.json` covers the
 full fail-closed partner set.
@@ -527,6 +530,11 @@ flightrecorder cloud-training import-completion \
 Receipt integrity is separate from outcome: coherent failed, incomplete, or
 unknown executions remain auditable, while only a completed candidate-bound
 receipt with an exact output set can unlock loop governance or promotion.
+The partner-authored runner envelope is itself registered as
+`hfr.external_cloud_training_runner.v1`. Its `result_run_id` must match the
+training-result run, and the result timestamp must fall between terminal runner
+completion and receipt import. Nonterminal snapshots use `observed_at` with
+null `finished_at` and `exit_code` values.
 Adapter/checkpoint leaves are hashed through descriptor-bound streaming rather
 than copied into semantic snapshots. Admission is deliberately bounded to 32
 outputs, 8 GiB per output, and 32 GiB total; the opaque raw-provider result is

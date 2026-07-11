@@ -89,10 +89,10 @@ from .cloud_training import (
     CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
     CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
-    CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION,
     CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION,
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
     PROVIDER_ADAPTER_RECEIPT_TYPES,
+    PROVIDER_ADAPTER_RECEIPT_TYPES_BY_VERSION,
 )
 from .cloud_training_completion import (
     CLOUD_TRAINING_COMPLETION_RECEIPT_SCHEMA_VERSION,
@@ -8904,8 +8904,16 @@ def _validate_cloud_training_adapter_contract(contract: Any, target: ValidationT
         target.errors.append(f"{label} must be an object.")
         return
     _validate_allowed_keys(contract, _CLOUD_TRAINING_ADAPTER_CONTRACT_KEYS, target, label)
-    if contract.get("schema_version") != CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION:
-        target.errors.append(f"{label}.schema_version must be {CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION!r}.")
+    contract_version = contract.get("schema_version")
+    expected_receipt_types = PROVIDER_ADAPTER_RECEIPT_TYPES_BY_VERSION.get(
+        contract_version
+    )
+    if expected_receipt_types is None:
+        target.errors.append(
+            f"{label}.schema_version must be one of "
+            f"{sorted(PROVIDER_ADAPTER_RECEIPT_TYPES_BY_VERSION)!r}."
+        )
+        expected_receipt_types = PROVIDER_ADAPTER_RECEIPT_TYPES
     if contract.get("provider_id") != provider_id:
         target.errors.append(f"{label}.provider_id must match provider id.")
     if not isinstance(contract.get("adapter_id"), str) or not contract.get("adapter_id"):
@@ -8914,10 +8922,10 @@ def _validate_cloud_training_adapter_contract(contract: Any, target: ValidationT
     if not _is_string_list(receipt_types):
         target.errors.append(f"{label}.receipt_types must be a list of strings.")
         receipt_types = []
-    missing_receipts = sorted(set(PROVIDER_ADAPTER_RECEIPT_TYPES) - set(receipt_types))
+    missing_receipts = sorted(set(expected_receipt_types) - set(receipt_types))
     if missing_receipts:
         target.errors.append(f"{label}.receipt_types missing required receipt types: {', '.join(missing_receipts)}.")
-    unsupported_receipts = sorted(set(receipt_types) - set(PROVIDER_ADAPTER_RECEIPT_TYPES))
+    unsupported_receipts = sorted(set(receipt_types) - set(expected_receipt_types))
     if unsupported_receipts:
         target.errors.append(f"{label}.receipt_types contains unsupported receipt types: {', '.join(unsupported_receipts)}.")
     if len(set(receipt_types)) != len(receipt_types):

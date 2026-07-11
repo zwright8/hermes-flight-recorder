@@ -144,6 +144,7 @@
         "candidate_model_id": {"minLength": 1, "type": "string"},
         "digest_sha256": {"$ref": "#/$defs/sha256"},
         "execution_id": {"minLength": 1, "type": "string"},
+        "result_run_id": {"minLength": 1, "type": "string"},
         "launch_plan_sha256": {"$ref": "#/$defs/nullableSha256"},
         "launch_receipt_sha256": {"$ref": "#/$defs/nullableSha256"},
         "output_artifact_manifest_sha256": {"$ref": "#/$defs/nullableSha256"},
@@ -160,6 +161,7 @@
         "provider_id",
         "provider_job_id",
         "execution_id",
+        "result_run_id",
         "candidate_model_id",
         "runner_id",
         "runner_version",
@@ -196,12 +198,14 @@
         "artifact_count": {"minimum": 0, "type": "integer"},
         "artifact_set_sha256": {"$ref": "#/$defs/sha256"},
         "candidate_model_id": {"type": "string"},
+        "created_at": {"format": "date-time", "type": "string"},
         "manifest_schema_version": {"const": "hfr.agentic_training_result.v1"},
         "manifest_sha256": {"$ref": "#/$defs/nullableSha256"},
         "output_artifact_count": {"minimum": 0, "type": "integer"},
-        "regular_artifact_count": {"minimum": 0, "type": "integer"}
+        "regular_artifact_count": {"minimum": 0, "type": "integer"},
+        "run_id": {"minLength": 1, "type": "string"}
       },
-      "required": ["manifest_schema_version", "manifest_sha256", "artifact_count", "regular_artifact_count", "output_artifact_count", "artifact_set_sha256", "candidate_model_id"],
+      "required": ["manifest_schema_version", "manifest_sha256", "artifact_count", "regular_artifact_count", "output_artifact_count", "artifact_set_sha256", "candidate_model_id", "run_id", "created_at"],
       "type": "object"
     },
     "providerConstraints": {
@@ -219,8 +223,10 @@
     "runnerObservation": {
       "additionalProperties": false,
       "properties": {
-        "exit_code": {"type": "integer"},
-        "finished_at": {"format": "date-time", "type": "string"},
+        "exit_code": {"type": ["integer", "null"]},
+        "finished_at": {"format": "date-time", "type": ["string", "null"]},
+        "observed_at": {"format": "date-time", "type": "string"},
+        "result_run_id": {"minLength": 1, "type": "string"},
         "runner_id": {"minLength": 1, "type": "string"},
         "runner_version": {"minLength": 1, "type": "string"},
         "side_effects": {
@@ -259,7 +265,7 @@
         },
         "started_at": {"format": "date-time", "type": "string"}
       },
-      "required": ["runner_id", "runner_version", "started_at", "finished_at", "exit_code", "side_effects"],
+      "required": ["runner_id", "runner_version", "started_at", "observed_at", "finished_at", "exit_code", "result_run_id", "side_effects"],
       "type": "object"
     },
     "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},

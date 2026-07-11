@@ -53,7 +53,7 @@ python3 scripts/archive_agentic_training_result.py \
   --adapter examples/agentic_training/trainer_outputs/adapter/adapter_model.safetensors \
   --metrics examples/agentic_training/trainer_outputs/metrics.json \
   --log examples/agentic_training/trainer_outputs/trainer.log \
-  --created-at 2026-07-02T00:00:00+00:00 \
+  --created-at 2026-07-03T00:20:00+00:00 \
   --out examples/agentic_training/completed_result.json
 ```
 
@@ -235,7 +235,7 @@ flightrecorder cloud-training import-completion \
   --launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --status-receipt examples/agentic_training/cloud_training/status_receipt.json \
   --runner-metadata examples/agentic_training/cloud_training/promotion_runner_metadata.json \
-  --raw-provider-result examples/agentic_training/cloud_training/raw_provider_result.json \
+  --raw-provider-result examples/agentic_training/cloud_training/promotion_raw_provider_result.json \
   --output-artifact-manifest examples/agentic_training/promotion_result.json \
   --created-at 2026-07-03T00:30:00+00:00 \
   --out examples/agentic_training/promotion_cloud_training_completion_receipt.json
@@ -244,7 +244,9 @@ flightrecorder cloud-training import-completion \
 The completion import is the only step that records the externally owned job
 outcome. It hashes but does not embed the opaque provider result, replays the
 launch/status lineage, and requires the direct agentic-training result to bind
-the exact candidate and output set. It never imports a provider SDK, polls a
+the exact candidate, result run ID, causal timestamp window, and output set.
+Runner metadata can be checked independently against the bundled
+`hfr.external_cloud_training_runner.v1` schema. It never imports a provider SDK, polls a
 job, moves artifacts, or updates weights. Integrity-valid failed, incomplete,
 and unknown outcomes remain auditable but cannot authorize promotion or loop
 governance.

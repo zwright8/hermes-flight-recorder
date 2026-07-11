@@ -25,8 +25,8 @@
       "path": "../promotion_result.json",
       "role": "agentic_training_result",
       "schema_version": "hfr.agentic_training_result.v1",
-      "sha256": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d",
-      "size_bytes": 11541
+      "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+      "size_bytes": 11571
     },
     "cloud_training_completion_receipt": {
       "exists": true,
@@ -34,8 +34,8 @@
       "path": "../promotion_cloud_training_completion_receipt.json",
       "role": "cloud_training_completion_receipt",
       "schema_version": "hfr.cloud_training_completion_receipt.v1",
-      "sha256": "7db56a9d7df9a6c77537b9536b6504be555d8005f407cafc9d5e439fb21afff4",
-      "size_bytes": 11442
+      "sha256": "368d57a662bba3dce30823501bf4ebe3d4f316b638b98edaedfc3a1566765559",
+      "size_bytes": 12268
     },
     "compare_gate": {
       "exists": true,
@@ -94,7 +94,7 @@
       "path": "model_registry_entry.json",
       "role": "model_registry_entry",
       "schema_version": "hfr.model_registry_entry.v1",
-      "sha256": "828827c5f6b5c04f88fa1548e3269641f13aba283edd5ec4d4dbd34454eb3132",
+      "sha256": "8fd939ef1d1e8be45803482d151ec0215ae0be31cca76ec48c7715f5f1f751b7",
       "size_bytes": 4153
     },
     "promotion_ledger_gate": {
@@ -1253,9 +1253,9 @@
     },
     {
       "actual": {
-        "agentic_training_result_sha256": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d",
-        "completion_identity_sha256": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d",
-        "completion_source_sha256": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d"
+        "agentic_training_result_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+        "completion_identity_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+        "completion_source_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b"
       },
       "expected": {
         "same_agentic_training_result": true

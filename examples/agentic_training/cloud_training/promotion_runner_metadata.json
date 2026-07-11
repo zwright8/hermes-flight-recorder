@@ -1,12 +1,14 @@
 {
   "candidate_model_id": "local/mock-candidate",
   "execution_id": "promotion-cloud-training-001",
+  "result_run_id": "synthetic-promotion-completed-001",
   "exit_code": 0,
   "failure": {
     "class": "none",
     "message": ""
   },
   "finished_at": "2026-07-03T00:20:00+00:00",
+  "observed_at": "2026-07-03T00:20:00+00:00",
   "provider_constraints": {
     "gpu_class": "a100",
     "region": "provider_default",
@@ -35,11 +37,11 @@
     "weights_updated_by_flight_recorder": false
   },
   "source_sha256": {
-    "launch_plan": "1bf6873f5d5ef163180b43243ef07ece3b6e1aa9347fbc62e2d16949eb2f50f1",
-    "launch_receipt": "cd3aaa336be422ff425cf0d6a29b6c500380ee0b3e541acdbcbb4a0105d5aaef",
-    "output_artifact_manifest": "b1b4a596a730e13d1a3aec562ed2622cbd5365e4fddb9c0251a2b6593b02ec1d",
-    "raw_provider_result": "bb4a372af81100af8af77fb66bc9dd312a5a1e545a0fb7c34eb5c808b48d3e3c",
-    "status_receipt": "cf7ce52ca5443d80521af1bc6fa2d1e33dfcc683864a908235ae8922d22d09f1"
+    "launch_plan": "7b9476f9fd8d36bd2ac8a1fa30092140752c026d744c913ad2b2eff7ab980a4f",
+    "launch_receipt": "30c933ebda010b75fb8afb4efe15a4546035313061a275a23d450ca08949aeb8",
+    "output_artifact_manifest": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+    "raw_provider_result": "8be5d484f596515e282e3abcf45dae4536d731c8e91f00096298b664d550277d",
+    "status_receipt": "1619635781b45a90c3264d55890166f30a1200922629b951e6ce791b5953681b"
   },
   "started_at": "2026-07-03T00:10:00+00:00",
   "status": "completed",

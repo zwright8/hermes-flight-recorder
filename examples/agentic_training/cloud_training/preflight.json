@@ -306,7 +306,7 @@
       "requires_environment_credentials_for_live": true,
       "requires_explicit_live_opt_in": true,
       "requires_region_and_gpu_constraints": true,
-      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "schema_version": "hfr.cloud_training_provider_adapter.v2",
       "status_cancel_receipts_supported": true,
       "weights_updated_by_flight_recorder": false
     },

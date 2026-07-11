@@ -12,7 +12,7 @@
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "ce747ae98fca1e0d9c51d6c34b46fd0fb66372b05d46fd6afeee676f14b4a90b",
+          "sha256": "ab6c6988dca9172ef487b64d5a3c218253ed48ca4c710602fc13bc004b01a710",
           "size_bytes": 11462,
           "source_passed": true,
           "source_recommendation": "build_dry_run_launch_plan"
@@ -36,7 +36,7 @@
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "5ff63e121d95d614668825743487a0f55e8179e8964ef7ccc6ea8fb922eef4ef",
+          "sha256": "2ad1d0a7b5d24101b64995491133999e42e00feff21e6a5b596b6ae38d57fa88",
           "size_bytes": 6886,
           "source_passed": true,
           "source_recommendation": ""
@@ -143,7 +143,7 @@
       "requires_environment_credentials_for_live": true,
       "requires_explicit_live_opt_in": true,
       "requires_region_and_gpu_constraints": true,
-      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "schema_version": "hfr.cloud_training_provider_adapter.v2",
       "status_cancel_receipts_supported": true,
       "weights_updated_by_flight_recorder": false
     },
@@ -200,7 +200,7 @@
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "5ff63e121d95d614668825743487a0f55e8179e8964ef7ccc6ea8fb922eef4ef",
+      "sha256": "2ad1d0a7b5d24101b64995491133999e42e00feff21e6a5b596b6ae38d57fa88",
       "size_bytes": 6886,
       "source_passed": true,
       "source_recommendation": ""
@@ -213,7 +213,7 @@
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "ce747ae98fca1e0d9c51d6c34b46fd0fb66372b05d46fd6afeee676f14b4a90b",
+      "sha256": "ab6c6988dca9172ef487b64d5a3c218253ed48ca4c710602fc13bc004b01a710",
       "size_bytes": 11462,
       "source_passed": true,
       "source_recommendation": "build_dry_run_launch_plan"

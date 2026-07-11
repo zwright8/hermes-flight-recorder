@@ -14,7 +14,7 @@
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "c86e4612cf8edd80fdad217da6e3d5a48bbb8f00b6e8830e9f1721e13cc296de",
+          "sha256": "57c07ba9c0bd7b792721f1ff878c5e2aec6939a0cea37cc913df5cc4987f4df2",
           "size_bytes": 11276,
           "source_passed": false,
           "source_recommendation": "block_cloud_training_launch"
@@ -38,7 +38,7 @@
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "35170346c836ceef9226306cb65ce6720bb701f67e04897e058b3ce1bdce48c5",
+          "sha256": "9bc5862244c1911259ba14e91781e92b1f900b1b0cda90252eb6a4a8cf5b5ca4",
           "size_bytes": 6087,
           "source_passed": true,
           "source_recommendation": ""
@@ -145,7 +145,7 @@
       "requires_environment_credentials_for_live": true,
       "requires_explicit_live_opt_in": true,
       "requires_region_and_gpu_constraints": true,
-      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "schema_version": "hfr.cloud_training_provider_adapter.v2",
       "status_cancel_receipts_supported": true,
       "weights_updated_by_flight_recorder": false
     },
@@ -202,7 +202,7 @@
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "35170346c836ceef9226306cb65ce6720bb701f67e04897e058b3ce1bdce48c5",
+      "sha256": "9bc5862244c1911259ba14e91781e92b1f900b1b0cda90252eb6a4a8cf5b5ca4",
       "size_bytes": 6087,
       "source_passed": true,
       "source_recommendation": ""
@@ -215,7 +215,7 @@
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "c86e4612cf8edd80fdad217da6e3d5a48bbb8f00b6e8830e9f1721e13cc296de",
+      "sha256": "57c07ba9c0bd7b792721f1ff878c5e2aec6939a0cea37cc913df5cc4987f4df2",
       "size_bytes": 11276,
       "source_passed": false,
       "source_recommendation": "block_cloud_training_launch"

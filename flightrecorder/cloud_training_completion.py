@@ -52,12 +52,14 @@ _METADATA_KEYS = {
     "provider_id",
     "provider_job_id",
     "execution_id",
+    "result_run_id",
     "candidate_model_id",
     "status",
     "terminal",
     "failure",
     "runner",
     "started_at",
+    "observed_at",
     "finished_at",
     "exit_code",
     "provider_constraints",
@@ -100,7 +102,18 @@ _HFR_SIDE_EFFECT_KEYS = {
     "provider_modules_imported_by_flight_recorder",
 }
 _SECRET_LIKE = re.compile(
-    r"(?i)(bearer\s+[a-z0-9._-]+|sk-[a-z0-9]{8,}|password\s*[:=]|api[_-]?key\s*[:=]|token\s*[:=])"
+    r"(?i)(bearer\s+[a-z0-9._-]+|basic\s+[a-z0-9._-]+|sk-[a-z0-9]{8,}|"
+    r"sk_(?:live|test)_[a-z0-9]{10,}|hf_[a-z0-9]{20,}|"
+    r"gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|"
+    r"xox[baprs]-[a-z0-9-]{10,}|aiza[0-9a-z_-]{20,}|"
+    r"akia[0-9a-z]{16}|password\s*[:=]|api[_-]?key\s*[:=]|token\s*[:=]|"
+    r"(?:aws[_-]?)?secret(?:[_-]access[_-]key)?\s*[:=]|authorization\s*[:=])"
+)
+_WINDOWS_ABSOLUTE_PATH = re.compile(
+    r"(?i)(?:^|[\s\"'(=])(?:[a-z]:[\\/])"
+)
+_POSIX_ABSOLUTE_PATH = re.compile(
+    r"(?:^|[\s\"'(\[{:=>])/{1,2}[^/\s\"')\]}][^\s\"')\]}]*"
 )
 
 
@@ -269,14 +282,14 @@ def build_cloud_training_completion_receipt(
         )
     created_at_value = created_at or datetime.now(timezone.utc).isoformat()
     parsed_created_at = _parsed_timestamp(created_at_value)
-    parsed_finished_at = _parsed_timestamp(metadata.get("finished_at"))
+    parsed_observed_at = _parsed_timestamp(metadata.get("observed_at"))
     if parsed_created_at is None:
         raise CloudTrainingCompletionError(
             "cloud completion created_at must be a timezone-aware ISO-8601 timestamp"
         )
-    if parsed_finished_at is not None and parsed_created_at < parsed_finished_at:
+    if parsed_observed_at is not None and parsed_created_at < parsed_observed_at:
         raise CloudTrainingCompletionError(
-            "cloud completion created_at must not precede runner finished_at"
+            "cloud completion created_at must not precede runner observed_at"
         )
     upstream_semantic_errors = _upstream_semantic_errors(source_paths)
 
@@ -307,6 +320,9 @@ def build_cloud_training_completion_receipt(
     result_plan_sha = _lineage_sha(output_manifest, "plan")
     candidate_model_id = _string(metadata.get("candidate_model_id"))
     result_candidate_id = _training_result_candidate(output_manifest)
+    runner_result_run_id = _string(metadata.get("result_run_id"))
+    result_run_id = _training_result_run_id(output_manifest)
+    result_created_at = _parsed_timestamp(output_manifest.get("created_at"))
 
     control_paths, control_source_closure_bounded = _linked_control_source_paths(
         (
@@ -398,6 +414,7 @@ def build_cloud_training_completion_receipt(
     )
     terminal_coherent = status not in {"completed", "failed"} or metadata.get("terminal") is True
     runner_started_at = _parsed_timestamp(metadata.get("started_at"))
+    runner_finished_at = _parsed_timestamp(metadata.get("finished_at"))
     launch_handoff_times = [
         parsed
         for parsed in (
@@ -418,6 +435,21 @@ def build_cloud_training_completion_receipt(
     completed_result = (
         output_manifest.get("passed") is True
         and _training_result_status(output_manifest) == "completed"
+    )
+    result_run_id_matches = (
+        bool(runner_result_run_id)
+        and runner_result_run_id == result_run_id
+    )
+    result_after_runner_finish = (
+        status not in {"completed", "failed"}
+        or (
+            result_created_at is not None
+            and runner_finished_at is not None
+            and result_created_at >= runner_finished_at
+        )
+    )
+    result_before_completion_import = (
+        result_created_at is not None and result_created_at <= parsed_created_at
     )
 
     checks: list[dict[str, Any]] = []
@@ -447,6 +479,9 @@ def build_cloud_training_completion_receipt(
     _add_check(checks, "completed_runner_exit_zero", status != "completed" or metadata.get("exit_code") == 0, "completed execution requires runner exit code zero")
     _add_check(checks, "completed_result_manifest_passed", status != "completed" or completed_result, "completed execution requires a passing completed agentic training result")
     _add_check(checks, "completed_candidate_matches", status != "completed" or (bool(candidate_model_id) and candidate_model_id == result_candidate_id), "completed execution candidate must match the agentic result registry target")
+    _add_check(checks, "completed_result_run_id_matches", result_run_id_matches, "runner metadata and agentic training result must identify the same result run")
+    _add_check(checks, "completed_result_after_runner_finish", result_after_runner_finish, "terminal agentic training result must not predate runner completion")
+    _add_check(checks, "completed_result_before_completion_import", result_before_completion_import, "agentic training result must not postdate completion import")
     _add_check(checks, "completed_outputs_nonempty", status != "completed" or output_artifact_count > 0, "completed execution requires at least one adapter or checkpoint")
     _add_check(checks, "sources_stable_after_validation", source_stable_after_validation, "direct evidence sources must remain stable throughout semantic validation")
 
@@ -458,6 +493,9 @@ def build_cloud_training_completion_receipt(
         and metadata.get("terminal") is True
         and completed_result
         and candidate_model_id == result_candidate_id
+        and result_run_id_matches
+        and result_after_runner_finish
+        and result_before_completion_import
         and output_artifact_count > 0
     )
     governance_blockers = [row["summary"] for row in failed_checks]
@@ -467,6 +505,10 @@ def build_cloud_training_completion_receipt(
         governance_blockers.append("agentic training result is not a passing completed result")
     if candidate_model_id != result_candidate_id:
         governance_blockers.append("completion candidate does not match the training result")
+    if not result_run_id_matches:
+        governance_blockers.append("completion result run does not match runner metadata")
+    if not result_after_runner_finish or not result_before_completion_import:
+        governance_blockers.append("completion result is outside its causal time window")
     if output_artifact_count == 0:
         governance_blockers.append("training result has no adapter or checkpoint output")
     governance_blockers = _unique(governance_blockers)
@@ -492,6 +534,8 @@ def build_cloud_training_completion_receipt(
         "output_artifact_count": output_artifact_count,
         "artifact_set_sha256": artifact_set_sha,
         "candidate_model_id": result_candidate_id,
+        "run_id": result_run_id,
+        "created_at": _string(output_manifest.get("created_at")),
     }
     provider_constraints_record = {
         "region": _string(runner_constraints.get("region")),
@@ -504,6 +548,7 @@ def build_cloud_training_completion_receipt(
         "provider_id": provider_id,
         "provider_job_id": _string(metadata.get("provider_job_id")),
         "execution_id": _string(metadata.get("execution_id")),
+        "result_run_id": result_run_id,
         "candidate_model_id": candidate_model_id,
         "runner_id": _string(runner.get("id")),
         "runner_version": _string(runner.get("version")),
@@ -546,8 +591,10 @@ def build_cloud_training_completion_receipt(
             "runner_id": _string(runner.get("id")),
             "runner_version": _string(runner.get("version")),
             "started_at": _string(metadata.get("started_at")),
-            "finished_at": _string(metadata.get("finished_at")),
+            "observed_at": _string(metadata.get("observed_at")),
+            "finished_at": metadata.get("finished_at"),
             "exit_code": metadata.get("exit_code"),
+            "result_run_id": runner_result_run_id,
             "side_effects": side_effects,
         },
         "outputs": outputs,
@@ -781,22 +828,46 @@ def _runner_metadata_errors(metadata: dict[str, Any]) -> list[str]:
     _unknown_keys(metadata, _METADATA_KEYS, "runner metadata", errors)
     if metadata.get("schema_version") != EXTERNAL_CLOUD_TRAINING_RUNNER_SCHEMA_VERSION:
         errors.append("runner metadata schema_version is unsupported")
-    for field in ("provider_id", "provider_job_id", "execution_id", "candidate_model_id"):
+    for field in (
+        "provider_id",
+        "provider_job_id",
+        "execution_id",
+        "result_run_id",
+        "candidate_model_id",
+    ):
         if not _public_identifier(metadata.get(field)):
             errors.append(f"runner metadata {field} must be a public identifier")
     status = _string(metadata.get("status")).lower()
     if status not in EXECUTION_STATUSES:
         errors.append("runner metadata status is unsupported")
-    if not isinstance(metadata.get("terminal"), bool):
+    terminal = metadata.get("terminal")
+    if not isinstance(terminal, bool):
         errors.append("runner metadata terminal must be boolean")
-    if not isinstance(metadata.get("exit_code"), int) or isinstance(metadata.get("exit_code"), bool):
-        errors.append("runner metadata exit_code must be an integer")
+    terminal_status = status in {"completed", "failed"}
+    exit_code = metadata.get("exit_code")
+    if terminal_status:
+        if terminal is not True:
+            errors.append("terminal runner status requires terminal=true")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            errors.append("terminal runner status requires an integer exit_code")
+    else:
+        if status in EXECUTION_STATUSES and terminal is not False:
+            errors.append("nonterminal runner status requires terminal=false")
+        if exit_code is not None:
+            errors.append("nonterminal runner status requires exit_code=null")
     parsed_timestamps: dict[str, datetime | None] = {}
-    for field in ("started_at", "finished_at"):
+    for field in ("started_at", "observed_at"):
         parsed_timestamps[field] = _parsed_timestamp(metadata.get(field))
         if parsed_timestamps[field] is None:
             errors.append(f"runner metadata {field} must be an ISO-8601 timestamp")
+    finished_value = metadata.get("finished_at")
+    parsed_timestamps["finished_at"] = _parsed_timestamp(finished_value)
+    if terminal_status and parsed_timestamps["finished_at"] is None:
+        errors.append("terminal runner status requires a finished_at timestamp")
+    if not terminal_status and finished_value is not None:
+        errors.append("nonterminal runner status requires finished_at=null")
     started_at = parsed_timestamps["started_at"]
+    observed_at = parsed_timestamps["observed_at"]
     finished_at = parsed_timestamps["finished_at"]
     if (
         started_at is not None
@@ -804,6 +875,18 @@ def _runner_metadata_errors(metadata: dict[str, Any]) -> list[str]:
         and finished_at < started_at
     ):
         errors.append("runner metadata finished_at must not precede started_at")
+    if (
+        started_at is not None
+        and observed_at is not None
+        and observed_at < started_at
+    ):
+        errors.append("runner metadata observed_at must not precede started_at")
+    if (
+        finished_at is not None
+        and observed_at is not None
+        and observed_at < finished_at
+    ):
+        errors.append("runner metadata observed_at must not precede finished_at")
     failure = metadata.get("failure")
     if not isinstance(failure, dict):
         errors.append("runner metadata failure must be an object")
@@ -1157,6 +1240,11 @@ def _training_result_status(payload: dict[str, Any]) -> str:
     return _string(result.get("status"))
 
 
+def _training_result_run_id(payload: dict[str, Any]) -> str:
+    result = payload.get("training_result") if isinstance(payload.get("training_result"), dict) else {}
+    return _string(result.get("run_id"))
+
+
 def _schema_errors(payload: dict[str, Any], schema_name: str) -> list[str]:
     try:
         result = check_schema_contract(payload, name_or_id=schema_name)
@@ -1247,6 +1335,9 @@ def _public_identifier(value: Any) -> bool:
         or "\\" in value
     ):
         return False
+    windows = PureWindowsPath(value)
+    if windows.is_absolute() or windows.drive:
+        return False
     lowered = value.lower()
     if any(token in lowered for token in ("/users/", "/home/", "c:\\")):
         return False
@@ -1262,6 +1353,8 @@ def _public_identifier(value: Any) -> bool:
         and "\r" not in value
         and "://" not in value
         and not value.startswith(("/", "~", "\\"))
+        and not _WINDOWS_ABSOLUTE_PATH.search(value)
+        and not _POSIX_ABSOLUTE_PATH.search(value)
         and not _SECRET_LIKE.search(value)
     )
 
@@ -1271,6 +1364,7 @@ def _public_message(value: Any) -> bool:
         not isinstance(value, str)
         or len(value) > 512
         or value != value.strip()
+        or "\\" in value
     ):
         return False
     lowered = value.lower()
@@ -1282,13 +1376,20 @@ def _public_message(value: Any) -> bool:
             "apikey",
             "token=",
             "password",
+            "secret",
+            "authorization",
             "/users/",
             "/home/",
             "c:\\",
         )
     ):
         return False
-    return not any(ord(char) < 0x20 and char not in {"\t"} for char in value) and not _SECRET_LIKE.search(value)
+    return (
+        not any(ord(char) < 0x20 and char not in {"\t"} for char in value)
+        and not _WINDOWS_ABSOLUTE_PATH.search(value)
+        and not _POSIX_ABSOLUTE_PATH.search(value)
+        and not _SECRET_LIKE.search(value)
+    )
 
 
 def _parsed_timestamp(value: Any) -> datetime | None:
@@ -1436,16 +1537,24 @@ def _public_path_component(value: Any) -> bool:
     lowered = value.lower()
     if any(
         token in lowered
-        for token in ("api_key", "apikey", "token=", "password", "bearer ")
+        for token in (
+            "api_key",
+            "apikey",
+            "token=",
+            "password",
+            "secret",
+            "authorization",
+            "bearer ",
+        )
     ):
         return False
     return not _SECRET_LIKE.search(value)
 
 
 def _unknown_keys(value: dict[str, Any], allowed: set[str], label: str, errors: list[str]) -> None:
-    unknown = sorted(set(value) - allowed)
-    if unknown:
-        errors.append(f"{label} contains unknown fields: {unknown}")
+    unknown_count = len(set(value) - allowed)
+    if unknown_count:
+        errors.append(f"{label} contains {unknown_count} unknown field(s)")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

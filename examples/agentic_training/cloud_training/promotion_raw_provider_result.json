@@ -1,0 +1,7 @@
+{
+  "candidate_model_id": "local/mock-candidate",
+  "execution_id": "promotion-cloud-training-001",
+  "provider_id": "modal",
+  "provider_job_id": "promotion-modal-job-001",
+  "reported_status": "completed"
+}

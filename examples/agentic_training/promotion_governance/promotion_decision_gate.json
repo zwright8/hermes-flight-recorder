@@ -52,7 +52,7 @@
     "exists": true,
     "kind": "file",
     "path": "promotion_decision.json",
-    "sha256": "2f7908e73d5836483d5d0f3955fac2ed56061277a56b193eac647ad19550964f",
+    "sha256": "ed7806370c83694bd29ae4df3cee692dea920401d50ca26c9aa6817a69473e39",
     "size_bytes": 51947
   },
   "source_decision": {

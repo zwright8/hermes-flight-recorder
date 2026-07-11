@@ -794,6 +794,14 @@
       "name": "cloud_training_completion_receipt"
     },
     {
+      "artifact": "external_cloud_training_runner",
+      "artifact_schema_version": "hfr.external_cloud_training_runner.v1",
+      "description": "Public fail-closed metadata envelope reported by an external cloud-training runner for import-only completion receipts.",
+      "filename": "external_cloud_training_runner.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/external_cloud_training_runner.v1.schema.json",
+      "name": "external_cloud_training_runner"
+    },
+    {
       "artifact": "agentic_rollout_plan",
       "artifact_schema_version": "hfr.agentic_rollout_plan.v1",
       "description": "Fail-closed rollout generation plan for agentic training loops.",

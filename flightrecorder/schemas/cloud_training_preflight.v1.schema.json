@@ -403,6 +403,59 @@
       "type": "object"
     },
     "adapterContract": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "schema_version": {
+                "const": "hfr.cloud_training_provider_adapter.v1"
+              }
+            },
+            "required": [
+              "schema_version"
+            ]
+          },
+          "then": {
+            "properties": {
+              "receipt_types": {
+                "items": {
+                  "enum": [
+                    "hfr.cloud_training_artifact_manifest.v1",
+                    "hfr.cloud_training_launch_plan.v1",
+                    "hfr.cloud_training_launch_receipt.v1",
+                    "hfr.cloud_training_preflight.v1",
+                    "hfr.cloud_training_provider_registry.v1",
+                    "hfr.cloud_training_status_receipt.v1"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 6,
+                "minItems": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "schema_version": {
+                "const": "hfr.cloud_training_provider_adapter.v2"
+              }
+            },
+            "required": [
+              "schema_version"
+            ]
+          },
+          "then": {
+            "properties": {
+              "receipt_types": {
+                "maxItems": 7,
+                "minItems": 7
+              }
+            }
+          }
+        }
+      ],
       "additionalProperties": false,
       "properties": {
         "adapter_id": {
@@ -452,7 +505,7 @@
             ],
             "type": "string"
           },
-          "minItems": 7,
+          "minItems": 6,
           "maxItems": 7,
           "uniqueItems": true,
           "type": "array"
@@ -470,7 +523,10 @@
           "const": true
         },
         "schema_version": {
-          "const": "hfr.cloud_training_provider_adapter.v1"
+          "enum": [
+            "hfr.cloud_training_provider_adapter.v1",
+            "hfr.cloud_training_provider_adapter.v2"
+          ]
         },
         "status_cancel_receipts_supported": {
           "const": true

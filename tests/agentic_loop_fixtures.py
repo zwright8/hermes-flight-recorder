@@ -41,19 +41,28 @@ def write_cloud_completion_fixture(
     failed = status != "completed"
     failure_class = "provider" if failed else "none"
     failure_message = "external provider reported failure" if failed else ""
+    result_payload = _read_json_object(agentic_training_result_path)
+    training_result = result_payload.get("training_result")
+    if not isinstance(training_result, dict) or not isinstance(
+        training_result.get("run_id"), str
+    ):
+        raise AssertionError("agentic training result fixture must declare a run id")
+    terminal = status in {"completed", "failed"}
     metadata = {
         "schema_version": "hfr.external_cloud_training_runner.v1",
         "provider_id": "modal",
         "provider_job_id": "fixture-modal-job-001",
         "execution_id": "fixture-cloud-training-001",
+        "result_run_id": training_result["run_id"],
         "candidate_model_id": candidate_id,
         "status": status,
-        "terminal": status in {"completed", "failed"},
+        "terminal": terminal,
         "failure": {"class": failure_class, "message": failure_message},
         "runner": {"id": "fixture-external-cloud-runner", "version": "1"},
         "started_at": "2026-07-03T00:10:00+00:00",
-        "finished_at": "2026-07-03T00:20:00+00:00",
-        "exit_code": 1 if failed else 0,
+        "observed_at": "2026-07-03T00:20:00+00:00",
+        "finished_at": "2026-07-03T00:20:00+00:00" if terminal else None,
+        "exit_code": (1 if failed else 0) if terminal else None,
         "provider_constraints": {
             "region": "provider_default",
             "gpu_class": "a100",
@@ -395,6 +404,7 @@ def _write_candidate_training_result(root: Path, candidate_id: str) -> Path:
         shutil.copyfile(example_root / filename, root / filename)
     payload = _read_json_object(example_root / "completed_result.json")
     result_path = root / "agentic_training_result.json"
+    payload["created_at"] = "2026-07-03T00:20:00+00:00"
     payload["artifact_path"] = result_path.name
     payload["registry_update"]["target_model_id"] = candidate_id
     payload["registry_update"]["links"][0]["path"] = result_path.name

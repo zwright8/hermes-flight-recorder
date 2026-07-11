@@ -30,6 +30,9 @@ from tests.agentic_loop_fixtures import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE_ID = "local/mock-candidate"
+AWS_KEY_SHAPED_TEST_VALUE = "AKIA" + "1234567890ABCDEF"
+LOWERCASE_AWS_KEY_SHAPED_TEST_VALUE = "akia" + "1234567890abcdef"
+AWS_DOCUMENTATION_KEY_TEST_VALUE = "AKIA" + "IOSFODNN7EXAMPLE"
 
 
 def run_cli(args: list[str]) -> int:
@@ -38,6 +41,215 @@ def run_cli(args: list[str]) -> int:
 
 
 class CloudTrainingCompletionTests(unittest.TestCase):
+    def test_committed_runner_metadata_matches_public_schema(self):
+        runner_paths = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "runner_metadata.json",
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "promotion_runner_metadata.json",
+        )
+
+        for path in runner_paths:
+            with self.subTest(path=path.name):
+                result = check_schema_file(
+                    path,
+                    "external_cloud_training_runner",
+                )
+                self.assertTrue(result["passed"], result["errors"])
+
+    def test_runner_metadata_schema_requires_public_result_run_id(self):
+        path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "runner_metadata.json"
+        )
+        valid = json.loads(path.read_text(encoding="utf-8"))
+        valid.setdefault("result_run_id", "external-result-run-001")
+        valid.setdefault("observed_at", "2026-07-03T00:21:00+00:00")
+
+        self.assertTrue(
+            check_schema_contract(
+                valid,
+                name_or_id="external_cloud_training_runner",
+            )["passed"]
+        )
+
+        missing = json.loads(json.dumps(valid))
+        missing.pop("result_run_id")
+        missing_result = check_schema_contract(
+            missing,
+            name_or_id="external_cloud_training_runner",
+        )
+        self.assertFalse(missing_result["passed"])
+        self.assertIn(
+            "missing required property 'result_run_id'",
+            "\n".join(missing_result["errors"]),
+        )
+
+        for malformed in (
+            "",
+            "../private-result",
+            "private\\result",
+            "D:/private/job",
+            "failure at D:/private/job",
+            "/private/job",
+            "failure at /tmp/private-job",
+            "//server/share",
+            "path:/private/var",
+            "[/private/var]",
+            "public-secret-result",
+            "AUTHORIZATION-header-result",
+            AWS_KEY_SHAPED_TEST_VALUE,
+            "hf_1234567890abcdefghij",
+            "ghp_1234567890abcdefghij",
+            "github_pat_1234567890abcdefghij",
+            "xoxb-1234567890",
+            "AIza1234567890abcdefghij",
+            "sk_live_1234567890",
+            "sk_test_1234567890",
+        ):
+            with self.subTest(result_run_id=malformed):
+                payload = json.loads(json.dumps(valid))
+                payload["result_run_id"] = malformed
+                result = check_schema_contract(
+                    payload,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertFalse(result["passed"], result)
+
+    def test_runner_metadata_schema_rejects_credentials_in_public_messages(self):
+        path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "runner_metadata.json"
+        )
+        valid = json.loads(path.read_text(encoding="utf-8"))
+        valid.setdefault("result_run_id", "external-result-run-001")
+        valid.setdefault("observed_at", "2026-07-03T00:21:00+00:00")
+
+        for message in (
+            "Secret material was observed",
+            "Authorization header was observed",
+            f"AWS access key {AWS_KEY_SHAPED_TEST_VALUE} was observed",
+            "failure at D:/private/job",
+            "failure at /Volumes/private/job",
+            "//server/share",
+            "path:/private/var",
+            "[/private/var]",
+            "UNC \\\\server\\share",
+            "hf_1234567890abcdefghij",
+            "gho_1234567890abcdefghij",
+            "github_pat_1234567890abcdefghij",
+            "xoxp-1234567890",
+            "AIza1234567890abcdefghij",
+            "sk_live_1234567890",
+            "sk_test_1234567890",
+        ):
+            with self.subTest(message=message):
+                payload = json.loads(json.dumps(valid))
+                payload["failure"]["message"] = message
+                result = check_schema_contract(
+                    payload,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertFalse(result["passed"], result)
+
+    def test_runner_metadata_schema_matches_all_secret_like_token_families(self):
+        path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "runner_metadata.json"
+        )
+        valid = json.loads(path.read_text(encoding="utf-8"))
+        secret_like_values = (
+            "sk-abcdefgh",
+            "api_key=abcdefgh",
+            "token=abcdefgh",
+            "Bearer abcdefgh",
+            "Basic abcdefgh",
+            "password=abcdefgh",
+            LOWERCASE_AWS_KEY_SHAPED_TEST_VALUE,
+            "HF_1234567890ABCDEFGHIJ",
+            "GHP_1234567890ABCDEFGHIJ",
+            "XOXB-1234567890",
+            "SK_LIVE_1234567890",
+        )
+
+        for value in secret_like_values:
+            with self.subTest(field="result_run_id", value=value):
+                payload = json.loads(json.dumps(valid))
+                payload["result_run_id"] = value
+                result = check_schema_contract(
+                    payload,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertFalse(result["passed"], result)
+
+            with self.subTest(field="failure.message", value=value):
+                payload = json.loads(json.dumps(valid))
+                payload["failure"]["message"] = value
+                result = check_schema_contract(
+                    payload,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertFalse(result["passed"], result)
+
+    def test_runner_metadata_schema_enforces_terminal_status_coherence(self):
+        path = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training"
+            / "runner_metadata.json"
+        )
+        completed = json.loads(path.read_text(encoding="utf-8"))
+        completed.setdefault("result_run_id", "external-result-run-001")
+        completed.setdefault("observed_at", "2026-07-03T00:21:00+00:00")
+
+        for status in ("incomplete", "unknown"):
+            with self.subTest(valid_status=status):
+                nonterminal = json.loads(json.dumps(completed))
+                nonterminal.update(
+                    {
+                        "status": status,
+                        "terminal": False,
+                        "finished_at": None,
+                        "exit_code": None,
+                    }
+                )
+                result = check_schema_contract(
+                    nonterminal,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertTrue(result["passed"], result["errors"])
+
+                nonterminal["terminal"] = True
+                mismatch = check_schema_contract(
+                    nonterminal,
+                    name_or_id="external_cloud_training_runner",
+                )
+                self.assertFalse(mismatch["passed"])
+
+        completed["finished_at"] = None
+        completed["exit_code"] = None
+        result = check_schema_contract(
+            completed,
+            name_or_id="external_cloud_training_runner",
+        )
+        self.assertFalse(result["passed"])
+
     def test_committed_completion_receipt_replays_and_is_schema_valid(self):
         path = (
             ROOT
@@ -64,6 +276,39 @@ class CloudTrainingCompletionTests(unittest.TestCase):
         for key, value in receipt["execution_boundary"].items():
             if key.endswith("_by_flight_recorder"):
                 self.assertFalse(value, key)
+
+    def test_committed_jobs_use_distinct_identity_coherent_provider_results(self):
+        receipt_paths = (
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "cloud_training_completion_receipt.json",
+            ROOT
+            / "examples"
+            / "agentic_training"
+            / "promotion_cloud_training_completion_receipt.json",
+        )
+        source_fingerprints: set[tuple[str, str]] = set()
+        for receipt_path in receipt_paths:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            source = receipt["sources"]["raw_provider_result"]
+            raw_path = receipt_path.parent / source["path"]
+            raw = json.loads(raw_path.read_text(encoding="utf-8"))
+            source_fingerprints.add((source["path"], source["sha256"]))
+
+            self.assertEqual(raw["provider_id"], receipt["identity"]["provider_id"])
+            self.assertEqual(
+                raw["provider_job_id"],
+                receipt["identity"]["provider_job_id"],
+            )
+            self.assertEqual(raw["execution_id"], receipt["identity"]["execution_id"])
+            self.assertEqual(
+                raw["candidate_model_id"],
+                receipt["identity"]["candidate_model_id"],
+            )
+            self.assertEqual(raw["reported_status"], receipt["execution"]["status"])
+
+        self.assertEqual(len(source_fingerprints), len(receipt_paths))
 
     def test_cli_imports_completion_without_provider_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,6 +422,126 @@ class CloudTrainingCompletionTests(unittest.TestCase):
             )
             self.assertTrue(inspection["ready"])
 
+    def test_nonterminal_outcomes_allow_null_finish_and_exit(self):
+        for status in ("incomplete", "unknown"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                result_path = _write_candidate_training_result(root, CANDIDATE_ID)
+                completion_path = write_cloud_completion_fixture(
+                    root,
+                    result_path,
+                    CANDIDATE_ID,
+                    status=status,
+                )
+                receipt = json.loads(completion_path.read_text(encoding="utf-8"))
+
+                self.assertTrue(receipt["passed"], receipt["integrity"])
+                self.assertEqual(receipt["execution"]["status"], status)
+                self.assertFalse(receipt["execution"]["terminal"])
+                self.assertIsNone(receipt["runner_observation"]["finished_at"])
+                self.assertIsNone(receipt["runner_observation"]["exit_code"])
+                self.assertFalse(
+                    receipt["governance"][
+                        "cloud_training_completion_claims_allowed"
+                    ]
+                )
+                self.assertEqual(
+                    validate_cloud_training_completion_receipt(
+                        completion_path
+                    ).errors,
+                    [],
+                )
+
+    def test_completed_result_run_id_must_match_runner_attestation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = _write_candidate_training_result(root, CANDIDATE_ID)
+            write_cloud_completion_fixture(root, result_path, CANDIDATE_ID)
+            cloud_root = root / "cloud_training"
+            metadata_path = cloud_root / "runner_metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["result_run_id"] = "unrelated-stale-result"
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            receipt = build_cloud_training_completion_receipt(
+                launch_plan_path=cloud_root / "launch_plan.json",
+                launch_receipt_path=cloud_root / "launch_receipt.json",
+                status_receipt_path=cloud_root / "status_receipt.json",
+                runner_metadata_path=metadata_path,
+                raw_provider_result_path=cloud_root / "raw_provider_result.json",
+                output_artifact_manifest_path=result_path,
+                out_path=root / "mismatched-result-run.json",
+                created_at="2026-07-03T00:30:00+00:00",
+            )
+
+            failed = {
+                check["id"]
+                for check in receipt["integrity"]["checks"]
+                if not check["passed"]
+            }
+            self.assertIn("completed_result_run_id_matches", failed)
+            self.assertFalse(
+                receipt["governance"]["cloud_training_completion_claims_allowed"]
+            )
+
+    def test_completed_result_timestamp_must_be_causally_bounded(self):
+        for created_at, expected_check in (
+            (
+                "2026-07-03T00:19:59+00:00",
+                "completed_result_after_runner_finish",
+            ),
+            (
+                "2026-07-03T00:30:01+00:00",
+                "completed_result_before_completion_import",
+            ),
+        ):
+            with self.subTest(created_at=created_at), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                result_path = _write_candidate_training_result(root, CANDIDATE_ID)
+                write_cloud_completion_fixture(root, result_path, CANDIDATE_ID)
+                cloud_root = root / "cloud_training"
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                result["created_at"] = created_at
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                metadata_path = cloud_root / "runner_metadata.json"
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["source_sha256"]["output_artifact_manifest"] = (
+                    hashlib.sha256(result_path.read_bytes()).hexdigest()
+                )
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                receipt = build_cloud_training_completion_receipt(
+                    launch_plan_path=cloud_root / "launch_plan.json",
+                    launch_receipt_path=cloud_root / "launch_receipt.json",
+                    status_receipt_path=cloud_root / "status_receipt.json",
+                    runner_metadata_path=metadata_path,
+                    raw_provider_result_path=cloud_root / "raw_provider_result.json",
+                    output_artifact_manifest_path=result_path,
+                    out_path=root / "stale-result.json",
+                    created_at="2026-07-03T00:30:00+00:00",
+                )
+
+                failed = {
+                    check["id"]
+                    for check in receipt["integrity"]["checks"]
+                    if not check["passed"]
+                }
+                self.assertIn(expected_check, failed)
+                self.assertFalse(
+                    receipt["governance"][
+                        "cloud_training_completion_claims_allowed"
+                    ]
+                )
+
     def test_current_source_mutation_invalidates_deterministic_replay(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -280,8 +645,23 @@ class CloudTrainingCompletionTests(unittest.TestCase):
 
     def test_unsafe_runner_metadata_is_not_written_or_echoed(self):
         unsafe_updates = (
+            {"api_key=sk-abcdefgh123456": "redacted"},
             {"provider_job_id": "sk-abcdefgh123456"},
             {"provider_job_id": "C:\\Users\\example\\private-job"},
+            {"provider_job_id": "D:/private/job"},
+            {"provider_job_id": "failure at D:/private/job"},
+            {"provider_job_id": "job /private/tmp/id"},
+            {
+                "provider_job_id": (
+                    f"secret={AWS_DOCUMENTATION_KEY_TEST_VALUE}"
+                )
+            },
+            {"provider_job_id": "authorization=Basic-private"},
+            {"provider_job_id": "hf_abcdefghijklmnopqrstuvwxyz"},
+            {"provider_job_id": "ghp_abcdefghijklmnopqrstuvwxyz"},
+            {"provider_job_id": "xoxb-1234567890-abcdefghij"},
+            {"provider_job_id": "AIza1234567890abcdefghijkl"},
+            {"provider_job_id": "sk_live_1234567890abcdef"},
             {"provider_job_id": "bad\x00job"},
             {"provider_id": "", "status": "bogus"},
             {
@@ -291,6 +671,60 @@ class CloudTrainingCompletionTests(unittest.TestCase):
                 "failure": {
                     "class": "provider",
                     "message": "/Users/example/private/provider failure",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failure at E:/private/job",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failure at /Volumes/Data/private-job",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failed at \\\\server\\share\\run.json",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failed at //server/share/run.json",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failed at path:/private/var/run.json",
+                },
+            },
+            {
+                "status": "failed",
+                "terminal": True,
+                "exit_code": 1,
+                "failure": {
+                    "class": "provider",
+                    "message": "failed at [/private/var/run.json]",
                 },
             },
         )
@@ -340,6 +774,24 @@ class CloudTrainingCompletionTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
                 self.assertFalse(completion_path.exists())
                 self.assertNotIn("sk-abcdefgh123456", stderr.getvalue())
+                self.assertNotIn("D:/private/job", stderr.getvalue())
+                self.assertNotIn("E:/private/job", stderr.getvalue())
+                self.assertNotIn("/private/tmp/id", stderr.getvalue())
+                self.assertNotIn("/Volumes/Data", stderr.getvalue())
+                self.assertNotIn("server/share/run.json", stderr.getvalue())
+                self.assertNotIn("server\\share\\run.json", stderr.getvalue())
+                self.assertNotIn("path:/private/var", stderr.getvalue())
+                self.assertNotIn("[/private/var", stderr.getvalue())
+                self.assertNotIn(
+                    AWS_DOCUMENTATION_KEY_TEST_VALUE,
+                    stderr.getvalue(),
+                )
+                self.assertNotIn("authorization=", stderr.getvalue())
+                self.assertNotIn("hf_abcdefghijklmnopqrstuvwxyz", stderr.getvalue())
+                self.assertNotIn("ghp_abcdefghijklmnopqrstuvwxyz", stderr.getvalue())
+                self.assertNotIn("xoxb-1234567890", stderr.getvalue())
+                self.assertNotIn("AIza1234567890", stderr.getvalue())
+                self.assertNotIn("sk_live_1234567890", stderr.getvalue())
                 self.assertNotIn("/Users/example", stderr.getvalue())
                 self.assertNotIn("Traceback", stderr.getvalue())
 
