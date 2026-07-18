@@ -315,14 +315,35 @@ def _decision_summary(passed: bool, checks: list[dict[str, Any]], metrics: dict[
         if check.get("passed") is False
     ]
     readiness = "ready" if passed else "blocked"
+    next_actions = _decision_next_actions("promotion_ledger_gate", "Promotion-ledger gate", blocking_checks)
     return {
         "readiness": readiness,
         "recommendation": "promote_iteration" if passed else "block_iteration",
         "summary": _decision_text(readiness, blocking_checks),
         "blocking_check_count": len(blocking_checks),
         "blocking_checks": blocking_checks,
+        "failed_checks": blocking_checks,
+        "next_action_count": len(next_actions),
+        "next_actions": next_actions,
         "key_metrics": _decision_key_metrics(metrics),
     }
+
+
+def _decision_next_actions(artifact: str, gate_label: str, blocking_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not blocking_checks:
+        return []
+    return [
+        {
+            "id": "resolve_failed_checks",
+            "priority": "critical",
+            "artifact": artifact,
+            "summary": f"Resolve {len(blocking_checks)} failed {gate_label} check(s) before using this gate downstream.",
+            "evidence": {
+                "failed_check_count": len(blocking_checks),
+                "failed_checks": blocking_checks,
+            },
+        }
+    ]
 
 
 def _decision_text(readiness: str, blocking_checks: list[dict[str, Any]]) -> str:

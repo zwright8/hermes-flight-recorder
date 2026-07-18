@@ -1,0 +1,194 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_model_registry_link_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free model-registry lifecycle link plan for agentic LoRA training results.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/$defs/command"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "properties": {
+        "flight_recorder_mutated_registry": {
+          "const": false
+        },
+        "moves_aliases": {
+          "const": false
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "flight_recorder_mutated_registry",
+        "moves_aliases",
+        "runner_owns_execution"
+      ],
+      "type": "object"
+    },
+    "input_manifests": {
+      "type": "object"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "model_registry": {
+      "type": "string"
+    },
+    "model_registry_entry": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "ready_to_link_training_result",
+        "block_registry_link"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_model_registry_link_plan.v1"
+    },
+    "status": {
+      "type": "string"
+    },
+    "training_plan": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "training_result": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "model",
+    "mode",
+    "status",
+    "training_plan",
+    "training_result",
+    "model_registry",
+    "model_registry_entry",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "commands",
+    "input_manifests",
+    "handoff_contract"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Model Registry Link Plan",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "command_argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "link_type": {
+          "enum": [
+            "training-run",
+            "adapter"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "link_type",
+        "artifact_id",
+        "path",
+        "command_argv"
+      ],
+      "type": "object"
+    }
+  }
+}

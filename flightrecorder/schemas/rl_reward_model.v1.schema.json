@@ -26,6 +26,9 @@
       },
       "type": "array"
     },
+    "label_provenance": {
+      "type": "object"
+    },
     "passed": {
       "type": "boolean"
     },
@@ -91,6 +94,7 @@
     "critical_failures",
     "source_fingerprint_status",
     "source_fingerprints",
+    "label_provenance",
     "source_artifact"
   ],
   "title": "Hermes Flight Recorder RL Reward Model Row",

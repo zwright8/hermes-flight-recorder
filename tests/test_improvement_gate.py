@@ -50,6 +50,8 @@ class ImprovementLedgerGateTests(unittest.TestCase):
             self.assertEqual(gate["decision"]["readiness"], "ready")
             self.assertEqual(gate["decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate["decision"]["blocking_check_count"], 0)
+            self.assertEqual(gate["decision"]["failed_checks"], [])
+            self.assertEqual(gate["decision"]["next_actions"], [])
             self.assertEqual(gate["metrics"]["recurring_work_item_count"], plan_payload["work_item_count"])
             self.assertEqual(gate["policy"]["schema_version"], "hfr.improvement_ledger_gate.policy.v1")
             self.assertEqual(gate["policy"]["effective"]["max_recurring_work_items"], plan_payload["work_item_count"])
@@ -73,6 +75,8 @@ class ImprovementLedgerGateTests(unittest.TestCase):
             strict_gate = json.loads(strict_gate_path.read_text(encoding="utf-8"))
             self.assertEqual(strict_gate["decision"]["readiness"], "blocked")
             self.assertEqual(strict_gate["decision"]["recommendation"], "block_iteration")
+            self.assertEqual(strict_gate["decision"]["next_action_count"], 1)
+            self.assertEqual(strict_gate["decision"]["next_actions"][0]["id"], "resolve_failed_checks")
             failed_checks = {check["id"] for check in strict_gate["checks"] if not check["passed"]}
             self.assertIn("max_recurring_work_items", failed_checks)
             self.assertIn("forbid_open_category", failed_checks)

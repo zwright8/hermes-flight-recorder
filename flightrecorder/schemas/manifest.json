@@ -1040,6 +1040,78 @@
       "filename": "training_plan.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/training_plan.v1.schema.json",
       "name": "training_plan"
+    },
+    {
+      "artifact": "agentic_lora_training_plan",
+      "artifact_schema_version": "hfr.agentic_lora_training_plan.v1",
+      "description": "Dry-run or launch-gating plan emitted by scripts/train_agentic_lora.py before heavy ML imports.",
+      "filename": "agentic_lora_training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_plan.v1.schema.json",
+      "name": "agentic_lora_training_plan"
+    },
+    {
+      "artifact": "agentic_lora_training_result",
+      "artifact_schema_version": "hfr.agentic_lora_training_result.v1",
+      "description": "Result archive emitted by scripts/train_agentic_lora.py after success, classified failure, or blocked launch.",
+      "filename": "agentic_lora_training_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_result.v1.schema.json",
+      "name": "agentic_lora_training_result"
+    },
+    {
+      "artifact": "agentic_lora_training_registry_event",
+      "artifact_schema_version": "hfr.agentic_lora_training_registry_event.v1",
+      "description": "Local JSONL registry event for training result/failure handoff.",
+      "filename": "agentic_lora_training_registry_event.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_registry_event.v1.schema.json",
+      "name": "agentic_lora_training_registry_event"
+    },
+    {
+      "artifact": "agentic_lora_smoke_fixture",
+      "artifact_schema_version": "hfr.agentic_lora_smoke_fixture.v1",
+      "description": "Registered tiny fixture manifest for no-download agentic LoRA smoke planning.",
+      "filename": "agentic_lora_smoke_fixture.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_smoke_fixture.v1.schema.json",
+      "name": "agentic_lora_smoke_fixture"
+    },
+    {
+      "artifact": "agentic_lora_backend_recipes",
+      "artifact_schema_version": "hfr.agentic_lora_backend_recipes.v1",
+      "description": "Side-effect-free external trainer recipe bundle emitted from a registry-backed agentic LoRA training plan.",
+      "filename": "agentic_lora_backend_recipes.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_backend_recipes.v1.schema.json",
+      "name": "agentic_lora_backend_recipes"
+    },
+    {
+      "artifact": "agentic_lora_model_registry_link_plan",
+      "artifact_schema_version": "hfr.agentic_lora_model_registry_link_plan.v1",
+      "description": "Side-effect-free model-registry lifecycle link plan for agentic LoRA training results.",
+      "filename": "agentic_lora_model_registry_link_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_model_registry_link_plan.v1.schema.json",
+      "name": "agentic_lora_model_registry_link_plan"
+    },
+    {
+      "artifact": "serving_endpoint_suite",
+      "artifact_schema_version": "hfr.serving_endpoint_suite.v1",
+      "description": "Suite-level readiness artifact for OpenAI-compatible serving profiles before Eval or demo replay.",
+      "filename": "serving_endpoint_suite.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_suite.v1.schema.json",
+      "name": "serving_endpoint_suite"
+    },
+    {
+      "artifact": "serving_lifecycle_run",
+      "artifact_schema_version": "hfr.serving_lifecycle_run.v1",
+      "description": "Managed serving process lifecycle artifact emitted by run_managed_serving_eval.py.",
+      "filename": "serving_lifecycle_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle_run.v1.schema.json",
+      "name": "serving_lifecycle_run"
+    },
+    {
+      "artifact": "serving_runtime_preflight",
+      "artifact_schema_version": "hfr.serving_runtime_preflight.v1",
+      "description": "Dependency and artifact preflight for launching real local serving runtimes.",
+      "filename": "serving_runtime_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_runtime_preflight.v1.schema.json",
+      "name": "serving_runtime_preflight"
     }
   ]
 }

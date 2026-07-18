@@ -1,0 +1,131 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_suite.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Suite-level readiness artifact for OpenAI-compatible serving profiles before Eval or demo replay.",
+  "properties": {
+    "arms": {
+      "items": {
+        "$ref": "#/$defs/arm"
+      },
+      "type": "array"
+    },
+    "failed_checks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "requirements": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.serving_endpoint_suite.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "failed_checks",
+    "requirements",
+    "arms"
+  ],
+  "title": "Hermes Flight Recorder Serving Endpoint Suite",
+  "type": "object",
+  "$defs": {
+    "arm": {
+      "additionalProperties": true,
+      "properties": {
+        "arm": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "object"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/check"
+          },
+          "type": "array"
+        },
+        "endpoint": {
+          "type": "object"
+        },
+        "failed_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lifecycle": {
+          "type": "object"
+        },
+        "model_identity": {
+          "type": "object"
+        },
+        "profile_arm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ready_for_eval": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "arm",
+        "profile_path",
+        "ready_for_eval",
+        "failed_checks",
+        "checks",
+        "endpoint",
+        "model_identity",
+        "capabilities",
+        "lifecycle"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "details": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "details"
+      ],
+      "type": "object"
+    }
+  }
+}

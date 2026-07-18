@@ -503,7 +503,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "source_run": _display_path(record.run_dir, preserve_paths),
         "scenario_id": scenario_id,
         "scenario_title": scenario_title,
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "prompt": _prompt_from_trace(trace),
         "source_format": trace.get("session", {}).get("source_format", "unknown"),
         "model": trace.get("session", {}).get("model", "unknown"),
@@ -611,7 +611,7 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
         "schema_version": RL_REWARD_SCHEMA_VERSION,
         "episode_id": record.run_id,
         "scenario_id": scenario_id,
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
         "source_fingerprints": source_fingerprints,
         "reward_scale": reward_scale,
@@ -634,7 +634,7 @@ def _step_reward_records(records: list[RunRecord], reward_scale: str) -> list[di
     for record in records:
         scorecard = record.scorecard
         scenario_id = str(scorecard.get("scenario_id") or record.run_id)
-        task_family = _task_family(scenario_id)
+        task_family = _scorecard_task_family(scorecard, scenario_id)
         source_fingerprints = _source_fingerprints(record)
         source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
         rules_by_id = {
@@ -784,7 +784,7 @@ def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: 
         "episode_id": record.run_id,
         "scenario_id": scenario_id,
         "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
         "source_fingerprints": source_fingerprints,
         "rule_id": rule_id,
@@ -2478,6 +2478,11 @@ def _prompt_from_trace(trace: dict[str, Any]) -> str:
 def _task_family(scenario_id: str) -> str:
     family = FAMILY_SUFFIX_RE.sub("", scenario_id).strip("_-")
     return family or scenario_id
+
+
+def _scorecard_task_family(scorecard: dict[str, Any], scenario_id: str) -> str:
+    family = str(scorecard.get("task_family") or "").strip()
+    return family or _task_family(scenario_id)
 
 
 def _score(scorecard: dict[str, Any]) -> int:

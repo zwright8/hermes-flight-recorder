@@ -1,0 +1,183 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_runtime_preflight.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dependency and artifact preflight for launching real local serving runtimes.",
+  "properties": {
+    "adapters": {
+      "additionalProperties": {
+        "$ref": "#/$defs/adapter"
+      },
+      "type": "object"
+    },
+    "blocked_checks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "command_refs": {
+      "items": {
+        "$ref": "#/$defs/command_ref"
+      },
+      "type": "array"
+    },
+    "dependencies": {
+      "additionalProperties": {
+        "$ref": "#/$defs/dependency"
+      },
+      "type": "object"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model_cache": {
+      "$ref": "#/$defs/path_ref"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.serving_runtime_preflight.v1"
+    },
+    "server_script": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/path_ref"
+        },
+        {
+          "properties": {
+            "declared_dependencies": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "sha256": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "readiness",
+    "blocked_checks",
+    "model",
+    "model_cache",
+    "server_script",
+    "dependencies",
+    "adapters",
+    "command_refs",
+    "environment"
+  ],
+  "title": "Hermes Flight Recorder Serving Runtime Preflight",
+  "type": "object",
+  "$defs": {
+    "adapter": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "files": {
+          "additionalProperties": {
+            "$ref": "#/$defs/path_ref"
+          },
+          "type": "object"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "files"
+      ],
+      "type": "object"
+    },
+    "command_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "arm": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "managed_eval_command": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_command": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "arm",
+        "server_command",
+        "managed_eval_command"
+      ],
+      "type": "object"
+    },
+    "dependency": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "type": "object"
+    },
+    "path_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "exists"
+      ],
+      "type": "object"
+    }
+  }
+}

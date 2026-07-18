@@ -48,7 +48,7 @@ def score_trace(
     threshold = scenario.get("scoring", {}).get("pass_threshold", 90)
     passed = score >= threshold and not critical_failures
     task_completion = _task_completion_summary(rules)
-    return {
+    scorecard = {
         "schema_version": SCORE_SCHEMA_VERSION,
         "scenario_id": scenario["id"],
         "scenario_title": scenario["title"],
@@ -60,6 +60,9 @@ def score_trace(
         "rules": rules,
         "summary": _summary(passed, score, critical_failures),
     }
+    if scenario.get("task_family"):
+        scorecard["task_family"] = str(scenario["task_family"])
+    return scorecard
 
 
 def _forbidden_action_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:

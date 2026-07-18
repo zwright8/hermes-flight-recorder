@@ -17225,6 +17225,7 @@ _SERVING_DEMO_RUN_KEYS = {
     "arms",
     "claims",
     "comparisons",
+    "endpoint_suite",
     "scenarios",
 }
 
@@ -17604,6 +17605,10 @@ def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -
     if isinstance(candidate_arm, str) and candidate_arm and candidate_arm not in arm_names:
         target.errors.append("serving_demo_run.candidate_arm must match one arm name.")
 
+    endpoint_suite = demo.get("endpoint_suite")
+    if endpoint_suite is not None:
+        _validate_serving_demo_endpoint_suite(endpoint_suite, set(arm_names), target)
+
     scenario_sets = demo.get("scenario_sets")
     if not isinstance(scenario_sets, dict):
         target.errors.append("serving_demo_run.scenario_sets must be an object.")
@@ -17662,6 +17667,58 @@ def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -
             "same_scenario_ids": demo.get("same_scenario_ids"),
         }
     )
+
+
+def _validate_serving_demo_endpoint_suite(value: Any, arm_names: set[str], target: ValidationTarget) -> None:
+    label = "serving_demo_run.endpoint_suite"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object when present.")
+        return
+    if value.get("schema_version") != "hfr.serving_endpoint_suite.v1":
+        target.errors.append(f"{label}.schema_version must be 'hfr.serving_endpoint_suite.v1'.")
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if not _is_string_list(value.get("failed_checks")):
+        target.errors.append(f"{label}.failed_checks must be a list of strings.")
+    if not isinstance(value.get("requirements"), dict):
+        target.errors.append(f"{label}.requirements must be an object.")
+    arms = value.get("arms")
+    if not isinstance(arms, list):
+        target.errors.append(f"{label}.arms must be a list.")
+        arms = []
+    suite_arm_names: set[str] = set()
+    for index, arm in enumerate(arms):
+        arm_label = f"{label}.arms[{index}]"
+        if not isinstance(arm, dict):
+            target.errors.append(f"{arm_label} must be an object.")
+            continue
+        name = arm.get("arm")
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{arm_label}.arm must be a non-empty string.")
+        else:
+            suite_arm_names.add(name)
+        if not isinstance(arm.get("ready_for_eval"), bool):
+            target.errors.append(f"{arm_label}.ready_for_eval must be a boolean.")
+        if not _is_string_list(arm.get("failed_checks")):
+            target.errors.append(f"{arm_label}.failed_checks must be a list of strings.")
+        for field_name in ("profile_path", "served_model_id", "requested_model", "lifecycle_path"):
+            if arm.get(field_name) is not None and not isinstance(arm.get(field_name), str):
+                target.errors.append(f"{arm_label}.{field_name} must be a string or null.")
+    missing_arms = sorted(arm_names - suite_arm_names)
+    if missing_arms:
+        target.errors.append(f"{label}.arms is missing demo arm(s): {missing_arms}.")
+    alignment = value.get("demo_alignment")
+    if not isinstance(alignment, dict):
+        target.errors.append(f"{label}.demo_alignment must be an object.")
+        return
+    if not isinstance(alignment.get("passed"), bool):
+        target.errors.append(f"{label}.demo_alignment.passed must be a boolean.")
+    if not _is_string_list(alignment.get("failed_checks")):
+        target.errors.append(f"{label}.demo_alignment.failed_checks must be a list of strings.")
+    if not isinstance(alignment.get("checks"), list):
+        target.errors.append(f"{label}.demo_alignment.checks must be a list.")
 
 
 def _validate_serving_readiness(
@@ -21798,6 +21855,7 @@ def _validate_action_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "action_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("action_ledger_gate.decision.key_metrics must be an object.")
@@ -22271,6 +22329,7 @@ def _validate_improvement_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "improvement_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("improvement_ledger_gate.decision.key_metrics must be an object.")
@@ -25545,6 +25604,7 @@ def _validate_promotion_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "promotion_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("promotion_ledger_gate.decision.key_metrics must be an object.")
@@ -25565,6 +25625,37 @@ def _validate_promotion_ledger_gate_decision(
             target.errors.append(
                 f"promotion_ledger_gate.decision.key_metrics.{field_name} must match promotion_ledger_gate.metrics.{field_name}."
             )
+
+
+def _validate_gate_decision_actions(value: dict[str, Any], failed_checks: int, target: ValidationTarget, label: str) -> None:
+    action_fields = {"failed_checks", "next_action_count", "next_actions"}
+    if action_fields.isdisjoint(value):
+        return
+    failed = value.get("failed_checks")
+    if not isinstance(failed, list):
+        target.errors.append(f"{label}.failed_checks must be a list.")
+    elif len(failed) != failed_checks:
+        target.errors.append(f"{label}.failed_checks expected {failed_checks} entries, got {len(failed)}.")
+    next_actions = value.get("next_actions")
+    if not isinstance(next_actions, list):
+        target.errors.append(f"{label}.next_actions must be a list.")
+        next_actions = []
+    if value.get("next_action_count") != len(next_actions):
+        target.errors.append(f"{label}.next_action_count expected {len(next_actions)}, got {value.get('next_action_count')!r}.")
+    if failed_checks and not next_actions:
+        target.errors.append(f"{label}.next_actions must not be empty when checks fail.")
+    for index, action in enumerate(next_actions):
+        action_label = f"{label}.next_actions[{index}]"
+        if not isinstance(action, dict):
+            target.errors.append(f"{action_label} must be an object.")
+            continue
+        for field_name in ("id", "priority", "artifact", "summary"):
+            if not isinstance(action.get(field_name), str) or not action.get(field_name):
+                target.errors.append(f"{action_label}.{field_name} must be a non-empty string.")
+        if action.get("priority") not in {"critical", "high", "medium", "low"}:
+            target.errors.append(f"{action_label}.priority must be critical, high, medium, or low.")
+        if not isinstance(action.get("evidence"), dict):
+            target.errors.append(f"{action_label}.evidence must be an object.")
 
 
 def _validate_promotion_ledger_gate_source_linkage(
