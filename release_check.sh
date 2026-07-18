@@ -100,6 +100,7 @@ grep -F -q "improvement_ledger_gate.json" runs/index.html
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/preferences.jsonl --name rl_preference >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/failure_modes.jsonl --name rl_failure_mode >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/action_sft.jsonl --name rl_action_sft >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/dpo.jsonl --name rl_dpo >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/reward_model.jsonl --name rl_reward_model >/dev/null
 rm -rf replay_runs
@@ -721,6 +722,7 @@ test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
 test -f runs/training_export/sft.jsonl
+test -f runs/training_export/action_sft.jsonl
 test -f runs/training_export/dpo.jsonl
 test -f runs/training_export/reward_model.jsonl
 test -f runs/training_export/dataset_metrics.json
@@ -799,6 +801,11 @@ sft = [
     for line in Path("runs/training_export/sft.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+action_sft = [
+    json.loads(line)
+    for line in Path("runs/training_export/action_sft.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 dpo = [
     json.loads(line)
     for line in Path("runs/training_export/dpo.jsonl").read_text(encoding="utf-8").splitlines()
@@ -818,7 +825,17 @@ episodes = [
     if line.strip()
 ]
 split_names = ("train", "validation", "test")
-split_artifacts = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
+split_artifacts = (
+    "episodes",
+    "rewards",
+    "step_rewards",
+    "preferences",
+    "failure_modes",
+    "sft",
+    "action_sft",
+    "dpo",
+    "reward_model",
+)
 split_keys = {f"{split}_{artifact}" for split in split_names for artifact in split_artifacts}
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
@@ -853,6 +870,7 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "reward_model",
     "rewards",
     "sft",
+    "action_sft",
     "step_rewards",
 } | split_keys
 assert all(record["exists"] is True for record in training_manifest["artifact_fingerprints"].values())
@@ -897,6 +915,8 @@ assert {item["episode_id"] for item in reward_model} >= {
 }
 assert dataset_metrics["artifact_counts"]["episodes"] == 7
 assert dataset_metrics["pass_rate"] == 0.2857
+assert dataset_metrics["artifact_counts"]["action_sft"] == len(action_sft)
+assert {sample["schema_version"] for sample in action_sft} == {"hfr.rl.action_sft.v1"}
 assert dataset_metrics["artifact_counts"]["reward_model"] == 7
 assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 7
 assert dataset_metrics["source_fingerprint_coverage"]["unverified"] == 0
@@ -949,8 +969,8 @@ assert gate["metrics"]["validation"]["passed"] is True
 assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 11
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 11
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 13
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 13
 assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
 assert gate["metrics"]["task_completion"]["incomplete_count"] == 4

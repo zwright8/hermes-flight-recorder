@@ -1120,6 +1120,14 @@
       "filename": "serving_runtime_preflight.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/serving_runtime_preflight.v1.schema.json",
       "name": "serving_runtime_preflight"
+    },
+    {
+      "artifact": "finetune_demo_evaluation",
+      "artifact_schema_version": "hfr.finetune_demo_evaluation.v1",
+      "description": "Bounded integration and memorization evaluation for a Flight Recorder agentic LoRA case study.",
+      "filename": "finetune_demo_evaluation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/finetune_demo_evaluation.v1.schema.json",
+      "name": "finetune_demo_evaluation"
     }
   ]
 }

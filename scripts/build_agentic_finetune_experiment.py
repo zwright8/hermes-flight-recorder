@@ -18,10 +18,15 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from flightrecorder.training import _agentic_messages, _inferred_tool_definitions
 

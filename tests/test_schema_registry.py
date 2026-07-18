@@ -90,6 +90,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "external_eval_receipt",
             "external_eval_result",
             "external_cloud_training_runner",
+            "finetune_demo_evaluation",
             "goal3_handoff",
             "harness_model_probe",
             "harness_replay_result",

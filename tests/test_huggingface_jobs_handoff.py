@@ -32,6 +32,8 @@ class HuggingFaceJobsHandoffTests(unittest.TestCase):
             built = subprocess.run(
                 [
                     sys.executable,
+                    "-I",
+                    "-S",
                     str(BUILD),
                     "--runs-dir",
                     str(ROOT / "examples" / "agentic_training"),

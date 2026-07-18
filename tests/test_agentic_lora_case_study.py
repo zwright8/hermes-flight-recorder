@@ -36,7 +36,10 @@ class AgenticLoraCaseStudyTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
 
     def test_evaluation_keeps_the_claim_narrow(self):
-        evaluation = json.loads((CASE_STUDY / "evaluation.json").read_text(encoding="utf-8"))
+        evaluation_path = CASE_STUDY / "evaluation.json"
+        schema = check_schema_file(evaluation_path, "finetune_demo_evaluation")
+        self.assertTrue(schema["passed"], schema["errors"])
+        evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
 
         self.assertTrue(evaluation["sequence_loss_improved"])
         self.assertLess(evaluation["tuned"]["sequence_loss"], evaluation["base"]["sequence_loss"])

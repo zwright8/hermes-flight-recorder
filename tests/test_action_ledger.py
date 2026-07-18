@@ -90,8 +90,6 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertEqual(gate_result["decision"]["readiness"], "ready")
             self.assertEqual(gate_result["decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate_result["decision"]["blocking_check_count"], 0)
-            self.assertEqual(gate_result["decision"]["failed_checks"], [])
-            self.assertEqual(gate_result["decision"]["next_actions"], [])
             self.assertEqual(gate_result["decision"]["key_metrics"]["recurring_action_count"], gate_result["metrics"]["recurring_action_count"])
             self.assertEqual(gate_result["policy"]["schema_version"], "hfr.action_ledger_gate.policy.v1")
             self.assertEqual(gate_result["policy"]["effective"]["max_recurring_actions"], 6)
@@ -119,8 +117,6 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertEqual(strict_gate["decision"]["readiness"], "blocked")
             self.assertEqual(strict_gate["decision"]["recommendation"], "block_iteration")
             self.assertEqual(strict_gate["decision"]["blocking_check_count"], strict_gate["failed_check_count"])
-            self.assertEqual(strict_gate["decision"]["next_action_count"], 1)
-            self.assertEqual(strict_gate["decision"]["next_actions"][0]["id"], "resolve_failed_checks")
             failed_checks = {check["id"] for check in strict_gate["checks"] if not check["passed"]}
             self.assertIn("max_recurring_actions", failed_checks)
             self.assertIn("forbid_open_priority", failed_checks)

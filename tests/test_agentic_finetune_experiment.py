@@ -18,6 +18,8 @@ class AgenticFinetuneExperimentTests(unittest.TestCase):
             built = subprocess.run(
                 [
                     sys.executable,
+                    "-I",
+                    "-S",
                     str(BUILD_SCRIPT),
                     "--runs-dir",
                     str(ROOT / "examples" / "agentic_training"),
@@ -101,6 +103,8 @@ class AgenticFinetuneExperimentTests(unittest.TestCase):
             built = subprocess.run(
                 [
                     sys.executable,
+                    "-I",
+                    "-S",
                     str(BUILD_SCRIPT),
                     "--runs-dir",
                     str(root / "runs"),
