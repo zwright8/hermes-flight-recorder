@@ -88,6 +88,13 @@ Useful modes are `fr_action_sft` for pure tool-trajectory imitation,
 path. The staged path trains accepted final responses and action trajectories,
 then continues the adapter with DPO.
 
+SFT defaults to assistant-only loss. Some published chat templates, including
+the current `Qwen/Qwen3-0.6B` template, do not expose the `{% generation %}`
+mask that TRL requires for that mode. For a bounded compatibility run, pass
+`--all-message-loss`; the launch plan records `assistant_only_loss: false` so
+the broader loss scope remains explicit and auditable. Prefer a template with
+assistant masks for production training when one is available.
+
 ## 3. Prepare the Hugging Face Jobs Handoff
 
 ```bash

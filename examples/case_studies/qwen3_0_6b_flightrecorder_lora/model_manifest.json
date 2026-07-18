@@ -1,0 +1,78 @@
+{
+  "candidate_id": "qwen3_0_6b_flightrecorder_demo",
+  "compatibility": {
+    "chat_template": {
+      "notes": "The upstream chat template rendered messages and tools during the completed run, but it did not expose TRL generation masks.",
+      "source": "completed_local_training_run",
+      "status": "verified_with_all_message_loss",
+      "verified": true
+    },
+    "context_length": 40960,
+    "memory": {
+      "notes": "The model and rank-8 adapter completed a 512-token, batch-size-one run on Apple MPS.",
+      "source": "completed_local_training_run",
+      "status": "verified_for_demo_shape",
+      "verified": true
+    },
+    "quantization": {
+      "notes": "No quantized model was used or evaluated.",
+      "source": "case_study_scope",
+      "status": "not_evaluated",
+      "verified": false
+    },
+    "serving": {
+      "notes": "Transformers and PEFT loaded the base model and adapter locally; no long-running serving endpoint was started.",
+      "source": "completed_local_training_run",
+      "status": "local_load_verified",
+      "supported": true,
+      "verified": true
+    },
+    "structured_outputs": {
+      "notes": "The sampled completion did not prove structurally valid tool-call generation.",
+      "source": "case_study_evaluation",
+      "status": "not_verified",
+      "supported": false,
+      "verified": false
+    },
+    "tokenizer": {
+      "notes": "AutoTokenizer loaded and tokenized the recorded trajectory during the completed run.",
+      "source": "completed_local_training_run",
+      "status": "verified",
+      "verified": true
+    },
+    "tool_calls": {
+      "notes": "The chat template accepted tool definitions and recorded tool messages; sampled tool-call correctness remains unverified.",
+      "source": "completed_local_training_run",
+      "status": "template_path_verified",
+      "supported": true,
+      "verified": false
+    }
+  },
+  "license": {
+    "accepted_terms": true,
+    "license_id": "apache-2.0",
+    "notes": [
+      "The upstream model card declares Apache-2.0.",
+      "Downstream publishers remain responsible for reviewing current upstream terms."
+    ],
+    "review_status": "approved_for_demo",
+    "reviewed_at": "2026-07-18T00:00:00Z",
+    "reviewer": "case-study-author",
+    "source_url": "https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/LICENSE",
+    "status": "approved",
+    "terms_url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+    "training_allowed": true
+  },
+  "model_id": "Qwen/Qwen3-0.6B",
+  "notes": [
+    "Reviewed base-model decision for the bounded Flight Recorder LoRA case study.",
+    "This manifest does not claim held-out agent-quality improvement."
+  ],
+  "schema_version": "hfr.model_candidate.v1",
+  "source": {
+    "revision": "main",
+    "type": "huggingface_model",
+    "url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+    "weight_download_allowed": true
+  }
+}

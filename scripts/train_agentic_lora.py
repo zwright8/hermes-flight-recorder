@@ -739,6 +739,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "lora_r": args.lora_r,
             "lora_alpha": args.lora_alpha,
             "lora_dropout": args.lora_dropout,
+            "assistant_only_loss": not args.all_message_loss,
         },
         "compute_assumptions": {
             "heavy_ml_imports_deferred_until_after_plan_passes": True,
@@ -1035,7 +1036,7 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
             num_train_epochs=args.sft_epochs,
             max_steps=args.max_steps,
             max_length=args.max_length,
-            assistant_only_loss=True,
+            assistant_only_loss=not args.all_message_loss,
             gradient_checkpointing=args.gradient_checkpointing,
             logging_steps=1,
             save_strategy="epoch",
@@ -1757,6 +1758,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--all-message-loss",
+        action="store_true",
+        help=(
+            "Train on every token in each rendered conversation instead of requiring the tokenizer "
+            "chat template to expose assistant-token generation masks"
+        ),
+    )
     parser.add_argument("--disable-trackio", action="store_true", help="Disable Trackio reporting")
     parser.add_argument("--trackio-project", default=DEFAULT_TRACKIO_PROJECT)
     parser.add_argument("--trackio-space-id", default="")

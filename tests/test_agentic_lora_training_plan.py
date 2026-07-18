@@ -211,9 +211,44 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertEqual(schema_result["schema"]["name"], "agentic_lora_training_plan")
             self.assertEqual(plan["model"], "local/test-model")
             self.assertEqual(plan["prepared_counts"]["action_sft"], 1)
+            self.assertTrue(plan["hyperparameters"]["assistant_only_loss"])
             self.assertEqual(plan["input_manifests"]["dataset"]["dataset_identity"], "2026-07-02.test")
             self.assertIn("fr_action_sft", plan["trainer_backends"]["executable_modes"])
             self.assertEqual(json.loads((out / "fr_action_sft_plan.json").read_text(encoding="utf-8"))["passed"], True)
+
+    def test_all_message_loss_is_recorded_for_templates_without_assistant_masks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            model_manifest = root / "model.json"
+            dataset_manifest = root / "dataset.json"
+            out = root / "out"
+            self.write_model_manifest(model_manifest)
+            self.write_dataset_manifest(dataset_manifest, experiment)
+
+            completed = run_train(
+                [
+                    "--mode",
+                    "fr_action_sft",
+                    "--dry-run",
+                    "--require-registered-inputs",
+                    "--experiment-dir",
+                    str(experiment),
+                    "--output-dir",
+                    str(out),
+                    "--model-manifest",
+                    str(model_manifest),
+                    "--dataset-manifest",
+                    str(dataset_manifest),
+                    "--all-message-loss",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            plan = stdout_json(completed)
+            self.assertTrue(plan["passed"])
+            self.assertFalse(plan["hyperparameters"]["assistant_only_loss"])
 
     def test_unknown_model_license_blocks_required_registry_plan(self):
         with tempfile.TemporaryDirectory() as tmp:

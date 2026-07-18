@@ -169,6 +169,9 @@ flightrecorder schemas --check runs/evidence_bundle.json
 
 For the full native tool-trajectory → TRL/PEFT LoRA → Hugging Face Jobs path,
 see [Agentic LoRA Training on Hugging Face](docs/agentic-training-huggingface.md).
+For a small, completed Qwen3-0.6B run with a redacted trajectory, training
+curve, evaluation receipt, and Hub-ready model card, see the
+[Flight Recorder LoRA case study](examples/case_studies/qwen3_0_6b_flightrecorder_lora/README.md).
 
 Goal 3 data handoff bundles the common path from scenarios to trainer-facing
 evidence. It runs the suite, exports training data, validates artifacts, gates
