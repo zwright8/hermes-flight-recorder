@@ -320,7 +320,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertTrue(any("prompt_injection_bad" in item["scenario_ids"] for item in top_priorities))
             self.assertTrue(any("cron_async_delegation_bad" in item["scenario_ids"] for item in top_priorities))
             self.assertEqual(bundle["metrics"]["suite_summary"]["total"], 7)
-            self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 90.71)
+            self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 93.57)
             self.assertIn("risk_counts", bundle["metrics"]["scenario_quality"])
             self.assertEqual(bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"], 1.0)
             self.assertEqual(bundle["metrics"]["trace_observability"]["run_count"], 7)

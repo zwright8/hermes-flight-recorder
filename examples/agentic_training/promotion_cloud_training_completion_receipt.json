@@ -33,18 +33,18 @@
   "identity": {
     "agentic_training_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
     "candidate_model_id": "local/mock-candidate",
-    "digest_sha256": "1d5012c35a51e444b733895c482f5b1a31ea02f38bb14276ec20bfca036e759a",
+    "digest_sha256": "edd9db28056521c0121625f37805aa9c7ff4515587c653c79ec60e0ce5995ad9",
     "execution_id": "promotion-cloud-training-001",
     "launch_plan_sha256": "7b9476f9fd8d36bd2ac8a1fa30092140752c026d744c913ad2b2eff7ab980a4f",
     "launch_receipt_sha256": "30c933ebda010b75fb8afb4efe15a4546035313061a275a23d450ca08949aeb8",
-    "output_artifact_manifest_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+    "output_artifact_manifest_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
     "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
     "provider_id": "modal",
     "provider_job_id": "promotion-modal-job-001",
     "raw_provider_result_sha256": "8be5d484f596515e282e3abcf45dae4536d731c8e91f00096298b664d550277d",
     "result_run_id": "synthetic-promotion-completed-001",
     "runner_id": "synthetic-external-cloud-runner",
-    "runner_metadata_sha256": "4684fc873b03d75810bfda1d5b8ffdd1a440e95969efaa5a5ae8efd605f45ff4",
+    "runner_metadata_sha256": "03d55d15109ab657824ffc52a62756eec4bcad0652997266f4a12e192e946b55",
     "runner_version": "1",
     "status_receipt_sha256": "1619635781b45a90c3264d55890166f30a1200922629b951e6ce791b5953681b"
   },
@@ -222,7 +222,7 @@
     "candidate_model_id": "local/mock-candidate",
     "created_at": "2026-07-03T00:20:00+00:00",
     "manifest_schema_version": "hfr.agentic_training_result.v1",
-    "manifest_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+    "manifest_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
     "output_artifact_count": 1,
     "regular_artifact_count": 4,
     "run_id": "synthetic-promotion-completed-001"
@@ -285,7 +285,7 @@
       "regular_file": true,
       "replayable": true,
       "schema_version": "hfr.agentic_training_result.v1",
-      "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+      "sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
       "size_bytes": 11571
     },
     "raw_provider_result": {
@@ -303,7 +303,7 @@
       "regular_file": true,
       "replayable": true,
       "schema_version": "hfr.external_cloud_training_runner.v1",
-      "sha256": "4684fc873b03d75810bfda1d5b8ffdd1a440e95969efaa5a5ae8efd605f45ff4",
+      "sha256": "03d55d15109ab657824ffc52a62756eec4bcad0652997266f4a12e192e946b55",
       "size_bytes": 1911
     },
     "status_receipt": {

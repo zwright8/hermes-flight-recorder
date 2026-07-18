@@ -18,7 +18,9 @@ from flightrecorder.path_safety import (
 )
 from flightrecorder.review import (
     ReviewExportError,
+    _reviewed_action_sft,
     _reviewed_dataset_version_id,
+    _reviewed_sft,
     apply_review_labels,
     review_item_sha256,
 )
@@ -64,6 +66,7 @@ def refresh_reviewed_export_metadata(reviewed: Path) -> None:
     artifact_names = (
         "reviewed_labels",
         "reviewed_sft",
+        "reviewed_action_sft",
         "reviewed_reward_model",
         "reviewed_preferences",
         "reviewed_dpo",
@@ -80,6 +83,7 @@ def refresh_reviewed_export_metadata(reviewed: Path) -> None:
     for field_name, artifact_name in (
         ("reviewed_label_count", "reviewed_labels"),
         ("sft_count", "reviewed_sft"),
+        ("action_sft_count", "reviewed_action_sft"),
         ("reward_model_count", "reviewed_reward_model"),
         ("preference_count", "reviewed_preferences"),
         ("dpo_count", "reviewed_dpo"),
@@ -89,6 +93,7 @@ def refresh_reviewed_export_metadata(reviewed: Path) -> None:
         artifact_name: row_counts[artifact_name]
         for artifact_name in (
             "reviewed_sft",
+            "reviewed_action_sft",
             "reviewed_reward_model",
             "reviewed_preferences",
             "reviewed_dpo",
@@ -158,6 +163,25 @@ def make_reviewed_export(tmp: str, *, include_bad: bool = False) -> Path:
 
 
 class ReviewExportTests(unittest.TestCase):
+    def test_legacy_accepted_text_row_is_not_promoted_to_native_action_sft(self):
+        reviewed_label = {
+            "review_item_id": "legacy-item",
+            "review_item_sha256": "a" * 64,
+            "episode_id": "legacy-episode",
+            "scenario_id": "legacy-scenario",
+            "task_family": "legacy",
+            "prompt": "Legacy prompt",
+            "response": "Legacy accepted response",
+            "messages": [],
+            "tools": [],
+            "tool_schema_provenance": "unknown",
+            "human_label": "accept",
+            "reviewer_confidence": "high",
+        }
+
+        self.assertEqual(len(_reviewed_sft([reviewed_label])), 1)
+        self.assertEqual(_reviewed_action_sft([reviewed_label]), [])
+
     def test_export_review_writes_review_queue_and_label_template(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -716,6 +740,7 @@ class ReviewExportTests(unittest.TestCase):
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             reviewed_labels = read_jsonl(out / "reviewed_labels.jsonl")
             sft = read_jsonl(out / "reviewed_sft.jsonl")
+            action_sft = read_jsonl(out / "reviewed_action_sft.jsonl")
             reward_model = read_jsonl(out / "reviewed_reward_model.jsonl")
             preferences = read_jsonl(out / "reviewed_preferences.jsonl")
             dpo = read_jsonl(out / "reviewed_dpo.jsonl")
@@ -736,15 +761,17 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(dataset_registry["selection"]["mode_to_view"], trainer_views["mode_to_view"])
             self.assertEqual(dataset_registry["selection"]["root_views"], trainer_views["root_views"])
             self.assertEqual(trainer_views["mode_to_view"]["sft"], "reviewed_sft")
-            self.assertEqual(trainer_views["mode_to_view"]["action_sft"], "reviewed_sft")
+            self.assertEqual(trainer_views["mode_to_view"]["action_sft"], "reviewed_action_sft")
             self.assertEqual(trainer_views["mode_to_view"]["dpo"], "reviewed_dpo")
             self.assertEqual(trainer_views["mode_to_view"]["reward_model"], "reviewed_reward_model")
             views_by_id = {view["view_id"]: view for view in trainer_views["views"]}
             self.assertEqual(views_by_id["reviewed_sft"]["row_count"], 1)
+            self.assertEqual(views_by_id["reviewed_action_sft"]["row_count"], 0)
             self.assertEqual(views_by_id["reviewed_dpo"]["row_count"], 1)
             self.assertEqual(views_by_id["reviewed_reward_model"]["row_count"], 2)
             self.assertEqual(manifest["reviewed_label_count"], 2)
             self.assertEqual(manifest["sft_count"], 1)
+            self.assertEqual(manifest["action_sft_count"], 0)
             self.assertEqual(manifest["reward_model_count"], 2)
             self.assertEqual(manifest["preference_count"], 1)
             self.assertEqual(manifest["dpo_count"], 1)
@@ -752,6 +779,7 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(manifest["medium_or_high_confidence_label_count"], 2)
             self.assertEqual({row["schema_version"] for row in reviewed_labels}, {"hfr.reviewed.label.v1"})
             self.assertEqual({row["schema_version"] for row in sft}, {"hfr.reviewed.sft.v1"})
+            self.assertEqual(action_sft, [])
             self.assertEqual({row["schema_version"] for row in reward_model}, {"hfr.reviewed.reward_model.v1"})
             self.assertEqual({row["schema_version"] for row in preferences}, {"hfr.reviewed.preference.v1"})
             self.assertEqual({row["schema_version"] for row in dpo}, {"hfr.reviewed.dpo.v1"})

@@ -36,6 +36,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--arm", default="candidate")
     parser.add_argument("--engine", choices=["openai_compatible", "sglang", "transformers", "vllm"], default="transformers")
     parser.add_argument("--adapter", default="")
+    parser.add_argument("--adapter-id", default="", help="Expected immutable adapter repository/id")
+    parser.add_argument("--adapter-revision", default="", help="Expected immutable adapter revision")
+    parser.add_argument(
+        "--adapter-sha256",
+        default="",
+        help="Expected adapter weights SHA-256; remote endpoints must expose it in model metadata",
+    )
     parser.add_argument("--profile-id", default="")
     parser.add_argument("--out", type=Path, required=True, help="Lifecycle artifact directory")
     parser.add_argument("--api-key-env", default="HERMES_EVAL_API_KEY")
@@ -155,6 +162,9 @@ def _wait_for_readiness(args: argparse.Namespace, out_dir: Path, process: subpro
             arm=str(args.arm),
             engine=str(args.engine),
             adapter=str(args.adapter),
+            adapter_id=str(args.adapter_id),
+            adapter_revision=str(args.adapter_revision),
+            adapter_sha256=str(args.adapter_sha256),
             profile_id=str(args.profile_id),
             api_key=api_key,
             timeout=float(args.request_timeout),

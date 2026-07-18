@@ -1,0 +1,24 @@
+{
+  "episode_id": "inventory-recovery",
+  "episode_outcome": "success",
+  "messages": [
+    {"role": "user", "content": "Look up part A-17."},
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {"id": "call-wrong", "type": "function", "function": {"name": "inventory.lookup", "arguments": {"part_id": "A-71"}}}
+      ]
+    },
+    {"role": "tool", "tool_call_id": "call-wrong", "name": "inventory.lookup", "status": "failed", "content": "{\"error\":\"part_not_found\"}"},
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {"id": "call-correct", "type": "function", "function": {"name": "inventory.lookup", "arguments": {"part_id": "A-17"}}}
+      ]
+    },
+    {"role": "tool", "tool_call_id": "call-correct", "name": "inventory.lookup", "status": "ok", "content": "{\"quantity\":12}"},
+    {"role": "assistant", "content": "Part A-17 has quantity 12."}
+  ]
+}

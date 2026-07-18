@@ -1,0 +1,27 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/branch_replay_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "State-bound verified branch continuations, preferences, and human-review routing.",
+  "properties": {
+    "schema_version": {"const": "hfr.branch_replay_dataset.v1"},
+    "replay_id": {"pattern": "^replay-[0-9a-f]{16}$", "type": "string"},
+    "source_episode_id": {"type": "string"},
+    "source_trajectory_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "source_prefix_messages": {"items": {"type": "object"}, "minItems": 1, "type": "array"},
+    "tools": {"items": {"type": "object"}, "type": "array"},
+    "task_family": {"minLength": 1, "type": "string"},
+    "replay_point": {"required": ["event_index", "state_fingerprint"], "type": "object"},
+    "candidate_count": {"minimum": 0, "type": "integer"},
+    "chosen_candidate_id": {"type": "string"},
+    "preference_count": {"minimum": 0, "type": "integer"},
+    "preferences": {"items": {"type": "object"}, "type": "array"},
+    "verifier_results": {"items": {"type": "object"}, "type": "array"},
+    "review_required": {"type": "boolean"},
+    "review_reasons": {"items": {"type": "string"}, "type": "array"},
+    "generation_boundary": {"type": "object"}
+  },
+  "required": ["schema_version", "replay_id", "source_episode_id", "source_trajectory_sha256", "source_prefix_messages", "tools", "task_family", "replay_point", "candidate_count", "chosen_candidate_id", "preference_count", "preferences", "verifier_results", "review_required", "review_reasons", "generation_boundary"],
+  "title": "Hermes Flight Recorder Branch Replay Dataset",
+  "type": "object"
+}

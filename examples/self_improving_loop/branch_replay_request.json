@@ -1,0 +1,39 @@
+{
+  "source_trajectory": {
+    "episode_id": "inventory-recovery",
+    "task_family": "inventory",
+    "messages": [{"role": "user", "content": "Look up part A-17."}],
+    "tools": [
+      {
+        "type": "function",
+        "version": "1.0.0",
+        "function": {
+          "name": "inventory.lookup",
+          "description": "Read one synthetic inventory record.",
+          "parameters": {
+            "type": "object",
+            "properties": {"part_id": {"type": "string"}},
+            "required": ["part_id"],
+            "additionalProperties": false
+          }
+        }
+      }
+    ]
+  },
+  "replay_point": {
+    "event_index": 1,
+    "state_fingerprint": "e460e205dd91ba3236f0dff40c3c8dc8f7a4348fdb32ea8637df0a6ac7c27f26"
+  },
+  "candidates": [
+    {"candidate_id": "correct-part", "continuation": [{"role": "assistant", "tool_calls": [{"id": "call-correct", "type": "function", "function": {"name": "inventory.lookup", "arguments": {"part_id": "A-17"}}}]}]},
+    {"candidate_id": "wrong-part", "continuation": [{"role": "assistant", "tool_calls": [{"id": "call-wrong", "type": "function", "function": {"name": "inventory.lookup", "arguments": {"part_id": "A-71"}}}]}]}
+  ],
+  "verifier_results": [
+    {"candidate_id": "correct-part", "passed": true, "safe": true, "score": 100, "confidence": 0.98},
+    {"candidate_id": "wrong-part", "passed": false, "safe": true, "score": 0, "confidence": 0.98}
+  ],
+  "high_impact": false,
+  "novel_behavior": false,
+  "grader_disagreement": false,
+  "review_confidence_threshold": 0.8
+}

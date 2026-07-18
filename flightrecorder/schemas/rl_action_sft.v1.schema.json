@@ -12,7 +12,7 @@
         "additionalProperties": true,
         "properties": {
           "content": { "type": "string" },
-          "role": { "enum": ["system", "user", "assistant", "tool"] }
+          "role": { "enum": ["system", "developer", "user", "assistant", "tool"] }
         },
         "required": ["role", "content"],
         "type": "object"
@@ -37,8 +37,11 @@
     "tool_call_count": { "minimum": 0, "type": "integer" },
     "tool_result_count": { "minimum": 0, "type": "integer" },
     "tool_schema_provenance": {
-      "enum": ["inferred_from_observed_argument_shapes", "not_applicable"]
+      "const": "recorded_exact"
     },
+    "trajectory_v2": {"type": "object"},
+    "trajectory_v2_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "governance": {"type": "object"},
     "tools": {
       "items": { "type": "object" },
       "type": "array"
@@ -55,6 +58,9 @@
     "messages",
     "tools",
     "tool_schema_provenance",
+    "trajectory_v2",
+    "trajectory_v2_sha256",
+    "governance",
     "action_count",
     "tool_call_count",
     "tool_result_count",

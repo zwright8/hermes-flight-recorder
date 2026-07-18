@@ -1,0 +1,38 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_action_sft.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Human-accepted native agent trajectory for action supervised fine-tuning.",
+  "properties": {
+    "episode_id": { "minLength": 1, "type": "string" },
+    "human_label": { "const": "accept" },
+    "messages": {
+      "items": { "additionalProperties": true, "required": ["role"], "type": "object" },
+      "minItems": 1,
+      "type": "array"
+    },
+    "quality_gate": { "const": "human_reviewed_native_action_accept" },
+    "review_item_id": { "minLength": 1, "type": "string" },
+    "review_item_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "reviewer_confidence": { "enum": ["high", "medium", "low", "unknown"], "type": "string" },
+    "schema_version": { "const": "hfr.reviewed.action_sft.v1" },
+    "source_artifact": { "const": "reviewed_labels.jsonl+action_sft.jsonl" },
+    "task_contract_fingerprint": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "tools": { "items": { "type": "object" }, "type": "array" }
+  },
+  "required": [
+    "schema_version",
+    "episode_id",
+    "review_item_id",
+    "review_item_sha256",
+    "human_label",
+    "reviewer_confidence",
+    "task_contract_fingerprint",
+    "messages",
+    "tools",
+    "quality_gate",
+    "source_artifact"
+  ],
+  "title": "Hermes Flight Recorder Reviewed Action SFT",
+  "type": "object"
+}

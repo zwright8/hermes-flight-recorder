@@ -27,7 +27,7 @@
         "champion": "local/mock-baseline",
         "rollback": "local/mock-rollback"
       },
-      "promotion_decision_sha256": "ed7806370c83694bd29ae4df3cee692dea920401d50ca26c9aa6817a69473e39",
+      "promotion_decision_sha256": "c1b0a39ac43472c9d66abf2132b650fe00366f95c48917b1c9ec511bace0c13f",
       "updated_aliases": {
         "candidate": "local/mock-candidate",
         "champion": "local/mock-candidate",
@@ -246,7 +246,7 @@
             "metadata": {},
             "path": "examples/agentic_training/promotion_result.json",
             "recorded_at": "2026-07-10T01:48:06Z",
-            "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+            "sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
             "size_bytes": 11571,
             "status": "completed"
           }

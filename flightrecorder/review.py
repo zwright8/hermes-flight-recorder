@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .data_governance import task_contract_fingerprint
 from .path_safety import (
     AtomicNamespaceMutationError,
     DirectoryCleanupOutcome,
@@ -29,13 +30,19 @@ from .path_safety import (
     remove_directory_tree_if_identity,
     sync_directory_tree,
 )
+from .review_semantics import (
+    REVIEWED_ACTION_SFT_SCHEMA_VERSION,
+    build_reviewed_action_rows,
+)
 from .training import (
     RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_LABEL_PROVENANCE_SCHEMA_VERSION,
     RL_TRAINER_VIEWS_CONTRACT_VERSION,
     RunRecord,
     TrainingExportError,
+    _agentic_messages,
     _fingerprint_identity,
+    _inferred_tool_definitions,
     build_redaction_status,
     episode_events_sha256,
     load_run_records,
@@ -64,6 +71,7 @@ REVIEWED_EXPORT_FILES = frozenset(
         "reviewed_preferences.jsonl",
         "reviewed_reward_model.jsonl",
         "reviewed_sft.jsonl",
+        "reviewed_action_sft.jsonl",
     }
 )
 REVIEWED_EXPORT_PROVENANCE_FILES = frozenset(
@@ -276,12 +284,14 @@ def _build_reviewed_export(
     if copied_reviewed_labels != reviewed_labels:
         raise ReviewExportError("review inputs changed while their provenance snapshot was being created")
     sft = _reviewed_sft(reviewed_labels)
+    action_sft = _reviewed_action_sft(reviewed_labels)
     reward_model = _reviewed_reward_model(reviewed_labels)
     preferences = _reviewed_preferences(reviewed_labels, max_pairs_per_family=max_pairs_per_family)
     dpo = _reviewed_dpo(preferences)
     paths = {
         "reviewed_labels": target / "reviewed_labels.jsonl",
         "reviewed_sft": target / "reviewed_sft.jsonl",
+        "reviewed_action_sft": target / "reviewed_action_sft.jsonl",
         "reviewed_reward_model": target / "reviewed_reward_model.jsonl",
         "reviewed_preferences": target / "reviewed_preferences.jsonl",
         "reviewed_dpo": target / "reviewed_dpo.jsonl",
@@ -290,6 +300,7 @@ def _build_reviewed_export(
     }
     _write_jsonl(paths["reviewed_labels"], reviewed_labels)
     _write_jsonl(paths["reviewed_sft"], sft)
+    _write_jsonl(paths["reviewed_action_sft"], action_sft)
     _write_jsonl(paths["reviewed_reward_model"], reward_model)
     _write_jsonl(paths["reviewed_preferences"], preferences)
     _write_jsonl(paths["reviewed_dpo"], dpo)
@@ -297,6 +308,7 @@ def _build_reviewed_export(
     rows_by_artifact = {
         "reviewed_labels": reviewed_labels,
         "reviewed_sft": sft,
+        "reviewed_action_sft": action_sft,
         "reviewed_reward_model": reward_model,
         "reviewed_preferences": preferences,
         "reviewed_dpo": dpo,
@@ -316,7 +328,14 @@ def _build_reviewed_export(
         raise ReviewExportError(
             "Reviewed export contains unredacted secret-like values; redact review labels or source traces before export."
         )
-    label_provenance = _reviewed_label_provenance_summary(reviewed_labels, sft, reward_model, preferences, dpo)
+    label_provenance = _reviewed_label_provenance_summary(
+        reviewed_labels,
+        sft,
+        action_sft,
+        reward_model,
+        preferences,
+        dpo,
+    )
     source_review_artifacts = _artifact_fingerprints(
         {
             "review_items": provenance_paths["review_items"],
@@ -342,7 +361,7 @@ def _build_reviewed_export(
         published_root=published_target,
     )
     dataset_version = _reviewed_dataset_version_id(pre_manifest_fingerprints, source_review_artifacts, labels_artifact)
-    trainer_views = _reviewed_trainer_views(sft, dpo, reward_model)
+    trainer_views = _reviewed_trainer_views(sft, action_sft, dpo, reward_model)
 
     manifest = {
         "schema_version": REVIEWED_MANIFEST_SCHEMA_VERSION,
@@ -354,6 +373,7 @@ def _build_reviewed_export(
         "max_pairs_per_family": max_pairs_per_family,
         "reviewed_label_count": len(reviewed_labels),
         "sft_count": len(sft),
+        "action_sft_count": len(action_sft),
         "reward_model_count": len(reward_model),
         "preference_count": len(preferences),
         "dpo_count": len(dpo),
@@ -402,6 +422,7 @@ def _build_reviewed_export(
             "Completed labels are bound to review_item_sha256 so stale labels cannot silently attach to changed review items.",
             "Rows with human_label='needs_review' are kept in reviewed_labels.jsonl but excluded from trainer-ready views.",
             "Reviewed SFT rows include only human_label='accept'.",
+            "Reviewed action SFT preserves native messages and tools for accepted rows; rejected and unresolved labels are excluded.",
             "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
             "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
             "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
@@ -426,6 +447,26 @@ def _review_item(record: RunRecord, preserve_paths: bool) -> dict[str, Any]:
     trace = record.trace
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     passed = bool(scorecard.get("passed"))
+    prompt = _prompt_from_trace(trace)
+    response = str(trace.get("final_answer") or "")
+    events = trace.get("events") if isinstance(trace.get("events"), list) else []
+    messages = _agentic_messages(prompt, response, events)
+    observed_calls = [
+        event
+        for event in events
+        if isinstance(event, dict) and event.get("type") == "tool_call"
+    ]
+    candidate_tools = trace.get("tools") if isinstance(trace.get("tools"), list) else None
+    recorded_tools = candidate_tools if _recorded_tool_definitions_exact(candidate_tools) else None
+    tools = recorded_tools if recorded_tools is not None else _inferred_tool_definitions(observed_calls)
+    task_contract = {
+        "prompt": prompt,
+        "messages": messages,
+        "tools": recorded_tools or [],
+        "environment": trace.get("environment") if isinstance(trace.get("environment"), dict) else {},
+        "policy": trace.get("policy") if isinstance(trace.get("policy"), dict) else {},
+        "scenario_contract": trace.get("scenario_contract") if isinstance(trace.get("scenario_contract"), dict) else {},
+    }
     return {
         "schema_version": REVIEW_ITEM_SCHEMA_VERSION,
         "review_item_id": record.run_id,
@@ -438,8 +479,15 @@ def _review_item(record: RunRecord, preserve_paths: bool) -> dict[str, Any]:
             "normalized_trace": _canonical_json_source_fingerprint(trace),
             "scorecard": _canonical_json_source_fingerprint(scorecard),
         },
-        "prompt": _prompt_from_trace(trace),
-        "final_answer": str(trace.get("final_answer") or ""),
+        "prompt": prompt,
+        "final_answer": response,
+        "messages": messages,
+        "tools": tools,
+        "tool_schema_provenance": "recorded_exact" if recorded_tools is not None else "inferred_from_observed_argument_shapes",
+        "environment": task_contract["environment"],
+        "policy": task_contract["policy"],
+        "scenario_contract": task_contract["scenario_contract"],
+        "task_contract_fingerprint": task_contract_fingerprint(task_contract),
         "event_count": len(trace.get("events", [])) if isinstance(trace.get("events"), list) else 0,
         "episode_events_sha256": episode_events_sha256(trace.get("events")),
         "scorecard": {
@@ -456,6 +504,24 @@ def _review_item(record: RunRecord, preserve_paths: bool) -> dict[str, Any]:
         "suggested_human_label": "accept" if passed else "reject",
         "label_options": list(REVIEW_LABELS),
     }
+
+
+def _recorded_tool_definitions_exact(tools: Any) -> bool:
+    if not isinstance(tools, list) or not tools:
+        return False
+    for tool in tools:
+        if not isinstance(tool, dict):
+            return False
+        function = tool.get("function") if isinstance(tool.get("function"), dict) else None
+        if function is None:
+            return False
+        if not isinstance(function.get("name"), str) or not function["name"]:
+            return False
+        if not isinstance(function.get("parameters"), dict):
+            return False
+        if not isinstance(tool.get("version"), str) or tool["version"] in {"", "unknown", "latest"}:
+            return False
+    return True
 
 
 def _canonical_json_source_fingerprint(value: Any) -> dict[str, Any]:
@@ -598,6 +664,13 @@ def _reviewed_label_row(
         "task_family": item.get("task_family"),
         "prompt": item.get("prompt", ""),
         "response": item.get("final_answer", ""),
+        "messages": item.get("messages", []),
+        "tools": item.get("tools", []),
+        "tool_schema_provenance": item.get("tool_schema_provenance", "unknown"),
+        "environment": item.get("environment", {}),
+        "policy": item.get("policy", {}),
+        "scenario_contract": item.get("scenario_contract", {}),
+        "task_contract_fingerprint": item.get("task_contract_fingerprint", ""),
         "human_label": human_label,
         "suggested_human_label": label.get("suggested_human_label"),
         "corrected_score": corrected_score,
@@ -643,6 +716,26 @@ def _reviewed_sft(reviewed_labels: list[dict[str, Any]]) -> list[dict[str, Any]]
     ]
 
 
+def _reviewed_action_sft(reviewed_labels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project only accepted rows backed by recorded native action context.
+
+    Legacy review items remain valid text-SFT evidence even when they predate
+    native messages/tools. Inferred tool definitions are useful for review but
+    are never promoted into the action-training view.
+    """
+
+    native_rows = [
+        row
+        for row in reviewed_labels
+        if row.get("human_label") == "accept"
+        and isinstance(row.get("messages"), list)
+        and bool(row["messages"])
+        and isinstance(row.get("tools"), list)
+        and str(row.get("tool_schema_provenance") or "").startswith("recorded")
+    ]
+    return build_reviewed_action_rows(native_rows, reviewed_labels)
+
+
 def _reviewed_reward_model(reviewed_labels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in reviewed_labels:
@@ -673,32 +766,46 @@ def _reviewed_preferences(
     *,
     max_pairs_per_family: int,
 ) -> list[dict[str, Any]]:
-    by_family: dict[str, list[dict[str, Any]]] = {}
+    by_contract: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in reviewed_labels:
         if row["human_label"] == "accept" or row["human_label"] in TRAINING_NEGATIVE_LABELS:
-            by_family.setdefault(str(row["task_family"] or "unknown"), []).append(row)
+            family = str(row["task_family"] or "unknown")
+            contract = str(
+                row.get("task_contract_fingerprint")
+                or _canonical_sha256(
+                    {"prompt": " ".join(str(row.get("prompt") or "").split()).casefold()}
+                )
+            )
+            by_contract.setdefault((family, contract), []).append(row)
 
     preferences: list[dict[str, Any]] = []
-    for family, rows in sorted(by_family.items()):
+    family_pair_counts: dict[str, int] = {}
+    for (family, contract), rows in sorted(by_contract.items()):
         positives = sorted([row for row in rows if row["human_label"] == "accept"], key=lambda row: str(row["episode_id"]))
         negatives = sorted([row for row in rows if row["human_label"] in TRAINING_NEGATIVE_LABELS], key=lambda row: str(row["episode_id"]))
-        pair_count = 0
         for chosen in positives:
             for rejected in negatives:
-                preferences.append(_reviewed_preference(family, chosen, rejected))
-                pair_count += 1
+                pair_count = family_pair_counts.get(family, 0)
                 if max_pairs_per_family and pair_count >= max_pairs_per_family:
                     break
-            if max_pairs_per_family and pair_count >= max_pairs_per_family:
+                preferences.append(_reviewed_preference(family, contract, chosen, rejected))
+                family_pair_counts[family] = pair_count + 1
+            if max_pairs_per_family and family_pair_counts.get(family, 0) >= max_pairs_per_family:
                 break
     return preferences
 
 
-def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str, Any]) -> dict[str, Any]:
+def _reviewed_preference(
+    family: str,
+    task_contract: str,
+    chosen: dict[str, Any],
+    rejected: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "schema_version": REVIEWED_PREFERENCE_SCHEMA_VERSION,
-        "preference_id": f"{family}:{chosen['episode_id']}>{rejected['episode_id']}",
+        "preference_id": f"{family}:{task_contract[:12]}:{chosen['episode_id']}>{rejected['episode_id']}",
         "task_family": family,
+        "task_contract_fingerprint": task_contract,
         "prompt": chosen.get("prompt") or rejected.get("prompt") or "",
         "chosen_episode_id": chosen["episode_id"],
         "rejected_episode_id": rejected["episode_id"],
@@ -739,6 +846,7 @@ def _reviewed_dpo(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "schema_version": REVIEWED_DPO_SCHEMA_VERSION,
             "preference_id": preference["preference_id"],
             "task_family": preference["task_family"],
+            "task_contract_fingerprint": preference["task_contract_fingerprint"],
             "prompt": preference["prompt"],
             "chosen": preference["chosen"]["response"],
             "rejected": preference["rejected"]["response"],
@@ -888,6 +996,7 @@ def _task_family(scenario_id: str) -> str:
 def _reviewed_label_provenance_summary(
     reviewed_labels: list[dict[str, Any]],
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
@@ -903,6 +1012,7 @@ def _reviewed_label_provenance_summary(
         "needs_review_excluded_count": label_counts.get("needs_review", 0),
         "trainer_view_counts": {
             "reviewed_sft": len(sft),
+            "reviewed_action_sft": len(action_sft),
             "reviewed_reward_model": len(reward_model),
             "reviewed_preferences": len(preferences),
             "reviewed_dpo": len(dpo),
@@ -930,19 +1040,30 @@ def _reviewed_dataset_version_id(
 
 def _reviewed_trainer_views(
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
 ) -> dict[str, Any]:
     views = [
         _reviewed_trainer_view_record(
             "reviewed_sft",
-            ["sft", "action_sft"],
+            ["sft"],
             "reviewed_sft.jsonl",
             REVIEWED_SFT_SCHEMA_VERSION,
             len(sft),
             "human_reviewed_accept",
             ["reviewed_labels.jsonl"],
-            ["Action SFT consumes the same human-accepted rows; no separate row copy is emitted."],
+            ["Text SFT consumes the final answer from each accepted review row."],
+        ),
+        _reviewed_trainer_view_record(
+            "reviewed_action_sft",
+            ["action_sft"],
+            "reviewed_action_sft.jsonl",
+            REVIEWED_ACTION_SFT_SCHEMA_VERSION,
+            len(action_sft),
+            "human_reviewed_native_action_accept",
+            ["reviewed_labels.jsonl"],
+            ["Action SFT retains native messages, tool calls/results, exact recorded tools when available, and review lineage."],
         ),
         _reviewed_trainer_view_record(
             "reviewed_dpo",
@@ -1023,7 +1144,12 @@ def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str,
             "trainer_preflight_arg": f"--require-dataset-version {manifest.get('dataset_version')}",
             "root_views": trainer_views.get(
                 "root_views",
-                ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"],
+                [
+                    "reviewed_sft.jsonl",
+                    "reviewed_action_sft.jsonl",
+                    "reviewed_dpo.jsonl",
+                    "reviewed_reward_model.jsonl",
+                ],
             ),
             "mode_to_view": trainer_views.get("mode_to_view", {}),
         },

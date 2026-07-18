@@ -240,7 +240,7 @@
       "summary": "flight_recorder_did_not_execute_trainer_flow: passed=True"
     }
   ],
-  "created_at": "2026-07-10T01:22:01.727383+00:00",
+  "created_at": "2026-07-03T00:00:00+00:00",
   "delegated_flow": {
     "backend": "axolotl",
     "command": {
@@ -424,7 +424,7 @@
       "regular_file": true,
       "role": "agentic_training_runtime_preflight",
       "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-      "sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+      "sha256": "d7ac9876a8fe38c4cd5fc9972b09e50f52306cc1a0b4617d0b9cdceb281ab813",
       "size_bytes": 8513
     },
     "trainer_consumer_plan": {

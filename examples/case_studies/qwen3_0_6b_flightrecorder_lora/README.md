@@ -33,24 +33,19 @@ assistant tool call → tool result → assistant
 
 ## Reproduce the data path
 
-The exact generated run directories are intentionally ignored. Starting from
-the repository root, rebuild and gate the data with:
+The exact historical run directories are intentionally ignored. The adapter
+metrics below remain bound to source commit `76e144e38526d88fb35cd755a3cac400cc81bdf8`.
+The current strict pipeline requires the newer governance, curation, credit,
+branch-replay, and human-rejection controls. Starting from the repository root,
+exercise that current compatibility path with the public-safe case study:
 
 ```bash
-python3 -m flightrecorder run-suite \
-  --scenarios scenarios \
-  --out runs/qwen3_0_6b_case_study \
-  --export-rl \
-  --validate \
-  --strict
-
-python3 -m flightrecorder gate-export \
-  --training-export runs/qwen3_0_6b_case_study/training_export \
-  --policy examples/training_gate_policy.demo.json \
-  --out runs/qwen3_0_6b_case_study/training_gate.json
+python3 scripts/prepare_self_improving_case_study.py \
+  --out runs/qwen3_0_6b_case_study
 
 python3 scripts/build_agentic_finetune_experiment.py \
   --runs-dir runs/qwen3_0_6b_case_study \
+  --controls-dir runs/qwen3_0_6b_case_study \
   --out runs/qwen3_0_6b_case_study/experiment \
   --model Qwen/Qwen3-0.6B
 ```

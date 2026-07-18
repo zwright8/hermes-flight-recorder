@@ -1,0 +1,22 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_derivation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-addressed dataset lineage record binding parents, recipe, governance, and supersession.",
+  "properties": {
+    "schema_version": {"const": "hfr.dataset_derivation.v1"},
+    "derivation_id": {"pattern": "^hfrds-[0-9a-f]{16}$", "type": "string"},
+    "parent_versions": {"items": {"minLength": 1, "type": "string"}, "type": "array"},
+    "recipe": {"type": "object"},
+    "recipe_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "selected_row_count": {"minimum": 0, "type": "integer"},
+    "selected_content_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "policy_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "scan_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "supersedes": {"items": {"type": "string"}, "type": "array"},
+    "identity_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": ["schema_version", "derivation_id", "parent_versions", "recipe", "recipe_fingerprint", "selected_row_count", "selected_content_fingerprint", "policy_fingerprint", "scan_fingerprint", "supersedes", "identity_fingerprint"],
+  "title": "Hermes Flight Recorder Dataset Derivation",
+  "type": "object"
+}

@@ -116,7 +116,7 @@
         "metadata": {},
         "path": "examples/agentic_training/promotion_result.json",
         "recorded_at": "2026-07-10T01:48:06Z",
-        "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+          "sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
         "size_bytes": 11571,
         "status": "completed"
       }

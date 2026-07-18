@@ -84,6 +84,7 @@ class RunRecord:
     lineage_path: Path | None = None
     lineage: dict[str, Any] | None = None
     state_diff: dict[str, Any] | None = None
+    trajectory_v2: dict[str, Any] | None = None
 
 
 def export_rl_dataset(
@@ -421,10 +422,12 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
         score_path = run_dir / "scorecard.json"
         lineage_path = run_dir / "artifact_lineage.json"
         state_diff_path = run_dir / "state_diff.json"
+        trajectory_v2_path = run_dir / "trajectory_v2.json"
         _reject_symlinked_evidence_file(trace_path, "normalized_trace.json")
         _reject_symlinked_evidence_file(score_path, "scorecard.json")
         _reject_symlinked_evidence_file(lineage_path, "artifact_lineage.json")
         _reject_symlinked_evidence_file(state_diff_path, "state_diff.json")
+        _reject_symlinked_evidence_file(trajectory_v2_path, "trajectory_v2.json")
         if not trace_path.exists() or not score_path.exists():
             continue
         _require_evidence_file(trace_path, "normalized_trace.json")
@@ -446,6 +449,21 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
             if not isinstance(raw_state_diff, dict):
                 raise TrainingExportError(f"Run {run_dir} state_diff.json must contain a JSON object")
             state_diff = raw_state_diff
+        trajectory_v2: dict[str, Any] | None = None
+        if trajectory_v2_path.exists():
+            _require_evidence_file(trajectory_v2_path, "trajectory_v2.json")
+            raw_trajectory_v2 = _read_json(trajectory_v2_path)
+            if not isinstance(raw_trajectory_v2, dict):
+                raise TrainingExportError(f"Run {run_dir} trajectory_v2.json must contain a JSON object")
+            from .trajectory_v2 import check_trajectory_v2
+
+            trajectory_status = check_trajectory_v2(raw_trajectory_v2)
+            if trajectory_status.get("passed") is not True:
+                raise TrainingExportError(
+                    f"Run {run_dir} trajectory_v2.json is invalid: "
+                    + "; ".join(str(value) for value in trajectory_status.get("errors", []))
+                )
+            trajectory_v2 = raw_trajectory_v2
         records.append(
             RunRecord(
                 run_id=run_dir.name,
@@ -455,6 +473,7 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
                 lineage_path=lineage_path if lineage_path.exists() else None,
                 lineage=lineage,
                 state_diff=state_diff,
+                trajectory_v2=trajectory_v2,
             )
         )
 
@@ -547,6 +566,9 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     }
     if record.lineage_path is not None:
         episode["source_lineage"] = _display_path(record.lineage_path, preserve_paths)
+    if record.trajectory_v2 is not None:
+        episode["trajectory_v2"] = record.trajectory_v2
+        episode["governance"] = record.trajectory_v2.get("governance", {})
     return episode
 
 
@@ -1072,8 +1094,12 @@ def _action_sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         response = str(episode.get("final_answer") or "")
         if not positive_label_eligible(episode) or not response:
             continue
-        events = episode.get("events") if isinstance(episode.get("events"), list) else []
-        messages = _agentic_messages(str(episode.get("prompt") or ""), response, events)
+        trajectory_v2 = episode.get("trajectory_v2") if isinstance(episode.get("trajectory_v2"), dict) else None
+        action_training = trajectory_v2.get("action_training") if isinstance(trajectory_v2, dict) else {}
+        if not isinstance(action_training, dict) or action_training.get("eligible") is not True:
+            continue
+        messages = _trajectory_v2_training_messages(trajectory_v2, response)
+        events = trajectory_v2.get("events") if isinstance(trajectory_v2.get("events"), list) else []
         tool_calls = [
             event
             for event in events
@@ -1081,6 +1107,17 @@ def _action_sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ]
         tool_results = [event for event in events if isinstance(event, dict) and event.get("type") == "tool_result"]
         assistant_actions = [message for message in messages if message.get("role") == "assistant"]
+        called_tool_names = {str(event.get("tool_name")) for event in tool_calls}
+        recorded_tools = [
+            tool.get("definition")
+            for tool in trajectory_v2.get("tools", [])
+            if isinstance(tool, dict)
+            and tool.get("schema_provenance") == "recorded_exact"
+            and str(tool.get("name") or "") in called_tool_names
+            and isinstance(tool.get("definition"), dict)
+        ]
+        if len(recorded_tools) != len(called_tool_names):
+            continue
         outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
         task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
         rows.append(
@@ -1093,8 +1130,11 @@ def _action_sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "prompt": str(episode.get("prompt") or ""),
                 "response": response,
                 "messages": messages,
-                "tools": _inferred_tool_definitions(tool_calls),
-                "tool_schema_provenance": "inferred_from_observed_argument_shapes" if tool_calls else "not_applicable",
+                "tools": recorded_tools,
+                "tool_schema_provenance": "recorded_exact",
+                "trajectory_v2": trajectory_v2,
+                "trajectory_v2_sha256": _canonical_sha256(trajectory_v2),
+                "governance": trajectory_v2.get("governance", {}),
                 "action_count": len(assistant_actions),
                 "tool_call_count": len(tool_calls),
                 "tool_result_count": len(tool_results),
@@ -1112,6 +1152,55 @@ def _action_sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _trajectory_v2_training_messages(trajectory: dict[str, Any], response: str) -> list[dict[str, Any]]:
+    """Project observable v2 events to native chat messages without inference."""
+
+    messages: list[dict[str, Any]] = []
+    for event in trajectory.get("events", []):
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "")
+        role = event.get("role")
+        content = str(event.get("content") or "")
+        if event_type == "tool_call":
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": [
+                        {
+                            "id": str(event.get("tool_call_id") or ""),
+                            "type": "function",
+                            "function": {
+                                "name": str(event.get("tool_name") or ""),
+                                "arguments": json.dumps(
+                                    event.get("arguments") if isinstance(event.get("arguments"), dict) else {},
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ],
+                }
+            )
+        elif event_type == "tool_result":
+            result = event.get("result")
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": result if isinstance(result, str) else json.dumps(result, sort_keys=True, ensure_ascii=False),
+                    "tool_call_id": str(event.get("tool_call_id") or ""),
+                    "name": str(event.get("tool_name") or ""),
+                }
+            )
+        elif role in {"system", "developer", "user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+    if not messages or messages[-1].get("role") != "assistant" or messages[-1].get("content") != response:
+        messages.append({"role": "assistant", "content": response})
+    return messages
 
 
 def _agentic_messages(prompt: str, response: str, events: list[Any]) -> list[dict[str, Any]]:

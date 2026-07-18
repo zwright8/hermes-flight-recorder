@@ -12,6 +12,7 @@ tools, workspaces, state snapshots, and Flight Recorder scoring.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -61,7 +62,6 @@ DEFAULT_MODEL = "hfr-live-expert"
 SECRET_PATTERNS = [r"(?i)(api[_-]?key|secret|token|password)"]
 CATALOG_SCHEMA_VERSION = "hfr.live_hermes_catalog.v1"
 COLLECTION_SUMMARY_SCHEMA_VERSION = "hfr.live_hermes_collection_summary.v1"
-ACTION_SFT_SCHEMA_VERSION = "hfr.live_hermes_action_sft.v1"
 TASK_ID_RE = re.compile(r"LIVE-HERMES-TASK:\s*([A-Za-z0-9_:-]+)")
 
 
@@ -149,18 +149,15 @@ def main() -> int:
 
     if not args.skip_export:
         export_dir = out_dir / "training_export"
-        manifest = export_rl_dataset(
+        manifest, action_sft_export_integrity = export_canonical_training_views(
             runs_dir,
             export_dir,
-            reward_scale="score",
-            min_score_gap=1,
-            preserve_paths=False,
             metadata={
                 "collection": "live_hermes_flightrecorder",
                 "base_model_target": "Qwen/Qwen3-4B-Instruct-2507",
             },
         )
-        action_sft_count = write_action_sft(export_dir / "action_sft.jsonl", export_dir / "episodes.jsonl")
+        action_sft_count = int(manifest.get("action_sft_count", 0) or 0)
         summary["training_export"] = {
             "path": str(export_dir),
             "episode_count": manifest["episode_count"],
@@ -169,6 +166,7 @@ def main() -> int:
             "reward_model_count": manifest["reward_model_count"],
             "step_reward_count": manifest["step_reward_count"],
             "action_sft_count": action_sft_count,
+            "action_sft_integrity": action_sft_export_integrity,
         }
         review_dir = out_dir / "review_queue"
         review_manifest = export_review_queue(runs_dir, review_dir, only_failed=True, preserve_paths=False)
@@ -184,6 +182,15 @@ def main() -> int:
             review_export_dir=review_dir,
             strict=True,
         )
+        action_sft_integrity = registered_artifact_integrity(manifest, export_dir, "action_sft")
+        action_sft_integrity["unchanged_since_export"] = (
+            action_sft_export_integrity.get("actual_size_bytes") == action_sft_integrity.get("actual_size_bytes")
+            and action_sft_export_integrity.get("actual_sha256") == action_sft_integrity.get("actual_sha256")
+        )
+        action_sft_integrity["passed"] = bool(
+            action_sft_integrity["passed"] and action_sft_integrity["unchanged_since_export"]
+        )
+        summary["training_export"]["action_sft_integrity"] = action_sft_integrity
         _write_json(validation_path, validation_summary)
         summary["validation_report"] = {
             "path": str(validation_path),
@@ -206,6 +213,14 @@ def main() -> int:
                 ),
             }
         )
+        if not action_sft_integrity["passed"]:
+            summary["errors"].append(
+                {
+                    "artifact": str(export_dir / "action_sft.jsonl"),
+                    "error": "registered action-SFT artifact changed after canonical export",
+                }
+            )
+            summary["error_count"] = len(summary["errors"])
         if not validation_summary["passed"]:
             summary["errors"].append({"artifact": str(validation_path), "error": "strict validation failed"})
             summary["error_count"] = len(summary["errors"])
@@ -670,60 +685,82 @@ def capture_workspace_state(workspace: Path) -> dict[str, Any]:
     )
 
 
-def write_action_sft(out_path: Path, episodes_path: Path) -> int:
-    rows: list[dict[str, Any]] = []
-    for line in episodes_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        episode = json.loads(line)
-        outcome = episode.get("outcome") or {}
-        completion = episode.get("task_completion") or {}
-        if not outcome.get("passed") or completion.get("status") != "complete":
-            continue
-        conversation: list[dict[str, str]] = [{"role": "user", "content": str(episode.get("prompt") or "")}]
-        row_index = 0
-        for event in sorted(episode.get("events", []), key=lambda item: int(item.get("index", item.get("order", 0)) or 0)):
-            event_type = event.get("type")
-            if event_type == "tool_result":
-                conversation.append({"role": "user", "content": tool_result_text(event)})
-                continue
-            if event_type == "tool_call" and event.get("tool_name"):
-                response = f"{event['tool_name']}({json.dumps(event.get('args') or {}, sort_keys=True)})"
-            elif event_type == "assistant_message" and event.get("text"):
-                response = str(event["text"])
-            else:
-                continue
-            rows.append(
-                {
-                    "schema_version": ACTION_SFT_SCHEMA_VERSION,
-                    "sample_id": f"{episode.get('episode_id')}:action:{row_index}",
-                    "episode_id": episode.get("episode_id"),
-                    "scenario_id": episode.get("scenario_id"),
-                    "task_family": episode.get("task_family"),
-                    "prompt": episode.get("prompt"),
-                    "response": response,
-                    "messages": conversation + [{"role": "assistant", "content": response}],
-                    "source_event_index": event.get("index", event.get("order")),
-                    "quality_gate": "passed_scorecard_task_completion_action_trace",
-                }
-            )
-            row_index += 1
-            conversation.append({"role": "assistant", "content": response})
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
-    return len(rows)
+def export_canonical_training_views(
+    runs_dir: Path,
+    export_dir: Path,
+    *,
+    metadata: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Export trainer views once and immediately bind canonical action identity."""
+
+    manifest = export_rl_dataset(
+        runs_dir,
+        export_dir,
+        reward_scale="score",
+        min_score_gap=1,
+        preserve_paths=False,
+        metadata=metadata,
+    )
+    return manifest, registered_artifact_integrity(manifest, export_dir, "action_sft")
 
 
-def tool_result_text(event: dict[str, Any]) -> str:
-    tool_name = str(event.get("tool_name") or "tool")
-    result = event.get("result")
-    if result is None:
-        result = event.get("text") or ""
-    if not isinstance(result, str):
-        result = json.dumps(result, sort_keys=True)
-    return f"Tool result from {tool_name}: {result}"
+def registered_artifact_integrity(manifest: dict[str, Any], export_dir: Path, artifact: str) -> dict[str, Any]:
+    """Recompute one registered artifact identity without modifying the export."""
+    fingerprints = manifest.get("artifact_fingerprints")
+    registered = fingerprints.get(artifact) if isinstance(fingerprints, dict) else None
+    path = export_dir / f"{artifact}.jsonl"
+    expected_count = manifest.get(f"{artifact}_count")
+    failures: list[str] = []
+    if not isinstance(expected_count, int) or isinstance(expected_count, bool) or expected_count < 0:
+        failures.append("registered row count is missing")
+        expected_count = None
+    if not isinstance(registered, dict):
+        failures.append("registered fingerprint is missing")
+        expected_size = None
+        expected_sha256 = None
+    else:
+        expected_size = registered.get("size_bytes")
+        expected_sha256 = registered.get("sha256")
+    if not path.exists() or not path.is_file():
+        failures.append("registered artifact is missing")
+        actual_count = None
+        actual_size = None
+        actual_sha256 = None
+    else:
+        actual_count = jsonl_row_count(path)
+        actual_size = path.stat().st_size
+        actual_sha256 = sha256_file(path)
+        if expected_count != actual_count:
+            failures.append("row count mismatch")
+        if expected_size != actual_size:
+            failures.append("size mismatch")
+        if expected_sha256 != actual_sha256:
+            failures.append("sha256 mismatch")
+    return {
+        "passed": not failures,
+        "artifact": artifact,
+        "path": str(path),
+        "registered_row_count": expected_count,
+        "actual_row_count": actual_count,
+        "registered_size_bytes": expected_size,
+        "actual_size_bytes": actual_size,
+        "registered_sha256": expected_sha256,
+        "actual_sha256": actual_sha256,
+        "failures": failures,
+    }
+
+
+def jsonl_row_count(path: Path) -> int:
+    with path.open("rb") as handle:
+        return sum(1 for line in handle if line.strip())
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def start_expert_server(tasks_by_id: dict[str, dict[str, Any]], model: str) -> tuple[ThreadingHTTPServer, str]:

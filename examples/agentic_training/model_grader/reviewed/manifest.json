@@ -1,27 +1,36 @@
 {
+  "action_sft_count": 0,
   "artifact_fingerprints": {
+    "reviewed_action_sft": {
+      "exists": true,
+      "path": "reviewed_action_sft.jsonl",
+      "regular_file": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
     "reviewed_dpo": {
       "exists": true,
       "path": "reviewed_dpo.jsonl",
       "regular_file": true,
-      "sha256": "2b3f62914e03ab1eae8d0c7108ed28a2518d186ce03c3409d8e37a5b626b7cd7",
-      "size_bytes": 1026,
+      "sha256": "e610fd3737afce43cabcb262e5925f70d9d7ea83daaf3424a07cd3388e08441d",
+      "size_bytes": 1136,
       "symlink": false
     },
     "reviewed_labels": {
       "exists": true,
       "path": "reviewed_labels.jsonl",
       "regular_file": true,
-      "sha256": "f926b0d674035280012d25d62a87324c6ce725e701634b2cd0765dd3504496ce",
-      "size_bytes": 3600,
+      "sha256": "7bc8dc970d8f07e694157f1e2f417b4edbe45c2e69371260d2d40208f3153b7a",
+      "size_bytes": 3914,
       "symlink": false
     },
     "reviewed_preferences": {
       "exists": true,
       "path": "reviewed_preferences.jsonl",
       "regular_file": true,
-      "sha256": "82746532bd3f91d3d8cd35c495cffa557c5d8196a19ed0ca681b88f4c749ae45",
-      "size_bytes": 1626,
+      "sha256": "55d152918f4d56202ba087007d352afb823f9287231c0dbc2584611ec1cbab40",
+      "size_bytes": 1736,
       "symlink": false
     },
     "reviewed_reward_model": {
@@ -47,9 +56,9 @@
     "medium": 0,
     "unknown": 0
   },
-  "dataset_version": "hfrds-16791825cc955df1",
+  "dataset_version": "hfrds-a79e2951af19e2dd",
   "dpo_count": 1,
-  "generated_at": "2026-07-10T22:32:50.243508+00:00",
+  "generated_at": "2026-07-18T15:05:56.686020+00:00",
   "high_confidence_label_count": 2,
   "label_counts": {
     "accept": 1,
@@ -69,6 +78,7 @@
     "reviewer_identity_assurance": "self_asserted",
     "schema_version": "hfr.rl.label_provenance.v1",
     "trainer_view_counts": {
+      "reviewed_action_sft": 0,
       "reviewed_dpo": 1,
       "reviewed_preferences": 1,
       "reviewed_reward_model": 2,
@@ -92,6 +102,7 @@
     "Completed labels are bound to review_item_sha256 so stale labels cannot silently attach to changed review items.",
     "Rows with human_label='needs_review' are kept in reviewed_labels.jsonl but excluded from trainer-ready views.",
     "Reviewed SFT rows include only human_label='accept'.",
+    "Reviewed action SFT preserves native messages and tools for accepted rows; rejected and unresolved labels are excluded.",
     "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
     "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
     "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
@@ -102,6 +113,7 @@
   "outputs": {
     "dataset_registry": "dataset_registry.json",
     "manifest": "manifest.json",
+    "reviewed_action_sft": "reviewed_action_sft.jsonl",
     "reviewed_dpo": "reviewed_dpo.jsonl",
     "reviewed_labels": "reviewed_labels.jsonl",
     "reviewed_preferences": "reviewed_preferences.jsonl",
@@ -122,7 +134,7 @@
   "registry": {
     "manifest_path": "manifest.json",
     "mode_to_view": {
-      "action_sft": "reviewed_sft",
+      "action_sft": "reviewed_action_sft",
       "dpo": "reviewed_dpo",
       "reward_model": "reviewed_reward_model",
       "sft": "reviewed_sft"
@@ -131,11 +143,12 @@
     "redaction_passed": true,
     "root_views": [
       "reviewed_sft.jsonl",
+      "reviewed_action_sft.jsonl",
       "reviewed_dpo.jsonl",
       "reviewed_reward_model.jsonl"
     ],
     "schema_version": "hfr.rl.dataset_registry.v1",
-    "selection_key": "hfrds-16791825cc955df1"
+    "selection_key": "hfrds-a79e2951af19e2dd"
   },
   "reviewed_label_count": 2,
   "reward_model_count": 2,
@@ -174,7 +187,7 @@
   "trainer_views": {
     "contract_version": "hfr.rl.trainer_views.v1",
     "mode_to_view": {
-      "action_sft": "reviewed_sft",
+      "action_sft": "reviewed_action_sft",
       "dpo": "reviewed_dpo",
       "reward_model": "reviewed_reward_model",
       "sft": "reviewed_sft"
@@ -185,6 +198,7 @@
     ],
     "root_views": [
       "reviewed_sft.jsonl",
+      "reviewed_action_sft.jsonl",
       "reviewed_dpo.jsonl",
       "reviewed_reward_model.jsonl"
     ],
@@ -196,7 +210,7 @@
         "available": true,
         "label_policy": "human_reviewed_accept",
         "notes": [
-          "Action SFT consumes the same human-accepted rows; no separate row copy is emitted."
+          "Text SFT consumes the final answer from each accepted review row."
         ],
         "row_count": 1,
         "schema_version": "hfr.reviewed.sft.v1",
@@ -205,10 +219,29 @@
         ],
         "split_paths": {},
         "training_modes": [
-          "sft",
-          "action_sft"
+          "sft"
         ],
         "view_id": "reviewed_sft"
+      },
+      {
+        "artifact": "reviewed_action_sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "reviewed_action_sft.jsonl",
+        "available": true,
+        "label_policy": "human_reviewed_native_action_accept",
+        "notes": [
+          "Action SFT retains native messages, tool calls/results, exact recorded tools when available, and review lineage."
+        ],
+        "row_count": 0,
+        "schema_version": "hfr.reviewed.action_sft.v1",
+        "source_artifacts": [
+          "reviewed_labels.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "action_sft"
+        ],
+        "view_id": "reviewed_action_sft"
       },
       {
         "artifact": "reviewed_dpo",

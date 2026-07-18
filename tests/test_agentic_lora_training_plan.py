@@ -97,31 +97,7 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
 
     def make_experiment(self, root: Path) -> Path:
         experiment = root / "experiment"
-        data = experiment / "data"
-        write_jsonl(
-            data / "hermes_trace_only_sft.jsonl",
-            [{"prompt": "Trace prompt", "response": "Trace response"}],
-        )
-        write_jsonl(
-            data / "flightrecorder_sft.jsonl",
-            [{"prompt": "Curated prompt", "response": "Curated response"}],
-        )
-        write_jsonl(
-            data / "flightrecorder_action_sft.jsonl",
-            [{"prompt": "Action prompt", "response": "tool_name({})"}],
-        )
-        write_jsonl(
-            data / "flightrecorder_combined_dpo.jsonl",
-            [{"prompt": "DPO prompt", "chosen": "Safe answer", "rejected": "Unsafe answer"}],
-        )
-        write_jsonl(
-            data / "flightrecorder_reward_model.jsonl",
-            [{"prompt": "Reward prompt", "response": "Reward response", "reward": 1}],
-        )
-        write_jsonl(
-            data / "flightrecorder_step_rewards.jsonl",
-            [{"episode_id": "ep-1", "target": "event", "reward": 1}],
-        )
+        TRAIN_MODULE.write_smoke_fixture(experiment)
         return experiment
 
     def write_model_manifest(self, path: Path, *, license_status: str = "approved") -> None:
@@ -142,38 +118,25 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
         )
 
     def write_dataset_manifest(self, path: Path, experiment: Path) -> None:
-        data = experiment / "data"
+        source_path = experiment / "registry" / "dataset_version.json"
+        source = json.loads(source_path.read_text(encoding="utf-8"))
         files = {
-            "trace_sft": data / "hermes_trace_only_sft.jsonl",
-            "flightrecorder_sft": data / "flightrecorder_sft.jsonl",
-            "flightrecorder_action_sft": data / "flightrecorder_action_sft.jsonl",
-            "flightrecorder_combined_dpo": data / "flightrecorder_combined_dpo.jsonl",
-            "flightrecorder_reward_model": data / "flightrecorder_reward_model.jsonl",
-            "flightrecorder_step_rewards": data / "flightrecorder_step_rewards.jsonl",
+            name: (source_path.parent / relative).resolve()
+            for name, relative in source["data_files"].items()
         }
-        write_json(
-            path,
-            {
-                "schema_version": "hfr.dataset_registry_entry.v1",
-                "dataset_id": "flightrecorder-test",
-                "dataset_version": "2026-07-02.test",
-                "redaction_status": "redacted",
-                "gates": {"training_gate": {"passed": True}},
-                "dataset_splits": {"family_exclusive": True},
-                "quality_flags": [],
-                "source_fingerprint_coverage": {"fully_verified": 6, "unverified": 0},
-                "data_files": {name: str(file_path) for name, file_path in files.items()},
-                "artifact_fingerprints": {
-                    name: {
-                        "path": str(file_path),
-                        "exists": True,
-                        "size_bytes": file_path.stat().st_size,
-                        "sha256": hashlib.sha256(file_path.read_bytes()).hexdigest(),
-                    }
-                    for name, file_path in files.items()
-                },
-            },
-        )
+        source["dataset_id"] = "flightrecorder-test"
+        source["dataset_version"] = "2026-07-02.test"
+        source["data_files"] = {name: str(file_path) for name, file_path in files.items()}
+        source["artifact_fingerprints"] = {
+            name: {
+                "path": str(file_path),
+                "exists": True,
+                "size_bytes": file_path.stat().st_size,
+                "sha256": hashlib.sha256(file_path.read_bytes()).hexdigest(),
+            }
+            for name, file_path in files.items()
+        }
+        write_json(path, source)
 
     def test_registry_backed_action_sft_dry_run_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -210,7 +173,7 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertTrue(schema_result["passed"], schema_result["errors"])
             self.assertEqual(schema_result["schema"]["name"], "agentic_lora_training_plan")
             self.assertEqual(plan["model"], "local/test-model")
-            self.assertEqual(plan["prepared_counts"]["action_sft"], 1)
+            self.assertEqual(plan["prepared_counts"]["action_sft"], 2)
             self.assertTrue(plan["hyperparameters"]["assistant_only_loss"])
             self.assertEqual(plan["input_manifests"]["dataset"]["dataset_identity"], "2026-07-02.test")
             self.assertIn("fr_action_sft", plan["trainer_backends"]["executable_modes"])
@@ -469,6 +432,10 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             experiment = self.make_experiment(root)
+            model_manifest = root / "model.json"
+            dataset_manifest = root / "dataset.json"
+            self.write_model_manifest(model_manifest)
+            self.write_dataset_manifest(dataset_manifest, experiment)
             completed = run_train(
                 [
                     "--mode",
@@ -476,6 +443,10 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
                     "--dry-run",
                     "--experiment-dir",
                     str(experiment),
+                    "--model-manifest",
+                    str(model_manifest),
+                    "--dataset-manifest",
+                    str(dataset_manifest),
                     "--output-dir",
                     str(root / "out"),
                     "--disable-trackio",
@@ -485,8 +456,73 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             plan = stdout_json(completed)
             self.assertTrue(plan["passed"])
-            self.assertEqual(plan["prepared_counts"]["step_rewards"], 1)
+            self.assertEqual(plan["prepared_counts"]["step_rewards"], 2)
             self.assertIn("fr_step_rewards", plan["trainer_backends"]["plan_only_modes"])
+
+    def test_flight_recorder_dry_run_rejects_unsafe_unregistered_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            completed = run_train(
+                [
+                    "--mode", "fr_sft", "--dry-run", "--unsafe-allow-unregistered-launch",
+                    "--experiment-dir", str(experiment), "--output-dir", str(root / "out"),
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            plan = stdout_json(completed)
+            failed = {check["id"] for check in plan["checks"] if not check["passed"]}
+            self.assertIn("registered_inputs_required", failed)
+            self.assertTrue(plan["compute_assumptions"]["registered_inputs_required_for_launch"])
+
+    def test_manifest_booleans_and_refingerprinted_row_cannot_forge_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            model_manifest = root / "model.json"
+            dataset_manifest = root / "dataset.json"
+            self.write_model_manifest(model_manifest)
+            self.write_dataset_manifest(dataset_manifest, experiment)
+            manifest = json.loads(dataset_manifest.read_text(encoding="utf-8"))
+
+            control_path = Path(manifest["data_files"].pop("governance_receipt"))
+            manifest["artifact_fingerprints"].pop("governance_receipt")
+            self.assertTrue(control_path.is_file())
+            write_json(dataset_manifest, manifest)
+            blocked_control = run_train(
+                [
+                    "--mode", "fr_sft", "--dry-run", "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest), "--experiment-dir", str(experiment),
+                    "--output-dir", str(root / "missing-control"), "--disable-trackio",
+                ]
+            )
+            self.assertEqual(blocked_control.returncode, 1)
+            checks = {row["id"]: row for row in stdout_json(blocked_control)["checks"]}
+            self.assertFalse(checks["content_bound_control_artifacts_replayed"]["passed"])
+
+            self.write_dataset_manifest(dataset_manifest, experiment)
+            manifest = json.loads(dataset_manifest.read_text(encoding="utf-8"))
+            sft_path = Path(manifest["data_files"]["flightrecorder_sft"])
+            rows = [json.loads(line) for line in sft_path.read_text(encoding="utf-8").splitlines() if line]
+            rows[0]["review_item_sha256"] = "0" * 64
+            write_jsonl(sft_path, rows)
+            record = manifest["artifact_fingerprints"]["flightrecorder_sft"]
+            record["size_bytes"] = sft_path.stat().st_size
+            record["sha256"] = hashlib.sha256(sft_path.read_bytes()).hexdigest()
+            write_json(dataset_manifest, manifest)
+            forged_row = run_train(
+                [
+                    "--mode", "fr_sft", "--dry-run", "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest), "--experiment-dir", str(experiment),
+                    "--output-dir", str(root / "forged-row"), "--disable-trackio",
+                ]
+            )
+            self.assertEqual(forged_row.returncode, 1)
+            checks = {row["id"]: row for row in stdout_json(forged_row)["checks"]}
+            self.assertTrue(checks["dataset_artifact_fingerprints_verified"]["passed"])
+            self.assertFalse(checks["training_rows_bound_to_control_artifacts"]["passed"])
 
     def test_training_schemas_are_registered(self):
         names = {record["name"] for record in list_schema_records()}

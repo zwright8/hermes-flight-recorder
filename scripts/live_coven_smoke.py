@@ -209,16 +209,9 @@ def _run_live_session(
     sessions = _run_coven(coven_bin, ["sessions", "--json", "--all"], env, out_dir, "coven_sessions_json", timeout=30, cwd=workspace)
     session_found = _session_found(sessions.stdout, session_id)
 
-    run_result = _write_smoke_artifacts(coven_trace, out_dir)
-    harness_result = publish_harness_artifacts(
-        scenario_path=out_dir / "live_coven_scenario.json",
-        run_dir=out_dir,
-        artifact_result=run_result,
-        trace_path=coven_trace,
-        trace_format="coven_jsonl",
-        runner="coven_live_smoke",
-        provider="coven",
-        model=MODEL_REF,
+    run_result = _write_smoke_artifacts(
+        coven_trace,
+        out_dir,
         sandbox={
             "root": temp_root,
             "home": home_dir,
@@ -243,6 +236,7 @@ def _run_live_session(
         metadata={"source": "scripts/live_coven_smoke.py", "detached": True},
         preserve_paths=preserve_paths,
     )
+    harness_result = run_result["harness_result"]
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]
     passed = (
@@ -281,15 +275,41 @@ def _run_live_session(
     )
 
 
-def _write_smoke_artifacts(coven_trace: Path, out_dir: Path) -> dict[str, Any]:
+def _write_smoke_artifacts(
+    coven_trace: Path,
+    out_dir: Path,
+    *,
+    sandbox: dict[str, Any] | None = None,
+    fake_secret_files: list[str | Path] | None = None,
+    process: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    preserve_paths: bool = True,
+) -> dict[str, Any]:
     scenario_path = out_dir / "live_coven_scenario.json"
     _write_json(scenario_path, _scenario(Path(coven_trace.name)))
-    return _run_scenario_artifacts(
+    result = _run_scenario_artifacts(
         scenario_path,
         out_dir,
         trace_format="coven_jsonl",
-        preserve_paths=True,
+        preserve_paths=preserve_paths,
     )
+    if sandbox is not None or fake_secret_files or process is not None or metadata is not None:
+        result["harness_result"] = publish_harness_artifacts(
+            scenario_path=scenario_path,
+            run_dir=out_dir,
+            artifact_result=result,
+            trace_path=coven_trace,
+            trace_format="coven_jsonl",
+            runner="coven_live_smoke",
+            provider="coven",
+            model=MODEL_REF,
+            sandbox=sandbox,
+            fake_secret_files=fake_secret_files,
+            process=process,
+            metadata=metadata,
+            preserve_paths=preserve_paths,
+        )
+    return result
 
 
 def _scenario(trace_path: Path) -> dict[str, Any]:

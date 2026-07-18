@@ -1,0 +1,28 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/data_governance_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Purpose-bound governance and personal-data admission receipt for a training dataset.",
+  "properties": {
+    "schema_version": {"const": "hfr.data_governance_receipt.v1"},
+    "passed": {"type": "boolean"},
+    "purpose": {"minLength": 1, "type": "string"},
+    "record_count": {"minimum": 0, "type": "integer"},
+    "authorized_record_count": {"minimum": 0, "type": "integer"},
+    "blocked_record_count": {"minimum": 0, "type": "integer"},
+    "pii_finding_count": {"minimum": 0, "type": "integer"},
+    "blocked_reasons": {"items": {"type": "string"}, "type": "array"},
+    "policy": {"type": "object"},
+    "requested_policy": {"type": "object"},
+    "policy_violations": {"items": {"type": "string"}, "type": "array"},
+    "policy_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "scan_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "record_statuses": {"items": {"type": "object"}, "type": "array"},
+    "findings": {"items": {"type": "object"}, "type": "array"},
+    "evaluated_at": {"format": "date-time", "type": "string"},
+    "notes": {"items": {"type": "string"}, "type": "array"}
+  },
+  "required": ["schema_version", "passed", "purpose", "record_count", "authorized_record_count", "blocked_record_count", "pii_finding_count", "blocked_reasons", "policy", "requested_policy", "policy_violations", "policy_fingerprint", "scan_fingerprint", "record_statuses", "findings", "evaluated_at", "notes"],
+  "title": "Hermes Flight Recorder Data Governance Receipt",
+  "type": "object"
+}

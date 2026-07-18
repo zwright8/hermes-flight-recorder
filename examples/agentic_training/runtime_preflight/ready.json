@@ -257,8 +257,8 @@
       ],
       "schema_name": "hfr.rl.sft.v1",
       "schema_version_declared": "hfr.rl.sft.v1",
-      "sha256": "a18ca653473ae0b0bbc635178937a351c3846149a5fcd74a1624dc8e83dd7997",
-      "size_bytes": 1383
+      "sha256": "dfe540cccb44cba12ab881163777911bbf41224349b82e4cfdafd7366c6aebe6",
+      "size_bytes": 2140
     },
     {
       "error_count": 0,
@@ -280,8 +280,8 @@
       ],
       "schema_name": "hfr.rl.dpo.v1",
       "schema_version_declared": "hfr.rl.dpo.v1",
-      "sha256": "a2ea1bade186c022ea178ca51b7d01cac8e864467d0128715423d6c5bd34ae49",
-      "size_bytes": 1987
+      "sha256": "7002281bc6dec519dce9439e1a975a5ecc121dd0953ad130eb3b6176e189db1c",
+      "size_bytes": 2753
     }
   ]
 }

@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections import Counter
 from pathlib import Path
 from typing import Any
+
+from flightrecorder.repeated_eval import build_promotion_evidence, validate_promotion_evidence
 
 
 FORBIDDEN_RULE_IDS = ("forbidden_actions", "secret_exposure")
@@ -504,26 +505,41 @@ def compare(baseline: dict[str, Any], trace_only: dict[str, Any], flightrecorder
 
 def write_report(path: Path, result: dict[str, Any]) -> None:
     handoff = result["governance_handoff"]
+    canonical = result.get("canonical_promotion_evidence")
     lines = [
         "# Agentic Fine-Tune Promotion Comparison",
         "",
-        f"- Eval checks passed: {result['passed']}",
+        f"- Legacy one-shot eval checks passed: {result['passed']}",
         f"- Comparison status: {result['comparison_status']}",
-        f"- Governance status: {handoff['status']}",
-        f"- Governance recommendation: {handoff['recommendation']}",
+        f"- Legacy governance status: {handoff['status']}",
+        f"- Legacy governance recommendation: {handoff['recommendation']}",
         f"- Checks: {result['check_count']}",
         f"- Failed checks: {result['failed_check_count']}",
-        "",
-        "## Scenario Comparability",
-        "",
-        f"- Identical held-out scenarios: {result['scenario_set']['identical']}",
-        f"- Scenario ids: {result['scenario_set']['scenario_ids'] or 'not comparable'}",
-        "",
-        "## Summary Metrics",
-        "",
-        "| Arm | Pass Rate | Average Score | Critical Failures | Forbidden | Unsupported Claims | Task Check Pass Rate |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if canonical:
+        lines.extend(
+            [
+                f"- Canonical repeated evidence passed: {canonical['passed']}",
+                f"- Canonical readiness: {canonical['readiness']}",
+                f"- Canonical recommendation: {canonical['recommendation']}",
+                f"- Canonical failed checks: {canonical['failed_check_count']}",
+                f"- Canonical evidence: {canonical['path']}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Scenario Comparability",
+            "",
+            f"- Identical held-out scenarios: {result['scenario_set']['identical']}",
+            f"- Scenario ids: {result['scenario_set']['scenario_ids'] or 'not comparable'}",
+            "",
+            "## Summary Metrics",
+            "",
+            "| Arm | Pass Rate | Average Score | Critical Failures | Forbidden | Unsupported Claims | Task Check Pass Rate |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     for name, summary in result["summaries"].items():
         task_rate = summary["task_completion"]["check_pass_rate"]
         lines.append(
@@ -560,7 +576,51 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=Path("experiments/qwen3_4b_flightrecorder/PROMOTION_REPORT.md"))
     parser.add_argument("--repair-out", type=Path, help="Standalone eval repair work items JSON; defaults beside --out")
     parser.add_argument("--curriculum-out", type=Path, help="Standalone eval curriculum suggestions JSON; defaults beside --out")
+    parser.add_argument("--baseline-observation", action="append", type=Path, default=[])
+    parser.add_argument("--trace-only-observation", action="append", type=Path, default=[])
+    parser.add_argument("--flightrecorder-observation", action="append", type=Path, default=[])
+    parser.add_argument(
+        "--promotion-evidence-out",
+        type=Path,
+        help="Write canonical repeated three-arm hfr.agentic_eval_promotion_evidence.v1 evidence",
+    )
+    parser.add_argument("--promotion-policy", type=Path, help="JSON object overriding repeated-evaluation policy defaults")
+    parser.add_argument("--primary-metric", choices=["pass_rate", "score"])
+    parser.add_argument("--minimum-effect", type=float)
+    parser.add_argument("--confidence-level", type=float)
+    parser.add_argument("--minimum-repeats", type=int)
+    parser.add_argument("--bootstrap-samples", type=int)
+    parser.add_argument("--bootstrap-seed", type=int)
+    parser.add_argument("--required-pool", action="append", choices=["frozen", "rolling", "adversarial"], default=[])
+    parser.add_argument("--max-cost-increase-ratio", type=float)
+    parser.add_argument("--max-latency-increase-ratio", type=float)
+    parser.add_argument("--cost-absolute-tolerance-usd", type=float)
+    parser.add_argument("--latency-absolute-tolerance-seconds", type=float)
+    parser.add_argument("--family-non-regression-tolerance", type=float)
+    parser.add_argument("--risk-non-regression-tolerance", type=float)
     return parser.parse_args()
+
+
+def _promotion_policy(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_json(args.promotion_policy) if args.promotion_policy is not None else {}
+    flags = {
+        "primary_metric": args.primary_metric,
+        "minimum_effect": args.minimum_effect,
+        "confidence_level": args.confidence_level,
+        "minimum_repeats": args.minimum_repeats,
+        "bootstrap_samples": args.bootstrap_samples,
+        "bootstrap_seed": args.bootstrap_seed,
+        "max_cost_increase_ratio": args.max_cost_increase_ratio,
+        "max_latency_increase_ratio": args.max_latency_increase_ratio,
+        "cost_absolute_tolerance_usd": args.cost_absolute_tolerance_usd,
+        "latency_absolute_tolerance_seconds": args.latency_absolute_tolerance_seconds,
+        "family_non_regression_tolerance": args.family_non_regression_tolerance,
+        "risk_non_regression_tolerance": args.risk_non_regression_tolerance,
+    }
+    policy.update({key: value for key, value in flags.items() if value is not None})
+    if args.required_pool:
+        policy["required_pools"] = args.required_pool
+    return policy
 
 
 def main() -> int:
@@ -574,10 +634,55 @@ def main() -> int:
     repair_out = args.repair_out or args.out.with_name("eval_repair_work_items.json")
     curriculum_out = args.curriculum_out or args.out.with_name("eval_curriculum_suggestions.json")
     result["output_artifacts"] = write_repair_outputs(result, repair_out=repair_out, curriculum_out=curriculum_out)
+    promotion_evidence = None
+    if args.promotion_evidence_out is not None:
+        observation_paths = {
+            "baseline": args.baseline_observation,
+            "trace_only": args.trace_only_observation,
+            "flightrecorder": args.flightrecorder_observation,
+        }
+        missing = [arm for arm, paths in observation_paths.items() if not paths]
+        if missing:
+            raise SystemExit(
+                "--promotion-evidence-out requires observations for all three arms; missing: " + ", ".join(missing)
+            )
+        promotion_evidence = build_promotion_evidence(
+            observation_paths=observation_paths,
+            policy=_promotion_policy(args),
+            out_path=args.promotion_evidence_out,
+        )
+        write_json(args.promotion_evidence_out, promotion_evidence)
+        validation = validate_promotion_evidence(args.promotion_evidence_out)
+        if not validation["passed"]:
+            raise SystemExit("Canonical promotion evidence failed replay validation: " + "; ".join(validation["errors"]))
+        result["output_artifacts"]["canonical_promotion_evidence"] = artifact_record(args.promotion_evidence_out)
+        result["canonical_promotion_evidence"] = {
+            "path": str(args.promotion_evidence_out),
+            "passed": promotion_evidence["passed"],
+            "promotion_ready": promotion_evidence["promotion_ready"],
+            "readiness": promotion_evidence["readiness"],
+            "recommendation": promotion_evidence["recommendation"],
+            "failed_check_count": promotion_evidence["failed_check_count"],
+            "blocking_reasons": promotion_evidence["blocking_reasons"],
+        }
     write_json(args.out, result)
     write_report(args.report, result)
-    print(json.dumps({"passed": result["passed"], "failed_check_count": result["failed_check_count"], "out": str(args.out)}, indent=2))
-    return 0 if result["passed"] else 1
+    canonical_passed = promotion_evidence["passed"] if promotion_evidence is not None else result["passed"]
+    print(
+        json.dumps(
+            {
+                "passed": canonical_passed,
+                "legacy_comparison_passed": result["passed"],
+                "failed_check_count": (
+                    promotion_evidence["failed_check_count"] if promotion_evidence is not None else result["failed_check_count"]
+                ),
+                "out": str(args.out),
+                "promotion_evidence": str(args.promotion_evidence_out) if args.promotion_evidence_out is not None else None,
+            },
+            indent=2,
+        )
+    )
+    return 0 if canonical_passed else 1
 
 
 if __name__ == "__main__":

@@ -106,6 +106,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--arm", default="candidate")
     parser.add_argument("--engine", choices=sorted(ENGINE_PROFILES), default="transformers")
     parser.add_argument("--adapter", default="", help="Optional adapter path or id")
+    parser.add_argument("--adapter-id", default="", help="Expected immutable adapter repository/id")
+    parser.add_argument("--adapter-revision", default="", help="Expected immutable adapter revision (never main/latest)")
+    parser.add_argument(
+        "--adapter-sha256",
+        default="",
+        help="Expected adapter weights SHA-256; remote endpoints must report it in model metadata",
+    )
     parser.add_argument("--profile-id", default="", help="Optional stable serving profile id")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=15.0)
@@ -140,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
             arm=args.arm,
             engine=args.engine,
             adapter=args.adapter,
+            adapter_id=args.adapter_id,
+            adapter_revision=args.adapter_revision,
+            adapter_sha256=args.adapter_sha256,
             profile_id=args.profile_id,
             api_key=api_key,
             timeout=float(args.timeout),
@@ -187,6 +197,9 @@ def check_endpoint(
     require_tool_call: bool,
     require_structured_output: bool,
     profile_id: str = "",
+    adapter_id: str = "",
+    adapter_revision: str = "",
+    adapter_sha256: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     generated_at = _utc_now()
     checks: list[dict[str, Any]] = []
@@ -224,8 +237,76 @@ def check_endpoint(
         checks.append(_check("structured_output_required", structured_check["status"] == "supported", structured_check))
 
     served_model_id = _first_non_empty(chat_model, metadata_model, observed_model_ids[0] if observed_model_ids else "", model)
-    identity_match = _identity_matches(model, adapter, [served_model_id, metadata_model, chat_model, *observed_model_ids])
+    identity_match = _identity_matches(
+        model,
+        adapter_id or adapter,
+        [served_model_id, metadata_model, chat_model, *observed_model_ids],
+    )
     checks.append(_check("model_identity", identity_match, {"expected": model, "served_model_id": served_model_id, "observed_model_ids": observed_model_ids, "metadata_model": metadata_model, "chat_response_model": chat_model}))
+    adapter_identity = _adapter_identity(
+        adapter,
+        metadata_payload=metadata.get("json"),
+        local_adapter_id=adapter_id,
+        local_revision=adapter_revision,
+    )
+    if adapter:
+        expected_adapter = {
+            "id": adapter_id or adapter,
+            "revision": adapter_revision,
+            "sha256": adapter_sha256,
+        }
+        if adapter_identity.get("local") is True:
+            expected_adapter = {
+                "id": adapter_id or adapter_identity.get("id"),
+                "revision": adapter_revision or adapter_identity.get("revision"),
+                "sha256": adapter_sha256 or adapter_identity.get("sha256"),
+            }
+        observed_adapter = {
+            key: adapter_identity.get(key)
+            for key in ("id", "revision", "sha256")
+        }
+        observation_source = adapter_identity.get("observation_source")
+        checks.append(
+            _check(
+                "adapter_identity_immutable",
+                adapter_identity.get("immutable") is True,
+                {
+                    **observed_adapter,
+                    "observation_source": observation_source,
+                },
+            )
+        )
+        checks.append(
+            _check(
+                "adapter_identity_observed",
+                observation_source in {"endpoint_model_metadata", "local_artifact_sha256"},
+                {
+                    "observation_source": observation_source,
+                    "local": adapter_identity.get("local"),
+                },
+            )
+        )
+        checks.append(
+            _check(
+                "adapter_identity_matches_expected",
+                observed_adapter == expected_adapter,
+                {"expected": expected_adapter, "observed": observed_adapter},
+            )
+        )
+    elif adapter_identity.get("present") is True:
+        checks.append(
+            _check(
+                "unexpected_adapter_identity",
+                False,
+                {
+                    "observed": {
+                        key: adapter_identity.get(key)
+                        for key in ("id", "revision", "sha256")
+                    },
+                    "observation_source": adapter_identity.get("observation_source"),
+                },
+            )
+        )
 
     failed_checks = [item["id"] for item in checks if not item["passed"]]
     passed = not failed_checks
@@ -252,7 +333,7 @@ def check_endpoint(
         "provider": provider,
         "engine": engine,
         "endpoint": {"base_url": _normalize_base_url(base_url), "models_url": _openai_url(base_url, "/models"), "chat_completions_url": _openai_url(base_url, "/chat/completions")},
-        "model_identity": {"requested_model": model, "served_model_id": served_model_id, "observed_model_ids": observed_model_ids, "metadata_model": metadata_model, "chat_response_model": chat_model, "adapter": _adapter_identity(adapter)},
+        "model_identity": {"requested_model": model, "served_model_id": served_model_id, "observed_model_ids": observed_model_ids, "metadata_model": metadata_model, "chat_response_model": chat_model, "adapter": adapter_identity},
         "capabilities": {
             "health": _check_passed(checks, "health"),
             "models": _check_passed(checks, "models"),
@@ -508,18 +589,123 @@ def _start_mock_server(response: str, model: str, adapter: str) -> tuple[Threadi
     return server, requests, f"http://127.0.0.1:{server.server_address[1]}/v1"
 
 
-def _adapter_identity(adapter: str) -> dict[str, Any]:
-    if not adapter:
-        return {"present": False, "id": "", "path": "", "local": False}
+def _adapter_identity(
+    adapter: str,
+    *,
+    metadata_payload: Any = None,
+    local_adapter_id: str = "",
+    local_revision: str = "",
+) -> dict[str, Any]:
+    observed = _metadata_adapter_identity(metadata_payload)
+    if not adapter and observed is None:
+        return {
+            "present": False,
+            "id": "",
+            "path": "",
+            "local": False,
+            "revision": "",
+            "sha256": "",
+            "immutable": False,
+            "observation_source": "none",
+        }
     path = Path(adapter).expanduser()
-    if not path.exists():
-        return {"present": True, "id": adapter, "path": adapter, "local": False}
-    files = []
-    for name in ("adapter_config.json", "adapter_model.safetensors", "tokenizer_config.json", "chat_template.jinja"):
-        candidate = path / name
-        if candidate.exists() and candidate.is_file():
-            files.append({"path": str(candidate), "sha256": _sha256_file(candidate), "bytes": candidate.stat().st_size})
-    return {"present": True, "id": path.name, "path": str(path.resolve()), "local": True, "files": files}
+    if adapter and path.exists():
+        files = []
+        for name in (
+            "adapter_config.json",
+            "adapter_model.safetensors",
+            "adapter_model.bin",
+            "tokenizer_config.json",
+            "chat_template.jinja",
+        ):
+            candidate = path / name
+            if candidate.exists() and candidate.is_file():
+                files.append({"path": str(candidate), "sha256": _sha256_file(candidate), "bytes": candidate.stat().st_size})
+        weights = next(
+            (
+                item
+                for item in files
+                if Path(item["path"]).name in {"adapter_model.safetensors", "adapter_model.bin"}
+            ),
+            None,
+        )
+        computed_sha256 = str(weights["sha256"]) if weights else ""
+        effective_revision = local_revision or (
+            f"local-{computed_sha256[:16]}" if computed_sha256 else ""
+        )
+        effective_id = local_adapter_id or path.name
+        return {
+            "present": True,
+            "id": effective_id,
+            "path": str(path.resolve()),
+            "local": True,
+            "revision": effective_revision,
+            "sha256": computed_sha256,
+            "immutable": _immutable_adapter_identity(effective_id, effective_revision, computed_sha256),
+            "observation_source": "local_artifact_sha256" if weights else "unobserved",
+            "files": files,
+        }
+    if observed is not None:
+        observed_id = observed["id"]
+        observed_revision = observed["revision"]
+        observed_sha256 = observed["sha256"]
+        return {
+            "present": True,
+            "id": observed_id,
+            "path": adapter,
+            "local": False,
+            "revision": observed_revision,
+            "sha256": observed_sha256,
+            "immutable": _immutable_adapter_identity(observed_id, observed_revision, observed_sha256),
+            "observation_source": "endpoint_model_metadata",
+        }
+    return {
+        "present": False,
+        "id": "",
+        "path": adapter,
+        "local": False,
+        "revision": "",
+        "sha256": "",
+        "immutable": False,
+        "observation_source": "unobserved",
+    }
+
+
+def _metadata_adapter_identity(payload: Any) -> dict[str, str] | None:
+    """Extract an immutable adapter identity returned by model metadata."""
+
+    if not isinstance(payload, dict):
+        return None
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    candidates = (
+        payload.get("adapter_identity"),
+        payload.get("adapter"),
+        metadata.get("adapter_identity"),
+        metadata.get("adapter"),
+    )
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        adapter_id = str(candidate.get("id") or candidate.get("adapter_id") or "")
+        revision = str(candidate.get("revision") or candidate.get("adapter_revision") or "")
+        sha256 = str(
+            candidate.get("sha256")
+            or candidate.get("adapter_sha256")
+            or candidate.get("weights_sha256")
+            or ""
+        )
+        if adapter_id or revision or sha256:
+            return {"id": adapter_id, "revision": revision, "sha256": sha256}
+    return None
+
+
+def _immutable_adapter_identity(adapter_id: str, revision: str, sha256: str) -> bool:
+    return bool(
+        adapter_id
+        and revision
+        and revision.lower() not in {"main", "master", "latest", "head"}
+        and re.fullmatch(r"[0-9a-f]{64}", sha256)
+    )
 
 
 def _identity_matches(expected_model: str, adapter: str, observed_values: list[str]) -> bool:
@@ -527,7 +713,13 @@ def _identity_matches(expected_model: str, adapter: str, observed_values: list[s
     if expected_model in values:
         return True
     if adapter:
-        return f"{expected_model}+{Path(adapter).name}" in values
+        adapter_ids = {adapter, Path(adapter).name}
+        return any(
+            value == f"{expected_model}+{adapter_id}"
+            or (value.startswith(f"{expected_model}+") and adapter_id in value)
+            for adapter_id in adapter_ids
+            for value in values
+        )
     return False
 
 

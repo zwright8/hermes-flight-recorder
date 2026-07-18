@@ -8,6 +8,7 @@ from flightrecorder.schema_registry import check_schema_file, check_schema_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
 CASE_STUDY = ROOT / "examples" / "case_studies" / "qwen3_0_6b_flightrecorder_lora"
+SELF_IMPROVING_README = ROOT / "examples" / "self_improving_loop" / "README.md"
 
 
 class AgenticLoraCaseStudyTests(unittest.TestCase):
@@ -58,6 +59,15 @@ class AgenticLoraCaseStudyTests(unittest.TestCase):
         for path in CASE_STUDY.rglob("*"):
             if path.is_file():
                 self.assertNotIn("/Users/", path.read_text(encoding="utf-8"), path)
+
+    def test_self_improving_dry_run_registers_both_inputs(self):
+        readme = SELF_IMPROVING_README.read_text(encoding="utf-8")
+        self.assertIn(
+            "--model-manifest examples/case_studies/"
+            "qwen3_0_6b_flightrecorder_lora/model_manifest.json",
+            readme,
+        )
+        self.assertIn("--dataset-manifest runs/self_improving_loop/", readme)
 
 
 if __name__ == "__main__":

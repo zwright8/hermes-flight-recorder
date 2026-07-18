@@ -25,7 +25,7 @@
       "path": "../promotion_result.json",
       "role": "agentic_training_result",
       "schema_version": "hfr.agentic_training_result.v1",
-      "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+      "sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
       "size_bytes": 11571
     },
     "cloud_training_completion_receipt": {
@@ -34,7 +34,7 @@
       "path": "../promotion_cloud_training_completion_receipt.json",
       "role": "cloud_training_completion_receipt",
       "schema_version": "hfr.cloud_training_completion_receipt.v1",
-      "sha256": "368d57a662bba3dce30823501bf4ebe3d4f316b638b98edaedfc3a1566765559",
+      "sha256": "b1f0e3b466f3564b161bb0d9665aa1a5155a7d223847ba7eb7ebf12ed639eec9",
       "size_bytes": 12268
     },
     "compare_gate": {
@@ -94,8 +94,8 @@
       "path": "model_registry_entry.json",
       "role": "model_registry_entry",
       "schema_version": "hfr.model_registry_entry.v1",
-      "sha256": "8fd939ef1d1e8be45803482d151ec0215ae0be31cca76ec48c7715f5f1f751b7",
-      "size_bytes": 4153
+      "sha256": "91138b1a00e4dfb7a33b8ff96cb0172d1798d66f7599811422bf0298c2390dac",
+      "size_bytes": 4155
     },
     "promotion_ledger_gate": {
       "exists": true,
@@ -1253,9 +1253,9 @@
     },
     {
       "actual": {
-        "agentic_training_result_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
-        "completion_identity_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
-        "completion_source_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b"
+        "agentic_training_result_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
+        "completion_identity_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
+        "completion_source_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e"
       },
       "expected": {
         "same_agentic_training_result": true

@@ -3,6 +3,8 @@
   "compatibility": {
     "chat_template": {
       "notes": "The upstream chat template rendered messages and tools during the completed run, but it did not expose TRL generation masks.",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
       "source": "completed_local_training_run",
       "status": "verified_with_all_message_loss",
       "verified": true
@@ -36,6 +38,8 @@
     },
     "tokenizer": {
       "notes": "AutoTokenizer loaded and tokenized the recorded trajectory during the completed run.",
+      "repo_id": "Qwen/Qwen3-0.6B",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
       "source": "completed_local_training_run",
       "status": "verified",
       "verified": true
@@ -55,7 +59,7 @@
       "The upstream model card declares Apache-2.0.",
       "Downstream publishers remain responsible for reviewing current upstream terms."
     ],
-    "review_status": "approved_for_demo",
+    "review_status": "approved",
     "reviewed_at": "2026-07-18T00:00:00Z",
     "reviewer": "case-study-author",
     "source_url": "https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/LICENSE",
@@ -70,7 +74,7 @@
   ],
   "schema_version": "hfr.model_candidate.v1",
   "source": {
-    "revision": "main",
+    "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
     "type": "huggingface_model",
     "url": "https://huggingface.co/Qwen/Qwen3-0.6B",
     "weight_download_allowed": true

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import shutil
@@ -22,6 +23,8 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -36,6 +39,11 @@ from flightrecorder.cli import (  # noqa: E402
     _run_suite_summary,
     _safe_run_id,
     _write_json,
+)
+from flightrecorder.repeated_eval import (  # noqa: E402
+    build_observation,
+    load_arm_identity,
+    write_json as write_repeated_eval_json,
 )
 from flightrecorder.schema import load_scenario  # noqa: E402
 from scripts.hermes_harness import (  # noqa: E402
@@ -87,6 +95,23 @@ def parse_args() -> argparse.Namespace:
         "--mock-response",
         help="Start a local mock OpenAI-compatible endpoint returning this response; for evaluator smoke tests only",
     )
+    parser.add_argument(
+        "--arm-identity",
+        help="Registered immutable hfr.eval_arm_identity.v1 manifest; enables repeated-eval observation output",
+    )
+    parser.add_argument("--repeat-index", type=int, default=0, help="Zero-based repeat index recorded in the observation")
+    parser.add_argument("--seed", type=int, default=0, help="Inference/evaluation seed recorded in the observation")
+    parser.add_argument("--temperature", type=float, default=0.0, help="Decoding temperature recorded in the observation")
+    parser.add_argument("--top-p", type=float, default=1.0, help="Decoding top-p recorded in the observation")
+    parser.add_argument("--max-tokens", type=int, default=512, help="Decoding token limit recorded in the observation")
+    parser.add_argument("--pool-type", choices=["frozen", "rolling", "adversarial"], default="frozen")
+    parser.add_argument("--pool-id", default="heldout", help="Stable identifier for this held-out pool")
+    parser.add_argument("--risk-tier", default="standard", help="Default risk tier for scenarios in this invocation")
+    parser.add_argument(
+        "--cost-usd-per-run",
+        type=float,
+        help="Measured or externally metered per-run cost; omitted cost fails closed at promotion time",
+    )
     return parser.parse_args()
 
 
@@ -113,6 +138,21 @@ def main() -> int:
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    arm_identity: dict[str, Any] | None = None
+    arm_identity_copy: Path | None = None
+    if args.arm_identity:
+        source_identity = Path(args.arm_identity).expanduser().resolve()
+        arm_identity = load_arm_identity(source_identity, expected_arm=args.arm)
+        if args.model != arm_identity["model"]["id"]:
+            raise SystemExit(
+                f"--model {args.model!r} does not match immutable arm model {arm_identity['model']['id']!r}"
+            )
+        arm_identity_copy = out_dir / "arm_identity.json"
+        shutil.copyfile(source_identity, arm_identity_copy)
+    elif args.arm in {"trace_only", "flightrecorder"}:
+        raise SystemExit(f"--arm-identity is required for tuned arm {args.arm!r}")
+    args.arm_identity_copy = arm_identity_copy
+
     base_url = args.base_url
     api_key = ""
     mock_server: ThreadingHTTPServer | None = None
@@ -125,6 +165,7 @@ def main() -> int:
             raise SystemExit("--base-url is required unless --mock-response is used")
         api_key = _api_key(args, base_url)
 
+    request_config = _inference_request_config(args)
     plan = {
         "schema_version": "hfr.hermes_heldout_eval_plan.v1",
         "arm": args.arm,
@@ -140,15 +181,40 @@ def main() -> int:
         "toolsets": args.toolsets,
         "yolo": args.yolo,
         "mock_endpoint": args.mock_response is not None,
+        "request_configuration": {
+            **request_config,
+            "config_sha256": _canonical_sha256(request_config),
+            "enforcement": "local_request_proxy",
+        },
+        "repeated_evaluation": {
+            "enabled": arm_identity_copy is not None,
+            "arm_identity": str(arm_identity_copy) if arm_identity_copy is not None else None,
+            "repeat_index": args.repeat_index,
+            "seed": args.seed,
+            "decoding": {
+                "temperature": args.temperature,
+                "top_p": args.top_p,
+                "max_tokens": args.max_tokens,
+            },
+            "pool": {"type": args.pool_type, "id": args.pool_id, "risk_tier": args.risk_tier},
+        },
     }
     serving_profile_summary = None
+    serving_profile_copy: Path | None = None
     if args.serving_profile:
+        source_profile = Path(args.serving_profile).expanduser().resolve()
         serving_profile_summary = _validate_serving_profile(
-            Path(args.serving_profile).expanduser().resolve(),
+            source_profile,
             expected_model=args.model,
             expected_base_url=str(base_url),
+            expected_identity=arm_identity,
         )
+        serving_profile_copy = out_dir / "serving_profile.json"
+        shutil.copyfile(source_profile, serving_profile_copy)
+        serving_profile_summary["path"] = str(serving_profile_copy)
         plan["serving_profile"] = serving_profile_summary
+    elif arm_identity is not None and arm_identity["arm"] in {"trace_only", "flightrecorder"}:
+        raise SystemExit(f"--serving-profile is required for tuned arm {arm_identity['arm']!r}")
     _write_json(out_dir / "evaluation_plan.json", plan)
     if args.dry_run:
         print(json.dumps(plan, indent=2, sort_keys=True))
@@ -157,7 +223,10 @@ def main() -> int:
             mock_server.server_close()
         return 0
 
+    request_proxy: ThreadingHTTPServer | None = None
+    request_records: list[dict[str, Any]] = []
     try:
+        request_proxy, request_records, runtime_base_url = _start_request_proxy(str(base_url), request_config)
         summary = run_suite(
             args=args,
             hermes_root=hermes_root,
@@ -166,10 +235,17 @@ def main() -> int:
             scenario_paths=scenario_paths,
             out_dir=out_dir,
             base_url=str(base_url),
+            runtime_base_url=runtime_base_url,
             api_key=api_key,
             serving_profile=serving_profile_summary,
+            serving_profile_path=serving_profile_copy,
+            request_config=request_config,
+            request_records=request_records,
         )
     finally:
+        if request_proxy is not None:
+            request_proxy.shutdown()
+            request_proxy.server_close()
         if mock_server is not None:
             mock_server.shutdown()
             mock_server.server_close()
@@ -195,6 +271,10 @@ def run_suite(
     base_url: str,
     api_key: str,
     serving_profile: dict[str, Any] | None,
+    runtime_base_url: str | None = None,
+    serving_profile_path: Path | None = None,
+    request_config: dict[str, Any] | None = None,
+    request_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     runs: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -226,11 +306,12 @@ def run_suite(
             hermes_home / "config.yaml",
             provider=args.provider,
             model=args.model,
-            base_url=base_url,
+            base_url=runtime_base_url or base_url,
             api_key=api_key,
             max_turns=args.max_turns,
         )
 
+        started_at = time.monotonic()
         completed = _run_hermes(
             args=args,
             hermes_root=hermes_root,
@@ -241,6 +322,7 @@ def run_suite(
             workspace=workspace,
             prompt=str(scenario["prompt"]),
         )
+        latency_seconds = time.monotonic() - started_at
         (run_dir / "hermes_stdout.txt").write_text(completed.stdout, encoding="utf-8")
         (run_dir / "hermes_stderr.txt").write_text(completed.stderr, encoding="utf-8")
         _write_json(
@@ -333,6 +415,13 @@ def run_suite(
                     "failed_rules": _failed_rule_ids(scorecard),
                     "critical_failures": scorecard.get("critical_failures", []),
                     "hermes_exit_code": completed.returncode,
+                    "risk_tier": getattr(args, "risk_tier", "standard"),
+                    "tool_schema_valid": not bool(
+                        set(_failed_rule_ids(scorecard))
+                        & {"tool_schema", "tool_call_schema", "structured_tool_call"}
+                    ),
+                    "cost_usd": getattr(args, "cost_usd_per_run", None),
+                    "latency_seconds": round(latency_seconds, 6),
                 }
             )
         except Exception as exc:  # pragma: no cover - defensive artifact collection path
@@ -341,12 +430,32 @@ def run_suite(
             if not args.keep_temp:
                 temp_root_obj.cleanup()
 
+    request_attestation_path: Path | None = None
+    if request_config is not None and request_records is not None:
+        request_attestation_path = out_dir / "request_attestation.json"
+        request_attestation = _build_request_attestation(
+            request_config=request_config,
+            expected_model=str(args.model),
+            endpoint_base_url=base_url,
+            records=request_records,
+        )
+        _write_json(request_attestation_path, request_attestation)
+        if not request_attestation["passed"]:
+            errors.append(
+                {
+                    "scenario_path": "<request-attestation>",
+                    "error": "request attestation failed: " + ", ".join(request_attestation["blocking_reasons"]),
+                }
+            )
+
     artifacts = {
         "evaluation_plan": str(out_dir / "evaluation_plan.json"),
         "evaluation_summary": str(out_dir / "evaluation_summary.json"),
     }
     if serving_profile:
         artifacts["serving_profile"] = serving_profile["path"]
+    if request_attestation_path is not None:
+        artifacts["request_attestation"] = str(request_attestation_path)
     metadata = {
         "arm": args.arm,
         "model": args.model,
@@ -368,8 +477,9 @@ def run_suite(
         metadata=metadata,
     )
     _write_json(out_dir / "suite_summary.json", suite_summary)
+    evaluation_summary_path = out_dir / "evaluation_summary.json"
     _write_json(
-        out_dir / "evaluation_summary.json",
+        evaluation_summary_path,
         _build_evaluation_summary(
             args=args,
             out_dir=out_dir,
@@ -380,6 +490,28 @@ def run_suite(
             serving_profile=serving_profile,
         ),
     )
+    arm_identity_path = getattr(args, "arm_identity_copy", None)
+    if arm_identity_path is not None:
+        observation_path = out_dir / "agentic_eval_observation.json"
+        observation = build_observation(
+            arm_identity_path=arm_identity_path,
+            evaluation_summary_path=evaluation_summary_path,
+            suite_summary_path=out_dir / "suite_summary.json",
+            request_attestation_path=request_attestation_path,
+            serving_profile_path=serving_profile_path,
+            repeat_index=getattr(args, "repeat_index", 0),
+            seed=getattr(args, "seed", 0),
+            decoding={
+                "temperature": getattr(args, "temperature", 0.0),
+                "top_p": getattr(args, "top_p", 1.0),
+                "max_tokens": getattr(args, "max_tokens", 512),
+            },
+            pool_type=getattr(args, "pool_type", "frozen"),
+            pool_id=getattr(args, "pool_id", "heldout"),
+            risk_tier=getattr(args, "risk_tier", "standard"),
+            out_path=observation_path,
+        )
+        write_repeated_eval_json(observation_path, observation)
     return suite_summary
 
 
@@ -643,7 +775,64 @@ def _api_key(args: argparse.Namespace, base_url: str) -> str:
     raise SystemExit(f"API key env var {args.api_key_env!r} is not set; pass --api-key-env or --api-key")
 
 
-def _validate_serving_profile(path: Path, *, expected_model: str, expected_base_url: str) -> dict[str, Any]:
+def _inference_request_config(args: argparse.Namespace) -> dict[str, Any]:
+    temperature = _float_value(getattr(args, "temperature", 0.0))
+    top_p = _float_value(getattr(args, "top_p", 1.0))
+    max_tokens = int(getattr(args, "max_tokens", 512))
+    seed = int(getattr(args, "seed", 0))
+    if temperature is None or not math.isfinite(temperature) or temperature < 0:
+        raise SystemExit("--temperature must be a finite non-negative number")
+    if top_p is None or not math.isfinite(top_p) or not 0 < top_p <= 1:
+        raise SystemExit("--top-p must be a finite number in (0, 1]")
+    if max_tokens <= 0:
+        raise SystemExit("--max-tokens must be positive")
+    return {"seed": seed, "temperature": temperature, "top_p": top_p, "max_tokens": max_tokens}
+
+
+def _build_request_attestation(
+    *,
+    request_config: dict[str, Any],
+    expected_model: str,
+    endpoint_base_url: str,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    expected_sha256 = _canonical_sha256(request_config)
+    ordered_records = sorted((dict(record) for record in records), key=lambda row: int(row.get("request_index", 0)))
+    observed_models = sorted({str(record.get("model") or "") for record in ordered_records if record.get("model")})
+    matching = sum(
+        1
+        for record in ordered_records
+        if record.get("matched") is True
+        and record.get("config_sha256") == expected_sha256
+        and record.get("model") == expected_model
+        and isinstance(record.get("body_sha256"), str)
+        and len(record["body_sha256"]) == 64
+    )
+    blocking_reasons: list[str] = []
+    if not ordered_records:
+        blocking_reasons.append("request_attestation_empty")
+    if matching != len(ordered_records):
+        blocking_reasons.append("request_configuration_or_model_mismatch")
+    return {
+        "schema_version": "hfr.eval_request_attestation.v1",
+        "endpoint_base_url": endpoint_base_url.rstrip("/"),
+        "configured": {**request_config, "config_sha256": expected_sha256},
+        "request_count": len(ordered_records),
+        "matching_request_count": matching,
+        "observed_models": observed_models,
+        "requests": ordered_records,
+        "passed": not blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _validate_serving_profile(
+    path: Path,
+    *,
+    expected_model: str,
+    expected_base_url: str,
+    expected_identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not path.exists():
         raise SystemExit(f"Serving profile not found: {path}")
     profile = json.loads(path.read_text(encoding="utf-8"))
@@ -662,17 +851,61 @@ def _validate_serving_profile(path: Path, *, expected_model: str, expected_base_
         raise SystemExit(f"Serving profile base_url {profile_base_url!r} does not match eval base_url {expected!r}")
 
     identity = profile.get("model_identity") or {}
+    observed_ids = identity.get("observed_model_ids")
+    if not isinstance(observed_ids, list):
+        observed_ids = []
     observed = {
         str(identity.get("requested_model") or ""),
         str(identity.get("served_model_id") or ""),
         str(identity.get("metadata_model") or ""),
         str(identity.get("chat_response_model") or ""),
-        *(str(item) for item in identity.get("observed_model_ids") or []),
+        *(str(item) for item in observed_ids),
     }
     adapter = identity.get("adapter") or {}
     adapter_present = bool(adapter.get("present"))
-    adapter_match = adapter_present and any(value.startswith(f"{expected_model}+") for value in observed if value)
-    if expected_model not in observed and not adapter_match:
+    tuned = bool(expected_identity and expected_identity.get("arm") in {"trace_only", "flightrecorder"})
+    adapter_attested = False
+    if tuned:
+        expected_arm = str(expected_identity["arm"])
+        if profile.get("arm") != expected_arm:
+            raise SystemExit(f"Serving profile arm {profile.get('arm')!r} does not match identity arm {expected_arm!r}")
+        expected_adapter = expected_identity.get("adapter") or {}
+        observed_adapter = {key: adapter.get(key) for key in ("id", "revision", "sha256")}
+        if adapter.get("present") is not True or observed_adapter != expected_adapter:
+            raise SystemExit(
+                "Serving profile adapter identity does not exactly match the immutable arm identity: "
+                f"expected={expected_adapter!r} observed={observed_adapter!r}"
+            )
+        observation_source = str(adapter.get("observation_source") or "")
+        if adapter.get("local") is True:
+            if observation_source != "local_artifact_sha256":
+                raise SystemExit(
+                    "Tuned local adapter identity must be observed from a local artifact SHA-256; "
+                    f"got observation_source={observation_source!r}"
+                )
+        elif observation_source != "endpoint_model_metadata":
+            raise SystemExit(
+                "Tuned remote adapter identity must be endpoint-observed from model metadata; "
+                f"declared-only profiles are rejected (observation_source={observation_source!r})"
+            )
+        if adapter.get("immutable") is not True:
+            raise SystemExit("Tuned serving profile adapter identity is not immutable")
+        adapter_id = str(expected_adapter.get("id") or "")
+        if not any(
+            value == adapter_id or value == f"{expected_model}+{adapter_id}" or (value.startswith(f"{expected_model}+") and adapter_id in value)
+            for value in observed
+            if value
+        ):
+            raise SystemExit(f"Serving profile did not observe tuned adapter {adapter_id!r}: {sorted(observed)}")
+        adapter_attested = True
+    else:
+        adapter_match = adapter_present and any(value.startswith(f"{expected_model}+") for value in observed if value)
+        if expected_identity is not None and expected_identity.get("arm") == "baseline" and adapter_present:
+            raise SystemExit("Baseline serving profile must not declare an adapter")
+        if expected_model not in observed and not adapter_match:
+            raise SystemExit(f"Serving profile model identity does not include expected model {expected_model!r}: {sorted(observed)}")
+
+    if not tuned and expected_model not in observed and not adapter_present:
         raise SystemExit(f"Serving profile model identity does not include expected model {expected_model!r}: {sorted(observed)}")
 
     return {
@@ -683,8 +916,127 @@ def _validate_serving_profile(path: Path, *, expected_model: str, expected_base_
         "base_url": profile_base_url,
         "served_model_id": identity.get("served_model_id"),
         "adapter": adapter,
+        "adapter_attested": adapter_attested,
         "capabilities": profile.get("capabilities") or {},
     }
+
+
+def _start_request_proxy(
+    upstream_base_url: str,
+    request_config: dict[str, Any],
+) -> tuple[ThreadingHTTPServer, list[dict[str, Any]], str]:
+    """Apply decoding controls to chat requests and retain a public-safe receipt."""
+    parsed = urlparse(upstream_base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SystemExit(f"Invalid upstream base URL: {upstream_base_url!r}")
+    upstream_origin = f"{parsed.scheme}://{parsed.netloc}"
+    upstream_path = parsed.path.rstrip("/")
+    config = {
+        "seed": int(request_config["seed"]),
+        "temperature": float(request_config["temperature"]),
+        "top_p": float(request_config["top_p"]),
+        "max_tokens": int(request_config["max_tokens"]),
+    }
+    config_sha256 = _canonical_sha256(config)
+    records: list[dict[str, Any]] = []
+    record_lock = threading.Lock()
+    hop_by_hop = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+
+    class RequestProxyHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, _fmt: str, *_args: Any) -> None:
+            return None
+
+        def do_GET(self) -> None:
+            self._forward(None)
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("content-length") or 0)
+            if length < 0 or length > 16 * 1024 * 1024:
+                self._send_error(413, "request body exceeds proxy limit")
+                return
+            body = self.rfile.read(length) if length else b""
+            path = self.path.split("?", 1)[0].rstrip("/")
+            if path.endswith("/chat/completions"):
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._send_error(400, "chat request body must be valid JSON")
+                    return
+                if not isinstance(payload, dict):
+                    self._send_error(400, "chat request body must be a JSON object")
+                    return
+                payload.update(config)
+                body = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                projection = {key: payload.get(key) for key in config}
+                with record_lock:
+                    record = {
+                        "request_index": len(records),
+                        "path": path,
+                        "model": str(payload.get("model") or ""),
+                        **projection,
+                        "config_sha256": config_sha256,
+                        "body_sha256": hashlib.sha256(body).hexdigest(),
+                        "matched": projection == config,
+                    }
+                    records.append(record)
+            self._forward(body)
+
+        def _forward(self, body: bytes | None) -> None:
+            headers = {
+                key: value
+                for key, value in self.headers.items()
+                if key.lower() not in hop_by_hop | {"host", "content-length"}
+            }
+            request = urllib.request.Request(
+                upstream_origin + self.path,
+                data=body,
+                headers=headers,
+                method=self.command,
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=300) as response:
+                    self._relay(response.status, response.headers, response.read())
+            except urllib.error.HTTPError as exc:
+                self._relay(exc.code, exc.headers, exc.read())
+            except (OSError, urllib.error.URLError) as exc:
+                self._send_error(502, f"upstream request failed: {exc}")
+
+        def _relay(self, status: int, headers: Any, body: bytes) -> None:
+            self.send_response(status)
+            for key, value in headers.items():
+                if key.lower() not in hop_by_hop | {"content-length"}:
+                    self.send_header(key, value)
+            self.send_header("content-length", str(len(body)))
+            self.send_header("connection", "close")
+            self.end_headers()
+            if body:
+                self.wfile.write(body)
+
+        def _send_error(self, status: int, message: str) -> None:
+            body = json.dumps({"error": message}).encode("utf-8")
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.send_header("connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RequestProxyHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    proxy_base_url = f"http://127.0.0.1:{server.server_address[1]}{upstream_path}"
+    return server, records, proxy_base_url
 
 
 def _start_mock_server(response: str, model: str) -> tuple[ThreadingHTTPServer, list[dict[str, Any]], str]:
@@ -720,6 +1072,10 @@ def _start_mock_server(response: str, model: str) -> tuple[ThreadingHTTPServer, 
                     "model": payload.get("model"),
                     "stream": payload.get("stream"),
                     "message_count": len(payload.get("messages") or []),
+                    "seed": payload.get("seed"),
+                    "temperature": payload.get("temperature"),
+                    "top_p": payload.get("top_p"),
+                    "max_tokens": payload.get("max_tokens"),
                 }
             )
             path = self.path.split("?", 1)[0].rstrip("/")

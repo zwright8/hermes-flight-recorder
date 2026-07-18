@@ -121,6 +121,8 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
         _edge(_run_digest_inputs(present), "run_digest", "summarize_run_evidence"),
         _edge(["scenario", "normalized_trace", "scorecard"], "report", "render"),
     ]
+    if "trajectory_v2" in present:
+        edges.append(_edge(["source_trace", "normalized_trace"], "trajectory_v2", "normalize_lossless_trajectory"))
     if "junit" in present:
         edges.append(_edge(["scorecard"], "junit", "ci_report"))
     if "markdown" in present:

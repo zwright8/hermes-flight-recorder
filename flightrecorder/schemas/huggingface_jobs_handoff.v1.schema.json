@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/huggingface_jobs_handoff.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Inert reviewed-plan Hugging Face Jobs handoff with immutable payload and canonical completion contract.",
+  "properties": {
+    "canonical_completion": {"type": "object"},
+    "checks": {"type": "object"},
+    "created_at": {"format": "date-time", "type": "string"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "network_writes_performed": {"const": false},
+    "output": {"type": "object"},
+    "payload_artifact_count": {"minimum": 1, "type": "integer"},
+    "payload_artifact_set_sha256": {"$ref": "#/$defs/sha256"},
+    "payload_artifacts": {"items": {"$ref": "#/$defs/artifact"}, "minItems": 1, "type": "array"},
+    "provider": {"const": "huggingface_jobs"},
+    "resume": {"type": "object"},
+    "reviewed_plan": {"$ref": "#/$defs/artifact"},
+    "reviewed_plan_identity": {"$ref": "#/$defs/identity"},
+    "runtime": {"type": "object"},
+    "schema_version": {"const": "hfr.huggingface_jobs_handoff.v1"},
+    "submission": {"type": "object"},
+    "submitted": {"const": false},
+    "upload_command": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "created_at", "provider", "submitted", "network_writes_performed", "reviewed_plan", "reviewed_plan_identity", "payload_artifact_count", "payload_artifact_set_sha256", "payload_artifacts", "runtime", "output", "resume", "upload_command", "submission", "canonical_completion", "checks", "identity"],
+  "title": "Hugging Face Jobs Handoff",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "role": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {"algorithm": {"const": "sha256"}, "sha256": {"$ref": "#/$defs/sha256"}},
+      "required": ["algorithm", "sha256"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

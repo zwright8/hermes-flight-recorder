@@ -1,0 +1,13 @@
+{
+  "cluster_id": "inventory-wrong-identifier-v1",
+  "failure_modes": ["invalid_tool_arguments"],
+  "severity": "medium",
+  "confidence": 0.97,
+  "frequency": 4,
+  "affected_task_families": ["inventory"],
+  "affected_tools": ["inventory.lookup"],
+  "affected_policies": ["fixture-read-only"],
+  "evidence_refs": [
+    {"artifact": "action_credit.jsonl", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+  ]
+}

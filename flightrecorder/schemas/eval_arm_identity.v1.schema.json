@@ -1,0 +1,47 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/eval_arm_identity.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable model, adapter, runtime, tool, and environment identity for one held-out evaluation arm.",
+  "properties": {
+    "adapter": {
+      "anyOf": [
+        { "$ref": "#/$defs/revisioned_artifact" },
+        { "type": "null" }
+      ]
+    },
+    "arm": {
+      "enum": ["baseline", "trace_only", "flightrecorder"],
+      "type": "string"
+    },
+    "environment": { "$ref": "#/$defs/artifact" },
+    "model": { "$ref": "#/$defs/revisioned_artifact" },
+    "runtime": { "$ref": "#/$defs/revisioned_artifact" },
+    "schema_version": { "const": "hfr.eval_arm_identity.v1" },
+    "tools": { "$ref": "#/$defs/artifact" }
+  },
+  "required": ["schema_version", "arm", "model", "adapter", "runtime", "tools", "environment"],
+  "title": "Hermes Flight Recorder Eval Arm Identity",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["id", "sha256"],
+      "type": "object"
+    },
+    "revisioned_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "revision": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["id", "revision", "sha256"],
+      "type": "object"
+    }
+  }
+}

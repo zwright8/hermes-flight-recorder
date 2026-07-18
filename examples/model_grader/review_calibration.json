@@ -143,16 +143,16 @@
   "source_artifacts": {
     "reviewed_export": {
       "contains_symlinks": false,
-      "dataset_version": "hfrds-16791825cc955df1",
+      "dataset_version": "hfrds-a79e2951af19e2dd",
       "exists": true,
-      "file_count": 11,
+      "file_count": 12,
       "kind": "directory",
       "manifest_path": "reviewed/manifest.json",
-      "manifest_sha256": "f5e08e334c4aa7826600cf8f4d1ed1109312a65a06acdedc49609a94e60da26d",
-      "manifest_size_bytes": 8643,
+      "manifest_sha256": "0a10c3166ee7bbc27478c4ea3e9ada7e959fa80bc1e7d9e78b9910a2a90d0530",
+      "manifest_size_bytes": 9865,
       "path": "reviewed",
-      "sha256": "1b9b9292b62a864f57760fda9aee904e54d08be4720a71c257be819017f4067b",
-      "size_bytes": 36756,
+      "sha256": "552bf4bc13f9c828467eeadbc02a5f32af9dc392a16ce31057af0f6e5ee7fde8",
+      "size_bytes": 39582,
       "tree_hash_algorithm": "hfr.sha256.file-tree.v1"
     }
   }

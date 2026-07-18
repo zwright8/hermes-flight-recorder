@@ -1,27 +1,35 @@
 {
   "artifact_fingerprints": {
+    "reviewed_action_sft": {
+      "exists": true,
+      "path": "reviewed_action_sft.jsonl",
+      "regular_file": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "symlink": false
+    },
     "reviewed_dpo": {
       "exists": true,
       "path": "reviewed_dpo.jsonl",
       "regular_file": true,
-      "sha256": "2b3f62914e03ab1eae8d0c7108ed28a2518d186ce03c3409d8e37a5b626b7cd7",
-      "size_bytes": 1026,
+      "sha256": "e610fd3737afce43cabcb262e5925f70d9d7ea83daaf3424a07cd3388e08441d",
+      "size_bytes": 1136,
       "symlink": false
     },
     "reviewed_labels": {
       "exists": true,
       "path": "reviewed_labels.jsonl",
       "regular_file": true,
-      "sha256": "f926b0d674035280012d25d62a87324c6ce725e701634b2cd0765dd3504496ce",
-      "size_bytes": 3600,
+      "sha256": "7bc8dc970d8f07e694157f1e2f417b4edbe45c2e69371260d2d40208f3153b7a",
+      "size_bytes": 3914,
       "symlink": false
     },
     "reviewed_preferences": {
       "exists": true,
       "path": "reviewed_preferences.jsonl",
       "regular_file": true,
-      "sha256": "82746532bd3f91d3d8cd35c495cffa557c5d8196a19ed0ca681b88f4c749ae45",
-      "size_bytes": 1626,
+      "sha256": "55d152918f4d56202ba087007d352afb823f9287231c0dbc2584611ec1cbab40",
+      "size_bytes": 1736,
       "symlink": false
     },
     "reviewed_reward_model": {
@@ -42,8 +50,8 @@
     }
   },
   "artifact_type": "reviewed_export",
-  "dataset_version": "hfrds-16791825cc955df1",
-  "generated_at": "2026-07-10T22:32:50.136305+00:00",
+  "dataset_version": "hfrds-a79e2951af19e2dd",
+  "generated_at": "2026-07-18T16:19:27.033855+00:00",
   "label_provenance": {
     "accepted_label_count": 1,
     "needs_review_excluded_count": 0,
@@ -58,6 +66,7 @@
     "reviewer_identity_assurance": "self_asserted",
     "schema_version": "hfr.rl.label_provenance.v1",
     "trainer_view_counts": {
+      "reviewed_action_sft": 0,
       "reviewed_dpo": 1,
       "reviewed_preferences": 1,
       "reviewed_reward_model": 2,
@@ -74,13 +83,14 @@
   },
   "labels_path": "provenance/completed_labels.jsonl",
   "manifest_path": "manifest.json",
-  "manifest_sha256": "f5e08e334c4aa7826600cf8f4d1ed1109312a65a06acdedc49609a94e60da26d",
+  "manifest_sha256": "0a10c3166ee7bbc27478c4ea3e9ada7e959fa80bc1e7d9e78b9910a2a90d0530",
   "notes": [
     "Select this reviewed dataset by dataset_version and verify manifest_sha256 before launching training."
   ],
   "outputs": {
     "dataset_registry": "dataset_registry.json",
     "manifest": "manifest.json",
+    "reviewed_action_sft": "reviewed_action_sft.jsonl",
     "reviewed_dpo": "reviewed_dpo.jsonl",
     "reviewed_labels": "reviewed_labels.jsonl",
     "reviewed_preferences": "reviewed_preferences.jsonl",
@@ -99,19 +109,20 @@
   },
   "schema_version": "hfr.rl.dataset_registry.v1",
   "selection": {
-    "key": "hfrds-16791825cc955df1",
+    "key": "hfrds-a79e2951af19e2dd",
     "mode_to_view": {
-      "action_sft": "reviewed_sft",
+      "action_sft": "reviewed_action_sft",
       "dpo": "reviewed_dpo",
       "reward_model": "reviewed_reward_model",
       "sft": "reviewed_sft"
     },
     "root_views": [
       "reviewed_sft.jsonl",
+      "reviewed_action_sft.jsonl",
       "reviewed_dpo.jsonl",
       "reviewed_reward_model.jsonl"
     ],
-    "trainer_preflight_arg": "--require-dataset-version hfrds-16791825cc955df1"
+    "trainer_preflight_arg": "--require-dataset-version hfrds-a79e2951af19e2dd"
   },
   "source_review_artifacts": {
     "label_template": {
@@ -143,7 +154,7 @@
   "trainer_views": {
     "contract_version": "hfr.rl.trainer_views.v1",
     "mode_to_view": {
-      "action_sft": "reviewed_sft",
+      "action_sft": "reviewed_action_sft",
       "dpo": "reviewed_dpo",
       "reward_model": "reviewed_reward_model",
       "sft": "reviewed_sft"
@@ -154,6 +165,7 @@
     ],
     "root_views": [
       "reviewed_sft.jsonl",
+      "reviewed_action_sft.jsonl",
       "reviewed_dpo.jsonl",
       "reviewed_reward_model.jsonl"
     ],
@@ -165,7 +177,7 @@
         "available": true,
         "label_policy": "human_reviewed_accept",
         "notes": [
-          "Action SFT consumes the same human-accepted rows; no separate row copy is emitted."
+          "Text SFT consumes the final answer from each accepted review row."
         ],
         "row_count": 1,
         "schema_version": "hfr.reviewed.sft.v1",
@@ -174,10 +186,29 @@
         ],
         "split_paths": {},
         "training_modes": [
-          "sft",
-          "action_sft"
+          "sft"
         ],
         "view_id": "reviewed_sft"
+      },
+      {
+        "artifact": "reviewed_action_sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "reviewed_action_sft.jsonl",
+        "available": true,
+        "label_policy": "human_reviewed_native_action_accept",
+        "notes": [
+          "Action SFT retains native messages, tool calls/results, exact recorded tools when available, and review lineage."
+        ],
+        "row_count": 0,
+        "schema_version": "hfr.reviewed.action_sft.v1",
+        "source_artifacts": [
+          "reviewed_labels.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "action_sft"
+        ],
+        "view_id": "reviewed_action_sft"
       },
       {
         "artifact": "reviewed_dpo",

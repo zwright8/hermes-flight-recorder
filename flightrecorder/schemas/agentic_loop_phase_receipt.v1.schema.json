@@ -1,0 +1,26 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_phase_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-bound durable receipt for one idempotent agentic loop phase attempt.",
+  "properties": {
+    "schema_version": {"const": "hfr.agentic_loop_phase_receipt.v1"},
+    "controller_id": {"minLength": 1, "type": "string"},
+    "plan_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "phase_id": {"minLength": 1, "type": "string"},
+    "idempotency_key": {"minLength": 1, "type": "string"},
+    "input_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "attempt": {"minimum": 1, "type": "integer"},
+    "approval_fingerprint": {"type": "string"},
+    "passed": {"type": "boolean"},
+    "cost_usd": {"minimum": 0, "type": "number"},
+    "duration_seconds": {"minimum": 0, "type": "number"},
+    "metrics": {"type": "object"},
+    "output_artifacts": {"items": {}, "type": "array"},
+    "adapter_result": {"type": "object"},
+    "created_at": {"format": "date-time", "type": "string"}
+  },
+  "required": ["schema_version", "controller_id", "plan_fingerprint", "phase_id", "idempotency_key", "input_fingerprint", "attempt", "approval_fingerprint", "passed", "cost_usd", "duration_seconds", "metrics", "output_artifacts", "adapter_result", "created_at"],
+  "title": "Hermes Flight Recorder Agentic Loop Phase Receipt",
+  "type": "object"
+}

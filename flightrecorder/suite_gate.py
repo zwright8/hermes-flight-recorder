@@ -137,15 +137,20 @@ def evaluate_suite_gate(
         "error_count": suite_summary.get("error_count"),
         "critical_failure_total": _total_count(metrics.get("critical_failure_counts")),
     }
+    decision = build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics)
     return {
         "schema_version": SUITE_GATE_SCHEMA_VERSION,
         "suite_summary": str(suite_summary_path),
         "passed": passed,
+        "readiness": decision["readiness"],
+        "recommendation": decision["recommendation"],
         "check_count": len(checks),
-        "failed_check_count": sum(1 for check in checks if not check["passed"]),
+        "failed_check_count": decision["blocking_check_count"],
+        "failed_checks": decision["failed_checks"],
+        "next_actions": decision["next_actions"],
         "checks": checks,
         "metrics": gate_metrics,
-        "decision": build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics),
+        "decision": decision,
     }
 
 

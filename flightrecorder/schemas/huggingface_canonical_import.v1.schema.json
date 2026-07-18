@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/huggingface_canonical_import.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Offline import receipt binding an immutable Hugging Face completion revision to canonical training and cloud-completion artifacts.",
+  "properties": {
+    "agentic_training_result": {"$ref": "#/$defs/artifact"},
+    "cloud_training_completion_receipt": {"$ref": "#/$defs/artifact"},
+    "completion_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "completion_revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "schema_version": {"const": "hfr.huggingface_canonical_import.v1"},
+    "snapshot_provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "git_commit_verified": {"const": true},
+        "remote_origin_sha256": {"$ref": "#/$defs/sha256"},
+        "repo_id": {"pattern": "^[^/]+/[^/]+$", "type": "string"},
+        "repo_type": {"enum": ["model", "dataset"]},
+        "revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+        "source": {"const": "huggingface_git_checkout"}
+      },
+      "required": ["source", "repo_id", "repo_type", "revision", "git_commit_verified", "remote_origin_sha256"],
+      "type": "object"
+    },
+    "source_completion_identity_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "required": ["schema_version", "completion_revision", "completion_receipt_sha256", "source_completion_identity_sha256", "snapshot_provenance", "agentic_training_result", "cloud_training_completion_receipt", "identity"],
+  "title": "Hugging Face Canonical Import",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["path", "sha256"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {"algorithm": {"const": "sha256"}, "sha256": {"$ref": "#/$defs/sha256"}},
+      "required": ["algorithm", "sha256"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

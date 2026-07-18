@@ -337,7 +337,7 @@
           "loop_candidate_model_id": "local/mock-candidate",
           "output_artifact_count": 1,
           "output_artifact_manifest_bound": true,
-          "output_artifact_manifest_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+          "output_artifact_manifest_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
           "output_artifact_set_bound": true,
           "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
           "pipeline_provider_id": "modal",
@@ -830,7 +830,7 @@
     "loop_candidate_model_id": "local/mock-candidate",
     "output_artifact_count": 1,
     "output_artifact_manifest_bound": true,
-    "output_artifact_manifest_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+    "output_artifact_manifest_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
     "output_artifact_set_bound": true,
     "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
     "pipeline_provider_id": "modal",
@@ -1473,8 +1473,8 @@
         "readiness": "ready",
         "role": "agentic_training_flow",
         "schema_version": "hfr.agentic_training_flow.v1",
-        "sha256": "db19a71e3b2143f864b7bf0c0b8807b7af3ec7fd5c8870b4027ed07604719adc",
-        "size_bytes": 13009
+        "sha256": "03b3d46781c21b5992cbeb937b6faa0e541c9ac8d29114855e0e7b16a8c3719d",
+        "size_bytes": 13002
       }
     ],
     "agentic_training_plan": [
@@ -1503,7 +1503,7 @@
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
-        "sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+        "sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
         "size_bytes": 11571
       }
     ],
@@ -1518,7 +1518,7 @@
         "readiness": "ready",
         "role": "agentic_training_runtime_preflight",
         "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-        "sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+        "sha256": "d7ac9876a8fe38c4cd5fc9972b09e50f52306cc1a0b4617d0b9cdceb281ab813",
         "size_bytes": 8513
       }
     ],
@@ -1548,7 +1548,7 @@
         "readiness": "",
         "role": "cloud_training_completion_receipt",
         "schema_version": "hfr.cloud_training_completion_receipt.v1",
-        "sha256": "368d57a662bba3dce30823501bf4ebe3d4f316b638b98edaedfc3a1566765559",
+        "sha256": "b1f0e3b466f3564b161bb0d9665aa1a5155a7d223847ba7eb7ebf12ed639eec9",
         "size_bytes": 12268
       }
     ],
@@ -1638,7 +1638,7 @@
         "readiness": "ready_for_external_trainer_handoff",
         "role": "dataset_curation_receipt",
         "schema_version": "hfr.dataset_curation_receipt.v1",
-        "sha256": "0346d56b10784cb080696cb6865987f790eebfb19e9e3b5940850ad3de4564a0",
+        "sha256": "b6d1f58ac0fa8b69e435d399228cf27fb188fb4b8f5e06de1fa6538b33478dc3",
         "size_bytes": 5980
       }
     ],
@@ -1818,7 +1818,7 @@
         "readiness": "labels_calibrated_for_curated_handoff",
         "role": "model_grader_gate",
         "schema_version": "hfr.model_grader_gate.v1",
-        "sha256": "872b75335b762e61f5cfce6058d5d7d33bdefb8dd6837950f45aa8ea3ecea8b6",
+        "sha256": "210b2406643be7fda768ff94a1c5f6865fc9105a53da1795fd27e0b66294f8c2",
         "size_bytes": 8623
       }
     ],
@@ -1833,7 +1833,7 @@
         "readiness": "applied",
         "role": "promotion_alias_apply",
         "schema_version": "hfr.promotion_alias_apply.v1",
-        "sha256": "c1fba47f94c42ae302d7614de5cb7c0d73fe991e36de422392b34f8ad03baf9e",
+        "sha256": "bd39284f49865629e0e2c72d847eb1d6097f08882514a862de0ae2a825ea1bbe",
         "size_bytes": 9965
       }
     ],
@@ -1848,8 +1848,8 @@
         "readiness": "",
         "role": "promotion_archive",
         "schema_version": "hfr.promotion_archive.v1",
-        "sha256": "2edc519d326d1c4c04c6e78d37987a9ea4052f26d9e7e3bc89a287bbadb57d16",
-        "size_bytes": 106128
+        "sha256": "fd4bf9c910b008045d5174319afdc1672721106626f6bdd904c6b297d53763b5",
+        "size_bytes": 106103
       }
     ],
     "promotion_cards": [
@@ -1878,7 +1878,7 @@
         "readiness": "ready",
         "role": "promotion_decision",
         "schema_version": "hfr.promotion_decision.v1",
-        "sha256": "ed7806370c83694bd29ae4df3cee692dea920401d50ca26c9aa6817a69473e39",
+        "sha256": "c1b0a39ac43472c9d66abf2132b650fe00366f95c48917b1c9ec511bace0c13f",
         "size_bytes": 51947
       }
     ],
@@ -1908,7 +1908,7 @@
         "readiness": "ready",
         "role": "promotion_release_record",
         "schema_version": "hfr.promotion_release_record.v1",
-        "sha256": "6529fd293e14108a64e0496e9d2695f96e992ee07d0adcc5531cb8f138e3e671",
+        "sha256": "6f4cedec0f9f0d08a1ad102b638d85be62858fdfc1f21d2da7d741ce11e49e11",
         "size_bytes": 19544
       }
     ],
@@ -1923,7 +1923,7 @@
         "readiness": "ready",
         "role": "promotion_rollback_receipt",
         "schema_version": "hfr.promotion_rollback_receipt.v1",
-        "sha256": "c692e170bcdc5e7591426ca166b38f8a57e80f0ae50e3a0f1f577fbe623e7b59",
+        "sha256": "c6eab1585ad40b219c603dabc5e3653f38ba7b61e99f546a9a8a8a8ff77ee843",
         "size_bytes": 4610
       }
     ],
@@ -1938,7 +1938,7 @@
         "readiness": "ready_for_dataset_curation",
         "role": "rejection_sampling_gate",
         "schema_version": "hfr.rejection_sampling_gate.v1",
-        "sha256": "3bec25ed39934be1daf3bab42e3c0e2cd830dd9c091ac4796a4ad860e8bc6287",
+        "sha256": "020fea509372ff7f7dc40c763a723026e21cfa9d180ace910eae7e6f75234105",
         "size_bytes": 6037
       }
     ],
@@ -1953,7 +1953,7 @@
         "readiness": "",
         "role": "review_calibration",
         "schema_version": "hfr.review_calibration.v1",
-        "sha256": "659d12f34642e2c07ddede85c2827089b1fa13af1c9a6cfde7f1d427fc404db7",
+        "sha256": "5347e12e4d0db6a1e40306f4d7951d88d7133283656072addd606949c8151adc",
         "size_bytes": 4035
       }
     ],
@@ -1968,7 +1968,7 @@
         "readiness": "",
         "role": "reviewed_gate",
         "schema_version": "hfr.reviewed_gate.v1",
-        "sha256": "53fd769986e277e75f0b306fa0796f3e033f45c0e1cb598a79f558161dad8e89",
+        "sha256": "3209a93b1e6d16c114855f732c78fb49d6e59df9a7ea913355d9e12230385e12",
         "size_bytes": 5600
       }
     ],

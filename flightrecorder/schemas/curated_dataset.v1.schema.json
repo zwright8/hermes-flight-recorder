@@ -1,0 +1,25 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/curated_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Deterministic selected/excluded training rows with mixture and effective sample size evidence.",
+  "properties": {
+    "schema_version": {"const": "hfr.curated_dataset.v1"},
+    "curation_id": {"pattern": "^hfrcur-[0-9a-f]{16}$", "type": "string"},
+    "recipe": {"type": "object"},
+    "recipe_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "input_count": {"minimum": 0, "type": "integer"},
+    "selected_count": {"minimum": 0, "type": "integer"},
+    "excluded_count": {"minimum": 0, "type": "integer"},
+    "selected": {"items": {"type": "object"}, "type": "array"},
+    "excluded": {"items": {"type": "object"}, "type": "array"},
+    "selected_role_counts": {"items": {"type": "object"}, "type": "array"},
+    "selected_family_counts": {"items": {"type": "object"}, "type": "array"},
+    "selected_source_counts": {"items": {"type": "object"}, "type": "array"},
+    "effective_sample_size": {"minimum": 0, "type": "number"},
+    "selection_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": ["schema_version", "curation_id", "recipe", "recipe_fingerprint", "input_count", "selected_count", "excluded_count", "selected", "excluded", "selected_role_counts", "selected_family_counts", "selected_source_counts", "effective_sample_size", "selection_fingerprint"],
+  "title": "Hermes Flight Recorder Curated Dataset",
+  "type": "object"
+}

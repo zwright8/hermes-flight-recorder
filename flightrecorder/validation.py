@@ -99,6 +99,7 @@ from .cloud_training_completion import (
     build_cloud_training_completion_receipt,
 )
 from .schema_registry import SchemaRegistryError, check_schema_contract, check_schema_file
+from .trajectory_v2 import check_trajectory_v2
 from .source_contract import (
     get_active_opaque_output_attestation,
     inspect_artifact_source,
@@ -108,6 +109,7 @@ from .dataset_curation import (
     DATASET_CURATION_RECEIPT_SCHEMA_VERSION,
     training_export_lineage_status,
 )
+from .data_governance import task_contract_fingerprint
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION, decision_gate_source_contract_errors
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
@@ -242,6 +244,7 @@ from .review import (
     _reviewed_labels as _build_reviewed_labels,
     _reviewed_preferences as _build_reviewed_preferences,
     _reviewed_reward_model as _build_reviewed_reward_model,
+    _reviewed_action_sft as _build_reviewed_action_sft,
     _reviewed_sft as _build_reviewed_sft,
     REVIEWED_DPO_SCHEMA_VERSION,
     REVIEWED_LABEL_SCHEMA_VERSION,
@@ -257,6 +260,9 @@ from .reviewed_gate import (
     ReviewedGateError,
     build_reviewed_export_source_artifact,
     evaluate_reviewed_gate,
+)
+from .review_semantics import (
+    REVIEWED_ACTION_SFT_SCHEMA_VERSION,
 )
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
 from .path_safety import (
@@ -666,6 +672,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
         return target
 
     trace_path = run_dir / "normalized_trace.json"
+    trajectory_v2_path = run_dir / "trajectory_v2.json"
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
     run_digest_path = run_dir / "run_digest.json"
@@ -674,6 +681,11 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     trace = _read_object(trace_path, target, "normalized_trace.json")
+    trajectory_v2 = (
+        _read_object(trajectory_v2_path, target, "trajectory_v2.json")
+        if trajectory_v2_path.exists()
+        else None
+    )
     scorecard = _read_object(score_path, target, "scorecard.json")
     task_completion = _read_object_optional(
         task_completion_path,
@@ -692,6 +704,17 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     state_diff = _read_object(state_diff_path, target, "state_diff.json") if state_diff_path.exists() else None
     if trace is not None:
         _validate_trace(trace, target)
+    if trajectory_v2 is not None:
+        trajectory_validation = check_trajectory_v2(trajectory_v2)
+        target.errors.extend(
+            f"trajectory_v2.json: {error}"
+            for error in trajectory_validation.get("errors", [])
+        )
+        if trajectory_validation.get("quarantined") is True:
+            target.warnings.append(
+                "trajectory_v2.json is quarantined from action training: "
+                + ", ".join(trajectory_validation.get("quarantine_reasons", []))
+            )
     if scorecard is not None:
         _validate_scorecard(scorecard, target)
     if task_completion is not None:
@@ -1022,6 +1045,11 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     )
     labels = _read_jsonl_objects(export_dir / "reviewed_labels.jsonl", target, "reviewed_labels.jsonl")
     sft = _read_jsonl_objects(export_dir / "reviewed_sft.jsonl", target, "reviewed_sft.jsonl")
+    action_sft = _read_jsonl_objects(
+        export_dir / "reviewed_action_sft.jsonl",
+        target,
+        "reviewed_action_sft.jsonl",
+    )
     reward_model = _read_jsonl_objects(export_dir / "reviewed_reward_model.jsonl", target, "reviewed_reward_model.jsonl")
     preferences = _read_jsonl_objects(export_dir / "reviewed_preferences.jsonl", target, "reviewed_preferences.jsonl")
     dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
@@ -1059,6 +1087,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     rows_by_artifact = {
         "reviewed_labels": labels,
         "reviewed_sft": sft,
+        "reviewed_action_sft": action_sft,
         "reviewed_reward_model": reward_model,
         "reviewed_preferences": preferences,
         "reviewed_dpo": dpo,
@@ -1076,7 +1105,14 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
             },
         )
     )
-    expected_label_provenance = _expected_reviewed_label_provenance(labels, sft, reward_model, preferences, dpo)
+    expected_label_provenance = _expected_reviewed_label_provenance(
+        labels,
+        sft,
+        action_sft,
+        reward_model,
+        preferences,
+        dpo,
+    )
     if expected_redaction_status.get("passed") is not True:
         target.errors.append("reviewed export contains unredacted secret-like values.")
     if manifest is not None:
@@ -1085,6 +1121,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
             target,
             labels,
             sft,
+            action_sft,
             reward_model,
             preferences,
             dpo,
@@ -1140,6 +1177,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     )
     _validate_reviewed_labels(labels, target)
     _validate_reviewed_sft(sft, target, labels)
+    _validate_reviewed_action_sft(action_sft, target, labels)
     _validate_reviewed_reward_model(reward_model, target, labels)
     _validate_reviewed_preferences(preferences, target, labels)
     _validate_reviewed_dpo(dpo, target, preferences)
@@ -1171,6 +1209,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
         manifest,
         expected_reviewed_labels,
         sft,
+        action_sft,
         reward_model,
         preferences,
         dpo,
@@ -1180,6 +1219,7 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
         {
             "reviewed_label_count": len(labels),
             "sft_count": len(sft),
+            "action_sft_count": len(action_sft),
             "reward_model_count": len(reward_model),
             "preference_count": len(preferences),
             "dpo_count": len(dpo),
@@ -1192,6 +1232,7 @@ def _validate_reviewed_trainer_view_replay(
     manifest: dict[str, Any] | None,
     reviewed_labels: list[dict[str, Any]] | None,
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
@@ -1221,6 +1262,7 @@ def _validate_reviewed_trainer_view_replay(
 
     try:
         expected_sft = _build_reviewed_sft(reviewed_labels)
+        expected_action_sft = _build_reviewed_action_sft(reviewed_labels)
         expected_reward_model = _build_reviewed_reward_model(reviewed_labels)
         expected_preferences = _build_reviewed_preferences(
             reviewed_labels,
@@ -1233,6 +1275,7 @@ def _validate_reviewed_trainer_view_replay(
 
     for artifact_name, actual, expected in (
         ("reviewed_sft.jsonl", sft, expected_sft),
+        ("reviewed_action_sft.jsonl", action_sft, expected_action_sft),
         ("reviewed_reward_model.jsonl", reward_model, expected_reward_model),
         ("reviewed_preferences.jsonl", preferences, expected_preferences),
         ("reviewed_dpo.jsonl", dpo, expected_dpo),
@@ -13802,6 +13845,22 @@ def _validate_lineage(
             target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
             continue
         _validate_lineage_file_record(outputs[output_name], run_dir, target, f"artifact_lineage.outputs.{output_name}")
+    trajectory_v2_path = run_dir / "trajectory_v2.json"
+    trajectory_v2_record = outputs.get("trajectory_v2")
+    if trajectory_v2_path.exists() and trajectory_v2_record is None:
+        target.errors.append("artifact_lineage.outputs missing 'trajectory_v2'.")
+    if trajectory_v2_record is not None:
+        path_label = trajectory_v2_record.get("path")
+        if not isinstance(path_label, str) or _lineage_basename(path_label) != "trajectory_v2.json":
+            target.errors.append(
+                "artifact_lineage.outputs.trajectory_v2.path must identify trajectory_v2.json."
+            )
+        _validate_lineage_file_record(
+            trajectory_v2_record,
+            run_dir,
+            target,
+            "artifact_lineage.outputs.trajectory_v2",
+        )
     if "run_digest" in outputs:
         _validate_lineage_file_record(outputs["run_digest"], run_dir, target, "artifact_lineage.outputs.run_digest")
     else:
@@ -14546,6 +14605,7 @@ def _review_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
 
 def _reviewed_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
     return {
+        "reviewed_action_sft": export_dir / "reviewed_action_sft.jsonl",
         "reviewed_dpo": export_dir / "reviewed_dpo.jsonl",
         "reviewed_labels": export_dir / "reviewed_labels.jsonl",
         "reviewed_preferences": export_dir / "reviewed_preferences.jsonl",
@@ -15028,6 +15088,7 @@ def _validate_reviewed_manifest(
     target: ValidationTarget,
     labels: list[dict[str, Any]],
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
@@ -15085,6 +15146,7 @@ def _validate_reviewed_manifest(
     expected_counts = {
         "reviewed_label_count": len(labels),
         "sft_count": len(sft),
+        "action_sft_count": len(action_sft),
         "reward_model_count": len(reward_model),
         "preference_count": len(preferences),
         "dpo_count": len(dpo),
@@ -15121,6 +15183,7 @@ def _validate_reviewed_manifest(
         for output_name in (
             "reviewed_labels",
             "reviewed_sft",
+            "reviewed_action_sft",
             "reviewed_reward_model",
             "reviewed_preferences",
             "reviewed_dpo",
@@ -15133,7 +15196,14 @@ def _validate_reviewed_manifest(
         target.errors.append("manifest.redaction_status must match recomputed reviewed redaction scan.")
     if manifest.get("label_provenance") != expected_label_provenance:
         target.errors.append("manifest.label_provenance must match recomputed reviewed label provenance.")
-    reviewed_trainer_views = _validate_reviewed_trainer_views(manifest, target, sft, reward_model, dpo)
+    reviewed_trainer_views = _validate_reviewed_trainer_views(
+        manifest,
+        target,
+        sft,
+        action_sft,
+        reward_model,
+        dpo,
+    )
     registry = manifest.get("registry")
     if not isinstance(registry, dict):
         target.errors.append("manifest.registry must be an object.")
@@ -15188,6 +15258,7 @@ def _validate_reviewed_manifest(
 def _expected_reviewed_label_provenance(
     labels: list[dict[str, Any]],
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
@@ -15203,6 +15274,7 @@ def _expected_reviewed_label_provenance(
         "needs_review_excluded_count": label_counts.get("needs_review", 0),
         "trainer_view_counts": {
             "reviewed_sft": len(sft),
+            "reviewed_action_sft": len(action_sft),
             "reviewed_reward_model": len(reward_model),
             "reviewed_preferences": len(preferences),
             "reviewed_dpo": len(dpo),
@@ -15219,6 +15291,7 @@ def _validate_reviewed_trainer_views(
     manifest: dict[str, Any],
     target: ValidationTarget,
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -15229,11 +15302,16 @@ def _validate_reviewed_trainer_views(
 
     expected_mode_to_view = {
         "sft": "reviewed_sft",
-        "action_sft": "reviewed_sft",
+        "action_sft": "reviewed_action_sft",
         "dpo": "reviewed_dpo",
         "reward_model": "reviewed_reward_model",
     }
-    expected_root_views = ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"]
+    expected_root_views = [
+        "reviewed_sft.jsonl",
+        "reviewed_action_sft.jsonl",
+        "reviewed_dpo.jsonl",
+        "reviewed_reward_model.jsonl",
+    ]
     if trainer_views.get("contract_version") != RL_TRAINER_VIEWS_CONTRACT_VERSION:
         target.errors.append("manifest.trainer_views.contract_version must be hfr.rl.trainer_views.v1.")
     if trainer_views.get("mode_to_view") != expected_mode_to_view:
@@ -15248,10 +15326,16 @@ def _validate_reviewed_trainer_views(
     views_by_id = {view.get("view_id"): view for view in views if isinstance(view, dict)}
     expected_views = {
         "reviewed_sft": {
-            "training_modes": ["sft", "action_sft"],
+            "training_modes": ["sft"],
             "artifact_path": "reviewed_sft.jsonl",
             "schema_version": REVIEWED_SFT_SCHEMA_VERSION,
             "row_count": len(sft),
+        },
+        "reviewed_action_sft": {
+            "training_modes": ["action_sft"],
+            "artifact_path": "reviewed_action_sft.jsonl",
+            "schema_version": REVIEWED_ACTION_SFT_SCHEMA_VERSION,
+            "row_count": len(action_sft),
         },
         "reviewed_dpo": {
             "training_modes": ["dpo"],
@@ -15391,6 +15475,75 @@ def _validate_reviewed_sft(sft: list[dict[str, Any]], target: ValidationTarget, 
                 target.errors.append(f"reviewed_sft[{index}].{field_name} must be a string.")
         if row.get("source_artifact") != "reviewed_labels.jsonl":
             target.errors.append(f"reviewed_sft[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
+
+
+def _validate_reviewed_action_sft(
+    rows: list[dict[str, Any]],
+    target: ValidationTarget,
+    labels: list[dict[str, Any]],
+) -> None:
+    label_map = _reviewed_label_map(labels)
+    for index, row in enumerate(rows):
+        prefix = f"reviewed_action_sft[{index}]"
+        _require_equal(
+            row,
+            "schema_version",
+            REVIEWED_ACTION_SFT_SCHEMA_VERSION,
+            target,
+            prefix=f"{prefix}.",
+        )
+        item = _reviewed_source_label(row, label_map, target, prefix)
+        if item is not None and item.get("human_label") != "accept":
+            target.errors.append(f"{prefix} must reference a reviewed label with human_label 'accept'.")
+        if item is not None:
+            _validate_review_item_hash_link(row, item, target, prefix)
+            _validate_review_confidence_link(row, item, target, prefix)
+        messages = row.get("messages")
+        tools = row.get("tools")
+        if not isinstance(messages, list) or not messages:
+            target.errors.append(f"{prefix}.messages must be a non-empty native message list.")
+            continue
+        if not isinstance(tools, list):
+            target.errors.append(f"{prefix}.tools must be a list.")
+        expected_contract = task_contract_fingerprint(row)
+        if row.get("task_contract_fingerprint") != expected_contract:
+            target.errors.append(f"{prefix}.task_contract_fingerprint must match the native task contract.")
+        if row.get("quality_gate") != "human_reviewed_native_action_accept":
+            target.errors.append(f"{prefix}.quality_gate must be 'human_reviewed_native_action_accept'.")
+        if row.get("source_artifact") != "reviewed_labels.jsonl+action_sft.jsonl":
+            target.errors.append(
+                f"{prefix}.source_artifact must be 'reviewed_labels.jsonl+action_sft.jsonl'."
+            )
+        call_ids: set[str] = set()
+        result_ids: list[str] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                target.errors.append(f"{prefix}.messages entries must be objects.")
+                continue
+            calls = message.get("tool_calls")
+            if isinstance(calls, list):
+                for call in calls:
+                    call_id = call.get("id") if isinstance(call, dict) else None
+                    if not isinstance(call_id, str) or not call_id:
+                        target.errors.append(f"{prefix} contains a tool call without a non-empty id.")
+                    elif call_id in call_ids:
+                        target.errors.append(f"{prefix} duplicates tool call id {call_id!r}.")
+                    else:
+                        call_ids.add(call_id)
+            if message.get("role") == "tool":
+                result_id = message.get("tool_call_id")
+                if not isinstance(result_id, str) or not result_id:
+                    target.errors.append(f"{prefix} contains a tool result without tool_call_id.")
+                else:
+                    result_ids.append(result_id)
+        for call_id in sorted(call_ids):
+            if result_ids.count(call_id) != 1:
+                target.errors.append(f"{prefix} tool call {call_id!r} must have exactly one result.")
+        unmatched_results = sorted(set(result_ids) - call_ids)
+        if unmatched_results:
+            target.errors.append(f"{prefix} contains unmatched tool result ids: {unmatched_results!r}.")
+        if call_ids and str(row.get("tool_schema_provenance") or "").startswith("inferred"):
+            target.errors.append(f"{prefix} inferred tool schemas are not eligible for action training.")
 
 
 def _validate_reviewed_reward_model(rows: list[dict[str, Any]], target: ValidationTarget, labels: list[dict[str, Any]]) -> None:
@@ -15876,7 +16029,11 @@ def _validate_action_sft_records(
     expected_ids = {
         str(episode.get("episode_id"))
         for episode in episodes
-        if isinstance(episode.get("episode_id"), str) and positive_label_eligible(episode)
+        if isinstance(episode.get("episode_id"), str)
+        and positive_label_eligible(episode)
+        and isinstance(episode.get("trajectory_v2"), dict)
+        and isinstance(episode["trajectory_v2"].get("action_training"), dict)
+        and episode["trajectory_v2"]["action_training"].get("eligible") is True
     }
     seen: set[str] = set()
     for index, sample in enumerate(action_sft):
@@ -15914,6 +16071,16 @@ def _validate_action_sft_records(
                 target.errors.append(f"{label}.{field_name} does not match episode {episode_id!r}.")
         _validate_matching_source_fingerprints(sample, episode, target, label)
         _validate_training_view_task_completion(sample, episode, target, label)
+        trajectory_v2 = episode.get("trajectory_v2") if isinstance(episode.get("trajectory_v2"), dict) else {}
+        if sample.get("trajectory_v2") != trajectory_v2:
+            target.errors.append(f"{label}.trajectory_v2 must match the source episode exactly.")
+        expected_trajectory_sha = hashlib.sha256(
+            json.dumps(trajectory_v2, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        if sample.get("trajectory_v2_sha256") != expected_trajectory_sha:
+            target.errors.append(f"{label}.trajectory_v2_sha256 does not match trajectory_v2.")
+        if sample.get("governance") != trajectory_v2.get("governance"):
+            target.errors.append(f"{label}.governance must match trajectory_v2 governance.")
         _validate_agentic_messages(sample, target, label)
     missing = sorted(expected_ids - seen)
     if missing:
@@ -15925,8 +16092,12 @@ def _validate_agentic_messages(sample: dict[str, Any], target: ValidationTarget,
     if not isinstance(messages, list) or len(messages) < 2:
         target.errors.append(f"{label}.messages must contain at least a user prompt and assistant action.")
         return
-    if not isinstance(messages[0], dict) or messages[0].get("role") != "user":
-        target.errors.append(f"{label}.messages must begin with a user message.")
+    first_user = next((index for index, message in enumerate(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
+    if first_user is None or any(
+        isinstance(message, dict) and message.get("role") not in {"system", "developer"}
+        for message in messages[:first_user]
+    ):
+        target.errors.append(f"{label}.messages must begin with optional system/developer context followed by a user message.")
     if not isinstance(messages[-1], dict) or messages[-1].get("role") != "assistant":
         target.errors.append(f"{label}.messages must end with an assistant message.")
     elif messages[-1].get("content") != sample.get("response"):
@@ -15941,7 +16112,7 @@ def _validate_agentic_messages(sample: dict[str, Any], target: ValidationTarget,
             target.errors.append(f"{message_label} must be an object.")
             continue
         role = message.get("role")
-        if role not in {"system", "user", "assistant", "tool"}:
+        if role not in {"system", "developer", "user", "assistant", "tool"}:
             target.errors.append(f"{message_label}.role is not supported.")
         if not isinstance(message.get("content"), str):
             target.errors.append(f"{message_label}.content must be a string.")
@@ -15999,7 +16170,7 @@ def _validate_agentic_messages(sample: dict[str, Any], target: ValidationTarget,
     }
     if defined_tools != called_tools:
         target.errors.append(f"{label}.tools must define exactly the tools called by messages.")
-    expected_provenance = "inferred_from_observed_argument_shapes" if called_tools else "not_applicable"
+    expected_provenance = "recorded_exact"
     if sample.get("tool_schema_provenance") != expected_provenance:
         target.errors.append(f"{label}.tool_schema_provenance expected {expected_provenance!r}.")
 
@@ -17525,6 +17696,27 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
     observed = identity.get("observed_model_ids")
     if observed is not None and not _is_string_list(observed):
         target.errors.append("serving_profile.model_identity.observed_model_ids must be a list of strings when present.")
+    adapter = identity.get("adapter")
+    if adapter is not None and not isinstance(adapter, dict):
+        target.errors.append("serving_profile.model_identity.adapter must be an object when present.")
+    elif isinstance(adapter, dict) and adapter.get("present") is True:
+        if not isinstance(adapter.get("local"), bool):
+            target.errors.append("serving_profile observed adapter identity must declare whether it is local.")
+        observation_source = adapter.get("observation_source")
+        if observation_source not in {"endpoint_model_metadata", "local_artifact_sha256"}:
+            target.errors.append(
+                "serving_profile.model_identity.adapter.observation_source must identify endpoint model metadata or a local artifact SHA-256."
+            )
+        if adapter.get("local") is True and observation_source != "local_artifact_sha256":
+            target.errors.append(
+                "serving_profile local adapter identity must use local_artifact_sha256 observation."
+            )
+        if adapter.get("local") is False and observation_source != "endpoint_model_metadata":
+            target.errors.append(
+                "serving_profile remote adapter identity must use endpoint_model_metadata observation."
+            )
+        if adapter.get("immutable") is not True:
+            target.errors.append("serving_profile observed adapter identity must be immutable.")
 
     capabilities = profile.get("capabilities") if isinstance(profile.get("capabilities"), dict) else {}
     if not capabilities:

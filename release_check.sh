@@ -303,7 +303,7 @@ assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] ==
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
 assert scenario_quality["passed"] is True
-assert scenario_quality["metrics"]["average_contract_score"] == 90.71
+assert scenario_quality["metrics"]["average_contract_score"] == 93.57
 assert scenario_quality["metrics"]["min_contract_score"] == 65
 assert scenario_quality["metrics"]["observable_scenario_rate"] == 0.8571
 assert scenario_quality["metrics"]["weak_scenario_count"] == 0
@@ -351,7 +351,7 @@ assert len({item["routing_key"] for item in evidence_bundle["decision"]["next_ac
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 7
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 7
 assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 14
-assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 90.71
+assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 93.57
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
 assert evidence_bundle["metrics"]["run_digest_coverage"]["run_count"] == 7
@@ -728,8 +728,11 @@ test -f runs/training_export/reward_model.jsonl
 test -f runs/training_export/dataset_metrics.json
 test -f runs/training_export/dataset_splits.json
 test -f runs/training_export/splits/train/episodes.jsonl
+test -f runs/training_export/splits/train/action_sft.jsonl
 test -f runs/training_export/splits/validation/episodes.jsonl
+test -f runs/training_export/splits/validation/action_sft.jsonl
 test -f runs/training_export/splits/test/episodes.jsonl
+test -f runs/training_export/splits/test/action_sft.jsonl
 test -f runs/training_export/DATASET_CARD.md
 test -f runs/training_export/manifest.json
 "$PYTHON" - <<'PY'
@@ -863,6 +866,7 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "dataset_card",
     "dataset_metrics",
     "dataset_splits",
+    "action_sft",
     "dpo",
     "episodes",
     "failure_modes",
@@ -924,8 +928,8 @@ assert dataset_metrics["task_completion"]["configured_count"] == 6
 assert dataset_metrics["task_completion"]["complete_count"] == 2
 assert dataset_metrics["task_completion"]["incomplete_count"] == 4
 assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
-assert dataset_metrics["task_completion"]["required_check_count"] == 21
-assert dataset_metrics["task_completion"]["passed_check_count"] == 11
+assert dataset_metrics["task_completion"]["required_check_count"] == 23
+assert dataset_metrics["task_completion"]["passed_check_count"] == 13
 assert dataset_metrics["trace_signal"]["average_event_count"] == 6.0
 assert dataset_metrics["trace_signal"]["event_type_count"] == 6
 assert dataset_metrics["trace_signal"]["final_answer_rate"] == 1.0
@@ -969,12 +973,12 @@ assert gate["metrics"]["validation"]["passed"] is True
 assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 13
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 13
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 12
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 12
 assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
 assert gate["metrics"]["task_completion"]["incomplete_count"] == 4
-assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5238
+assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5652
 assert gate["metrics"]["trace_signal"]["average_event_count"] == 6.0
 assert gate["metrics"]["trace_signal"]["event_type_count"] == 6
 assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8571
@@ -990,7 +994,7 @@ assert gate["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"] =
 assert gate["policy"]["effective"]["max_unverified_trainer_view_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
 assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 4
-assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5238
+assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5652
 assert gate["policy"]["effective"]["min_trace_average_events"] == 6.0
 assert gate["policy"]["effective"]["min_trace_event_type_count"] == 4
 assert gate["policy"]["effective"]["min_trace_final_answer_rate"] == 1.0

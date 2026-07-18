@@ -1,0 +1,29 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/huggingface_payload_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-addressed file inventory for a Hugging Face Jobs payload, excluding the manifest itself.",
+  "properties": {
+    "artifact_count": {"minimum": 1, "type": "integer"},
+    "artifact_set_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "artifacts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {"minLength": 1, "type": "string"},
+          "role": {"minLength": 1, "type": "string"},
+          "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "size_bytes": {"minimum": 0, "type": "integer"}
+        },
+        "required": ["role", "path", "sha256", "size_bytes"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": {"const": "hfr.huggingface_payload_manifest.v1"}
+  },
+  "required": ["schema_version", "artifact_count", "artifact_set_sha256", "artifacts"],
+  "title": "Hugging Face Payload Manifest",
+  "type": "object"
+}

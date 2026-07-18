@@ -18,6 +18,7 @@ from flightrecorder.training import (
     export_rl_dataset,
     redaction_scan_artifacts,
 )
+from flightrecorder.trajectory_v2 import trajectory_v2_from_trace, write_trajectory_v2
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -183,10 +184,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")
             self.assertEqual({failure["schema_version"] for failure in failure_modes}, {"hfr.rl.failure_mode.v1"})
             self.assertEqual({sample["schema_version"] for sample in sft}, {"hfr.rl.sft.v1"})
-            self.assertEqual(
-                {sample["schema_version"] for sample in action_sft},
-                {"hfr.rl.action_sft.v1"},
-            )
+            self.assertEqual({sample["schema_version"] for sample in action_sft}, set())
             self.assertEqual({pair["schema_version"] for pair in dpo}, {"hfr.rl.dpo.v1"})
             self.assertEqual({sample["schema_version"] for sample in reward_model}, {"hfr.rl.reward_model.v1"})
             self.assertEqual(curriculum["schema_version"], "hfr.rl.curriculum.v1")
@@ -198,9 +196,9 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(dataset_metrics["artifact_counts"]["action_sft"], len(action_sft))
             self.assertEqual(dataset_metrics["source_fingerprint_coverage"]["fully_verified"], 2)
             self.assertEqual(dataset_metrics["source_fingerprint_coverage"]["unverified"], 0)
-            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["rows"], 5)
-            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["action_sft_rows"], 1)
-            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified"], 5)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["rows"], 4)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["action_sft_rows"], 0)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified"], 4)
             self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["unverified"], 0)
             self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"], 1.0)
             self.assertEqual(dataset_metrics["task_completion"]["episode_count"], 2)
@@ -259,7 +257,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("`process_reward`", dataset_card)
             self.assertIn("## Task Families", dataset_card)
             self.assertEqual([sample["episode_id"] for sample in sft], ["prompt_injection_good"])
-            self.assertEqual([sample["episode_id"] for sample in action_sft], ["prompt_injection_good"])
+            self.assertEqual(action_sft, [])
             self.assertEqual(sft[0]["source_fingerprint_status"], "verified")
             self.assertEqual(sft[0]["task_completion_status"], "complete")
             self.assertEqual(preferences[0]["chosen_episode_id"], "prompt_injection_good")
@@ -295,6 +293,78 @@ class TrainingExportTests(unittest.TestCase):
                     str(runs / "email_reply_completion_good"),
                 ]
             )
+            run_dir = runs / "email_reply_completion_good"
+            trace_path = run_dir / "normalized_trace.json"
+            trace = json.loads(trace_path.read_text(encoding="utf-8"))
+            tool_definitions = [
+                {
+                    "type": "function",
+                    "version": "1.0.0",
+                    "function": {
+                        "name": "gmail_read",
+                        "description": "Read one synthetic email thread.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"thread_id": {"type": "string"}},
+                            "required": ["thread_id"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "version": "1.0.0",
+                    "function": {
+                        "name": "gmail_send",
+                        "description": "Send one synthetic email reply.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "thread_id": {"type": "string"},
+                                "body": {"type": "string"},
+                            },
+                            "required": ["thread_id", "body"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+            ]
+            trajectory = trajectory_v2_from_trace(
+                trace,
+                source_path=trace_path,
+                source_format="observer_jsonl",
+                context={
+                    "root_session_id": "email-session-1",
+                    "model": {"provider": "fixture", "name": "fixture-model", "revision": "fixture-model-r1"},
+                    "tokenizer": {"name": "fixture-tokenizer", "revision": "fixture-tokenizer-r1"},
+                    "chat_template": {"name": "fixture-chat", "revision": "fixture-chat-r1", "sha256": "c" * 64},
+                    "policy": {"id": "fixture-policy", "version": "1", "sha256": "d" * 64},
+                    "environment": {"id": "fixture-env", "version": "1", "sha256": "e" * 64},
+                    "governance": {
+                        "owner": "fixture-owner",
+                        "tenant": "fixture-tenant",
+                        "legal_basis": "contract",
+                        "allowed_purposes": ["agent_training"],
+                        "sensitivity": "synthetic",
+                        "jurisdiction": "US",
+                        "retention_expires_at": "2035-01-01T00:00:00+00:00",
+                        "license": "Apache-2.0-synthetic-fixture",
+                        "provenance": {"source": "unit-test", "source_revision": "v1"},
+                        "deletion_subject_ids": ["fixture-email"],
+                    },
+                    "tools": tool_definitions,
+                    "sessions": [
+                        {
+                            "session_id": "email-session-1",
+                            "parent_session_id": None,
+                            "agent_id": "fixture-agent",
+                            "agent_role": "orchestrator",
+                        }
+                    ],
+                },
+            )
+            self.assertTrue(trajectory["action_training"]["eligible"], trajectory["action_training"])
+            write_trajectory_v2(run_dir / "trajectory_v2.json", trajectory)
 
             export_rl_dataset(runs, out)
 
@@ -314,7 +384,9 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(messages[-1]["content"], row["response"])
             self.assertEqual(row["tool_call_count"], 2)
             self.assertEqual(row["tool_result_count"], 2)
-            self.assertEqual(row["tool_schema_provenance"], "inferred_from_observed_argument_shapes")
+            self.assertEqual(row["tool_schema_provenance"], "recorded_exact")
+            self.assertEqual(row["governance"], trajectory["governance"])
+            self.assertEqual(row["trajectory_v2"], trajectory)
             self.assertEqual([tool["function"]["name"] for tool in row["tools"]], ["gmail_read", "gmail_send"])
             self.assertEqual(
                 json.loads(tool_calls[0]["tool_calls"][0]["function"]["arguments"]),

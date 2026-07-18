@@ -1,0 +1,146 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/huggingface_publication_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Private Hugging Face Hub publication receipt bound to an immutable artifact set, reviewed plan, and observed runtime identity.",
+  "properties": {
+    "artifact_count": {"minimum": 1, "type": "integer"},
+    "artifact_set_sha256": {"$ref": "#/$defs/sha256"},
+    "artifacts": {"items": {"$ref": "#/$defs/artifact"}, "minItems": 1, "type": "array"},
+    "created_at": {"format": "date-time", "type": "string"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "private": {"const": true},
+    "repo_id": {"minLength": 1, "type": "string"},
+    "repo_type": {"enum": ["dataset", "model"]},
+    "revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+    "reviewed_plan": {"$ref": "#/$defs/artifact"},
+    "runtime_declaration": {"$ref": "#/$defs/runtimeDeclaration"},
+    "runtime_observation": {"$ref": "#/$defs/runtimeObservation"},
+    "schema_version": {"const": "hfr.huggingface_publication_receipt.v1"},
+    "source_plan_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "required": ["schema_version", "created_at", "repo_id", "repo_type", "private", "revision", "source_plan_sha256", "reviewed_plan", "runtime_declaration", "runtime_observation", "artifact_count", "artifact_set_sha256", "artifacts", "identity"],
+  "title": "Hugging Face Publication Receipt",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "role": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {"algorithm": {"const": "sha256"}, "sha256": {"$ref": "#/$defs/sha256"}},
+      "required": ["algorithm", "sha256"],
+      "type": "object"
+    },
+    "runtimeDeclaration": {
+      "additionalProperties": false,
+      "properties": {
+        "container_image": {"pattern": "^\\S+@sha256:[0-9a-f]{64}$", "type": "string"},
+        "declaration_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "dependencies": {"items": {"pattern": "^[A-Za-z0-9_.-]+==[^=<>!~\\s]+$", "type": "string"}, "minItems": 1, "type": "array"},
+        "dependency_lock_sha256": {"$ref": "#/$defs/sha256"},
+        "hardware_flavor": {"minLength": 1, "type": "string"},
+        "model_identity": {"$ref": "#/$defs/modelIdentity"},
+        "python": {"const": "3.11"},
+        "timeout": {"minLength": 1, "type": "string"},
+        "trainer_script_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["python", "container_image", "hardware_flavor", "timeout", "dependencies", "dependency_lock_sha256", "trainer_script_sha256", "model_identity", "declaration_identity_sha256"],
+      "type": "object"
+    },
+    "runtimeObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "container": {"$ref": "#/$defs/containerObservation"},
+        "container_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "context": {"enum": ["training_job", "payload_publisher"]},
+        "cuda": {"$ref": "#/$defs/cudaObservation"},
+        "cuda_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "dependencies": {"additionalProperties": {"$ref": "#/$defs/libraryObservation"}, "minProperties": 1, "type": "object"},
+        "hardware": {"$ref": "#/$defs/hardwareObservation"},
+        "hardware_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "library_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "measured_artifacts": {"$ref": "#/$defs/measuredArtifacts"},
+        "observed_at": {"format": "date-time", "type": "string"},
+        "platform": {"minLength": 1, "type": "string"},
+        "python": {"minLength": 1, "type": "string"},
+        "python_implementation": {"minLength": 1, "type": "string"},
+        "runtime_identity_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["context", "observed_at", "python", "python_implementation", "platform", "dependencies", "container", "hardware", "cuda", "measured_artifacts", "library_identity_sha256", "container_identity_sha256", "hardware_identity_sha256", "cuda_identity_sha256", "runtime_identity_sha256"],
+      "type": "object"
+    },
+    "libraryObservation": {
+      "additionalProperties": false,
+      "properties": {"actual": {"minLength": 1, "type": "string"}, "measurement_source": {"const": "importlib.metadata"}},
+      "required": ["actual", "measurement_source"],
+      "type": "object"
+    },
+    "modelIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "base_model_revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+        "chat_template_sha256": {"$ref": "#/$defs/sha256"},
+        "tokenizer_revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"}
+      },
+      "required": ["base_model_revision", "tokenizer_revision", "chat_template_sha256"],
+      "type": "object"
+    },
+    "containerObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "cgroup_sha256": {"minLength": 1, "type": "string"},
+        "detected": {"type": "boolean"},
+        "image_digest": {"minLength": 1, "type": "string"},
+        "image_digest_source": {"minLength": 1, "type": "string"},
+        "isolation": {"enum": ["container", "host_or_unknown"]},
+        "marker_paths": {"items": {"type": "string"}, "type": "array"},
+        "measurement_source": {"const": "runtime_probe"},
+        "os_release_sha256": {"minLength": 1, "type": "string"}
+      },
+      "required": ["measurement_source", "detected", "isolation", "marker_paths", "cgroup_sha256", "os_release_sha256", "image_digest", "image_digest_source"],
+      "type": "object"
+    },
+    "hardwareObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "accelerator_count": {"minimum": 0, "type": "integer"},
+        "accelerator_kind": {"enum": ["none", "cuda"]},
+        "logical_cpu_count": {"minimum": 0, "type": "integer"},
+        "machine": {"minLength": 1, "type": "string"},
+        "measurement_source": {"const": "runtime_probe"},
+        "processor": {"minLength": 1, "type": "string"}
+      },
+      "required": ["measurement_source", "machine", "processor", "logical_cpu_count", "accelerator_kind", "accelerator_count"],
+      "type": "object"
+    },
+    "measuredArtifacts": {
+      "additionalProperties": false,
+      "properties": {"trainer_script_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"const": "unavailable"}]}},
+      "required": ["trainer_script_sha256"],
+      "type": "object"
+    },
+    "cudaObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {"type": "boolean"},
+        "cudnn_version": {"minLength": 1, "type": "string"},
+        "device_count": {"minimum": 0, "type": "integer"},
+        "devices": {"items": {"additionalProperties": false, "properties": {"compute_capability": {"minLength": 1, "type": "string"}, "index": {"minimum": 0, "type": "integer"}, "name": {"minLength": 1, "type": "string"}}, "required": ["index", "name", "compute_capability"], "type": "object"}, "type": "array"},
+        "driver_version": {"minLength": 1, "type": "string"},
+        "runtime_version": {"minLength": 1, "type": "string"}
+      },
+      "required": ["available", "runtime_version", "driver_version", "cudnn_version", "device_count", "devices"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

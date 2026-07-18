@@ -63,6 +63,7 @@ REVIEWED_EXPORT_CONTENT_FILES = (
     "provenance/review_items.jsonl",
     "provenance/review_manifest.json",
     "reviewed_dpo.jsonl",
+    "reviewed_action_sft.jsonl",
     "reviewed_labels.jsonl",
     "reviewed_preferences.jsonl",
     "reviewed_reward_model.jsonl",

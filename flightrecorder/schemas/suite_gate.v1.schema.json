@@ -11,9 +11,19 @@
     },
     "decision": { "$ref": "#/$defs/decision" },
     "failed_check_count": { "minimum": 0, "type": "integer" },
+    "failed_checks": {
+      "items": { "$ref": "#/$defs/blocking_check" },
+      "type": "array"
+    },
     "metrics": { "$ref": "#/$defs/metrics" },
+    "next_actions": {
+      "items": { "type": "object" },
+      "type": "array"
+    },
     "passed": { "type": "boolean" },
     "policy": { "$ref": "#/$defs/policy" },
+    "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+    "recommendation": { "enum": ["block_iteration", "promote_iteration"], "type": "string" },
     "schema_version": { "const": "hfr.suite_gate.v1" },
     "suite_summary": { "minLength": 1, "type": "string" }
   },

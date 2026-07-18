@@ -1,0 +1,31 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_controller_state.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Durable resumable state for a plan-bound agentic loop controller.",
+  "properties": {
+    "schema_version": {"const": "hfr.agentic_loop_controller_state.v1"},
+    "controller_id": {"minLength": 1, "type": "string"},
+    "plan_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "state_path": {"minLength": 1, "type": "string"},
+    "status": {"minLength": 1, "type": "string"},
+    "current_phase": {"type": "string"},
+    "active_model": {"minLength": 1, "type": "string"},
+    "rollback_model": {"minLength": 1, "type": "string"},
+    "started_at": {"format": "date-time", "type": "string"},
+    "deadline_at": {"format": "date-time", "type": "string"},
+    "completed_at": {"type": "string"},
+    "spent_cost_usd": {"minimum": 0, "type": "number"},
+    "elapsed_duration_seconds": {"minimum": 0, "type": "number"},
+    "total_attempts": {"minimum": 0, "type": "integer"},
+    "pending_approvals": {"items": {"type": "string"}, "type": "array"},
+    "phase_records": {"items": {"type": "object"}, "type": "array"},
+    "rollback": {"type": "object"},
+    "failure_analysis": {"type": "object"},
+    "next_iteration": {"type": "object"},
+    "lease": {"required": ["owner_id", "expires_at", "heartbeat_at", "fencing_token"], "type": "object"}
+  },
+  "required": ["schema_version", "controller_id", "plan_fingerprint", "state_path", "status", "current_phase", "active_model", "rollback_model", "started_at", "deadline_at", "completed_at", "spent_cost_usd", "elapsed_duration_seconds", "total_attempts", "pending_approvals", "phase_records", "rollback", "failure_analysis", "next_iteration", "lease"],
+  "title": "Hermes Flight Recorder Agentic Loop Controller State",
+  "type": "object"
+}
