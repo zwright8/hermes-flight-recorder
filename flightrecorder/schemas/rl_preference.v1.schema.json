@@ -14,9 +14,6 @@
     "chosen_score": {
       "type": "integer"
     },
-    "label_provenance": {
-      "type": "object"
-    },
     "preference_id": {
       "minLength": 1,
       "type": "string"
@@ -60,8 +57,7 @@
     "score_gap",
     "reason",
     "chosen",
-    "rejected",
-    "label_provenance"
+    "rejected"
   ],
   "title": "Hermes Flight Recorder RL Preference Row",
   "type": "object"

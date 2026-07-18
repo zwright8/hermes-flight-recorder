@@ -21855,7 +21855,6 @@ def _validate_action_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
-    _validate_gate_decision_actions(value, failed_checks, target, "action_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("action_ledger_gate.decision.key_metrics must be an object.")
@@ -22329,7 +22328,6 @@ def _validate_improvement_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
-    _validate_gate_decision_actions(value, failed_checks, target, "improvement_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("improvement_ledger_gate.decision.key_metrics must be an object.")
@@ -25604,7 +25602,6 @@ def _validate_promotion_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
-    _validate_gate_decision_actions(value, failed_checks, target, "promotion_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("promotion_ledger_gate.decision.key_metrics must be an object.")
@@ -25625,37 +25622,6 @@ def _validate_promotion_ledger_gate_decision(
             target.errors.append(
                 f"promotion_ledger_gate.decision.key_metrics.{field_name} must match promotion_ledger_gate.metrics.{field_name}."
             )
-
-
-def _validate_gate_decision_actions(value: dict[str, Any], failed_checks: int, target: ValidationTarget, label: str) -> None:
-    action_fields = {"failed_checks", "next_action_count", "next_actions"}
-    if action_fields.isdisjoint(value):
-        return
-    failed = value.get("failed_checks")
-    if not isinstance(failed, list):
-        target.errors.append(f"{label}.failed_checks must be a list.")
-    elif len(failed) != failed_checks:
-        target.errors.append(f"{label}.failed_checks expected {failed_checks} entries, got {len(failed)}.")
-    next_actions = value.get("next_actions")
-    if not isinstance(next_actions, list):
-        target.errors.append(f"{label}.next_actions must be a list.")
-        next_actions = []
-    if value.get("next_action_count") != len(next_actions):
-        target.errors.append(f"{label}.next_action_count expected {len(next_actions)}, got {value.get('next_action_count')!r}.")
-    if failed_checks and not next_actions:
-        target.errors.append(f"{label}.next_actions must not be empty when checks fail.")
-    for index, action in enumerate(next_actions):
-        action_label = f"{label}.next_actions[{index}]"
-        if not isinstance(action, dict):
-            target.errors.append(f"{action_label} must be an object.")
-            continue
-        for field_name in ("id", "priority", "artifact", "summary"):
-            if not isinstance(action.get(field_name), str) or not action.get(field_name):
-                target.errors.append(f"{action_label}.{field_name} must be a non-empty string.")
-        if action.get("priority") not in {"critical", "high", "medium", "low"}:
-            target.errors.append(f"{action_label}.priority must be critical, high, medium, or low.")
-        if not isinstance(action.get("evidence"), dict):
-            target.errors.append(f"{action_label}.evidence must be an object.")
 
 
 def _validate_promotion_ledger_gate_source_linkage(

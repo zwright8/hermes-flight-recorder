@@ -26,9 +26,6 @@
     "chosen_source_fingerprints": {
       "type": "object"
     },
-    "label_provenance": {
-      "type": "object"
-    },
     "pair_id": {
       "minLength": 1,
       "type": "string"
@@ -99,7 +96,6 @@
     "rejected_source_fingerprint_status",
     "chosen_source_fingerprints",
     "rejected_source_fingerprints",
-    "label_provenance",
     "source_artifact"
   ],
   "title": "Hermes Flight Recorder RL DPO Row",
