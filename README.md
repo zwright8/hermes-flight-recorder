@@ -167,6 +167,9 @@ flightrecorder schemas --check runs/evidence_bundle.json
 
 ## One-Command Data Handoff
 
+For the full native tool-trajectory → TRL/PEFT LoRA → Hugging Face Jobs path,
+see [Agentic LoRA Training on Hugging Face](docs/agentic-training-huggingface.md).
+
 Goal 3 data handoff bundles the common path from scenarios to trainer-facing
 evidence. It runs the suite, exports training data, validates artifacts, gates
 the export, builds an evidence bundle, and writes trainer preflight artifacts.

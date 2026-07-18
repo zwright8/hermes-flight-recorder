@@ -418,6 +418,14 @@
       "name": "rl_sft"
     },
     {
+      "artifact": "rl_action_sft",
+      "artifact_schema_version": "hfr.rl.action_sft.v1",
+      "description": "Native tool-trajectory supervised fine-tuning row emitted in export-rl action_sft.jsonl.",
+      "filename": "rl_action_sft.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_action_sft.v1.schema.json",
+      "name": "rl_action_sft"
+    },
+    {
       "artifact": "rl_dpo",
       "artifact_schema_version": "hfr.rl.dpo.v1",
       "description": "Trainer-ready direct-preference row emitted in export-rl dpo.jsonl.",

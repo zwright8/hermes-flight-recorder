@@ -72,6 +72,7 @@ class TrainingExportTests(unittest.TestCase):
             preferences = read_jsonl(out / "preferences.jsonl")
             failure_modes = read_jsonl(out / "failure_modes.jsonl")
             sft = read_jsonl(out / "sft.jsonl")
+            action_sft = read_jsonl(out / "action_sft.jsonl")
             dpo = read_jsonl(out / "dpo.jsonl")
             reward_model = read_jsonl(out / "reward_model.jsonl")
             curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
@@ -101,8 +102,8 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(trainer_views["mode_to_view"]["step_reward"], "step_reward")
             self.assertEqual(trainer_views["mode_to_view"]["process_reward"], "process_reward")
             self.assertEqual(trainer_views["mode_to_view"]["curriculum"], "curriculum")
-            self.assertEqual(views_by_id["action_sft"]["artifact_path"], "sft.jsonl")
-            self.assertEqual(views_by_id["action_sft"]["row_count"], len(sft))
+            self.assertEqual(views_by_id["action_sft"]["artifact_path"], "action_sft.jsonl")
+            self.assertEqual(views_by_id["action_sft"]["row_count"], len(action_sft))
             self.assertEqual(views_by_id["process_reward"]["artifact_path"], "step_rewards.jsonl")
             self.assertEqual(views_by_id["process_reward"]["row_count"], len(step_rewards))
             self.assertIn("train", views_by_id["process_reward"]["split_paths"])
@@ -116,6 +117,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(manifest["preference_count"], 1)
             self.assertEqual(manifest["failure_mode_count"], len(failure_modes))
             self.assertEqual(manifest["sft_count"], len(sft))
+            self.assertEqual(manifest["action_sft_count"], len(action_sft))
             self.assertEqual(manifest["dpo_count"], len(dpo))
             self.assertEqual(manifest["reward_model_count"], len(reward_model))
             self.assertEqual(manifest["quality_flag_count"], len(dataset_metrics["quality_flags"]))
@@ -123,6 +125,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("failure_modes", manifest["outputs"])
             self.assertIn("curriculum", manifest["outputs"])
             self.assertIn("sft", manifest["outputs"])
+            self.assertIn("action_sft", manifest["outputs"])
             self.assertIn("dpo", manifest["outputs"])
             self.assertIn("reward_model", manifest["outputs"])
             self.assertIn("dataset_metrics", manifest["outputs"])
@@ -142,6 +145,7 @@ class TrainingExportTests(unittest.TestCase):
                     "reward_model",
                     "rewards",
                     "sft",
+                    "action_sft",
                     "step_rewards",
                 }
                 | split_artifact_keys(),
@@ -179,6 +183,10 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")
             self.assertEqual({failure["schema_version"] for failure in failure_modes}, {"hfr.rl.failure_mode.v1"})
             self.assertEqual({sample["schema_version"] for sample in sft}, {"hfr.rl.sft.v1"})
+            self.assertEqual(
+                {sample["schema_version"] for sample in action_sft},
+                {"hfr.rl.action_sft.v1"},
+            )
             self.assertEqual({pair["schema_version"] for pair in dpo}, {"hfr.rl.dpo.v1"})
             self.assertEqual({sample["schema_version"] for sample in reward_model}, {"hfr.rl.reward_model.v1"})
             self.assertEqual(curriculum["schema_version"], "hfr.rl.curriculum.v1")
@@ -187,10 +195,12 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(curriculum["failure_mode_count"], len(failure_modes))
             self.assertEqual(dataset_metrics["artifact_counts"]["episodes"], 2)
             self.assertEqual(dataset_metrics["artifact_counts"]["dpo"], 1)
+            self.assertEqual(dataset_metrics["artifact_counts"]["action_sft"], len(action_sft))
             self.assertEqual(dataset_metrics["source_fingerprint_coverage"]["fully_verified"], 2)
             self.assertEqual(dataset_metrics["source_fingerprint_coverage"]["unverified"], 0)
-            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["rows"], 4)
-            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified"], 4)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["rows"], 5)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["action_sft_rows"], 1)
+            self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified"], 5)
             self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["unverified"], 0)
             self.assertEqual(dataset_metrics["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"], 1.0)
             self.assertEqual(dataset_metrics["task_completion"]["episode_count"], 2)
@@ -249,6 +259,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("`process_reward`", dataset_card)
             self.assertIn("## Task Families", dataset_card)
             self.assertEqual([sample["episode_id"] for sample in sft], ["prompt_injection_good"])
+            self.assertEqual([sample["episode_id"] for sample in action_sft], ["prompt_injection_good"])
             self.assertEqual(sft[0]["source_fingerprint_status"], "verified")
             self.assertEqual(sft[0]["task_completion_status"], "complete")
             self.assertEqual(preferences[0]["chosen_episode_id"], "prompt_injection_good")
@@ -261,11 +272,56 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(dpo[0]["preference_id"], preferences[0]["preference_id"])
             self.assertEqual(dpo[0]["chosen"], preferences[0]["chosen"]["final_answer"])
             self.assertEqual(dpo[0]["rejected"], preferences[0]["rejected"]["final_answer"])
+            self.assertEqual(dpo[0]["trajectory_format"], "native_tool_messages")
+            self.assertTrue(any(message.get("tool_calls") for message in dpo[0]["chosen_messages"]))
+            self.assertTrue(any(message.get("role") == "tool" for message in dpo[0]["chosen_messages"]))
+            self.assertTrue(dpo[0]["tools"])
             self.assertEqual(dpo[0]["chosen_source_fingerprint_status"], "verified")
             self.assertEqual(dpo[0]["rejected_source_fingerprint_status"], "verified")
             self.assertEqual({sample["episode_id"] for sample in reward_model}, {"prompt_injection_good", "prompt_injection_bad"})
             self.assertEqual({sample["source_fingerprint_status"] for sample in reward_model}, {"verified"})
             self.assertEqual({sample["task_completion_status"] for sample in reward_model}, {"complete", "incomplete"})
+
+    def test_export_rl_emits_native_tool_trajectory_for_action_sft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "email_reply_completion_good.json"),
+                    "--out",
+                    str(runs / "email_reply_completion_good"),
+                ]
+            )
+
+            export_rl_dataset(runs, out)
+
+            rows = read_jsonl(out / "action_sft.jsonl")
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            messages = row["messages"]
+            self.assertEqual(messages[0]["role"], "user")
+            tool_calls = [message for message in messages if message["role"] == "assistant" and message.get("tool_calls")]
+            tool_results = [message for message in messages if message["role"] == "tool"]
+            self.assertEqual(len(tool_calls), 2)
+            self.assertEqual(len(tool_results), 2)
+            self.assertEqual(tool_calls[0]["tool_calls"][0]["id"], "call-1")
+            self.assertEqual(tool_results[0]["tool_call_id"], "call-1")
+            self.assertEqual(tool_results[0]["name"], "gmail_read")
+            self.assertEqual(messages[-1]["role"], "assistant")
+            self.assertEqual(messages[-1]["content"], row["response"])
+            self.assertEqual(row["tool_call_count"], 2)
+            self.assertEqual(row["tool_result_count"], 2)
+            self.assertEqual(row["tool_schema_provenance"], "inferred_from_observed_argument_shapes")
+            self.assertEqual([tool["function"]["name"] for tool in row["tools"]], ["gmail_read", "gmail_send"])
+            self.assertEqual(
+                json.loads(tool_calls[0]["tool_calls"][0]["function"]["arguments"]),
+                {"thread_id": "email-123"},
+            )
+            self.assertEqual(read_jsonl(out / "splits" / "train" / "action_sft.jsonl"), rows)
+            self.assertEqual(run_cli(["validate", "--training-export", str(out), "--strict"]), 0)
 
     def test_export_rl_blocks_unredacted_secret_like_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:

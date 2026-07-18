@@ -1,5 +1,9 @@
 # Agentic Finetune Training Layer
 
+For the concrete TRL/PEFT and Hugging Face Jobs workflow, including native
+tool-call SFT/DPO formats and immutable Hub persistence, see
+[`agentic-training-huggingface.md`](agentic-training-huggingface.md).
+
 Goal 5 owns reproducible, side-effect-free training paths from registered model
 and dataset manifests into external trainer handoffs. Flight Recorder does not
 download models, import trainer stacks, mutate weights, or train on unredacted

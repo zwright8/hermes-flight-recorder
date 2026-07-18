@@ -26,6 +26,7 @@ heavy ML dependencies.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -86,6 +87,30 @@ def write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> int:
     return count
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def adapter_artifact_manifest(directory: Path) -> dict[str, Any]:
+    files = [path for path in sorted(directory.rglob("*")) if path.is_file() and not path.is_symlink()]
+    return {
+        "directory": str(directory),
+        "file_count": len(files),
+        "files": [
+            {
+                "path": path.relative_to(directory).as_posix(),
+                "size_bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+            }
+            for path in files
+        ],
+    }
+
+
 def as_messages(prompt: str, response: str) -> list[dict[str, str]]:
     return [
         {"role": "user", "content": prompt},
@@ -102,25 +127,49 @@ def prepare_sft_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
             response = str(row.get("response") or "")
             messages = as_messages(prompt, response)
         if messages and len(messages) >= 2:
-            prepared.append({"messages": messages})
+            prepared.append(
+                {
+                    "messages": messages,
+                    "tools": row.get("tools") if isinstance(row.get("tools"), list) else [],
+                }
+            )
     return prepared
 
 
 def prepare_dpo_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     prepared: list[dict[str, Any]] = []
     for row in rows:
-        prompt = row.get("prompt")
-        chosen = row.get("chosen")
-        rejected = row.get("rejected")
-        if not prompt or not chosen or not rejected:
-            continue
-        prepared.append(
-            {
+        chosen_messages = row.get("chosen_messages")
+        rejected_messages = row.get("rejected_messages")
+        prepared_row: dict[str, Any] | None = None
+        if isinstance(chosen_messages, list) and isinstance(rejected_messages, list):
+            prefix_length = 0
+            for chosen_message, rejected_message in zip(chosen_messages, rejected_messages):
+                if chosen_message != rejected_message:
+                    break
+                prefix_length += 1
+            prompt_messages = chosen_messages[:prefix_length]
+            chosen_completion = chosen_messages[prefix_length:]
+            rejected_completion = rejected_messages[prefix_length:]
+            if prompt_messages and chosen_completion and rejected_completion:
+                prepared_row = {
+                    "prompt": prompt_messages,
+                    "chosen": chosen_completion,
+                    "rejected": rejected_completion,
+                }
+        if prepared_row is None:
+            prompt = row.get("prompt")
+            chosen = row.get("chosen")
+            rejected = row.get("rejected")
+            if not prompt or not chosen or not rejected:
+                continue
+            prepared_row = {
                 "prompt": [{"role": "user", "content": str(prompt)}],
                 "chosen": [{"role": "assistant", "content": str(chosen)}],
                 "rejected": [{"role": "assistant", "content": str(rejected)}],
             }
-        )
+        prepared_row["tools"] = row.get("tools") if isinstance(row.get("tools"), list) else []
+        prepared.append(prepared_row)
     return prepared
 
 
@@ -140,11 +189,11 @@ def data_paths(experiment_dir: Path, dataset_context: dict[str, Any] | None = No
         manifest_base = Path(artifact_base) if artifact_base else Path.cwd()
         aliases = {
             "trace_sft": ("trace_sft", "trace_only_sft", "hermes_trace_only_sft"),
-            "fr_sft": ("fr_sft", "flightrecorder_sft", "sft", "train_sft"),
-            "fr_action_sft": ("fr_action_sft", "flightrecorder_action_sft", "action_sft", "train_action_sft"),
-            "fr_dpo": ("fr_dpo", "flightrecorder_combined_dpo", "combined_dpo", "dpo", "train_dpo"),
-            "fr_reward_model": ("fr_reward_model", "flightrecorder_reward_model", "reward_model", "train_reward_model"),
-            "fr_step_rewards": ("fr_step_rewards", "flightrecorder_step_rewards", "step_rewards", "train_step_rewards"),
+            "fr_sft": ("fr_sft", "flightrecorder_sft", "train_sft", "sft"),
+            "fr_action_sft": ("fr_action_sft", "flightrecorder_action_sft", "train_action_sft", "action_sft"),
+            "fr_dpo": ("fr_dpo", "flightrecorder_combined_dpo", "combined_dpo", "train_dpo", "dpo"),
+            "fr_reward_model": ("fr_reward_model", "flightrecorder_reward_model", "train_reward_model", "reward_model"),
+            "fr_step_rewards": ("fr_step_rewards", "flightrecorder_step_rewards", "train_step_rewards", "step_rewards"),
         }
         for plan_key, names in aliases.items():
             for name in names:
@@ -159,12 +208,12 @@ def resolve_artifact_path(value: str, base_dir: Path) -> Path:
     path = Path(value)
     if path.is_absolute():
         return path
-    cwd_path = Path.cwd() / path
-    if cwd_path.exists():
-        return cwd_path
     base_path = base_dir / path
     if base_path.exists():
         return base_path
+    cwd_path = Path.cwd() / path
+    if cwd_path.exists():
+        return cwd_path
     return path
 
 
@@ -220,16 +269,24 @@ def load_dataset_context(path: Path | None) -> dict[str, Any]:
         else:
             source_manifest = nested
             source_path = resolved
-    artifact_map = _dict_value(manifest, "data_files") or _dict_value(source_manifest, "data_files")
+    artifact_map = _dict_value(manifest, "data_files")
+    artifact_base = path.parent
     if not artifact_map:
-        artifact_map = _dict_value(manifest, "artifacts") or _dict_value(source_manifest, "artifacts")
+        artifact_map = _dict_value(manifest, "artifacts")
     if not artifact_map:
-        artifact_map = _dict_value(manifest, "outputs") or _dict_value(source_manifest, "outputs")
+        artifact_map = _dict_value(manifest, "outputs")
+    if not artifact_map:
+        artifact_map = _dict_value(source_manifest, "data_files") or _dict_value(source_manifest, "artifacts") or _dict_value(
+            source_manifest, "outputs"
+        )
+        artifact_base = source_path.parent
     context["source_manifest"] = source_manifest
     context["source_path"] = str(source_path)
     context["source_schema_version"] = str(source_manifest.get("schema_version") or "")
     context["artifact_map"] = artifact_map
-    context["artifact_base"] = str(source_path.parent)
+    context["artifact_base"] = str(artifact_base)
+    context["artifact_fingerprints"] = _dict_value(manifest, "artifact_fingerprints")
+    context["fingerprint_base"] = str(path.parent)
     return context
 
 
@@ -250,10 +307,16 @@ def _redaction_status(dataset_context: dict[str, Any]) -> str:
     source = dataset_context.get("source_manifest") if isinstance(dataset_context.get("source_manifest"), dict) else {}
     redaction = manifest.get("redaction") if isinstance(manifest.get("redaction"), dict) else {}
     source_redaction = source.get("redaction") if isinstance(source.get("redaction"), dict) else {}
+    manifest_status = manifest.get("redaction_status")
+    source_status = source.get("redaction_status")
+    if isinstance(manifest_status, dict) and manifest_status.get("passed") is True:
+        return "passed"
+    if isinstance(source_status, dict) and source_status.get("passed") is True:
+        return "passed"
     return _first_string(
-        manifest.get("redaction_status"),
+        manifest_status,
         redaction.get("status"),
-        source.get("redaction_status"),
+        source_status,
         source_redaction.get("status"),
     ).lower()
 
@@ -304,7 +367,10 @@ def _quality_flags_clear(dataset_context: dict[str, Any]) -> bool | None:
             continue
         flags = source.get("quality_flags")
         if isinstance(flags, list):
-            return len(flags) == 0
+            return not any(
+                isinstance(flag, dict) and str(flag.get("severity") or "").lower() == "error"
+                for flag in flags
+            )
         count = source.get("quality_flag_count")
         if isinstance(count, int) and not isinstance(count, bool):
             return count == 0
@@ -324,6 +390,36 @@ def _source_fingerprints_verified(dataset_context: dict[str, Any]) -> bool | Non
         if isinstance(unverified, int) and not isinstance(unverified, bool):
             return unverified == 0 and (not isinstance(fully_verified, int) or fully_verified > 0)
     return None
+
+
+def _dataset_artifact_integrity(dataset_context: dict[str, Any]) -> dict[str, Any]:
+    records = dataset_context.get("artifact_fingerprints")
+    if not isinstance(records, dict) or not records:
+        return {"passed": False, "checked": 0, "failures": ["artifact_fingerprints missing"]}
+    base = Path(str(dataset_context.get("fingerprint_base") or "."))
+    failures: list[str] = []
+    checked = 0
+    for name, record in records.items():
+        if not isinstance(record, dict):
+            failures.append(f"{name}: fingerprint record is not an object")
+            continue
+        path_value = record.get("path")
+        expected_sha = record.get("sha256")
+        expected_size = record.get("size_bytes")
+        if not isinstance(path_value, str) or not path_value:
+            failures.append(f"{name}: path missing")
+            continue
+        path = resolve_artifact_path(path_value, base)
+        if not path.exists() or not path.is_file():
+            failures.append(f"{name}: file missing")
+            continue
+        checked += 1
+        if not isinstance(expected_size, int) or isinstance(expected_size, bool) or path.stat().st_size != expected_size:
+            failures.append(f"{name}: size mismatch")
+        actual_sha = sha256_file(path)
+        if not isinstance(expected_sha, str) or actual_sha != expected_sha:
+            failures.append(f"{name}: sha256 mismatch")
+    return {"passed": not failures and checked == len(records), "checked": checked, "failures": failures}
 
 
 def add_check(
@@ -442,6 +538,14 @@ def write_smoke_fixture(root: Path) -> dict[str, Any]:
             },
         },
     )
+    fixture_data_files = {
+        "trace_sft": "../data/hermes_trace_only_sft.jsonl",
+        "flightrecorder_sft": "../data/flightrecorder_sft.jsonl",
+        "flightrecorder_action_sft": "../data/flightrecorder_action_sft.jsonl",
+        "flightrecorder_combined_dpo": "../data/flightrecorder_combined_dpo.jsonl",
+        "flightrecorder_reward_model": "../data/flightrecorder_reward_model.jsonl",
+        "flightrecorder_step_rewards": "../data/flightrecorder_step_rewards.jsonl",
+    }
     write_json(
         dataset_manifest,
         {
@@ -453,13 +557,15 @@ def write_smoke_fixture(root: Path) -> dict[str, Any]:
             "dataset_splits": {"family_exclusive": True},
             "quality_flags": [],
             "source_fingerprint_coverage": {"fully_verified": sum(counts.values()), "unverified": 0},
-            "data_files": {
-                "trace_sft": "../data/hermes_trace_only_sft.jsonl",
-                "flightrecorder_sft": "../data/flightrecorder_sft.jsonl",
-                "flightrecorder_action_sft": "../data/flightrecorder_action_sft.jsonl",
-                "flightrecorder_combined_dpo": "../data/flightrecorder_combined_dpo.jsonl",
-                "flightrecorder_reward_model": "../data/flightrecorder_reward_model.jsonl",
-                "flightrecorder_step_rewards": "../data/flightrecorder_step_rewards.jsonl",
+            "data_files": fixture_data_files,
+            "artifact_fingerprints": {
+                name: {
+                    "path": relative_path,
+                    "exists": True,
+                    "size_bytes": (registry_dir / relative_path).resolve().stat().st_size,
+                    "sha256": hashlib.sha256((registry_dir / relative_path).resolve().read_bytes()).hexdigest(),
+                }
+                for name, relative_path in fixture_data_files.items()
             },
         },
     )
@@ -604,6 +710,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "trackio_space_id": args.trackio_space_id,
             "run_name_prefix": args.run_name_prefix,
         },
+        "persistence": {
+            "push_to_hub": args.push_to_hub,
+            "hub_model_id": args.hub_model_id,
+            "checkpoint_push_strategy": "every_save" if args.push_to_hub else "local_only",
+            "final_adapter_push": args.push_to_hub,
+        },
         "data_files": {name: str(path) for name, path in paths.items()},
         "raw_counts": {name: len(rows) for name, rows in raw.items()},
         "prepared_counts": {
@@ -631,7 +743,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "compute_assumptions": {
             "heavy_ml_imports_deferred_until_after_plan_passes": True,
             "default_device_order": ["cuda", "mps", "cpu"],
-            "dtype_policy": "bfloat16 on CUDA, float16 on MPS, float32 on CPU",
+            "dtype_policy": "bfloat16 on supported CUDA devices, float16 on other CUDA/MPS devices, float32 on CPU",
             "registered_inputs_required_for_launch": requires_registered_inputs,
         },
         "trainer_backends": {
@@ -761,6 +873,14 @@ def _add_dataset_checks(checks: list[dict[str, Any]], dataset_context: dict[str,
         "dataset manifest records verified source fingerprints",
         actual={"source_fingerprints_verified": fingerprints_verified},
     )
+    artifact_integrity = _dataset_artifact_integrity(dataset_context)
+    add_check(
+        checks,
+        "dataset_artifact_fingerprints_verified",
+        artifact_integrity["passed"] is True,
+        "dataset trainer artifacts match their registered SHA-256 fingerprints",
+        actual=artifact_integrity,
+    )
 
 
 def _add_data_checks(
@@ -803,6 +923,13 @@ def _add_data_checks(
 
 
 def _add_hyperparameter_checks(checks: list[dict[str, Any]], args: argparse.Namespace) -> None:
+    add_check(
+        checks,
+        "hub_model_id_present_when_pushing",
+        not args.push_to_hub or bool(args.hub_model_id),
+        "Hub persistence declares a destination model repository before training",
+        actual={"push_to_hub": args.push_to_hub, "hub_model_id": args.hub_model_id},
+    )
     add_check(checks, "limit_non_negative", args.limit >= 0, "row limit is non-negative", actual={"limit": args.limit})
     add_check(checks, "batch_size_positive", args.batch_size > 0, "batch size is positive", actual={"batch_size": args.batch_size})
     add_check(
@@ -859,13 +986,20 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
         fr_dpo_rows = fr_dpo_rows[: args.limit]
 
     if torch.cuda.is_available():
-        dtype = torch.bfloat16
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     elif torch.backends.mps.is_available():
         dtype = torch.float16
     else:
         dtype = torch.float32
     model_kwargs = {"dtype": dtype}
     report_to = configure_tracking(args)
+    hub_config = {}
+    if args.push_to_hub:
+        hub_config = {
+            "push_to_hub": True,
+            "hub_model_id": args.hub_model_id,
+            "hub_strategy": "every_save",
+        }
     peft_config = LoraConfig(
         r=args.lora_r,
         lora_alpha=args.lora_alpha,
@@ -908,6 +1042,7 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
             report_to=report_to,
             run_name=run_name(args, "sft"),
             model_init_kwargs=model_kwargs,
+            **hub_config,
         )
         trainer = SFTTrainer(
             model=args.model,
@@ -938,6 +1073,7 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
             report_to=report_to,
             run_name=run_name(args, "dpo"),
             model_init_kwargs=model_kwargs if isinstance(model_or_path, str) else None,
+            **hub_config,
         )
         if isinstance(model_or_path, Path):
             model = AutoPeftModelForCausalLM.from_pretrained(
@@ -973,13 +1109,20 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
         raise SystemExit(f"Unsupported mode: {args.mode}")
 
     result["final_adapter_dir"] = str(final_dir)
+    result["final_adapter_artifacts"] = adapter_artifact_manifest(final_dir)
     if args.push_to_hub:
         if not args.hub_model_id:
             raise SystemExit("--push-to-hub requires --hub-model-id")
         # Re-open as PEFT model where possible so adapter-only pushes are explicit.
         model = AutoPeftModelForCausalLM.from_pretrained(str(final_dir), is_trainable=False)
-        model.push_to_hub(args.hub_model_id)
+        commit_info = model.push_to_hub(args.hub_model_id)
         result["pushed_to_hub"] = args.hub_model_id
+        result["hub_persistence"] = {
+            "repo_id": args.hub_model_id,
+            "commit_url": str(getattr(commit_info, "commit_url", "") or ""),
+            "revision": str(getattr(commit_info, "oid", "") or ""),
+            "immutable_revision_recorded": bool(getattr(commit_info, "oid", "")),
+        }
     return result
 
 
@@ -1286,7 +1429,11 @@ def _unsloth_trainer(mode: str) -> str:
 def classify_failure(exc: BaseException) -> dict[str, Any]:
     message = str(exc)
     lower = message.lower()
-    if isinstance(exc, ModuleNotFoundError):
+    if isinstance(exc, json.JSONDecodeError):
+        category = "invalid_training_data"
+    elif isinstance(exc, (OSError, UnicodeError)):
+        category = "training_input_io_error"
+    elif isinstance(exc, ModuleNotFoundError):
         category = "missing_dependency"
     elif "out of memory" in lower or "oom" in lower:
         category = "resource_exhausted"
@@ -1360,6 +1507,8 @@ def write_result_registry_event(
         "result_path": str(result_path),
         "training_plan": result.get("training_plan"),
         "final_adapter_dir": result.get("final_adapter_dir"),
+        "final_adapter_artifacts": result.get("final_adapter_artifacts", {}),
+        "hub_persistence": result.get("hub_persistence", {}),
         "input_manifests": result.get("input_manifests", {}),
         "failure": result.get("failure"),
         "plan_passed": plan.get("passed") is True,
@@ -1412,7 +1561,9 @@ def write_model_registry_link_plan(
             "command_argv": _model_registry_link_command(
                 registry_path=registry_path,
                 entry=entry,
-                link_type="training-run",
+                collection="training_runs",
+                kind="training-run",
+                status=str(result.get("status") or "recorded"),
                 artifact_id=result_artifact_id,
                 path=str(result_path),
                 metadata={
@@ -1426,18 +1577,21 @@ def write_model_registry_link_plan(
     final_adapter_dir = result.get("final_adapter_dir")
     if isinstance(final_adapter_dir, str) and final_adapter_dir:
         adapter_artifact_id = _artifact_id("adapter", str(result.get("model") or "model"), str(result.get("mode") or "mode"))
+        adapter_config_path = str(Path(final_adapter_dir) / "adapter_config.json")
         commands.append(
             {
                 "id": "link_final_adapter",
                 "link_type": "adapter",
                 "artifact_id": adapter_artifact_id,
-                "path": final_adapter_dir,
+                "path": adapter_config_path,
                 "command_argv": _model_registry_link_command(
                     registry_path=registry_path,
                     entry=entry,
-                    link_type="adapter",
+                    collection="adapters",
+                    kind="peft-adapter",
+                    status="trained",
                     artifact_id=adapter_artifact_id,
-                    path=final_adapter_dir,
+                    path=adapter_config_path,
                     metadata={
                         "mode": str(result.get("mode") or ""),
                         "training_result": str(result_path),
@@ -1490,7 +1644,9 @@ def _model_registry_link_command(
     *,
     registry_path: str,
     entry: str,
-    link_type: str,
+    collection: str,
+    kind: str,
+    status: str,
     artifact_id: str,
     path: str,
     metadata: dict[str, str],
@@ -1505,10 +1661,14 @@ def _model_registry_link_command(
         registry_path,
         "--entry",
         entry,
-        "--type",
-        link_type,
+        "--collection",
+        collection,
         "--artifact-id",
         artifact_id,
+        "--kind",
+        kind,
+        "--status",
+        status,
         "--path",
         path,
     ]
@@ -1616,11 +1776,40 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--preflight-only cannot be combined with --dry-run")
     if not args.mode:
         raise SystemExit("--mode is required unless --write-smoke-fixture is provided")
-    plan = build_plan(args)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     plan_path = args.output_dir / f"{args.mode}_plan.json"
     result_path = args.output_dir / f"{args.mode}_result.json"
     registry_path = args.result_registry or (args.output_dir / "training_registry_events.jsonl")
+    try:
+        plan = build_plan(args)
+    except (json.JSONDecodeError, OSError, UnicodeError) as exc:
+        plan = {
+            "schema_version": PLAN_SCHEMA_VERSION,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "mode": args.mode,
+            "model": args.model,
+            "experiment_dir": str(args.experiment_dir),
+            "output_dir": str(args.output_dir),
+            "passed": False,
+            "readiness": "blocked",
+            "recommendation": "block_launch",
+            "failed_check_count": 1,
+            "blocked_reasons": ["training input data could not be parsed"],
+            "input_manifests": {},
+            "failure": classify_failure(exc),
+        }
+        write_json(plan_path, plan)
+        result = failure_result(args, plan, plan_path, exc)
+        persist_result(
+            args=args,
+            plan=plan,
+            plan_path=plan_path,
+            result_path=result_path,
+            registry_path=registry_path,
+            result=result,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 1
     write_json(plan_path, plan)
     if args.write_backend_recipes is not None:
         bundle = write_backend_recipes(args.write_backend_recipes, args, plan, plan_path)

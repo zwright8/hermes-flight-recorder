@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,6 +44,20 @@ class AgenticEvalLayerTests(unittest.TestCase):
         self.assertEqual(result["governance_handoff"]["recommendation"], "send_to_governance")
         self.assertEqual(result["repair_work_items"], [])
 
+    def test_comparison_blocks_when_scenario_ids_match_but_content_differs(self):
+        scenario_ids = ["alpha", "beta"]
+        baseline = _comparison_summary(scenario_ids, pass_rate=0.1, score=50, critical=5, task_rate=0.2)
+        trace_only = _comparison_summary(scenario_ids, pass_rate=0.2, score=55, critical=4, task_rate=0.3)
+        flightrecorder = _comparison_summary(scenario_ids, pass_rate=0.9, score=90, critical=1, task_rate=0.8)
+        flightrecorder["scenario_fingerprints"]["alpha"] = "f" * 64
+
+        result = compare(baseline, trace_only, flightrecorder)
+
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["scenario_set"]["identical_ids"])
+        self.assertFalse(result["scenario_set"]["identical_content_fingerprints"])
+        self.assertEqual(result["comparison_status"], "not_comparable")
+
     def test_evaluation_summary_contains_governance_handoff_and_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp)
@@ -61,6 +76,8 @@ class AgenticEvalLayerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (out_dir / "evaluation_plan.json").write_text("{}\n", encoding="utf-8")
+            scenario_path = out_dir / "alpha.json"
+            scenario_path.write_text('{"id":"alpha"}\n', encoding="utf-8")
             suite_summary = {
                 "metrics": {
                     "pass_rate": 1.0,
@@ -94,7 +111,7 @@ class AgenticEvalLayerTests(unittest.TestCase):
                 args=args,
                 out_dir=out_dir,
                 base_url="http://127.0.0.1:8000/v1",
-                scenario_paths=[Path("alpha.json")],
+                scenario_paths=[scenario_path],
                 suite_summary=suite_summary,
                 errors=[],
                 serving_profile=None,
@@ -102,12 +119,41 @@ class AgenticEvalLayerTests(unittest.TestCase):
 
             self.assertEqual(summary["scenario_ids"], ["alpha"])
             self.assertEqual(len(summary["scenario_set_fingerprint"]), 64)
+            self.assertEqual(len(summary["scenario_fingerprints"][0]["sha256"]), 64)
             self.assertEqual(summary["critical_failure_total"], 1)
             self.assertEqual(summary["task_completion"]["check_pass_rate"], 0.5)
             self.assertEqual(summary["cost"]["total_usd"], 0.125)
             self.assertEqual(summary["latency"]["average_seconds"], 2.5)
             self.assertEqual(len(summary["artifact_hashes"]["evaluation_plan"]["sha256"]), 64)
             self.assertTrue(summary["governance_handoff"]["ready"])
+
+    def test_empty_evaluation_summary_is_not_governance_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            (out_dir / "evaluation_plan.json").write_text("{}\n", encoding="utf-8")
+            suite_summary = {
+                "metrics": {"pass_rate": 0.0, "average_score": 0.0},
+                "runs": [],
+                "total": 0,
+                "passed": 0,
+                "failed": 0,
+                "error_count": 0,
+            }
+            (out_dir / "suite_summary.json").write_text(json.dumps(suite_summary) + "\n", encoding="utf-8")
+            args = SimpleNamespace(arm="candidate", model="local-model", provider="custom", split="heldout", mock_response=None)
+
+            summary = _build_evaluation_summary(
+                args=args,
+                out_dir=out_dir,
+                base_url="http://127.0.0.1:8000/v1",
+                scenario_paths=[],
+                suite_summary=suite_summary,
+                errors=[],
+                serving_profile=None,
+            )
+
+            self.assertFalse(summary["governance_handoff"]["ready"])
+            self.assertIn("empty_or_incomplete_scenario_set", summary["governance_handoff"]["blocking_reasons"])
 
     def test_external_eval_adapter_plan_fails_closed_by_default(self):
         result = build_external_eval_adapters(
@@ -192,6 +238,10 @@ def _comparison_summary(
         "forbidden_action_failures": 0,
         "unsupported_claim_failures": critical,
         "scenario_ids": scenario_ids,
+        "scenario_fingerprints": {
+            scenario_id: hashlib.sha256(scenario_id.encode("utf-8")).hexdigest()
+            for scenario_id in scenario_ids
+        },
         "task_completion": {
             "configured": len(scenario_ids),
             "complete": int(task_rate * len(scenario_ids)),

@@ -100,7 +100,7 @@ class ModelBackend:
         else:
             stop_sequences = []
 
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        prompt = _render_chat_prompt(self.tokenizer, messages, payload.get("tools"))
         inputs = None
         output = None
         new_tokens = None
@@ -372,6 +372,18 @@ def _apply_stop_sequences(text: str, stop_sequences: list[str]) -> str:
     if first_index is None:
         return text
     return text[:first_index]
+
+
+def _render_chat_prompt(tokenizer: Any, messages: list[dict[str, Any]], tools: Any) -> str:
+    kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
+    if isinstance(tools, list) and tools:
+        kwargs["tools"] = tools
+    try:
+        return str(tokenizer.apply_chat_template(messages, **kwargs))
+    except TypeError as exc:
+        if "tools" in kwargs:
+            raise ValueError("Tokenizer chat template does not accept structured tools for agentic serving") from exc
+        raise
 
 
 def _extract_tool_calls(text: str, payload: dict[str, Any]) -> list[dict[str, Any]]:

@@ -15,12 +15,15 @@ inputs and statistics needed before launching an expensive Qwen fine-tune.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+from flightrecorder.training import _agentic_messages, _inferred_tool_definitions
 
 
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
@@ -66,6 +69,15 @@ def _copy_if_exists(src: Path, dst: Path) -> bool:
     return True
 
 
+def _file_fingerprint(path: Path, base_dir: Path) -> dict[str, Any]:
+    return {
+        "path": path.relative_to(base_dir).as_posix(),
+        "exists": True,
+        "size_bytes": path.stat().st_size,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
 def _as_text(value: Any) -> str:
     if value is None:
         return ""
@@ -79,21 +91,6 @@ def _messages(prompt: str, response: str) -> list[dict[str, str]]:
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": response},
     ]
-
-
-def _tool_call_text(event: dict[str, Any]) -> str:
-    tool_name = str(event.get("tool_name") or "tool")
-    args = event.get("args") or {}
-    return f"{tool_name}({json.dumps(args, sort_keys=True)})"
-
-
-def _tool_result_text(event: dict[str, Any]) -> str:
-    tool_name = str(event.get("tool_name") or "tool")
-    result = event.get("result")
-    if result is None:
-        result = event.get("text") or ""
-    result_text = result if isinstance(result, str) else json.dumps(result, sort_keys=True)
-    return f"Tool result from {tool_name}: {result_text}"
 
 
 def _task_family_counts(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
@@ -164,45 +161,28 @@ def _build_action_sft_rows(episodes: list[dict[str, Any]]) -> list[dict[str, Any
         prompt = _as_text(episode.get("prompt"))
         if not prompt:
             continue
-        conversation: list[dict[str, str]] = [{"role": "user", "content": prompt}]
         events = sorted(
             [event for event in episode.get("events", []) if isinstance(event, dict)],
             key=lambda event: int(event.get("order", event.get("index", 0)) or 0),
         )
-        row_index = 0
-        for event in events:
-            event_type = event.get("type")
-            if event_type == "user_message":
-                continue
-            if event_type == "tool_result":
-                conversation.append({"role": "user", "content": _tool_result_text(event)})
-                continue
-            if event_type == "tool_call" and event.get("tool_name"):
-                response = _tool_call_text(event)
-            elif event_type == "assistant_message":
-                response = _as_text(event.get("text"))
-                if not response:
-                    continue
-            else:
-                continue
-
-            rows.append(
-                {
-                    "sample_id": f"{episode.get('episode_id')}:action:{row_index}",
-                    "episode_id": episode.get("episode_id"),
-                    "scenario_id": episode.get("scenario_id"),
-                    "task_family": episode.get("task_family"),
-                    "prompt": prompt,
-                    "response": response,
-                    "messages": conversation + [{"role": "assistant", "content": response}],
-                    "source_artifact": "runs/training_export/episodes.jsonl",
-                    "source_event_index": event.get("index", event.get("order")),
-                    "training_arm": "flightrecorder_action_sft",
-                    "quality_gate": "passed_scorecard_task_completion_action_trace",
-                }
-            )
-            row_index += 1
-            conversation.append({"role": "assistant", "content": response})
+        response = _as_text(episode.get("final_answer"))
+        tool_calls = [event for event in events if event.get("type") == "tool_call" and event.get("tool_name")]
+        rows.append(
+            {
+                "sample_id": episode.get("episode_id"),
+                "episode_id": episode.get("episode_id"),
+                "scenario_id": episode.get("scenario_id"),
+                "task_family": episode.get("task_family"),
+                "prompt": prompt,
+                "response": response,
+                "messages": _agentic_messages(prompt, response, events),
+                "tools": _inferred_tool_definitions(tool_calls),
+                "tool_schema_provenance": "inferred_from_observed_argument_shapes" if tool_calls else "not_applicable",
+                "source_artifact": "runs/training_export/episodes.jsonl",
+                "training_arm": "flightrecorder_action_sft",
+                "quality_gate": "passed_scorecard_and_task_completion",
+            }
+        )
     return rows
 
 
@@ -287,7 +267,7 @@ def _filter_train_rows(
     heldout_scenario_ids: set[str],
 ) -> list[dict[str, Any]]:
     if not train_families:
-        return rows
+        return []
     filtered: list[dict[str, Any]] = []
     for row in rows:
         scenario_ids = [
@@ -333,6 +313,56 @@ def _known_trace_quality(episodes: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _write_training_dataset_manifest(
+    out_dir: Path,
+    training_dir: Path,
+    dataset_metrics: dict[str, Any],
+    dataset_splits: dict[str, Any],
+    training_gate: dict[str, Any],
+) -> Path:
+    data_files = {
+        "trace_sft": "data/hermes_trace_only_sft.jsonl",
+        "flightrecorder_sft": "data/flightrecorder_sft.jsonl",
+        "train_sft": "data/flightrecorder_sft.jsonl",
+        "flightrecorder_action_sft": "data/flightrecorder_action_sft.jsonl",
+        "train_action_sft": "data/flightrecorder_action_sft.jsonl",
+        "flightrecorder_combined_dpo": "data/flightrecorder_combined_dpo.jsonl",
+        "train_dpo": "data/flightrecorder_combined_dpo.jsonl",
+        "flightrecorder_reward_model": "data/flightrecorder_reward_model.jsonl",
+        "train_reward_model": "data/flightrecorder_reward_model.jsonl",
+        "flightrecorder_step_rewards": "data/flightrecorder_step_rewards.jsonl",
+        "train_step_rewards": "data/flightrecorder_step_rewards.jsonl",
+    }
+    source_manifest = _load_json(training_dir / "manifest.json", {})
+    manifest_path = out_dir / "dataset_training_manifest.json"
+    artifact_fingerprints = {
+        name: _file_fingerprint(out_dir / relative_path, out_dir)
+        for name, relative_path in data_files.items()
+        if name.startswith("flightrecorder_") or name == "trace_sft"
+    }
+    leakage = dataset_splits.get("leakage_checks") if isinstance(dataset_splits.get("leakage_checks"), dict) else {}
+    manifest = {
+        "schema_version": "hfr.dataset_registry_entry.v1",
+        "dataset_id": str(source_manifest.get("dataset_version") or "flightrecorder-agentic-training"),
+        "dataset_version": str(source_manifest.get("dataset_version") or ""),
+        "source_manifest": str((training_dir / "manifest.json").resolve()),
+        "redaction_status": dataset_metrics.get("redaction_status", {}),
+        "gates": {"training_gate": {"passed": training_gate.get("passed") is True}},
+        "dataset_splits": dataset_splits.get("summary", {}),
+        "leakage_checks": leakage,
+        "quality_flags": dataset_metrics.get("quality_flags", []),
+        "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage", {}),
+        "data_files": data_files,
+        "artifact_fingerprints": artifact_fingerprints,
+        "notes": [
+            "All trainer aliases point to heldout-filtered experiment artifacts.",
+            "The trainer must revalidate these SHA-256 fingerprints before launch.",
+        ],
+    }
+    _write_json(manifest_path, manifest)
+    return manifest_path
+
+
 def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
     training_dir = runs_dir / "training_export"
     reviewed_dir = runs_dir / "reviewed_export"
@@ -340,6 +370,17 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
 
     dataset_metrics = _load_json(training_dir / "dataset_metrics.json", {})
     dataset_splits = _load_json(training_dir / "dataset_splits.json", {})
+    leakage_checks = dataset_splits.get("leakage_checks") if isinstance(dataset_splits.get("leakage_checks"), dict) else {}
+    if not dataset_splits or not isinstance(dataset_splits.get("assignments"), list) or not dataset_splits["assignments"]:
+        raise ValueError("dataset_splits.json must contain deterministic split assignments before building training data")
+    if leakage_checks.get("family_exclusive") is not True or leakage_checks.get("heldout_scenario_exclusive") is not True:
+        raise ValueError("dataset split leakage checks must pass before building training data")
+    redaction_status = dataset_metrics.get("redaction_status") if isinstance(dataset_metrics.get("redaction_status"), dict) else {}
+    if redaction_status.get("passed") is not True:
+        raise ValueError("dataset redaction status must pass before building training data")
+    training_gate = _gate_summary(runs_dir / "training_gate.json")
+    if training_gate.get("available") is not True or training_gate.get("passed") is not True:
+        raise ValueError("a passing training_gate.json is required before building training data")
     split_plan = _split_scenarios(dataset_splits)
     split_filters = _split_filter_sets(split_plan)
     train_filter = {
@@ -350,7 +391,8 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
     }
 
     episodes_all = _load_jsonl(training_dir / "episodes.jsonl")
-    episodes = _filter_train_rows(
+    train_episodes_path = training_dir / "splits" / "train" / "episodes.jsonl"
+    episodes = _load_jsonl(train_episodes_path) if train_episodes_path.exists() else _filter_train_rows(
         episodes_all,
         train_families=split_filters["train_families"],
         heldout_scenario_ids=split_filters["heldout_scenario_ids"],
@@ -361,9 +403,10 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
         "flightrecorder_reviewed_sft",
     )
     if not reviewed_sft:
+        train_sft_path = training_dir / "splits" / "train" / "sft.jsonl"
         reviewed_sft = _normalize_sft_rows(
-            _load_jsonl(training_dir / "sft.jsonl"),
-            "runs/training_export/sft.jsonl",
+            _load_jsonl(train_sft_path if train_sft_path.exists() else training_dir / "sft.jsonl"),
+            "runs/training_export/splits/train/sft.jsonl" if train_sft_path.exists() else "runs/training_export/sft.jsonl",
             "flightrecorder_scorecard_sft",
         )
     reviewed_dpo = _normalize_dpo_rows(
@@ -371,9 +414,10 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
         "runs/reviewed_export/reviewed_dpo.jsonl",
         "flightrecorder_reviewed_dpo",
     )
+    train_dpo_path = training_dir / "splits" / "train" / "dpo.jsonl"
     scorecard_dpo = _normalize_dpo_rows(
-        _load_jsonl(training_dir / "dpo.jsonl"),
-        "runs/training_export/dpo.jsonl",
+        _load_jsonl(train_dpo_path if train_dpo_path.exists() else training_dir / "dpo.jsonl"),
+        "runs/training_export/splits/train/dpo.jsonl" if train_dpo_path.exists() else "runs/training_export/dpo.jsonl",
         "flightrecorder_scorecard_dpo",
     )
     compare_dpo = _normalize_dpo_rows(
@@ -382,13 +426,27 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
         "flightrecorder_compare_dpo",
     )
     reviewed_reward_model = _load_jsonl(reviewed_dir / "reviewed_reward_model.jsonl")
-    reward_model = reviewed_reward_model or _load_jsonl(training_dir / "reward_model.jsonl")
-    step_rewards = _load_jsonl(training_dir / "step_rewards.jsonl")
+    train_reward_model_path = training_dir / "splits" / "train" / "reward_model.jsonl"
+    reward_model = reviewed_reward_model or _load_jsonl(
+        train_reward_model_path if train_reward_model_path.exists() else training_dir / "reward_model.jsonl"
+    )
+    train_step_rewards_path = training_dir / "splits" / "train" / "step_rewards.jsonl"
+    step_rewards = _load_jsonl(
+        train_step_rewards_path if train_step_rewards_path.exists() else training_dir / "step_rewards.jsonl"
+    )
+    root_action_sft = _load_jsonl(training_dir / "action_sft.jsonl")
+    train_action_sft_path = training_dir / "splits" / "train" / "action_sft.jsonl"
+    if train_action_sft_path.exists():
+        action_sft_source = _load_jsonl(train_action_sft_path)
+    elif root_action_sft:
+        action_sft_source = root_action_sft
+    else:
+        action_sft_source = _build_action_sft_rows(episodes_all)
 
     raw_counts = {
         "episodes": len(episodes_all),
         "flightrecorder_sft": len(reviewed_sft),
-        "flightrecorder_action_sft": len(_build_action_sft_rows(episodes_all)),
+        "flightrecorder_action_sft": len(root_action_sft or _build_action_sft_rows(episodes_all)),
         "flightrecorder_reviewed_dpo": len(reviewed_dpo),
         "flightrecorder_scorecard_dpo": len(scorecard_dpo),
         "flightrecorder_compare_dpo": len(compare_dpo),
@@ -429,7 +487,7 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
 
     trace_only_sft = _build_trace_only_rows(episodes)
     action_sft = _filter_train_rows(
-        _build_action_sft_rows(episodes_all),
+        action_sft_source,
         train_families=split_filters["train_families"],
         heldout_scenario_ids=split_filters["heldout_scenario_ids"],
     )
@@ -445,6 +503,13 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
         "flightrecorder_step_rewards": _write_jsonl(data_dir / "flightrecorder_step_rewards.jsonl", step_rewards),
     }
     combined_dpo = reviewed_dpo + compare_dpo
+    if not combined_dpo:
+        # A normal ``run-suite --export-rl`` handoff produces scorecard-gated
+        # preference rows without requiring a separate human-review or
+        # baseline/candidate comparison export. Keep reviewed and comparison
+        # labels preferred when they exist, but do not strand the advertised
+        # SFT-then-DPO path when the standard export is the only evidence source.
+        combined_dpo = scorecard_dpo
     counts["flightrecorder_combined_dpo"] = _write_jsonl(data_dir / "flightrecorder_combined_dpo.jsonl", combined_dpo)
     _write_json(out_dir / "heldout_scenarios.json", split_plan)
     train_filter["raw_counts_before_filter"] = raw_counts
@@ -465,11 +530,18 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
     }
 
     gate_summaries = {
-        "training_gate": _gate_summary(runs_dir / "training_gate.json"),
+        "training_gate": training_gate,
         "reviewed_gate": _gate_summary(runs_dir / "reviewed_gate.json"),
         "compare_gate": _gate_summary(runs_dir / "compare_gate.json"),
         "evidence_bundle": _gate_summary(runs_dir / "evidence_bundle.json"),
     }
+    dataset_training_manifest_path = _write_training_dataset_manifest(
+        out_dir,
+        training_dir,
+        dataset_metrics,
+        dataset_splits,
+        training_gate,
+    )
 
     stats = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -540,6 +612,7 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
         "objective": "Demonstrate whether Flight Recorder curated outputs train a Hermes runtime model better than raw Hermes traces alone.",
         "artifacts": {
             "stats": "stats.json",
+            "dataset_training_manifest": dataset_training_manifest_path.relative_to(out_dir).as_posix(),
             "heldout_scenarios": "heldout_scenarios.json",
             "trace_only_sft": "data/hermes_trace_only_sft.jsonl",
             "flightrecorder_sft": "data/flightrecorder_sft.jsonl",
@@ -550,7 +623,12 @@ def build_bundle(runs_dir: Path, out_dir: Path, model: str) -> dict[str, Any]:
             **eval_status["artifacts"],
         },
         "status": {
-            "data_bundle_ready": True,
+            "data_bundle_ready": bool(
+                counts["flightrecorder_sft"]
+                and counts["flightrecorder_action_sft"]
+                and training_gate.get("passed") is True
+                and redaction_status.get("passed") is True
+            ),
             "baseline_model_eval_complete": eval_status["baseline_complete"],
             "trace_only_finetune_complete": eval_status["trace_only_complete"],
             "flightrecorder_finetune_complete": eval_status["flightrecorder_complete"],
@@ -594,7 +672,10 @@ def _evaluation_status(out_dir: Path) -> dict[str, Any]:
         rel = path.relative_to(out_dir).as_posix()
         artifacts[f"{name}_evaluation_summary"] = rel
         data = _load_json(path, {})
-        return bool(data) and int(data.get("error_count") or 0) == 0
+        scenario_count = int(data.get("scenario_count") or 0)
+        total = int(data.get("total") or 0)
+        handoff = data.get("governance_handoff") if isinstance(data.get("governance_handoff"), dict) else {}
+        return bool(data) and scenario_count > 0 and total == scenario_count and int(data.get("error_count") or 0) == 0 and handoff.get("ready") is True
 
     promotion_path = out_dir / "promotion_comparison.json"
     promotion_complete = False

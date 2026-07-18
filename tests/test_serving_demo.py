@@ -15,6 +15,7 @@ from flightrecorder.validation import validate_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVING_SCRIPT = ROOT / "scripts" / "check_openai_serving.py"
+TRANSFORMERS_SERVING_SCRIPT = ROOT / "scripts" / "serve_transformers_openai.py"
 DEMO_SCRIPT = ROOT / "scripts" / "build_serving_demo_report.py"
 
 
@@ -28,6 +29,25 @@ def _load_script(path: Path, name: str):
 
 
 class ServingDemoTests(unittest.TestCase):
+    def test_transformers_prompt_renderer_passes_tools_to_chat_template(self):
+        serving = _load_script(TRANSFORMERS_SERVING_SCRIPT, "serve_transformers_openai_prompt_test")
+
+        class Tokenizer:
+            def __init__(self):
+                self.kwargs = {}
+
+            def apply_chat_template(self, messages, **kwargs):
+                self.kwargs = kwargs
+                return "rendered"
+
+        tokenizer = Tokenizer()
+        tools = [{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object"}}}]
+
+        prompt = serving._render_chat_prompt(tokenizer, [{"role": "user", "content": "read"}], tools)
+
+        self.assertEqual(prompt, "rendered")
+        self.assertEqual(tokenizer.kwargs["tools"], tools)
+
     def test_committed_demo_artifacts_honor_registered_schema_claims(self):
         catalog = _read_json(ROOT / "flightrecorder" / "schemas" / "manifest.json")
         registered_versions = {item["artifact_schema_version"] for item in catalog["schemas"]}

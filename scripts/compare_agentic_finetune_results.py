@@ -99,6 +99,11 @@ def summarize(summary_path: Path) -> dict[str, Any]:
     critical = counts(metrics.get("critical_failure_counts", []))
     failed_rules = counts(metrics.get("failed_rule_counts", []))
     scenario_ids = sorted(str(run.get("scenario_id")) for run in summary.get("runs", []))
+    scenario_fingerprints = {
+        str(run.get("scenario_id")): str(run.get("scenario_sha256"))
+        for run in summary.get("runs", [])
+        if run.get("scenario_id") and isinstance(run.get("scenario_sha256"), str) and len(str(run.get("scenario_sha256"))) == 64
+    }
     return {
         "path": str(summary_path),
         "total": int(summary.get("total") or len(summary.get("runs", []))),
@@ -112,6 +117,7 @@ def summarize(summary_path: Path) -> dict[str, Any]:
         "forbidden_action_failures": total_count(critical, FORBIDDEN_RULE_IDS),
         "unsupported_claim_failures": total_count(critical, UNSUPPORTED_CLAIM_RULE_IDS),
         "scenario_ids": scenario_ids,
+        "scenario_fingerprints": scenario_fingerprints,
         "task_completion": task_completion_metrics(summary_path, summary),
         "artifact_hashes": {
             "suite_summary": artifact_record(summary_path),
@@ -168,15 +174,34 @@ def scenario_set_summary(
         "flightrecorder": flightrecorder["scenario_ids"],
     }
     arm_sets = {name: set(ids) for name, ids in arms.items()}
+    fingerprint_arms = {
+        name: summary.get("scenario_fingerprints", {})
+        for name, summary in {
+            "baseline": baseline,
+            "trace_only": trace_only,
+            "flightrecorder": flightrecorder,
+        }.items()
+    }
     all_ids = sorted(set().union(*arm_sets.values()))
     common_ids = sorted(set.intersection(*arm_sets.values())) if arm_sets else []
+    identical_ids = bool(all_ids) and baseline["scenario_ids"] == trace_only["scenario_ids"] == flightrecorder["scenario_ids"]
+    fingerprints_complete = all(set(fingerprints) == set(all_ids) for fingerprints in fingerprint_arms.values())
+    identical_fingerprints = fingerprints_complete and all(
+        fingerprint_arms["baseline"] == fingerprints
+        for fingerprints in fingerprint_arms.values()
+    )
+    identical = identical_ids and identical_fingerprints
     return {
-        "identical": baseline["scenario_ids"] == trace_only["scenario_ids"] == flightrecorder["scenario_ids"],
-        "requires_identical_scenarios_for_claims": True,
-        "scenario_ids": baseline["scenario_ids"] if baseline["scenario_ids"] == trace_only["scenario_ids"] == flightrecorder["scenario_ids"] else [],
+        "identical": identical,
+        "identical_ids": identical_ids,
+        "identical_content_fingerprints": identical_fingerprints,
+        "fingerprints_complete": fingerprints_complete,
+        "requires_identical_scenario_content_for_claims": True,
+        "scenario_ids": baseline["scenario_ids"] if identical else [],
         "common_scenario_ids": common_ids,
         "all_scenario_ids": all_ids,
         "arms": arms,
+        "fingerprint_arms": fingerprint_arms,
         "missing_by_arm": {
             name: [scenario_id for scenario_id in all_ids if scenario_id not in ids]
             for name, ids in arm_sets.items()
@@ -194,7 +219,7 @@ def governance_handoff(checks: list[dict[str, Any]], scenario_set: dict[str, Any
             "failed_checks": failed_checks,
             "blocking_reasons": [SCENARIO_COMPARABILITY_CHECK],
             "next_actions": [
-                "Rerun baseline, trace-only, champion, and candidate arms on the exact same held-out scenario id list.",
+            "Rerun baseline, trace-only, champion, and candidate arms on the exact same fingerprinted held-out scenario files.",
                 "Do not use pass-rate, score, or regression deltas from this comparison for promotion decisions.",
             ],
         }
@@ -362,8 +387,9 @@ def compare(baseline: dict[str, Any], trace_only: dict[str, Any], flightrecorder
                 "baseline": baseline["scenario_ids"],
                 "trace_only": trace_only["scenario_ids"],
                 "flightrecorder": flightrecorder["scenario_ids"],
+                "scenario_fingerprints": scenario_set["fingerprint_arms"],
             },
-            "identical scenario id lists",
+            "identical non-empty scenario id lists and content fingerprints",
         ),
         comparative_check(
             "higher_pass_rate_than_baseline",

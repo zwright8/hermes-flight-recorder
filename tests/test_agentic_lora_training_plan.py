@@ -1,4 +1,6 @@
 import json
+import hashlib
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -10,6 +12,10 @@ from flightrecorder.schema_registry import check_schema_contract, check_schema_f
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "train_agentic_lora.py"
+SCRIPT_SPEC = importlib.util.spec_from_file_location("train_agentic_lora_test_module", SCRIPT)
+assert SCRIPT_SPEC is not None and SCRIPT_SPEC.loader is not None
+TRAIN_MODULE = importlib.util.module_from_spec(SCRIPT_SPEC)
+SCRIPT_SPEC.loader.exec_module(TRAIN_MODULE)
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -37,6 +43,58 @@ def stdout_json(completed: subprocess.CompletedProcess[str]) -> dict:
 
 
 class AgenticLoraTrainingPlanTests(unittest.TestCase):
+    def test_preparation_preserves_native_tools_for_sft_and_dpo(self):
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
+                },
+            }
+        ]
+        prompt = {"role": "user", "content": "Read the file."}
+        chosen_call = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "read_file", "arguments": "{\"path\":\"safe.txt\"}"},
+                }
+            ],
+        }
+        rejected_call = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {"name": "read_file", "arguments": "{\"path\":\"secret.txt\"}"},
+                }
+            ],
+        }
+
+        sft = TRAIN_MODULE.prepare_sft_rows([{"messages": [prompt, chosen_call], "tools": tools}])
+        dpo = TRAIN_MODULE.prepare_dpo_rows(
+            [
+                {
+                    "chosen_messages": [prompt, chosen_call],
+                    "rejected_messages": [prompt, rejected_call],
+                    "tools": tools,
+                }
+            ]
+        )
+
+        self.assertEqual(sft[0]["messages"][1]["tool_calls"][0]["id"], "call-1")
+        self.assertEqual(sft[0]["tools"], tools)
+        self.assertEqual(dpo[0]["prompt"], [prompt])
+        self.assertEqual(dpo[0]["chosen"], [chosen_call])
+        self.assertEqual(dpo[0]["rejected"], [rejected_call])
+        self.assertEqual(dpo[0]["tools"], tools)
+
     def make_experiment(self, root: Path) -> Path:
         experiment = root / "experiment"
         data = experiment / "data"
@@ -85,6 +143,14 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
 
     def write_dataset_manifest(self, path: Path, experiment: Path) -> None:
         data = experiment / "data"
+        files = {
+            "trace_sft": data / "hermes_trace_only_sft.jsonl",
+            "flightrecorder_sft": data / "flightrecorder_sft.jsonl",
+            "flightrecorder_action_sft": data / "flightrecorder_action_sft.jsonl",
+            "flightrecorder_combined_dpo": data / "flightrecorder_combined_dpo.jsonl",
+            "flightrecorder_reward_model": data / "flightrecorder_reward_model.jsonl",
+            "flightrecorder_step_rewards": data / "flightrecorder_step_rewards.jsonl",
+        }
         write_json(
             path,
             {
@@ -96,13 +162,15 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
                 "dataset_splits": {"family_exclusive": True},
                 "quality_flags": [],
                 "source_fingerprint_coverage": {"fully_verified": 6, "unverified": 0},
-                "data_files": {
-                    "trace_sft": str(data / "hermes_trace_only_sft.jsonl"),
-                    "flightrecorder_sft": str(data / "flightrecorder_sft.jsonl"),
-                    "flightrecorder_action_sft": str(data / "flightrecorder_action_sft.jsonl"),
-                    "flightrecorder_combined_dpo": str(data / "flightrecorder_combined_dpo.jsonl"),
-                    "flightrecorder_reward_model": str(data / "flightrecorder_reward_model.jsonl"),
-                    "flightrecorder_step_rewards": str(data / "flightrecorder_step_rewards.jsonl"),
+                "data_files": {name: str(file_path) for name, file_path in files.items()},
+                "artifact_fingerprints": {
+                    name: {
+                        "path": str(file_path),
+                        "exists": True,
+                        "size_bytes": file_path.stat().st_size,
+                        "sha256": hashlib.sha256(file_path.read_bytes()).hexdigest(),
+                    }
+                    for name, file_path in files.items()
                 },
             },
         )
@@ -180,6 +248,29 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             failed = {check["id"] for check in plan["checks"] if not check["passed"]}
             self.assertIn("model_license_known", failed)
 
+    def test_push_to_hub_without_repository_blocks_before_training(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            completed = run_train(
+                [
+                    "--mode",
+                    "fr_sft",
+                    "--dry-run",
+                    "--push-to-hub",
+                    "--experiment-dir",
+                    str(experiment),
+                    "--output-dir",
+                    str(root / "out"),
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            plan = stdout_json(completed)
+            failed = {check["id"] for check in plan["checks"] if not check["passed"]}
+            self.assertIn("hub_model_id_present_when_pushing", failed)
+
     def test_non_dry_run_without_registry_blocks_before_heavy_imports(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -226,6 +317,46 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertEqual(events[0]["failure"]["category"], "plan_validation_failed")
             event_schema = check_schema_jsonl_file(registry, "agentic_lora_training_registry_event")
             self.assertTrue(event_schema["passed"], event_schema["errors"])
+
+    def test_malformed_training_jsonl_is_archived_before_trainer_imports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            out = root / "out"
+            registry = root / "registry" / "training_events.jsonl"
+            (experiment / "data" / "flightrecorder_action_sft.jsonl").write_text(
+                '{"messages": [}\n',
+                encoding="utf-8",
+            )
+
+            completed = run_train(
+                [
+                    "--mode",
+                    "fr_action_sft",
+                    "--experiment-dir",
+                    str(experiment),
+                    "--output-dir",
+                    str(out),
+                    "--result-registry",
+                    str(registry),
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            self.assertNotIn("Traceback", completed.stderr)
+            result = stdout_json(completed)
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["failure"]["category"], "invalid_training_data")
+            self.assertTrue((out / "fr_action_sft_plan.json").exists())
+            self.assertEqual(
+                json.loads((out / "fr_action_sft_result.json").read_text(encoding="utf-8"))["failure"]["category"],
+                "invalid_training_data",
+            )
+            events = [json.loads(line) for line in registry.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(events[0]["failure"]["category"], "invalid_training_data")
+            result_schema = check_schema_contract(result)
+            self.assertTrue(result_schema["passed"], result_schema["errors"])
 
     def test_preflight_only_archives_missing_dependency_without_training(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -292,7 +423,10 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertFalse(link["handoff_contract"]["moves_aliases"])
             self.assertFalse(link["handoff_contract"]["flight_recorder_mutated_registry"])
             self.assertEqual(link["commands"][0]["link_type"], "training-run")
-            self.assertIn("--type", link["commands"][0]["command_argv"])
+            self.assertIn("--collection", link["commands"][0]["command_argv"])
+            self.assertIn("training_runs", link["commands"][0]["command_argv"])
+            self.assertIn("--kind", link["commands"][0]["command_argv"])
+            self.assertNotIn("--type", link["commands"][0]["command_argv"])
             link_schema = check_schema_file(link_plan)
             self.assertTrue(link_schema["passed"], link_schema["errors"])
 

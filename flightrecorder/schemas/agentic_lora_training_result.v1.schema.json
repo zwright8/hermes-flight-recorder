@@ -26,6 +26,12 @@
         "null"
       ]
     },
+    "final_adapter_artifacts": {
+      "type": "object"
+    },
+    "hub_persistence": {
+      "type": "object"
+    },
     "input_manifests": {
       "type": "object"
     },

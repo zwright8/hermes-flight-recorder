@@ -77,6 +77,15 @@
     "task_family": {
       "minLength": 1,
       "type": "string"
+    },
+    "tools": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "trajectory_format": {
+      "const": "native_tool_messages"
     }
   },
   "required": [

@@ -101,6 +101,8 @@ def main() -> int:
     require_hermes_checkout(hermes_root)
     scenario_ids = args.scenario_id or _scenario_ids(heldout_path, args.split)
     scenario_paths = [scenarios_dir / f"{scenario_id}.json" for scenario_id in scenario_ids]
+    if not scenario_paths:
+        raise SystemExit("Held-out evaluation requires at least one scenario")
     for path in scenario_paths:
         if not path.exists():
             raise SystemExit(f"Scenario not found: {path}")
@@ -395,7 +397,12 @@ def _build_evaluation_summary(
     critical_failures = _counts_dict(metrics.get("critical_failure_counts", []))
     failed_rules = _counts_dict(metrics.get("failed_rule_counts", []))
     scenario_ids = [str(path.stem) for path in scenario_paths]
+    scenario_fingerprints = [
+        {"scenario_id": str(path.stem), "sha256": _sha256_file(path)}
+        for path in scenario_paths
+    ]
     eval_error_count = int(suite_summary["error_count"])
+    eval_ready = bool(scenario_ids) and int(suite_summary.get("total") or 0) == len(scenario_ids) and eval_error_count == 0
     return {
         "schema_version": "hfr.hermes_heldout_eval_summary.v1",
         "arm": args.arm,
@@ -414,7 +421,8 @@ def _build_evaluation_summary(
         "serving_profile": serving_profile,
         "scenario_ids": scenario_ids,
         "scenario_count": len(scenario_ids),
-        "scenario_set_fingerprint": _canonical_sha256(scenario_ids),
+        "scenario_fingerprints": scenario_fingerprints,
+        "scenario_set_fingerprint": _canonical_sha256(scenario_fingerprints),
         "suite_summary": str(out_dir / "suite_summary.json"),
         "metrics": metrics,
         "pass_rate": metrics.get("pass_rate"),
@@ -431,11 +439,11 @@ def _build_evaluation_summary(
             "suite_summary": _artifact_record(out_dir / "suite_summary.json"),
         },
         "governance_handoff": {
-            "ready": eval_error_count == 0,
-            "status": "complete" if eval_error_count == 0 else "blocked_by_eval_errors",
-            "recommendation": "consume_eval_summary" if eval_error_count == 0 else "repair_eval_errors",
-            "blocking_reasons": [] if eval_error_count == 0 else ["eval_errors"],
-            "requires_identical_scenario_ids_for_cross_arm_claims": True,
+            "ready": eval_ready,
+            "status": "complete" if eval_ready else "blocked_by_incomplete_eval",
+            "recommendation": "consume_eval_summary" if eval_ready else "repair_eval_errors",
+            "blocking_reasons": [] if eval_ready else (["empty_or_incomplete_scenario_set"] if eval_error_count == 0 else ["eval_errors"]),
+            "requires_identical_scenario_content_for_cross_arm_claims": True,
             "next_actions": _next_actions(eval_error_count),
         },
         "total": suite_summary["total"],

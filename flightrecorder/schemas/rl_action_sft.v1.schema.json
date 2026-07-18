@@ -1,0 +1,73 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_action_sft.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Native tool-trajectory supervised fine-tuning row emitted in export-rl action_sft.jsonl.",
+  "properties": {
+    "action_count": { "minimum": 1, "type": "integer" },
+    "episode_id": { "minLength": 1, "type": "string" },
+    "label_provenance": { "type": "object" },
+    "messages": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "content": { "type": "string" },
+          "role": { "enum": ["system", "user", "assistant", "tool"] }
+        },
+        "required": ["role", "content"],
+        "type": "object"
+      },
+      "minItems": 2,
+      "type": "array"
+    },
+    "prompt": { "type": "string" },
+    "quality_gate": { "const": "passed_scorecard_and_task_completion" },
+    "response": { "type": "string" },
+    "reward": { "type": "number" },
+    "sample_id": { "minLength": 1, "type": "string" },
+    "scenario_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.rl.action_sft.v1" },
+    "score": { "minimum": 0, "type": "integer" },
+    "source_artifact": { "const": "episodes.jsonl" },
+    "source_fingerprint_status": { "type": "string" },
+    "source_fingerprints": { "type": "object" },
+    "task_completion_passed": { "type": "boolean" },
+    "task_completion_status": { "type": "string" },
+    "task_family": { "minLength": 1, "type": "string" },
+    "tool_call_count": { "minimum": 0, "type": "integer" },
+    "tool_result_count": { "minimum": 0, "type": "integer" },
+    "tool_schema_provenance": {
+      "enum": ["inferred_from_observed_argument_shapes", "not_applicable"]
+    },
+    "tools": {
+      "items": { "type": "object" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "sample_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "prompt",
+    "response",
+    "messages",
+    "tools",
+    "tool_schema_provenance",
+    "action_count",
+    "tool_call_count",
+    "tool_result_count",
+    "score",
+    "reward",
+    "quality_gate",
+    "task_completion_status",
+    "task_completion_passed",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "label_provenance",
+    "source_artifact"
+  ],
+  "title": "Hermes Flight Recorder RL Action SFT Row",
+  "type": "object"
+}

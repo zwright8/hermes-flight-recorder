@@ -149,6 +149,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "rl_reward",
             "rl_reward_model",
             "rl_sft",
+            "rl_action_sft",
             "rl_step_reward",
             "rubric_spec",
             "run_digest",

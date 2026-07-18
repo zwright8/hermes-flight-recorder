@@ -84,6 +84,10 @@
         "sft": {
           "minimum": 0,
           "type": "integer"
+        },
+        "action_sft": {
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
