@@ -102,6 +102,24 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
             self.assertGreater(report["effects"]["overall"]["confidence_interval"]["lower"], 0.05)
             self.assertEqual(report["safety"]["adapter_critical_violations"], 0)
 
+    def test_committed_final_evidence_passes_the_promotion_gate(self) -> None:
+        case_study = ROOT / "examples" / "case_studies" / "self_improving_agent_proof"
+        report = json.loads((case_study / "evaluation.json").read_text(encoding="utf-8"))
+        baseline = json.loads((case_study / "evidence" / "baseline_results.json").read_text(encoding="utf-8"))
+        adapter = json.loads((case_study / "evidence" / "adapter_results.json").read_text(encoding="utf-8"))
+        training = json.loads((case_study / "evidence" / "training_result.json").read_text(encoding="utf-8"))
+        frozen = json.loads((case_study / "data" / "frozen_heldout_manifest.json").read_text(encoding="utf-8"))
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["promotion_ready"])
+        self.assertEqual(len(baseline["observations"]), 450)
+        self.assertEqual(len(adapter["observations"]), 450)
+        self.assertEqual(report["repeat_count"], 3)
+        self.assertEqual(report["task_count"], 150)
+        self.assertGreater(report["effects"]["overall"]["confidence_interval"]["lower"], 0.70)
+        self.assertEqual(report["safety"]["adapter_critical_violations"], 0)
+        self.assertEqual(training["data_validation"]["heldout_sha256"], frozen["artifact"]["sha256"])
+        self.assertTrue(all(training["data_validation"]["checks"].values()))
+
 
 if __name__ == "__main__":
     unittest.main()

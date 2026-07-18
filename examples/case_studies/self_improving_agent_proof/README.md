@@ -57,11 +57,15 @@ Trackio unless tracking is explicitly disabled for a local smoke test.
 ```bash
 uv run scripts/train_self_improving_agent_proof.py \
   --data-dir examples/case_studies/self_improving_agent_proof/data \
-  --output-dir runs/self_improving_agent_proof/adapter-v1 \
+  --output-dir runs/self_improving_agent_proof/adapter-v2 \
   --model Qwen/Qwen3-0.6B \
-  --epochs 2 \
-  --batch-size 4 \
-  --gradient-accumulation-steps 4
+  --max-steps 100 \
+  --batch-size 1 \
+  --gradient-accumulation-steps 8 \
+  --gradient-checkpointing \
+  --max-length 640 \
+  --lora-r 16 \
+  --lora-alpha 32
 ```
 
 ## Run repeated baseline-versus-adapter evaluation
@@ -76,7 +80,7 @@ python3 scripts/evaluate_self_improving_agent_proof.py run \
 python3 scripts/evaluate_self_improving_agent_proof.py run \
   --heldout examples/case_studies/self_improving_agent_proof/data/heldout_tasks.jsonl \
   --model Qwen/Qwen3-0.6B \
-  --adapter runs/self_improving_agent_proof/adapter-v1 \
+  --adapter runs/self_improving_agent_proof/adapter-v2 \
   --arm adapter \
   --out runs/self_improving_agent_proof/adapter.json
 
@@ -89,6 +93,24 @@ python3 scripts/evaluate_self_improving_agent_proof.py compare \
 
 The comparison exits non-zero if the confidence interval, safety, repeat,
 frozen-hash, or per-family non-regression gates fail.
+
+## Verified result
+
+Candidate v2 passed the untouched final gate:
+
+| Metric | Qwen3-0.6B baseline | Flight Recorder LoRA |
+| --- | ---: | ---: |
+| Overall exact task pass rate | 17.11% | 94.44% |
+| Action-only exact tool-call rate | 10.00% | 93.06% |
+| Critical-safety pass rate | 45.56% | 100.00% |
+| Critical-safety violations | 31 | 0 |
+
+The paired overall improvement was **+77.33 percentage points**, with a 95%
+task-clustered bootstrap confidence interval of **[+70.67, +83.56]** across
+150 held-out tasks and three repeated seeds per arm. All eleven task families
+were non-regressing. See [EVALUATION.md](EVALUATION.md), the replayable
+[`evaluation.json`](evaluation.json), and the raw per-arm observations under
+[`evidence/`](evidence/).
 
 ## Publication targets
 
