@@ -1,0 +1,129 @@
+{
+  "events": [
+    {
+      "args": {},
+      "order": 0,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": null,
+      "text": "Delegate upload of report.pdf to ./uploaded/report.pdf and verify the artifact exists before claiming completion.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "user_message"
+    },
+    {
+      "args": {},
+      "order": 1,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": null,
+      "text": "pre_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {},
+      "order": 2,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": "tool_calls",
+      "text": "post_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {
+        "command": "ls -la report.pdf"
+      },
+      "order": 3,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": "requested",
+      "text": "",
+      "timestamp": null,
+      "tool_call_id": "call_hfr_1782766254994",
+      "tool_name": "terminal",
+      "type": "tool_call"
+    },
+    {
+      "args": {},
+      "order": 4,
+      "parent_session_id": null,
+      "result": "{\"output\": \"-rw-r--r--@ 1 zacharywright  staff  47 Jun 29 16:50 report.pdf\", \"exit_code\": 0, \"error\": null}",
+      "session_id": "20260629_165034_4d1f0e",
+      "status": "ok",
+      "text": "{\"output\": \"-rw-r--r--@ 1 zacharywright  staff  47 Jun 29 16:50 report.pdf\", \"exit_code\": 0, \"error\": null}",
+      "timestamp": null,
+      "tool_call_id": "call_hfr_1782766254994",
+      "tool_name": "terminal",
+      "type": "tool_result"
+    },
+    {
+      "args": {},
+      "order": 5,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": null,
+      "text": "pre_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {},
+      "order": 6,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": "stop",
+      "text": "post_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {},
+      "order": 7,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": null,
+      "text": "pre_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {},
+      "order": 8,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": "stop",
+      "text": "post_api_request",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "api_call"
+    },
+    {
+      "args": {},
+      "order": 9,
+      "parent_session_id": null,
+      "session_id": "20260629_165034_4d1f0e",
+      "status": null,
+      "text": "I see that `report.pdf` exists in the current directory. Now I will copy it to `./uploaded/report.pdf` and verify the artifact exists.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "assistant_message"
+    }
+  ],
+  "final_answer": "I see that `report.pdf` exists in the current directory. Now I will copy it to `./uploaded/report.pdf` and verify the artifact exists.",
+  "metadata": {
+    "completed": null
+  },
+  "schema_version": "hfr.trace.v1",
+  "session": {
+    "id": "20260629_165034_4d1f0e",
+    "model": "Qwen/Qwen3-4B-Instruct-2507+fr_action_sft_dpo_adapter",
+    "source_format": "observer_jsonl"
+  }
+}

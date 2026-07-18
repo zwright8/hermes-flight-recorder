@@ -73,12 +73,18 @@ class ReviewedGateTests(unittest.TestCase):
             result = json.loads(gate.read_text(encoding="utf-8"))
             self.assertEqual(result["schema_version"], "hfr.reviewed_gate.v1")
             self.assertTrue(result["passed"])
+            self.assertEqual(result["readiness"], "ready")
+            self.assertEqual(result["recommendation"], "promote_iteration")
             self.assertEqual(result["failed_check_count"], 0)
+            self.assertEqual(result["failed_checks"], [])
+            self.assertEqual(result["decision"]["blocking_check_count"], 0)
+            self.assertEqual(result["decision"]["next_actions"], [])
             self.assertEqual(result["policy"]["schema_version"], "hfr.reviewed_gate.policy.v1")
             self.assertGreaterEqual(result["metrics"]["accepted_count"], 2)
             self.assertGreaterEqual(result["metrics"]["rejected_count"], 2)
             self.assertEqual(result["metrics"]["low_confidence_label_count"], 0)
             self.assertEqual(result["metrics"]["unknown_confidence_label_count"], 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_reviewed_fails_thresholds_and_forbidden_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +110,10 @@ class ReviewedGateTests(unittest.TestCase):
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_reviewed_labels", failed_checks)
             self.assertIn("forbid_label", failed_checks)
+            self.assertEqual(result["readiness"], "blocked")
+            self.assertEqual(result["recommendation"], "block_iteration")
+            self.assertEqual(result["decision"]["next_actions"][0]["id"], "resolve_failed_checks")
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_reviewed_fails_confidence_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:

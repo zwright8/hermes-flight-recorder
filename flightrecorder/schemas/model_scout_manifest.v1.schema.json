@@ -1,0 +1,122 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_scout_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Model scouting manifest that records candidate artifact references, license-selection policy, and compatibility proof links before registry or training selection.",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/candidateRef"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.model_scout_manifest.v1"
+    },
+    "selection_policy": {
+      "$ref": "#/$defs/selectionPolicy"
+    },
+    "updated_at": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "updated_at",
+    "selection_policy",
+    "candidates"
+  ],
+  "title": "Hermes Flight Recorder Model Scout Manifest",
+  "type": "object",
+  "$defs": {
+    "candidateRef": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "compatibility_report_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "license_status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "manifest_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "priority": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "registry_entry_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "training_selection_eligible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "manifest_path",
+        "priority",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "selectionPolicy": {
+      "additionalProperties": true,
+      "properties": {
+        "allow_unknown_license_for_scouting": {
+          "type": "boolean"
+        },
+        "block_unknown_license_from_training": {
+          "type": "boolean"
+        },
+        "require_candidate_source": {
+          "type": "boolean"
+        },
+        "require_compatibility_metadata": {
+          "type": "boolean"
+        },
+        "require_terms_review_for_training": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allow_unknown_license_for_scouting",
+        "block_unknown_license_from_training",
+        "require_candidate_source",
+        "require_compatibility_metadata",
+        "require_terms_review_for_training"
+      ],
+      "type": "object"
+    }
+  }
+}

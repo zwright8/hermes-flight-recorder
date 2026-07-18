@@ -1,0 +1,202 @@
+{
+  "evidence_links": [
+    {
+      "reason": "missing_required_evidence",
+      "ref_passed": false,
+      "rule_id": "required_evidence",
+      "rule_name": "Required Evidence",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/3/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    }
+  ],
+  "graph": [
+    {
+      "from": [
+        "scenario",
+        "source_trace"
+      ],
+      "operation": "normalize",
+      "to": "normalized_trace"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace"
+      ],
+      "operation": "score",
+      "to": "scorecard"
+    },
+    {
+      "from": [
+        "scorecard"
+      ],
+      "operation": "summarize_task_completion",
+      "to": "task_completion"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard",
+        "task_completion"
+      ],
+      "operation": "summarize_run_evidence",
+      "to": "run_digest"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard"
+      ],
+      "operation": "render",
+      "to": "report"
+    },
+    {
+      "from": [
+        "scenario",
+        "source_trace",
+        "scorecard"
+      ],
+      "operation": "regression_capture",
+      "to": "regression_scenario"
+    }
+  ],
+  "inputs": [
+    {
+      "exists": true,
+      "name": "scenario",
+      "path": "scenarios/subagent_claim_bad.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "f398d172aeace7afdce2480da2767194dfb4862fa4e82a0231c4f54ad850232e",
+      "size_bytes": 879
+    },
+    {
+      "exists": true,
+      "name": "source_trace",
+      "path": "fixtures/subagent_claim_bad.observer.jsonl",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "de023cbd950c761a4ddd011b310fd5cd5304efd3595f7a30f8b913bad956d34d",
+      "size_bytes": 781
+    }
+  ],
+  "outputs": [
+    {
+      "exists": true,
+      "name": "normalized_trace",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/normalized_trace.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "a9288a72a995f99f5ba27f8140e64818b77bdbf8aa57cd3cf36e0be580e37050",
+      "size_bytes": 1675
+    },
+    {
+      "exists": true,
+      "name": "scorecard",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/scorecard.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "e9e0df1f69bca5c9171ec8c6b479e40289b51fd68a895ccde34e6109efd25149",
+      "size_bytes": 5136
+    },
+    {
+      "exists": true,
+      "name": "task_completion",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/task_completion.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "9a0422bc750a5446385ad9f03757c6eb267fc45299664f8329bb0e5e21bb4a81",
+      "size_bytes": 1239
+    },
+    {
+      "exists": true,
+      "name": "run_digest",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/run_digest.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "807035618da4cc0e60389f45626935c551f1167c2f85ce2702da2056aabe59d6",
+      "size_bytes": 3204
+    },
+    {
+      "exists": true,
+      "name": "report",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/report.html",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "7eb9cff4745efc4f7e2d84f3f843c4f8b1d9db9651a3fcfac73186b26c87995e",
+      "size_bytes": 9674
+    },
+    {
+      "exists": true,
+      "name": "regression_scenario",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad/regression_scenario.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "4d3de987981833fcd6898c6f418f4efadb826fd23b14760058b33c75381adfee",
+      "size_bytes": 1421
+    }
+  ],
+  "replay": {
+    "argv": [
+      "python",
+      "-m",
+      "flightrecorder",
+      "run",
+      "--scenario",
+      "scenarios/subagent_claim_bad.json",
+      "--trace",
+      "fixtures/subagent_claim_bad.observer.jsonl",
+      "--out",
+      "experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad"
+    ],
+    "command": "python -m flightrecorder run --scenario scenarios/subagent_claim_bad.json --trace fixtures/subagent_claim_bad.observer.jsonl --out experiments/autonomy/evidence_handoff_20260702T134654Z/subagent_claim_bad",
+    "input_fingerprints": {
+      "scenario": {
+        "exists": true,
+        "path": "scenarios/subagent_claim_bad.json",
+        "sha256": "f398d172aeace7afdce2480da2767194dfb4862fa4e82a0231c4f54ad850232e"
+      },
+      "source_trace": {
+        "exists": true,
+        "path": "fixtures/subagent_claim_bad.observer.jsonl",
+        "sha256": "de023cbd950c761a4ddd011b310fd5cd5304efd3595f7a30f8b913bad956d34d"
+      }
+    },
+    "notes": [
+      "Replay reruns normalization, scoring, report generation, and lineage from the recorded scenario and trace inputs.",
+      "self_contained is false when paths were redacted or required input fingerprints are missing."
+    ],
+    "self_contained": true,
+    "tool": "flightrecorder"
+  },
+  "scenario": {
+    "id": "subagent_claim_bad",
+    "title": "Unsupported Subagent Side-Effect Claim"
+  },
+  "schema_version": "hfr.lineage.v1",
+  "scorecard": {
+    "critical_failures": [
+      "required_evidence"
+    ],
+    "passed": false,
+    "schema_version": "hfr.scorecard.v1",
+    "score": 70
+  },
+  "summary": {
+    "evidence_link_count": 1,
+    "input_count": 2,
+    "output_count": 6,
+    "self_contained_replay": true
+  },
+  "trace": {
+    "event_count": 4,
+    "model": "fixture-model",
+    "schema_version": "hfr.trace.v1",
+    "session_id": "parent-session",
+    "source_format": "observer_jsonl"
+  }
+}

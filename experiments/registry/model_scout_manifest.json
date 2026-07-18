@@ -1,0 +1,28 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "local_mock_tiny_chat",
+      "compatibility_report_path": "experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+      "license_status": "approved",
+      "manifest_path": "experiments/registry/model_candidates/local_mock_tiny_chat.json",
+      "priority": "bootstrap",
+      "reason": "No-download local candidate for validating model-layer registry and dry-run training-plan gates.",
+      "registry_entry_id": "local_mock_tiny_chat",
+      "review_status": "approved",
+      "training_selection_eligible": true
+    }
+  ],
+  "notes": [
+    "Scouting entries must include explicit license review and compatibility metadata before training selection.",
+    "Unknown or non-approved license status can be recorded for scouting, but cannot be selected for training plans."
+  ],
+  "schema_version": "hfr.model_scout_manifest.v1",
+  "selection_policy": {
+    "allow_unknown_license_for_scouting": true,
+    "block_unknown_license_from_training": true,
+    "require_candidate_source": true,
+    "require_compatibility_metadata": true,
+    "require_terms_review_for_training": true
+  },
+  "updated_at": "2026-07-02T14:35:00Z"
+}

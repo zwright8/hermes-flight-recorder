@@ -216,6 +216,8 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertTrue(gate["passed"])
             self.assertEqual(gate["decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate["decision"]["readiness"], "ready")
+            self.assertEqual(gate["decision"]["failed_checks"], [])
+            self.assertEqual(gate["decision"]["next_actions"], [])
             self.assertEqual(gate["metrics"]["blocked_rate"], 0.0)
             self.assertEqual(gate["metrics"]["failed_decision_count"], 0)
             self.assertEqual(gate["policy"]["schema_version"], "hfr.promotion_ledger_gate.policy.v1")
@@ -309,6 +311,8 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertFalse(gate["passed"])
             self.assertEqual(gate["decision"]["recommendation"], "block_iteration")
             self.assertEqual(gate["decision"]["readiness"], "blocked")
+            self.assertEqual(gate["decision"]["next_action_count"], 1)
+            self.assertEqual(gate["decision"]["next_actions"][0]["id"], "resolve_failed_checks")
             self.assertEqual(gate["metrics"]["blocked_rate"], 1.0)
             self.assertEqual(gate["metrics"]["failed_decision_count"], 1)
             failed_checks = {check["id"] for check in gate["checks"] if not check["passed"]}

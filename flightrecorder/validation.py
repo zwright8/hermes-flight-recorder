@@ -19,11 +19,35 @@ from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
+from .governance import (
+    PROMOTION_CARDS_SCHEMA_VERSION,
+    PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_POLICY_SCHEMA_VERSION,
+    PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
+    REGISTRY_ALIAS_APPLY_SCHEMA_VERSION,
+    REGISTRY_ALIAS_RECEIPT_SCHEMA_VERSION,
+)
+from .gate_contract import BLOCK_RECOMMENDATION, READY_RECOMMENDATION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
+from .model_registry import (
+    MODEL_CANDIDATE_SCHEMA_VERSION,
+    MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION,
+    MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
+    MODEL_REGISTRY_SCHEMA_VERSION,
+    MODEL_SCOUT_MANIFEST_SCHEMA_VERSION,
+    TRAINING_PLAN_SCHEMA_VERSION,
+    is_training_license_approved,
+    model_candidate_errors,
+    model_compatibility_report_errors,
+    model_registry_entry_errors,
+    model_registry_errors,
+    model_scout_manifest_errors,
+    training_plan_errors,
+)
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
@@ -57,20 +81,27 @@ from .training import (
     DATASET_SPLIT_NAMES,
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
+    RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_DATASET_SPLITS_SCHEMA_VERSION,
     RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
+    RL_LABEL_PROVENANCE_SCHEMA_VERSION,
     COMPARE_RL_DPO_SCHEMA_VERSION,
     COMPARE_RL_MANIFEST_SCHEMA_VERSION,
     COMPARE_RL_PAIR_SCHEMA_VERSION,
     RL_MANIFEST_SCHEMA_VERSION,
     RL_PREFERENCE_SCHEMA_VERSION,
+    RL_REDACTION_STATUS_SCHEMA_VERSION,
     RL_REWARD_SCHEMA_VERSION,
     RL_REWARD_MODEL_SCHEMA_VERSION,
     RL_SFT_SCHEMA_VERSION,
     RL_STEP_REWARD_SCHEMA_VERSION,
     REWARD_SCALES,
+    build_label_provenance_summary,
+    build_redaction_status,
+    metadata_redaction_scan_payload,
+    redaction_scan_artifacts,
 )
 from .verifiers import VERIFIER_SOURCES_SCHEMA_VERSION
 
@@ -78,6 +109,9 @@ VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
+HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
+HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
+HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -116,6 +150,11 @@ def validate_artifacts(
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
+    promotion_decision_paths: list[str | Path] | None = None,
+    promotion_cards_paths: list[str | Path] | None = None,
+    promotion_release_record_paths: list[str | Path] | None = None,
+    registry_alias_receipt_paths: list[str | Path] | None = None,
+    registry_alias_apply_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
     promotion_archive_paths: list[str | Path] | None = None,
@@ -125,6 +164,12 @@ def validate_artifacts(
     trainer_archive_check_paths: list[str | Path] | None = None,
     trainer_consumer_plan_paths: list[str | Path] | None = None,
     trainer_wrapper_dry_run_paths: list[str | Path] | None = None,
+    model_scout_manifest_paths: list[str | Path] | None = None,
+    model_candidate_paths: list[str | Path] | None = None,
+    model_compatibility_report_paths: list[str | Path] | None = None,
+    model_registry_entry_paths: list[str | Path] | None = None,
+    model_registry_paths: list[str | Path] | None = None,
+    training_plan_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -135,6 +180,9 @@ def validate_artifacts(
     state_snapshot_paths: list[str | Path] | None = None,
     state_diff_paths: list[str | Path] | None = None,
     run_digest_paths: list[str | Path] | None = None,
+    harness_manifest_paths: list[str | Path] | None = None,
+    harness_result_paths: list[str | Path] | None = None,
+    harness_replay_result_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -168,6 +216,16 @@ def validate_artifacts(
         targets.append(validate_action_ledger_gate(action_ledger_gate_path))
     for decision_gate_path in decision_gate_paths or []:
         targets.append(validate_decision_gate(decision_gate_path))
+    for promotion_decision_path in promotion_decision_paths or []:
+        targets.append(validate_promotion_decision(promotion_decision_path))
+    for promotion_cards_path in promotion_cards_paths or []:
+        targets.append(validate_promotion_cards(promotion_cards_path))
+    for promotion_release_record_path in promotion_release_record_paths or []:
+        targets.append(validate_promotion_release_record(promotion_release_record_path))
+    for registry_alias_receipt_path in registry_alias_receipt_paths or []:
+        targets.append(validate_registry_alias_receipt(registry_alias_receipt_path))
+    for registry_alias_apply_path in registry_alias_apply_paths or []:
+        targets.append(validate_registry_alias_apply(registry_alias_apply_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
         targets.append(validate_promotion_ledger(promotion_ledger_path))
     for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
@@ -186,6 +244,18 @@ def validate_artifacts(
         targets.append(validate_trainer_consumer_plan(trainer_consumer_plan_path))
     for trainer_wrapper_dry_run_path in trainer_wrapper_dry_run_paths or []:
         targets.append(validate_trainer_wrapper_dry_run(trainer_wrapper_dry_run_path))
+    for model_scout_manifest_path in model_scout_manifest_paths or []:
+        targets.append(validate_model_scout_manifest(model_scout_manifest_path))
+    for model_candidate_path in model_candidate_paths or []:
+        targets.append(validate_model_candidate(model_candidate_path))
+    for model_compatibility_report_path in model_compatibility_report_paths or []:
+        targets.append(validate_model_compatibility_report(model_compatibility_report_path))
+    for model_registry_entry_path in model_registry_entry_paths or []:
+        targets.append(validate_model_registry_entry(model_registry_entry_path))
+    for model_registry_path in model_registry_paths or []:
+        targets.append(validate_model_registry(model_registry_path))
+    for training_plan_path in training_plan_paths or []:
+        targets.append(validate_training_plan(training_plan_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -206,6 +276,12 @@ def validate_artifacts(
         targets.append(validate_state_diff(state_diff_path))
     for run_digest_path in run_digest_paths or []:
         targets.append(validate_run_digest(run_digest_path))
+    for harness_manifest_path in harness_manifest_paths or []:
+        targets.append(validate_harness_run_manifest(harness_manifest_path))
+    for harness_result_path in harness_result_paths or []:
+        targets.append(validate_harness_run_result(harness_result_path))
+    for harness_replay_result_path in harness_replay_result_paths or []:
+        targets.append(validate_harness_replay_result(harness_replay_result_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     if not targets:
@@ -345,6 +421,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     dataset_metrics_path = export_dir / "dataset_metrics.json"
     dataset_splits_path = export_dir / "dataset_splits.json"
     dataset_card_path = export_dir / "DATASET_CARD.md"
+    dataset_registry_path = export_dir / "dataset_registry.json"
     sft = _read_jsonl_objects_optional(sft_path, target, "sft.jsonl", "rerun export-rl to emit trainer-ready SFT rows")
     dpo = _read_jsonl_objects_optional(dpo_path, target, "dpo.jsonl", "rerun export-rl to emit trainer-ready DPO rows")
     reward_model = _read_jsonl_objects_optional(
@@ -365,6 +442,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         "dataset_splits.json",
         "rerun export-rl to emit deterministic train/validation/test split metadata",
     )
+    dataset_registry = _read_object_optional(
+        dataset_registry_path,
+        target,
+        "dataset_registry.json",
+        "rerun export-rl to emit a local dataset registry entry",
+    )
     split_rows = _read_training_split_rows(export_dir, target)
     rows_by_artifact = {
         "episodes": episodes,
@@ -376,6 +459,17 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         "dpo": dpo,
         "reward_model": reward_model,
     }
+    redaction_status = build_redaction_status(
+        redaction_scan_artifacts(
+            rows_by_artifact,
+            curriculum or {},
+            extra_artifacts=_training_export_metadata_redaction_artifacts(manifest, dataset_metrics, dataset_registry),
+        )
+    )
+    if redaction_status.get("passed") is not True:
+        target.errors.append(
+            f"training export contains {redaction_status.get('unredacted_secret_count')} unredacted secret-like value(s)."
+        )
     if manifest is not None:
         _validate_training_manifest(
             manifest,
@@ -391,6 +485,8 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             reward_model,
             dataset_metrics,
             dataset_splits,
+            dataset_registry,
+            redaction_status,
             dataset_card_path.exists(),
             export_dir,
         )
@@ -420,9 +516,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             dpo,
             reward_model,
             dataset_splits,
+            redaction_status,
         )
     if dataset_splits is not None:
         _validate_dataset_splits(dataset_splits, target, rows_by_artifact, split_rows)
+    if dataset_registry is not None:
+        _validate_dataset_registry(dataset_registry, target, manifest, dataset_metrics, dataset_splits, episodes, dataset_registry_path)
     if dataset_card_path.exists():
         _validate_dataset_card(dataset_card_path, target)
     else:
@@ -439,9 +538,22 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "reward_model_count": len(reward_model),
             "quality_flag_count": len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics, dict) else None,
             "split_episode_counts": dataset_splits.get("summary") if isinstance(dataset_splits, dict) else None,
+            "dataset_version": manifest.get("dataset_version") if isinstance(manifest, dict) else None,
+            "redaction_passed": redaction_status.get("passed"),
         }
     )
     return target
+
+
+def _training_export_metadata_redaction_artifacts(*artifacts: dict[str, Any] | None) -> dict[str, Any]:
+    scan_artifacts: dict[str, Any] = {}
+    for artifact_name, artifact in zip(("manifest", "dataset_metrics", "dataset_registry"), artifacts):
+        if not isinstance(artifact, dict):
+            continue
+        metadata = artifact.get("metadata")
+        if isinstance(metadata, dict):
+            scan_artifacts[f"{artifact_name}_metadata"] = metadata_redaction_scan_payload(metadata)
+    return scan_artifacts
 
 
 def validate_compare_export(path: str | Path) -> ValidationTarget:
@@ -641,6 +753,56 @@ def validate_decision_gate(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_promotion_decision(path: str | Path) -> ValidationTarget:
+    """Validate a top-level promotion decision artifact."""
+    decision_path = Path(path)
+    target = ValidationTarget("promotion_decision", str(decision_path))
+    decision = _read_object(decision_path, target, "promotion_decision.json")
+    if decision is not None:
+        _validate_promotion_decision(decision, target, decision_path)
+    return target
+
+
+def validate_promotion_cards(path: str | Path) -> ValidationTarget:
+    """Validate a promotion card manifest and generated card content."""
+    cards_path = Path(path)
+    target = ValidationTarget("promotion_cards", str(cards_path))
+    cards = _read_object(cards_path, target, "promotion_cards.json")
+    if cards is not None:
+        _validate_promotion_cards(cards, target, cards_path)
+    return target
+
+
+def validate_promotion_release_record(path: str | Path) -> ValidationTarget:
+    """Validate a release record that binds promotion governance artifacts."""
+    record_path = Path(path)
+    target = ValidationTarget("promotion_release_record", str(record_path))
+    record = _read_object(record_path, target, "promotion_release_record.json")
+    if record is not None:
+        _validate_promotion_release_record(record, target, record_path)
+    return target
+
+
+def validate_registry_alias_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a dry-run registry alias movement receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("registry_alias_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "registry_alias_receipt.json")
+    if receipt is not None:
+        _validate_registry_alias_receipt(receipt, target, receipt_path)
+    return target
+
+
+def validate_registry_alias_apply(path: str | Path) -> ValidationTarget:
+    """Validate a guarded registry alias apply record."""
+    apply_path = Path(path)
+    target = ValidationTarget("registry_alias_apply", str(apply_path))
+    apply_record = _read_object(apply_path, target, "registry_alias_apply.json")
+    if apply_record is not None:
+        _validate_registry_alias_apply(apply_record, target, apply_path)
+    return target
+
+
 def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
     """Validate a longitudinal promotion-ledger artifact."""
     ledger_path = Path(path)
@@ -735,6 +897,66 @@ def validate_trainer_wrapper_dry_run(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_model_scout_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a model scout manifest and its referenced model artifacts."""
+    manifest_path = Path(path)
+    target = ValidationTarget("model_scout_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "model_scout_manifest.json")
+    if manifest is not None:
+        _validate_model_scout_manifest(manifest, target, manifest_path)
+    return target
+
+
+def validate_model_candidate(path: str | Path) -> ValidationTarget:
+    """Validate a model candidate artifact."""
+    candidate_path = Path(path)
+    target = ValidationTarget("model_candidate", str(candidate_path))
+    candidate = _read_object(candidate_path, target, "model_candidate.json")
+    if candidate is not None:
+        _validate_model_candidate(candidate, target)
+    return target
+
+
+def validate_model_compatibility_report(path: str | Path) -> ValidationTarget:
+    """Validate a no-download model compatibility report artifact."""
+    report_path = Path(path)
+    target = ValidationTarget("model_compatibility_report", str(report_path))
+    report = _read_object(report_path, target, "model_compatibility_report.json")
+    if report is not None:
+        _validate_model_compatibility_report(report, target)
+    return target
+
+
+def validate_model_registry_entry(path: str | Path) -> ValidationTarget:
+    """Validate a model registry entry artifact."""
+    entry_path = Path(path)
+    target = ValidationTarget("model_registry_entry", str(entry_path))
+    entry = _read_object(entry_path, target, "model_registry_entry.json")
+    if entry is not None:
+        _validate_model_registry_entry(entry, target)
+    return target
+
+
+def validate_model_registry(path: str | Path) -> ValidationTarget:
+    """Validate a model registry artifact."""
+    registry_path = Path(path)
+    target = ValidationTarget("model_registry", str(registry_path))
+    registry = _read_object(registry_path, target, "model_registry.json")
+    if registry is not None:
+        _validate_model_registry(registry, target)
+    return target
+
+
+def validate_training_plan(path: str | Path) -> ValidationTarget:
+    """Validate a dry-run training plan artifact."""
+    plan_path = Path(path)
+    target = ValidationTarget("training_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "training_plan.json")
+    if plan is not None:
+        _validate_training_plan(plan, target)
+    return target
+
+
 def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
     """Validate a live Hermes observer-smoke summary artifact."""
     summary_path = Path(path)
@@ -805,6 +1027,124 @@ def validate_run_digest(path: str | Path) -> ValidationTarget:
     if digest is not None:
         _validate_run_digest(digest, target, "run_digest")
     return target
+
+
+def validate_harness_run_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a harness run manifest artifact."""
+    manifest_path = Path(path)
+    target = ValidationTarget("harness_run_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "harness_manifest.json")
+    if manifest is not None:
+        _validate_harness_run_manifest(manifest, target)
+    return target
+
+
+def validate_harness_run_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness run result artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_run_result", str(result_path))
+    result = _read_object(result_path, target, "harness_result.json")
+    if result is not None:
+        _validate_harness_run_result(result, target)
+    return target
+
+
+def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness replay result artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_replay_result", str(result_path))
+    result = _read_object(result_path, target, "harness_replay_result.json")
+    if result is not None:
+        _validate_harness_replay_result(result, target)
+    return target
+
+
+def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    if manifest.get("schema_version") != HARNESS_RUN_MANIFEST_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_manifest.schema_version must be {HARNESS_RUN_MANIFEST_SCHEMA_VERSION!r}, got {manifest.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider"):
+        if not isinstance(manifest.get(field_name), str) or not manifest.get(field_name):
+            target.errors.append(f"harness_manifest.{field_name} must be a non-empty string.")
+    for field_name in ("model", "scenario", "outputs", "sandbox", "tool_policy"):
+        if not isinstance(manifest.get(field_name), dict):
+            target.errors.append(f"harness_manifest.{field_name} must be an object.")
+    model = manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
+    if not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_manifest.model.id must be a non-empty string.")
+    scenario = manifest.get("scenario") if isinstance(manifest.get("scenario"), dict) else {}
+    for field_name in ("id", "path"):
+        if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
+            target.errors.append(f"harness_manifest.scenario.{field_name} must be a non-empty string.")
+    outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
+    for field_name in ("run_dir", "manifest", "result"):
+        if not isinstance(outputs.get(field_name), str) or not outputs.get(field_name):
+            target.errors.append(f"harness_manifest.outputs.{field_name} must be a non-empty string.")
+    sandbox = manifest.get("sandbox") if isinstance(manifest.get("sandbox"), dict) else {}
+    for field_name in ("root", "home", "workspace", "events"):
+        if not isinstance(sandbox.get(field_name), str) or not sandbox.get(field_name):
+            target.errors.append(f"harness_manifest.sandbox.{field_name} must be a non-empty string.")
+    canaries = sandbox.get("fake_secret_canaries")
+    if not isinstance(canaries, list) or not canaries:
+        target.errors.append("harness_manifest.sandbox.fake_secret_canaries must be a non-empty list.")
+
+
+def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    if result.get("schema_version") != HARNESS_RUN_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_result.schema_version must be {HARNESS_RUN_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider", "scenario_id"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_result.{field_name} must be a non-empty string.")
+    for field_name in ("model", "sandbox", "tool_policy", "trace", "scorecard", "artifacts", "replay"):
+        if not isinstance(result.get(field_name), dict):
+            target.errors.append(f"harness_result.{field_name} must be an object.")
+    trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
+    _validate_existing_path_field(trace, "path", target, "harness_result.trace.path")
+    scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
+    _validate_existing_path_field(scorecard, "path", target, "harness_result.scorecard.path")
+    if not isinstance(scorecard.get("passed"), bool):
+        target.errors.append("harness_result.scorecard.passed must be a boolean.")
+    if not isinstance(scorecard.get("score"), (int, float)):
+        target.errors.append("harness_result.scorecard.score must be numeric.")
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+        _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}")
+    replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
+    _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage")
+    if not isinstance(replay.get("self_contained"), bool):
+        target.errors.append("harness_result.replay.self_contained must be a boolean.")
+
+
+def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    if result.get("schema_version") != HARNESS_REPLAY_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_replay_result.schema_version must be {HARNESS_REPLAY_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    _validate_existing_path_field(result, "lineage", target, "harness_replay_result.lineage")
+    out_dir = result.get("out_dir")
+    if not isinstance(out_dir, str) or not out_dir:
+        target.errors.append("harness_replay_result.out_dir must be a non-empty string.")
+    elif not Path(out_dir).is_dir():
+        target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
+    if not _is_non_negative_int(result.get("exit_code")):
+        target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")
+    scorecard = result.get("scorecard")
+    if scorecard is not None:
+        _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard")
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("harness_replay_result.passed must be a boolean.")
+
+
+def _validate_existing_path_field(value: dict[str, Any], field_name: str, target: ValidationTarget, label: str) -> None:
+    path_value = value.get(field_name)
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label} must be a non-empty string.")
+        return
+    if not Path(path_value).exists():
+        target.errors.append(f"{label} does not exist: {path_value}.")
 
 
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
@@ -1767,6 +2107,8 @@ def _validate_training_manifest(
     reward_model: list[dict[str, Any]],
     dataset_metrics: dict[str, Any] | None,
     dataset_splits: dict[str, Any] | None,
+    dataset_registry: dict[str, Any] | None,
+    redaction_status: dict[str, Any],
     has_dataset_card: bool,
     export_dir: Path,
 ) -> None:
@@ -1798,6 +2140,8 @@ def _validate_training_manifest(
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
+    if not isinstance(manifest.get("dataset_version"), str) or not manifest.get("dataset_version"):
+        target.errors.append("manifest.dataset_version must be a non-empty string.")
     if not isinstance(manifest.get("outputs"), dict):
         target.errors.append("manifest.outputs must be an object.")
     else:
@@ -1815,6 +2159,8 @@ def _validate_training_manifest(
             target.warnings.append("manifest.outputs.dataset_splits is missing; rerun export-rl to refresh deterministic split artifacts.")
         if "dataset_card" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.dataset_card is missing; rerun export-rl to refresh the dataset card.")
+        if "dataset_registry" not in manifest["outputs"]:
+            target.warnings.append("manifest.outputs.dataset_registry is missing; rerun export-rl to refresh registry metadata.")
         for split_name in DATASET_SPLIT_NAMES:
             for artifact_name in DATASET_SPLIT_ARTIFACTS:
                 output_name = f"{split_name}_{artifact_name}"
@@ -1832,6 +2178,32 @@ def _validate_training_manifest(
         target.warnings.append("manifest has no validated dataset_splits.json companion.")
     elif manifest.get("dataset_splits") != dataset_splits.get("summary"):
         target.errors.append("manifest.dataset_splits must match dataset_splits.summary.")
+    if dataset_registry is None:
+        target.warnings.append("manifest has no dataset_registry.json companion.")
+    if "redaction_status" in manifest:
+        _validate_redaction_status(manifest.get("redaction_status"), target, "manifest.redaction_status", redaction_status)
+    else:
+        target.warnings.append("manifest.redaction_status is missing; rerun export-rl to refresh dataset registration metadata.")
+    expected_label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model)
+    if "label_provenance" in manifest:
+        _validate_label_provenance_summary(
+            manifest.get("label_provenance"),
+            target,
+            "manifest.label_provenance",
+            expected_label_provenance,
+        )
+    else:
+        target.warnings.append("manifest.label_provenance is missing; rerun export-rl to refresh dataset registration metadata.")
+    registry = manifest.get("registry")
+    if not isinstance(registry, dict):
+        target.warnings.append("manifest.registry is missing; rerun export-rl to refresh dataset registration metadata.")
+    else:
+        if registry.get("schema_version") != RL_DATASET_REGISTRY_SCHEMA_VERSION:
+            target.errors.append(f"manifest.registry.schema_version must be {RL_DATASET_REGISTRY_SCHEMA_VERSION!r}.")
+        if registry.get("selection_key") != manifest.get("dataset_version"):
+            target.errors.append("manifest.registry.selection_key must match manifest.dataset_version.")
+        if not isinstance(registry.get("path"), str) or not registry.get("path"):
+            target.errors.append("manifest.registry.path must be a non-empty string.")
     if not has_dataset_card:
         target.warnings.append("manifest has no DATASET_CARD.md companion.")
     if "metadata" in manifest:
@@ -2080,9 +2452,37 @@ def _validate_dataset_splits(
     placement_errors = _validate_split_row_placement(rows_by_artifact, split_rows, family_to_split, episode_by_id, target)
     cross_split_families = _cross_split_families(split_rows)
     family_exclusive = not cross_split_families and not placement_errors
+    split_scenario_ids = _dataset_split_scenario_ids(split_rows)
+    train_scenario_ids = split_scenario_ids["train"]
+    heldout_scenario_ids = sorted(set(split_scenario_ids["validation"]) | set(split_scenario_ids["test"]))
+    cross_split_scenario_ids = _cross_split_scenario_ids(split_scenario_ids)
+    heldout_scenario_exclusive = not (set(train_scenario_ids) & set(heldout_scenario_ids)) and not cross_split_scenario_ids
+    train_task_families = sorted(family for family, split_name in family_to_split.items() if split_name == "train")
+    heldout_task_families = sorted(family for family, split_name in family_to_split.items() if split_name != "train")
     _validate_dataset_split_counts(value.get("split_counts"), target, assignments, split_rows)
-    _validate_dataset_split_summary(value.get("summary"), target, family_to_split, episodes, split_rows, family_exclusive)
-    _validate_dataset_split_leakage(value.get("leakage_checks"), target, family_exclusive, cross_split_families)
+    _validate_dataset_split_summary(
+        value.get("summary"),
+        target,
+        family_to_split,
+        episodes,
+        split_rows,
+        family_exclusive,
+        train_scenario_ids,
+        heldout_scenario_ids,
+        heldout_scenario_exclusive,
+    )
+    _validate_dataset_split_leakage(
+        value.get("leakage_checks"),
+        target,
+        family_exclusive,
+        cross_split_families,
+        train_task_families,
+        heldout_task_families,
+        train_scenario_ids,
+        heldout_scenario_ids,
+        cross_split_scenario_ids,
+        heldout_scenario_exclusive,
+    )
 
 
 def _validate_split_row_placement(
@@ -2165,6 +2565,27 @@ def _cross_split_families(split_rows: dict[str, dict[str, list[dict[str, Any]]]]
     return sorted(family for family, splits in family_splits.items() if len(splits) > 1)
 
 
+def _dataset_split_scenario_ids(split_rows: dict[str, dict[str, list[dict[str, Any]]]]) -> dict[str, list[str]]:
+    return {
+        split_name: sorted(
+            {
+                str(episode.get("scenario_id") or "")
+                for episode in split_rows[split_name]["episodes"]
+                if str(episode.get("scenario_id") or "")
+            }
+        )
+        for split_name in DATASET_SPLIT_NAMES
+    }
+
+
+def _cross_split_scenario_ids(split_scenario_ids: dict[str, list[str]]) -> list[str]:
+    scenario_splits: dict[str, set[str]] = {}
+    for split_name, scenario_ids in split_scenario_ids.items():
+        for scenario_id in scenario_ids:
+            scenario_splits.setdefault(scenario_id, set()).add(split_name)
+    return sorted(scenario_id for scenario_id, splits in scenario_splits.items() if len(splits) > 1)
+
+
 def _validate_dataset_split_counts(
     value: Any,
     target: ValidationTarget,
@@ -2210,6 +2631,9 @@ def _validate_dataset_split_summary(
     episodes: list[dict[str, Any]],
     split_rows: dict[str, dict[str, list[dict[str, Any]]]],
     family_exclusive: bool,
+    train_scenario_ids: list[str],
+    heldout_scenario_ids: list[str],
+    heldout_scenario_exclusive: bool,
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append("dataset_splits.summary must be an object.")
@@ -2221,6 +2645,9 @@ def _validate_dataset_split_summary(
         "validation_episode_count": len(split_rows["validation"]["episodes"]),
         "test_episode_count": len(split_rows["test"]["episodes"]),
         "family_exclusive": family_exclusive,
+        "train_scenario_count": len(train_scenario_ids),
+        "heldout_scenario_count": len(heldout_scenario_ids),
+        "heldout_scenario_exclusive": heldout_scenario_exclusive,
     }
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
@@ -2232,6 +2659,12 @@ def _validate_dataset_split_leakage(
     target: ValidationTarget,
     family_exclusive: bool,
     cross_split_families: list[str],
+    train_task_families: list[str],
+    heldout_task_families: list[str],
+    train_scenario_ids: list[str],
+    heldout_scenario_ids: list[str],
+    cross_split_scenario_ids: list[str],
+    heldout_scenario_exclusive: bool,
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append("dataset_splits.leakage_checks must be an object.")
@@ -2244,6 +2677,19 @@ def _validate_dataset_split_leakage(
         target.errors.append(
             f"dataset_splits.leakage_checks.cross_split_task_families expected {cross_split_families!r}, got {value.get('cross_split_task_families')!r}."
         )
+    expected = {
+        "heldout_scenario_exclusive": heldout_scenario_exclusive,
+        "cross_split_scenario_ids": cross_split_scenario_ids,
+        "train_task_families": train_task_families,
+        "heldout_task_families": heldout_task_families,
+        "train_scenario_ids": train_scenario_ids,
+        "heldout_scenario_ids": heldout_scenario_ids,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"dataset_splits.leakage_checks.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}."
+            )
 
 
 def _compare_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
@@ -3248,11 +3694,12 @@ def _validate_sft_records(
         and episode["outcome"].get("passed") is True
         and isinstance(episode.get("final_answer"), str)
         and bool(episode.get("final_answer"))
+        and _episode_positive_label_eligible(episode)
     }
     seen: set[str] = set()
     for index, sample in enumerate(sft):
         _require_equal(sample, "schema_version", RL_SFT_SCHEMA_VERSION, target, prefix=f"sft[{index}].")
-        episode_id = _validate_training_view_common(sample, target, f"sft[{index}]", episode_by_id)
+        episode_id = _validate_training_view_common(sample, target, f"sft[{index}]", episode_by_id, "sft_positive")
         if episode_id:
             if episode_id in seen:
                 target.errors.append(f"sft[{index}].episode_id duplicates {episode_id!r}.")
@@ -3329,7 +3776,7 @@ def _validate_reward_model_records(
     seen: set[str] = set()
     for index, sample in enumerate(reward_model):
         _require_equal(sample, "schema_version", RL_REWARD_MODEL_SCHEMA_VERSION, target, prefix=f"reward_model[{index}].")
-        episode_id = _validate_training_view_common(sample, target, f"reward_model[{index}]", episode_by_id)
+        episode_id = _validate_training_view_common(sample, target, f"reward_model[{index}]", episode_by_id, "reward_model")
         if episode_id:
             if episode_id in seen:
                 target.errors.append(f"reward_model[{index}].episode_id duplicates {episode_id!r}.")
@@ -3342,7 +3789,16 @@ def _validate_reward_model_records(
         for field_name in ("failed_rules", "critical_failures"):
             if not _is_string_list(sample.get(field_name)):
                 target.errors.append(f"reward_model[{index}].{field_name} must be a list of strings.")
-    missing = sorted(set(episode_by_id) - seen)
+    expected_ids = {
+        str(episode_id)
+        for episode_id, episode in episode_by_id.items()
+        if not (
+            isinstance(episode.get("outcome"), dict)
+            and episode["outcome"].get("passed") is True
+            and not _episode_positive_label_eligible(episode)
+        )
+    }
+    missing = sorted(expected_ids - seen)
     if missing:
         target.errors.append(f"reward_model.jsonl missing episode samples: {missing!r}.")
 
@@ -3352,6 +3808,7 @@ def _validate_training_view_common(
     target: ValidationTarget,
     label: str,
     episode_by_id: dict[Any, dict[str, Any]],
+    expected_label_type: str,
 ) -> str | None:
     sample_id = sample.get("sample_id")
     episode_id = sample.get("episode_id")
@@ -3390,7 +3847,89 @@ def _validate_training_view_common(
         for field_name, expected_value in expected.items():
             if sample.get(field_name) != expected_value:
                 target.errors.append(f"{label}.{field_name} does not match episode {episode_id!r}.")
+        _validate_row_label_provenance(
+            sample.get("label_provenance"),
+            target,
+            f"{label}.label_provenance",
+            _expected_row_label_provenance(episode, expected_label_type),
+        )
     return episode_id if isinstance(episode_id, str) and episode_id else None
+
+
+def _episode_positive_label_eligible(episode: dict[str, Any]) -> bool:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    if outcome.get("passed") is not True:
+        return False
+    task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+    return (
+        task.get("task_evidence_configured") is True
+        and task.get("status") == "complete"
+        and task.get("passed") is True
+    )
+
+
+def _expected_row_label_provenance(episode: dict[str, Any], label_type: str) -> dict[str, Any]:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+    state_diff = episode.get("state_diff") if isinstance(episode.get("state_diff"), dict) else {}
+    trace_signal = episode.get("trace_signal") if isinstance(episode.get("trace_signal"), dict) else {}
+    scorecard_passed = outcome.get("passed") is True
+    task_evidence_configured = task.get("task_evidence_configured") is True
+    task_completion_passed = task.get("status") == "complete" and task.get("passed") is True
+    evidence_sources: list[str] = []
+    if task_evidence_configured:
+        evidence_sources.append("task_completion")
+    if state_diff.get("changed") is True:
+        evidence_sources.append("state_diff")
+    if trace_signal.get("has_tool_or_api_events") is True:
+        evidence_sources.append("tool_or_api_trace")
+    if not evidence_sources:
+        evidence_sources.append("final_answer")
+    final_answer_only_success = scorecard_passed and not task_completion_passed
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "label_type": label_type,
+        "source": "scorecard_outcome",
+        "scorecard_passed": scorecard_passed,
+        "score": _score_value(outcome.get("score")),
+        "reward": _number_value(outcome.get("reward")),
+        "task_evidence_configured": task_evidence_configured,
+        "task_completion_status": str(task.get("status") or "unknown"),
+        "task_completion_passed": bool(task.get("passed", False)),
+        "state_changed": bool(state_diff.get("changed", False)),
+        "state_change_count": _non_negative_int_value(state_diff.get("change_count")),
+        "trace_has_tool_or_api_events": bool(trace_signal.get("has_tool_or_api_events", False)),
+        "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+        "evidence_sources": evidence_sources,
+        "final_answer_only_success": final_answer_only_success,
+        "trainer_view_eligible": (not scorecard_passed) or _episode_positive_label_eligible(episode),
+        "exclusion_reason": "missing_task_completion_success_evidence" if final_answer_only_success else "",
+    }
+
+
+def _expected_paired_label_provenance(chosen: dict[str, Any], rejected: dict[str, Any], label_type: str) -> dict[str, Any]:
+    chosen_provenance = _expected_row_label_provenance(chosen, "chosen_positive")
+    rejected_provenance = _expected_row_label_provenance(rejected, "rejected_comparison")
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "label_type": label_type,
+        "source": "scorecard_preference",
+        "chosen": chosen_provenance,
+        "rejected": rejected_provenance,
+        "trainer_view_eligible": bool(chosen_provenance.get("trainer_view_eligible")),
+        "exclusion_reason": str(chosen_provenance.get("exclusion_reason") or ""),
+    }
+
+
+def _validate_row_label_provenance(value: Any, target: ValidationTarget, label: str, expected: dict[str, Any]) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("schema_version") != RL_LABEL_PROVENANCE_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {RL_LABEL_PROVENANCE_SCHEMA_VERSION!r}.")
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
 
 
 def _validate_training_view_task_completion(
@@ -3430,6 +3969,7 @@ def _compare_dpo_to_preference(
     expected["rejected_source_fingerprint_status"] = rejected.get("source_fingerprint_status")
     expected["chosen_source_fingerprints"] = chosen.get("source_fingerprints")
     expected["rejected_source_fingerprints"] = rejected.get("source_fingerprints")
+    expected["label_provenance"] = preference.get("label_provenance")
     for field_name, expected_value in expected.items():
         if pair.get(field_name) != expected_value:
             target.errors.append(f"dpo[{index}].{field_name} does not match preference {preference.get('preference_id')!r}.")
@@ -3673,6 +4213,7 @@ def _validate_dataset_metrics(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_splits: dict[str, Any] | None,
+    redaction_status: dict[str, Any],
 ) -> None:
     _require_equal(metrics, "schema_version", RL_DATASET_METRICS_SCHEMA_VERSION, target, prefix="dataset_metrics.")
     artifact_counts = metrics.get("artifact_counts")
@@ -3740,6 +4281,20 @@ def _validate_dataset_metrics(
         target.warnings.append(
             "dataset_metrics.trainer_view_source_fingerprint_coverage is missing; rerun export-rl to refresh trainer-view provenance metrics."
         )
+    if "redaction_status" in metrics:
+        _validate_redaction_status(metrics.get("redaction_status"), target, "dataset_metrics.redaction_status", redaction_status)
+    else:
+        target.warnings.append("dataset_metrics.redaction_status is missing; rerun export-rl to refresh dataset registration metadata.")
+    expected_label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model)
+    if "label_provenance" in metrics:
+        _validate_label_provenance_summary(
+            metrics.get("label_provenance"),
+            target,
+            "dataset_metrics.label_provenance",
+            expected_label_provenance,
+        )
+    else:
+        target.warnings.append("dataset_metrics.label_provenance is missing; rerun export-rl to refresh dataset registration metadata.")
     if "task_completion" in metrics:
         expected_task_completion = _expected_task_completion_metrics(episodes)
         actual_task_completion = metrics.get("task_completion")
@@ -4024,6 +4579,105 @@ def _validate_quality_flags(value: Any, target: ValidationTarget) -> None:
             target.errors.append(f"dataset_metrics.quality_flags[{index}].message must be a non-empty string.")
 
 
+def _validate_redaction_status(value: Any, target: ValidationTarget, label: str, expected: dict[str, Any]) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("schema_version") != RL_REDACTION_STATUS_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {RL_REDACTION_STATUS_SCHEMA_VERSION!r}.")
+    for field_name in ("passed", "scanner", "unredacted_secret_count", "finding_count", "findings"):
+        if value.get(field_name) != expected.get(field_name):
+            target.errors.append(f"{label}.{field_name} must match the recomputed redaction scan.")
+    if value.get("passed") is not True:
+        target.errors.append(f"{label}.passed must be true before training data registration.")
+
+
+def _validate_label_provenance_summary(value: Any, target: ValidationTarget, label: str, expected: dict[str, Any]) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("schema_version") != RL_LABEL_PROVENANCE_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {RL_LABEL_PROVENANCE_SCHEMA_VERSION!r}.")
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+
+
+def _validate_dataset_registry(
+    registry: dict[str, Any],
+    target: ValidationTarget,
+    manifest: dict[str, Any] | None,
+    metrics: dict[str, Any] | None,
+    dataset_splits: dict[str, Any] | None,
+    episodes: list[dict[str, Any]],
+    registry_path: Path,
+) -> None:
+    _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="dataset_registry.")
+    if not isinstance(registry.get("dataset_version"), str) or not registry.get("dataset_version"):
+        target.errors.append("dataset_registry.dataset_version must be a non-empty string.")
+    if manifest is None:
+        target.errors.append("dataset_registry cannot be validated without manifest.json.")
+        return
+    if registry.get("dataset_version") != manifest.get("dataset_version"):
+        target.errors.append("dataset_registry.dataset_version must match manifest.dataset_version.")
+    manifest_record = registry.get("manifest")
+    if not isinstance(manifest_record, dict):
+        target.errors.append("dataset_registry.manifest must be an object.")
+    else:
+        manifest_path = registry_path.parent / "manifest.json"
+        if manifest_record.get("exists") is not True:
+            target.errors.append("dataset_registry.manifest.exists must be true.")
+        if not _is_non_negative_int(manifest_record.get("size_bytes")):
+            target.errors.append("dataset_registry.manifest.size_bytes must be a non-negative integer.")
+        elif manifest_path.exists() and manifest_record.get("size_bytes") != manifest_path.stat().st_size:
+            target.errors.append("dataset_registry.manifest.size_bytes does not match manifest.json.")
+        if not _is_sha256(manifest_record.get("sha256")):
+            target.errors.append("dataset_registry.manifest.sha256 must be a SHA-256 hex string.")
+        elif manifest_path.exists() and _sha256(manifest_path) != manifest_record.get("sha256"):
+            target.errors.append("dataset_registry.manifest.sha256 does not match manifest.json.")
+    if registry.get("source_fingerprint_coverage") != manifest.get("source_fingerprint_coverage"):
+        target.errors.append("dataset_registry.source_fingerprint_coverage must match manifest.source_fingerprint_coverage.")
+    if registry.get("source_runs") != _registry_source_runs(episodes):
+        target.errors.append("dataset_registry.source_runs must match exported episode source fingerprints.")
+    if dataset_splits is not None:
+        if registry.get("split_metadata") != dataset_splits.get("summary"):
+            target.errors.append("dataset_registry.split_metadata must match dataset_splits.summary.")
+        if registry.get("split_assignments") != dataset_splits.get("assignments"):
+            target.errors.append("dataset_registry.split_assignments must match dataset_splits.assignments.")
+    if metrics is not None:
+        if registry.get("quality_flags") != metrics.get("quality_flags"):
+            target.errors.append("dataset_registry.quality_flags must match dataset_metrics.quality_flags.")
+        if registry.get("label_provenance") != metrics.get("label_provenance"):
+            target.errors.append("dataset_registry.label_provenance must match dataset_metrics.label_provenance.")
+    if registry.get("redaction_status") != manifest.get("redaction_status"):
+        target.errors.append("dataset_registry.redaction_status must match manifest.redaction_status.")
+    if registry.get("artifact_fingerprints") != manifest.get("artifact_fingerprints"):
+        target.errors.append("dataset_registry.artifact_fingerprints must match manifest.artifact_fingerprints.")
+    selection = registry.get("selection")
+    if not isinstance(selection, dict):
+        target.errors.append("dataset_registry.selection must be an object.")
+    else:
+        if selection.get("by_dataset_version") != manifest.get("dataset_version"):
+            target.errors.append("dataset_registry.selection.by_dataset_version must match manifest.dataset_version.")
+        if not isinstance(selection.get("by_manifest"), str) or not selection.get("by_manifest"):
+            target.errors.append("dataset_registry.selection.by_manifest must be a non-empty string.")
+    if not isinstance(registry.get("registry_path"), str) or not registry.get("registry_path"):
+        target.errors.append("dataset_registry.registry_path must be a non-empty string.")
+
+
+def _registry_source_runs(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "episode_id": str(episode.get("episode_id") or ""),
+            "scenario_id": str(episode.get("scenario_id") or ""),
+            "task_family": str(episode.get("task_family") or "unknown"),
+            "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+            "source_fingerprints": episode.get("source_fingerprints", {}),
+        }
+        for episode in episodes
+    ]
+
+
 def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
     try:
         text = path.read_text(encoding="utf-8")
@@ -4034,6 +4688,8 @@ def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
         "# Flight Recorder Dataset Card",
         "## Summary",
         "## Source Fingerprints",
+        "## Redaction",
+        "## Label Provenance",
         "## Trace Signal",
         "## Dataset Splits",
         "## Artifact Counts",
@@ -4075,6 +4731,12 @@ def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationT
                 target.errors.append(f"preferences[{index}] chosen/rejected task families differ.")
             if preference.get("task_family") != chosen.get("task_family"):
                 target.errors.append(f"preferences[{index}].task_family does not match chosen episode.")
+            _validate_row_label_provenance(
+                preference.get("label_provenance"),
+                target,
+                f"preferences[{index}].label_provenance",
+                _expected_paired_label_provenance(chosen, rejected, "dpo_preference"),
+            )
 
 
 def _validate_failure_modes(
@@ -5588,6 +6250,7 @@ def _validate_action_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "action_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("action_ledger_gate.decision.key_metrics must be an object.")
@@ -5772,6 +6435,7 @@ def _validate_improvement_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "improvement_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("improvement_ledger_gate.decision.key_metrics must be an object.")
@@ -6035,6 +6699,970 @@ def _validate_decision_gate_source_decision_matches_artifact(
     for field_name, expected_value in expected.items():
         if source_decision.get(field_name) != expected_value:
             target.errors.append(f"decision_gate.source_decision.{field_name} must match current source artifact.")
+
+
+def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(decision, "schema_version", PROMOTION_DECISION_SCHEMA_VERSION, target)
+    if not isinstance(decision.get("decision_path"), str):
+        target.errors.append("promotion_decision.decision_path must be a string.")
+    if not isinstance(decision.get("passed"), bool):
+        target.errors.append("promotion_decision.passed must be a boolean.")
+    if not isinstance(decision.get("readiness"), str) or not decision.get("readiness"):
+        target.errors.append("promotion_decision.readiness must be a non-empty string.")
+    if not isinstance(decision.get("recommendation"), str) or not decision.get("recommendation"):
+        target.errors.append("promotion_decision.recommendation must be a non-empty string.")
+
+    checks = decision.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_decision.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "promotion_decision.checks")
+    if decision.get("check_count") != len(checks):
+        target.errors.append(f"promotion_decision.check_count expected {len(checks)}, got {decision.get('check_count')!r}.")
+    if decision.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_decision.failed_check_count expected {failed_checks}, got {decision.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(decision.get("passed"), bool) and decision.get("passed") != expected_passed:
+        target.errors.append("promotion_decision.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "promote_candidate" if expected_passed else "block_candidate"
+    if decision.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_decision.readiness expected {expected_readiness!r}, got {decision.get('readiness')!r}.")
+    if decision.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_decision.recommendation expected {expected_recommendation!r}, got {decision.get('recommendation')!r}."
+        )
+
+    _validate_promotion_decision_policy(decision.get("policy"), target)
+    artifacts = _validate_promotion_decision_record_map(decision.get("artifacts"), target, "promotion_decision.artifacts", source_path)
+    evals = _validate_promotion_decision_record_map(decision.get("evals"), target, "promotion_decision.evals", source_path)
+    gates = _validate_promotion_decision_record_map(decision.get("gates"), target, "promotion_decision.gates", source_path)
+    metrics = decision.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_decision.metrics must be an object.")
+        metrics = {}
+    _validate_promotion_decision_metrics(metrics, decision.get("policy"), artifacts, evals, gates, failed_checks, target)
+    _validate_promotion_decision_decision(decision.get("decision"), expected_passed, failed_checks, metrics, target)
+    if "metadata" in decision:
+        _validate_metadata(decision.get("metadata"), target, "promotion_decision.metadata")
+    if not _is_string_list(decision.get("notes")):
+        target.errors.append("promotion_decision.notes must be a list of strings.")
+    target.details.update(
+        {
+            "readiness": decision.get("readiness"),
+            "recommendation": decision.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "artifact_count": len(artifacts),
+            "eval_count": len(evals),
+            "gate_count": len(gates),
+        }
+    )
+
+
+def _validate_promotion_decision_policy(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_decision.policy must be an object.")
+        return
+    _require_equal(value, "schema_version", PROMOTION_POLICY_SCHEMA_VERSION, target, prefix="promotion_decision.policy.")
+    if not isinstance(value.get("path"), str):
+        target.errors.append("promotion_decision.policy.path must be a string.")
+    if "description" in value and not isinstance(value.get("description"), str):
+        target.errors.append("promotion_decision.policy.description must be a string when present.")
+    effective = value.get("effective")
+    if not isinstance(effective, dict):
+        target.errors.append("promotion_decision.policy.effective must be an object.")
+        return
+    for field_name in ("required_artifacts", "required_evals", "required_gates", "baseline_arms"):
+        if not _is_string_list(effective.get(field_name)):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a list of strings.")
+    for field_name in ("candidate_arm",):
+        if not isinstance(effective.get(field_name), str) or not effective.get(field_name):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a non-empty string.")
+    for field_name in ("min_pass_rate_delta", "min_average_score_delta"):
+        if not _is_number_between(effective.get(field_name), 0.0, float("inf")):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a non-negative number.")
+    for field_name in ("max_candidate_error_count", "max_new_critical_failures"):
+        if not _is_non_negative_int(effective.get(field_name)):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a non-negative integer.")
+    for field_name in (
+        "require_identical_scenarios",
+        "require_passed_gates",
+        "require_passed_evidence_bundle",
+        "require_redaction_status",
+    ):
+        if not isinstance(effective.get(field_name), bool):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a boolean.")
+    for field_name in ("approved_license_statuses", "forbidden_candidate_critical_rules"):
+        if not _is_string_list(effective.get(field_name)):
+            target.errors.append(f"promotion_decision.policy.effective.{field_name} must be a list of strings.")
+    sections = effective.get("card_required_sections")
+    if not isinstance(sections, dict):
+        target.errors.append("promotion_decision.policy.effective.card_required_sections must be an object.")
+    else:
+        for role, role_sections in sections.items():
+            if not isinstance(role, str) or not role:
+                target.errors.append("promotion_decision.policy.effective.card_required_sections keys must be non-empty strings.")
+            if not _is_string_list(role_sections):
+                target.errors.append(
+                    f"promotion_decision.policy.effective.card_required_sections.{role} must be a list of strings."
+                )
+
+
+def _validate_promotion_decision_record_map(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    for name, record in value.items():
+        record_label = f"{label}.{name}"
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+            continue
+        if not isinstance(record, dict):
+            target.errors.append(f"{record_label} must be an object.")
+            continue
+        records[name] = record
+        if record.get("name") != name:
+            target.errors.append(f"{record_label}.name must match its map key.")
+        if not isinstance(record.get("path"), str) or not record.get("path"):
+            target.errors.append(f"{record_label}.path must be a non-empty string.")
+        if not isinstance(record.get("exists"), bool):
+            target.errors.append(f"{record_label}.exists must be a boolean.")
+        if record.get("kind") not in {"missing", "file", "directory", "other"}:
+            target.errors.append(f"{record_label}.kind must be missing, file, directory, or other.")
+        if record.get("kind") == "file":
+            _validate_preflight_file_hash(record, target, record_label, source_path)
+        if "schema_version" in record and record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
+            target.errors.append(f"{record_label}.schema_version must be a string or null when present.")
+        if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
+            target.errors.append(f"{record_label}.passed must be a boolean or null when present.")
+        if "parse_error" in record and not isinstance(record.get("parse_error"), str):
+            target.errors.append(f"{record_label}.parse_error must be a string when present.")
+        if "summary" in record:
+            _validate_promotion_decision_eval_summary(record.get("summary"), target, f"{record_label}.summary")
+    return records
+
+
+def _validate_promotion_decision_eval_summary(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not _is_string_list(value.get("scenario_ids")):
+        target.errors.append(f"{label}.scenario_ids must be a list of strings.")
+    for field_name in ("total", "passed", "failed", "error_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("pass_rate", "average_score"):
+        if not _is_number_between(value.get(field_name), 0.0, 100.0):
+            target.errors.append(f"{label}.{field_name} must be a number from 0 to 100.")
+    if not isinstance(value.get("critical_failure_counts"), dict):
+        target.errors.append(f"{label}.critical_failure_counts must be an object.")
+    else:
+        for rule_id, count in value["critical_failure_counts"].items():
+            if not isinstance(rule_id, str) or not rule_id:
+                target.errors.append(f"{label}.critical_failure_counts keys must be non-empty strings.")
+            if not _is_non_negative_int(count):
+                target.errors.append(f"{label}.critical_failure_counts.{rule_id} must be a non-negative integer.")
+
+
+def _validate_promotion_decision_metrics(
+    metrics: dict[str, Any],
+    policy: Any,
+    artifacts: dict[str, dict[str, Any]],
+    evals: dict[str, dict[str, Any]],
+    gates: dict[str, dict[str, Any]],
+    failed_checks: int,
+    target: ValidationTarget,
+) -> None:
+    effective = policy.get("effective") if isinstance(policy, dict) and isinstance(policy.get("effective"), dict) else {}
+    required_artifacts = effective.get("required_artifacts") if _is_string_list(effective.get("required_artifacts")) else []
+    required_evals = effective.get("required_evals") if _is_string_list(effective.get("required_evals")) else []
+    required_gates = effective.get("required_gates") if _is_string_list(effective.get("required_gates")) else []
+    expected = {
+        "required_artifact_count": len(required_artifacts),
+        "present_required_artifact_count": sum(1 for role in required_artifacts if _promotion_decision_record_is_file(artifacts.get(role))),
+        "required_eval_count": len(required_evals),
+        "present_required_eval_count": sum(1 for arm in required_evals if _promotion_decision_record_is_file(evals.get(arm))),
+        "required_gate_count": len(required_gates),
+        "passed_required_gate_count": sum(
+            1 for gate_id in required_gates if isinstance(gates.get(gate_id), dict) and gates[gate_id].get("passed") is True
+        ),
+        "failed_check_count": failed_checks,
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"promotion_decision.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("candidate_arm",):
+        if not isinstance(metrics.get(field_name), str):
+            target.errors.append(f"promotion_decision.metrics.{field_name} must be a string.")
+    if not _is_string_list(metrics.get("baseline_arms")):
+        target.errors.append("promotion_decision.metrics.baseline_arms must be a list of strings.")
+    for field_name in ("scenario_count", "new_critical_failure_count"):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"promotion_decision.metrics.{field_name} must be a non-negative integer.")
+    for field_name in ("candidate_pass_rate", "candidate_average_score"):
+        if metrics.get(field_name) is not None and not _is_number_between(metrics.get(field_name), 0.0, 100.0):
+            target.errors.append(f"promotion_decision.metrics.{field_name} must be null or a number from 0 to 100.")
+    if metrics.get("candidate_error_count") is not None and not _is_non_negative_int(metrics.get("candidate_error_count")):
+        target.errors.append("promotion_decision.metrics.candidate_error_count must be null or a non-negative integer.")
+    count_rows = _count_rows(metrics.get("new_critical_failure_counts"))
+    if count_rows is None:
+        target.errors.append("promotion_decision.metrics.new_critical_failure_counts must be a list of {id, count} objects.")
+    elif sum(count_rows.values()) != metrics.get("new_critical_failure_count"):
+        target.errors.append("promotion_decision.metrics.new_critical_failure_count must match new_critical_failure_counts.")
+
+
+def _validate_promotion_decision_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_decision.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "promote_candidate" if expected_passed else "block_candidate"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_decision.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "promotion_decision.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("promotion_decision.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_decision.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("promotion_decision.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"promotion_decision.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"promotion_decision.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if value.get("key_metrics") != metrics:
+        target.errors.append("promotion_decision.decision.key_metrics must match promotion_decision.metrics.")
+
+
+def _promotion_decision_record_is_file(record: Any) -> bool:
+    return isinstance(record, dict) and record.get("exists") is True and record.get("kind") == "file" and record.get("regular_file") is True
+
+
+def _validate_promotion_cards(cards: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(cards, "schema_version", PROMOTION_CARDS_SCHEMA_VERSION, target)
+    for field_name in ("manifest_path", "out_dir", "generated_at", "readiness", "recommendation"):
+        if not isinstance(cards.get(field_name), str):
+            target.errors.append(f"promotion_cards.{field_name} must be a string.")
+    if not isinstance(cards.get("passed"), bool):
+        target.errors.append("promotion_cards.passed must be a boolean.")
+    card_map = cards.get("cards")
+    if not isinstance(card_map, dict):
+        target.errors.append("promotion_cards.cards must be an object.")
+        card_map = {}
+    for role in ("model_card", "dataset_card"):
+        _validate_promotion_card_record(card_map.get(role), target, f"promotion_cards.cards.{role}", source_path)
+
+    checks = cards.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_cards.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "promotion_cards.checks")
+    if cards.get("check_count") != len(checks):
+        target.errors.append(f"promotion_cards.check_count expected {len(checks)}, got {cards.get('check_count')!r}.")
+    if cards.get("failed_check_count") != failed_checks:
+        target.errors.append(f"promotion_cards.failed_check_count expected {failed_checks}, got {cards.get('failed_check_count')!r}.")
+    expected_passed = failed_checks == 0
+    if isinstance(cards.get("passed"), bool) and cards.get("passed") != expected_passed:
+        target.errors.append("promotion_cards.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "use_generated_cards" if expected_passed else "fix_card_inputs"
+    if cards.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_cards.readiness expected {expected_readiness!r}, got {cards.get('readiness')!r}.")
+    if cards.get("recommendation") != expected_recommendation:
+        target.errors.append(f"promotion_cards.recommendation expected {expected_recommendation!r}, got {cards.get('recommendation')!r}.")
+
+    policy = cards.get("policy")
+    if not isinstance(policy, dict):
+        target.errors.append("promotion_cards.policy must be an object.")
+    else:
+        _validate_promotion_decision_policy(policy, target)
+    artifacts = _validate_promotion_decision_record_map(cards.get("artifacts"), target, "promotion_cards.artifacts", source_path)
+    evals = _validate_promotion_decision_record_map(cards.get("evals"), target, "promotion_cards.evals", source_path)
+    gates = _validate_promotion_decision_record_map(cards.get("gates"), target, "promotion_cards.gates", source_path)
+    metrics = cards.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_cards.metrics must be an object.")
+        metrics = {}
+    expected_metrics = {
+        "card_count": len(card_map),
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "artifact_count": len(artifacts),
+        "eval_count": len(evals),
+        "gate_count": len(gates),
+    }
+    for field_name, expected_value in expected_metrics.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"promotion_cards.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    if not isinstance(metrics.get("candidate_arm"), str):
+        target.errors.append("promotion_cards.metrics.candidate_arm must be a string.")
+    if not _is_string_list(metrics.get("baseline_arms")):
+        target.errors.append("promotion_cards.metrics.baseline_arms must be a list of strings.")
+    _validate_promotion_cards_decision(cards.get("decision"), expected_passed, failed_checks, metrics, target)
+    if "metadata" in cards:
+        _validate_metadata(cards.get("metadata"), target, "promotion_cards.metadata")
+    if not _is_string_list(cards.get("notes")):
+        target.errors.append("promotion_cards.notes must be a list of strings.")
+    target.details.update(
+        {
+            "readiness": cards.get("readiness"),
+            "recommendation": cards.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "card_count": len(card_map),
+        }
+    )
+
+
+def _validate_promotion_card_record(record: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("path", "kind", "content_sha256", "content"):
+        if not isinstance(record.get(field_name), str) or not record.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if record.get("kind") != "markdown":
+        target.errors.append(f"{label}.kind must be markdown.")
+    content = record.get("content") if isinstance(record.get("content"), str) else ""
+    if isinstance(record.get("content_sha256"), str) and hashlib.sha256(content.encode("utf-8")).hexdigest() != record.get("content_sha256"):
+        target.errors.append(f"{label}.content_sha256 must match content.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    elif len(content.encode("utf-8")) != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes must match content byte length.")
+    sections = record.get("required_sections")
+    if not _is_string_list(sections):
+        target.errors.append(f"{label}.required_sections must be a list of strings.")
+        sections = []
+    for section in sections:
+        if section not in content:
+            target.errors.append(f"{label}.content missing required section {section!r}.")
+    file_path = _resolve_preflight_record_path(record.get("path"), source_path)
+    if file_path is None:
+        return
+    if file_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an existing file.")
+        return
+    try:
+        file_content = file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        target.errors.append(f"{label}.path could not be read: {exc}")
+        return
+    if file_content != content:
+        target.errors.append(f"{label}.path content must match manifest content.")
+    if hashlib.sha256(file_content.encode("utf-8")).hexdigest() != record.get("content_sha256"):
+        target.errors.append(f"{label}.path content_sha256 does not match manifest.")
+
+
+def _validate_promotion_cards_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_cards.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "use_generated_cards" if expected_passed else "fix_card_inputs"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_cards.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_cards.decision.recommendation expected {expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("promotion_cards.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(f"promotion_cards.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}.")
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("promotion_cards.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(f"promotion_cards.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}.")
+    for index, check in enumerate(blocking_checks):
+        label = f"promotion_cards.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if value.get("key_metrics") != metrics:
+        target.errors.append("promotion_cards.decision.key_metrics must match promotion_cards.metrics.")
+
+
+def _validate_promotion_release_record(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(record, "schema_version", PROMOTION_RELEASE_RECORD_SCHEMA_VERSION, target)
+    for field_name in ("release_id", "record_path", "generated_at", "readiness", "recommendation"):
+        if not isinstance(record.get(field_name), str) or (field_name == "release_id" and not record.get(field_name)):
+            target.errors.append(f"promotion_release_record.{field_name} must be a non-empty string.")
+    if not isinstance(record.get("passed"), bool):
+        target.errors.append("promotion_release_record.passed must be a boolean.")
+
+    components = _validate_promotion_decision_record_map(
+        record.get("components"),
+        target,
+        "promotion_release_record.components",
+        source_path,
+    )
+    expected_component_schemas = {
+        "promotion_decision": PROMOTION_DECISION_SCHEMA_VERSION,
+        "promotion_cards": PROMOTION_CARDS_SCHEMA_VERSION,
+        "registry_alias_receipt": REGISTRY_ALIAS_RECEIPT_SCHEMA_VERSION,
+    }
+    for role, expected_schema in expected_component_schemas.items():
+        payload = components.get(role, {}).get("json") if isinstance(components.get(role, {}).get("json"), dict) else {}
+        if payload.get("schema_version") != expected_schema:
+            target.errors.append(f"promotion_release_record.components.{role}.json.schema_version must be {expected_schema!r}.")
+    evals = _validate_promotion_decision_record_map(record.get("evals"), target, "promotion_release_record.evals", source_path)
+    _validate_promotion_card_record(record.get("release_notes"), target, "promotion_release_record.release_notes", source_path)
+    policy = record.get("policy")
+    if not isinstance(policy, dict):
+        target.errors.append("promotion_release_record.policy must be an object.")
+    else:
+        _validate_promotion_decision_policy(policy, target)
+
+    checks = record.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_release_record.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "promotion_release_record.checks")
+    if record.get("check_count") != len(checks):
+        target.errors.append(f"promotion_release_record.check_count expected {len(checks)}, got {record.get('check_count')!r}.")
+    if record.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_release_record.failed_check_count expected {failed_checks}, got {record.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(record.get("passed"), bool) and record.get("passed") != expected_passed:
+        target.errors.append("promotion_release_record.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "record_release" if expected_passed else "block_release"
+    if record.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_release_record.readiness expected {expected_readiness!r}, got {record.get('readiness')!r}.")
+    if record.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_release_record.recommendation expected {expected_recommendation!r}, got {record.get('recommendation')!r}."
+        )
+
+    metrics = record.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_release_record.metrics must be an object.")
+        metrics = {}
+    expected_metrics = {
+        "component_count": len(components),
+        "eval_count": len(evals),
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+    }
+    for field_name, expected_value in expected_metrics.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(
+                f"promotion_release_record.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}."
+            )
+    if not isinstance(metrics.get("candidate_arm"), str):
+        target.errors.append("promotion_release_record.metrics.candidate_arm must be a string.")
+    if not _is_string_list(metrics.get("baseline_arms")):
+        target.errors.append("promotion_release_record.metrics.baseline_arms must be a list of strings.")
+    _validate_promotion_release_record_decision(record.get("decision"), expected_passed, failed_checks, metrics, target)
+    if "metadata" in record:
+        _validate_metadata(record.get("metadata"), target, "promotion_release_record.metadata")
+    if not _is_string_list(record.get("notes")):
+        target.errors.append("promotion_release_record.notes must be a list of strings.")
+    target.details.update(
+        {
+            "release_id": record.get("release_id"),
+            "readiness": record.get("readiness"),
+            "recommendation": record.get("recommendation"),
+            "failed_check_count": failed_checks,
+        }
+    )
+
+
+def _validate_promotion_release_record_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_release_record.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "record_release" if expected_passed else "block_release"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"promotion_release_record.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}."
+        )
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "promotion_release_record.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("promotion_release_record.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_release_record.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("promotion_release_record.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"promotion_release_record.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"promotion_release_record.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if value.get("key_metrics") != metrics:
+        target.errors.append("promotion_release_record.decision.key_metrics must match promotion_release_record.metrics.")
+
+
+def _validate_registry_alias_apply(apply_record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(apply_record, "schema_version", REGISTRY_ALIAS_APPLY_SCHEMA_VERSION, target)
+    for field_name in ("apply_path", "applied_at", "readiness", "recommendation"):
+        if not isinstance(apply_record.get(field_name), str):
+            target.errors.append(f"registry_alias_apply.{field_name} must be a string.")
+    if not isinstance(apply_record.get("passed"), bool):
+        target.errors.append("registry_alias_apply.passed must be a boolean.")
+
+    _validate_registry_alias_apply_registry_before(apply_record.get("registry_before"), target)
+    _validate_registry_alias_apply_registry_after(
+        apply_record.get("registry_after"),
+        apply_record.get("registry_before"),
+        target,
+        source_path,
+    )
+    _validate_registry_alias_receipt_promotion_decision(
+        apply_record.get("registry_alias_receipt"),
+        target,
+        "registry_alias_apply.registry_alias_receipt",
+        source_path,
+    )
+    release_record = apply_record.get("promotion_release_record")
+    _validate_registry_alias_receipt_promotion_decision(
+        release_record,
+        target,
+        "registry_alias_apply.promotion_release_record",
+        source_path,
+    )
+    if isinstance(release_record, dict) and release_record.get("schema_version") != PROMOTION_RELEASE_RECORD_SCHEMA_VERSION:
+        target.errors.append(
+            f"registry_alias_apply.promotion_release_record.schema_version must be {PROMOTION_RELEASE_RECORD_SCHEMA_VERSION!r}."
+        )
+    _validate_registry_alias_apply_alias_update(apply_record.get("alias_update"), apply_record.get("passed") is True, target)
+
+    checks = apply_record.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("registry_alias_apply.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "registry_alias_apply.checks")
+    if apply_record.get("check_count") != len(checks):
+        target.errors.append(f"registry_alias_apply.check_count expected {len(checks)}, got {apply_record.get('check_count')!r}.")
+    if apply_record.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"registry_alias_apply.failed_check_count expected {failed_checks}, got {apply_record.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(apply_record.get("passed"), bool) and apply_record.get("passed") != expected_passed:
+        target.errors.append("registry_alias_apply.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "alias_applied" if expected_passed else "block_alias_apply"
+    if apply_record.get("readiness") != expected_readiness:
+        target.errors.append(f"registry_alias_apply.readiness expected {expected_readiness!r}, got {apply_record.get('readiness')!r}.")
+    if apply_record.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"registry_alias_apply.recommendation expected {expected_recommendation!r}, got {apply_record.get('recommendation')!r}."
+        )
+
+    metrics = apply_record.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("registry_alias_apply.metrics must be an object.")
+        metrics = {}
+    expected_metrics = {
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+    }
+    for field_name, expected_value in expected_metrics.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"registry_alias_apply.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("registry_entry_count", "alias_history_count_before", "alias_history_count_after"):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"registry_alias_apply.metrics.{field_name} must be a non-negative integer.")
+    if metrics.get("side_effects") is not (apply_record.get("passed") is True):
+        target.errors.append("registry_alias_apply.metrics.side_effects must match passed.")
+    _validate_registry_alias_apply_decision(apply_record.get("decision"), expected_passed, failed_checks, metrics, target)
+    if "metadata" in apply_record:
+        _validate_metadata(apply_record.get("metadata"), target, "registry_alias_apply.metadata")
+    if not _is_string_list(apply_record.get("notes")):
+        target.errors.append("registry_alias_apply.notes must be a list of strings.")
+    alias_update = apply_record.get("alias_update") if isinstance(apply_record.get("alias_update"), dict) else {}
+    target.details.update(
+        {
+            "readiness": apply_record.get("readiness"),
+            "recommendation": apply_record.get("recommendation"),
+            "alias": alias_update.get("alias"),
+            "target": alias_update.get("target"),
+            "failed_check_count": failed_checks,
+        }
+    )
+
+
+def _validate_registry_alias_apply_registry_before(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_apply.registry_before must be an object.")
+        return
+    for field_name in ("name", "path", "kind"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"registry_alias_apply.registry_before.{field_name} must be a non-empty string.")
+    if not isinstance(value.get("exists"), bool):
+        target.errors.append("registry_alias_apply.registry_before.exists must be a boolean.")
+    if value.get("exists") is True and not _is_sha256(value.get("sha256")):
+        target.errors.append("registry_alias_apply.registry_before.sha256 must be a SHA-256 hex string for existing files.")
+
+
+def _validate_registry_alias_apply_registry_after(value: Any, before: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_apply.registry_after must be an object.")
+        return
+    if not isinstance(value.get("applied"), bool):
+        target.errors.append("registry_alias_apply.registry_after.applied must be a boolean.")
+    if not isinstance(value.get("aliases"), dict):
+        target.errors.append("registry_alias_apply.registry_after.aliases must be an object.")
+    if not _is_non_negative_int(value.get("alias_history_count")):
+        target.errors.append("registry_alias_apply.registry_after.alias_history_count must be a non-negative integer.")
+    if value.get("applied") is not True:
+        return
+    if not _is_sha256(value.get("sha256_after_write")):
+        target.errors.append("registry_alias_apply.registry_after.sha256_after_write must be a SHA-256 hex string when applied.")
+        return
+    before_path = before.get("path") if isinstance(before, dict) else None
+    file_path = _resolve_preflight_record_path(before_path, source_path)
+    if file_path is None:
+        return
+    if file_path.is_symlink():
+        target.errors.append("registry_alias_apply.registry_after.path must not resolve to a symlink.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append("registry_alias_apply.registry_after.path does not resolve to an existing file.")
+        return
+    if _sha256(file_path) != value.get("sha256_after_write"):
+        target.errors.append("registry_alias_apply.registry_after.sha256_after_write does not match current registry file.")
+
+
+def _validate_registry_alias_apply_alias_update(value: Any, expected_applied: bool, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_apply.alias_update must be an object.")
+        return
+    if value.get("alias") not in {"candidate", "champion", "rollback"}:
+        target.errors.append("registry_alias_apply.alias_update.alias must be candidate, champion, or rollback.")
+    if value.get("previous_target") is not None and not isinstance(value.get("previous_target"), str):
+        target.errors.append("registry_alias_apply.alias_update.previous_target must be a string or null.")
+    for field_name in ("target", "reason"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"registry_alias_apply.alias_update.{field_name} must be a string.")
+    if value.get("rollback_target") is not None and not isinstance(value.get("rollback_target"), str):
+        target.errors.append("registry_alias_apply.alias_update.rollback_target must be a string or null.")
+    if value.get("applied") is not expected_applied:
+        target.errors.append("registry_alias_apply.alias_update.applied must match passed.")
+    if value.get("side_effects") is not expected_applied:
+        target.errors.append("registry_alias_apply.alias_update.side_effects must match passed.")
+
+
+def _validate_registry_alias_apply_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_apply.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "alias_applied" if expected_passed else "block_alias_apply"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"registry_alias_apply.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"registry_alias_apply.decision.recommendation expected {expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("registry_alias_apply.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(f"registry_alias_apply.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}.")
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("registry_alias_apply.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(f"registry_alias_apply.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}.")
+    for index, check in enumerate(blocking_checks):
+        label = f"registry_alias_apply.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if value.get("key_metrics") != metrics:
+        target.errors.append("registry_alias_apply.decision.key_metrics must match registry_alias_apply.metrics.")
+
+
+def _validate_registry_alias_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(receipt, "schema_version", REGISTRY_ALIAS_RECEIPT_SCHEMA_VERSION, target)
+    for field_name in ("receipt_path", "generated_at", "readiness", "recommendation"):
+        if not isinstance(receipt.get(field_name), str):
+            target.errors.append(f"registry_alias_receipt.{field_name} must be a string.")
+    if not isinstance(receipt.get("passed"), bool):
+        target.errors.append("registry_alias_receipt.passed must be a boolean.")
+
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("registry_alias_receipt.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "registry_alias_receipt.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"registry_alias_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"registry_alias_receipt.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(receipt.get("passed"), bool) and receipt.get("passed") != expected_passed:
+        target.errors.append("registry_alias_receipt.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "apply_alias_update" if expected_passed else "block_alias_update"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"registry_alias_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}."
+        )
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "registry_alias_receipt.recommendation expected "
+            f"{expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+
+    registry = receipt.get("registry")
+    _validate_registry_alias_receipt_source_record(registry, target, "registry_alias_receipt.registry", source_path)
+    promotion_decision = receipt.get("promotion_decision")
+    _validate_registry_alias_receipt_promotion_decision(
+        promotion_decision,
+        target,
+        "registry_alias_receipt.promotion_decision",
+        source_path,
+    )
+    alias_update = receipt.get("alias_update")
+    _validate_registry_alias_receipt_alias_update(alias_update, target)
+    metrics = receipt.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("registry_alias_receipt.metrics must be an object.")
+        metrics = {}
+    expected_metrics = {
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+    }
+    for field_name, expected_value in expected_metrics.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"registry_alias_receipt.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("registry_entry_count", "planned_alias_history_count"):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"registry_alias_receipt.metrics.{field_name} must be a non-negative integer.")
+    for field_name in ("target_registered", "rollback_required", "side_effects"):
+        if not isinstance(metrics.get(field_name), bool):
+            target.errors.append(f"registry_alias_receipt.metrics.{field_name} must be a boolean.")
+    if metrics.get("side_effects") is not False:
+        target.errors.append("registry_alias_receipt.metrics.side_effects must be false.")
+
+    _validate_registry_alias_receipt_decision(receipt.get("decision"), expected_passed, failed_checks, metrics, target)
+    if "metadata" in receipt:
+        _validate_metadata(receipt.get("metadata"), target, "registry_alias_receipt.metadata")
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("registry_alias_receipt.notes must be a list of strings.")
+    target.details.update(
+        {
+            "readiness": receipt.get("readiness"),
+            "recommendation": receipt.get("recommendation"),
+            "alias": alias_update.get("alias") if isinstance(alias_update, dict) else None,
+            "target": alias_update.get("target") if isinstance(alias_update, dict) else None,
+            "failed_check_count": failed_checks,
+        }
+    )
+
+
+def _validate_registry_alias_receipt_source_record(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("name", "path", "kind"):
+        if not isinstance(record.get(field_name), str) or not record.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    for field_name in ("exists",):
+        if not isinstance(record.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if record.get("kind") == "file":
+        _validate_preflight_file_hash(record, target, label, source_path)
+
+
+def _validate_registry_alias_receipt_promotion_decision(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    _validate_registry_alias_receipt_source_record(record, target, label, source_path)
+    if not isinstance(record, dict):
+        return
+    if record.get("schema_version") != PROMOTION_DECISION_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {PROMOTION_DECISION_SCHEMA_VERSION!r}.")
+    if not isinstance(record.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+    for field_name in ("readiness", "recommendation"):
+        if not isinstance(record.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("failed_check_count", "blocking_check_count"):
+        if record.get(field_name) is not None and not _is_non_negative_int(record.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be null or a non-negative integer.")
+
+
+def _validate_registry_alias_receipt_alias_update(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_receipt.alias_update must be an object.")
+        return
+    if value.get("alias") not in {"candidate", "champion", "rollback"}:
+        target.errors.append("registry_alias_receipt.alias_update.alias must be candidate, champion, or rollback.")
+    if not isinstance(value.get("target"), str) or not value.get("target"):
+        target.errors.append("registry_alias_receipt.alias_update.target must be a non-empty string.")
+    for field_name in ("previous_target", "rollback_target"):
+        if value.get(field_name) is not None and not isinstance(value.get(field_name), str):
+            target.errors.append(f"registry_alias_receipt.alias_update.{field_name} must be a string or null.")
+    if not isinstance(value.get("reason"), str):
+        target.errors.append("registry_alias_receipt.alias_update.reason must be a string.")
+    if value.get("dry_run") is not True:
+        target.errors.append("registry_alias_receipt.alias_update.dry_run must be true.")
+    if value.get("applied") is not False:
+        target.errors.append("registry_alias_receipt.alias_update.applied must be false.")
+    if value.get("side_effects") is not False:
+        target.errors.append("registry_alias_receipt.alias_update.side_effects must be false.")
+    history = value.get("planned_alias_history")
+    if not isinstance(history, list):
+        target.errors.append("registry_alias_receipt.alias_update.planned_alias_history must be a list.")
+        return
+    for index, item in enumerate(history):
+        label = f"registry_alias_receipt.alias_update.planned_alias_history[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("alias", "target", "moved_at", "reason"):
+            if not isinstance(item.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if item.get("previous") is not None and not isinstance(item.get("previous"), str):
+            target.errors.append(f"{label}.previous must be a string or null.")
+
+
+def _validate_registry_alias_receipt_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("registry_alias_receipt.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "apply_alias_update" if expected_passed else "block_alias_update"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"registry_alias_receipt.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}."
+        )
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "registry_alias_receipt.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("registry_alias_receipt.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"registry_alias_receipt.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("registry_alias_receipt.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"registry_alias_receipt.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"registry_alias_receipt.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if value.get("key_metrics") != metrics:
+        target.errors.append("registry_alias_receipt.decision.key_metrics must match registry_alias_receipt.metrics.")
 
 
 def _validate_promotion_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
@@ -6398,6 +8026,7 @@ def _validate_promotion_ledger_gate_decision(
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
+    _validate_gate_decision_actions(value, failed_checks, target, "promotion_ledger_gate.decision")
     key_metrics = value.get("key_metrics")
     if not isinstance(key_metrics, dict):
         target.errors.append("promotion_ledger_gate.decision.key_metrics must be an object.")
@@ -6418,6 +8047,34 @@ def _validate_promotion_ledger_gate_decision(
             target.errors.append(
                 f"promotion_ledger_gate.decision.key_metrics.{field_name} must match promotion_ledger_gate.metrics.{field_name}."
             )
+
+
+def _validate_gate_decision_actions(value: dict[str, Any], failed_checks: int, target: ValidationTarget, label: str) -> None:
+    failed = value.get("failed_checks")
+    if not isinstance(failed, list):
+        target.errors.append(f"{label}.failed_checks must be a list.")
+    elif len(failed) != failed_checks:
+        target.errors.append(f"{label}.failed_checks expected {failed_checks} entries, got {len(failed)}.")
+    next_actions = value.get("next_actions")
+    if not isinstance(next_actions, list):
+        target.errors.append(f"{label}.next_actions must be a list.")
+        next_actions = []
+    if value.get("next_action_count") != len(next_actions):
+        target.errors.append(f"{label}.next_action_count expected {len(next_actions)}, got {value.get('next_action_count')!r}.")
+    if failed_checks and not next_actions:
+        target.errors.append(f"{label}.next_actions must not be empty when checks fail.")
+    for index, action in enumerate(next_actions):
+        action_label = f"{label}.next_actions[{index}]"
+        if not isinstance(action, dict):
+            target.errors.append(f"{action_label} must be an object.")
+            continue
+        for field_name in ("id", "priority", "artifact", "summary"):
+            if not isinstance(action.get(field_name), str) or not action.get(field_name):
+                target.errors.append(f"{action_label}.{field_name} must be a non-empty string.")
+        if action.get("priority") not in {"critical", "high", "medium", "low"}:
+            target.errors.append(f"{action_label}.priority must be critical, high, medium, or low.")
+        if not isinstance(action.get("evidence"), dict):
+            target.errors.append(f"{action_label}.evidence must be an object.")
 
 
 def _validate_promotion_ledger_gate_policy_summary(value: Any, target: ValidationTarget) -> None:
@@ -7375,6 +9032,170 @@ def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarg
             "failed_check_count": failed_checks,
             "trainer_input_count": metrics.get("trainer_input_count"),
             "external_code_file_count": metrics.get("external_code_file_count"),
+        }
+    )
+
+
+def _validate_model_scout_manifest(manifest: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(manifest, "schema_version", MODEL_SCOUT_MANIFEST_SCHEMA_VERSION, target, prefix="model_scout_manifest.")
+    target.errors.extend(model_scout_manifest_errors(manifest))
+    selection_policy = manifest.get("selection_policy") if isinstance(manifest.get("selection_policy"), dict) else {}
+    require_compatibility_metadata = selection_policy.get("require_compatibility_metadata") is True
+    candidates = manifest.get("candidates") if isinstance(manifest.get("candidates"), list) else []
+    candidate_count = 0
+    training_eligible_count = 0
+    compatibility_report_count = 0
+    blocked_training_selection_count = 0
+    for index, ref in enumerate(candidates):
+        if not isinstance(ref, dict):
+            continue
+        candidate_count += 1
+        label = f"model_scout_manifest.candidates[{index}]"
+        candidate_path = _model_scout_reference_path(ref.get("manifest_path"), source_path)
+        candidate = _read_object(candidate_path, target, f"{label}.manifest_path") if candidate_path is not None else None
+        if candidate is None:
+            continue
+        candidate_errors = model_candidate_errors(candidate)
+        target.errors.extend(error.replace("model_candidate.", f"{label}.candidate.") for error in candidate_errors)
+        if ref.get("candidate_id") != candidate.get("candidate_id"):
+            target.errors.append(f"{label}.candidate_id must match referenced candidate.candidate_id.")
+        license_review = candidate.get("license") if isinstance(candidate.get("license"), dict) else {}
+        if isinstance(ref.get("license_status"), str) and ref.get("license_status") != license_review.get("status"):
+            target.errors.append(f"{label}.license_status must match referenced candidate license.status.")
+        if isinstance(ref.get("review_status"), str) and ref.get("review_status") != license_review.get("review_status"):
+            target.errors.append(f"{label}.review_status must match referenced candidate license.review_status.")
+        training_eligible = is_training_license_approved(candidate)
+        if training_eligible:
+            training_eligible_count += 1
+        elif ref.get("training_selection_eligible") is True:
+            blocked_training_selection_count += 1
+            target.errors.append(
+                f"{label}.training_selection_eligible cannot be true unless the referenced candidate license is approved for training."
+            )
+        if ref.get("training_selection_eligible") is False and training_eligible:
+            target.warnings.append(f"{label}.training_selection_eligible is false although the referenced candidate is license-approved.")
+        if require_compatibility_metadata and not isinstance(candidate.get("compatibility"), dict):
+            target.errors.append(f"{label}.candidate.compatibility must be present when selection policy requires compatibility metadata.")
+        report_path_value = ref.get("compatibility_report_path")
+        if isinstance(report_path_value, str) and report_path_value:
+            compatibility_report_count += 1
+            report_path = _model_scout_reference_path(report_path_value, source_path)
+            report = _read_object(report_path, target, f"{label}.compatibility_report_path") if report_path is not None else None
+            if report is None:
+                continue
+            report_errors = model_compatibility_report_errors(report)
+            target.errors.extend(
+                error.replace("model_compatibility_report.", f"{label}.compatibility_report.") for error in report_errors
+            )
+            if report.get("candidate_id") != candidate.get("candidate_id"):
+                target.errors.append(f"{label}.compatibility_report.candidate_id must match referenced candidate.")
+            if report.get("model_id") != candidate.get("model_id"):
+                target.errors.append(f"{label}.compatibility_report.model_id must match referenced candidate.")
+            if ref.get("training_selection_eligible") is True and report.get("passed") is not True:
+                target.errors.append(f"{label}.compatibility_report.passed must be true for training-selectable scout entries.")
+    target.details.update(
+        {
+            "candidate_count": candidate_count,
+            "compatibility_report_count": compatibility_report_count,
+            "training_eligible_count": training_eligible_count,
+            "blocked_training_selection_count": blocked_training_selection_count,
+        }
+    )
+
+
+def _model_scout_reference_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.exists() or path.is_absolute():
+        return path
+    local_path = source_path.parent / path
+    return local_path if local_path.exists() else path
+
+
+def _validate_model_candidate(candidate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(candidate, "schema_version", MODEL_CANDIDATE_SCHEMA_VERSION, target, prefix="model_candidate.")
+    target.errors.extend(model_candidate_errors(candidate))
+    license_review = candidate.get("license") if isinstance(candidate.get("license"), dict) else {}
+    compatibility = candidate.get("compatibility") if isinstance(candidate.get("compatibility"), dict) else {}
+    target.details.update(
+        {
+            "candidate_id": candidate.get("candidate_id"),
+            "model_id": candidate.get("model_id"),
+            "license_status": license_review.get("status"),
+            "license_review_status": license_review.get("review_status"),
+            "context_length": compatibility.get("context_length"),
+        }
+    )
+
+
+def _validate_model_compatibility_report(report: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        report,
+        "schema_version",
+        MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION,
+        target,
+        prefix="model_compatibility_report.",
+    )
+    target.errors.extend(model_compatibility_report_errors(report))
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    target.details.update(
+        {
+            "candidate_id": report.get("candidate_id"),
+            "model_id": report.get("model_id"),
+            "readiness": report.get("readiness"),
+            "probe_count": summary.get("probe_count"),
+            "verified_count": summary.get("verified_count"),
+            "metadata_only_count": summary.get("metadata_only_count"),
+        }
+    )
+
+
+def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(entry, "schema_version", MODEL_REGISTRY_ENTRY_SCHEMA_VERSION, target, prefix="model_registry_entry.")
+    target.errors.extend(model_registry_entry_errors(entry))
+    target.details.update(
+        {
+            "entry_id": entry.get("entry_id"),
+            "candidate_id": entry.get("candidate_id"),
+            "training_eligible": entry.get("training_eligible"),
+            "license_status": entry.get("license_status"),
+        }
+    )
+
+
+def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(registry, "schema_version", MODEL_REGISTRY_SCHEMA_VERSION, target, prefix="model_registry.")
+    target.errors.extend(model_registry_errors(registry))
+    entries = registry.get("entries") if isinstance(registry.get("entries"), dict) else {}
+    aliases = registry.get("aliases") if isinstance(registry.get("aliases"), dict) else {}
+    target.details.update(
+        {
+            "entry_count": len(entries),
+            "training_eligible_count": sum(
+                1 for entry in entries.values() if isinstance(entry, dict) and entry.get("training_eligible") is True
+            ),
+            "aliases": aliases,
+        }
+    )
+
+
+def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", TRAINING_PLAN_SCHEMA_VERSION, target, prefix="training_plan.")
+    target.errors.extend(training_plan_errors(plan))
+    model = plan.get("model") if isinstance(plan.get("model"), dict) else {}
+    dataset = plan.get("dataset") if isinstance(plan.get("dataset"), dict) else {}
+    compatibility_report = plan.get("compatibility_report") if isinstance(plan.get("compatibility_report"), dict) else {}
+    target.details.update(
+        {
+            "model_ref": model.get("model_ref"),
+            "candidate_id": model.get("candidate_id"),
+            "dataset_id": dataset.get("dataset_id"),
+            "compatibility_report_path": compatibility_report.get("path"),
+            "compatibility_report_sha256": compatibility_report.get("sha256"),
+            "dry_run": plan.get("dry_run"),
+            "gpu_execution": plan.get("gpu_execution"),
+            "no_weight_download": plan.get("no_weight_download"),
         }
     )
 
@@ -9054,6 +10875,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "review_calibration",
         "live_smoke_summary",
         "trainer_handoff",
+        "harness_handoff",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
@@ -9067,6 +10889,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     trainer_handoff = metrics.get("trainer_handoff")
     if isinstance(trainer_handoff, dict):
         _validate_bundle_trainer_handoff(trainer_handoff, target)
+    harness_handoff = metrics.get("harness_handoff")
+    if isinstance(harness_handoff, dict):
+        _validate_bundle_harness_handoff(harness_handoff, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -9083,8 +10908,42 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].schema_version must be a string when present.")
             if not isinstance(gate.get("passed"), bool):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
+            if "contract" not in gate:
+                target.errors.append(f"evidence_bundle.metrics.gates[{index}].contract is required.")
+            else:
+                _validate_bundle_gate_contract(gate.get("contract"), gate, target, f"evidence_bundle.metrics.gates[{index}].contract")
             if "validation" in gate:
                 _validate_bundle_gate_validation(gate.get("validation"), target, f"evidence_bundle.metrics.gates[{index}].validation")
+
+
+def _validate_bundle_gate_contract(value: Any, gate: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("available", "valid"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    for field_name in ("failed_check_count", "blocking_check_count", "next_action_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("readiness", "recommendation"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    errors = value.get("errors")
+    if not isinstance(errors, list) or not all(isinstance(item, str) for item in errors):
+        target.errors.append(f"{label}.errors must be a list of strings.")
+        errors = []
+    if value.get("valid") is True and errors:
+        target.errors.append(f"{label}.errors must be empty when contract is valid.")
+    if value.get("valid") is False and not errors:
+        target.errors.append(f"{label}.errors must explain an invalid contract.")
+    if isinstance(gate.get("passed"), bool):
+        expected_readiness = "ready" if gate["passed"] else "blocked"
+        expected_recommendation = READY_RECOMMENDATION if gate["passed"] else BLOCK_RECOMMENDATION
+        if value.get("readiness") and value.get("readiness") != expected_readiness:
+            target.errors.append(f"{label}.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+        if value.get("recommendation") and value.get("recommendation") != expected_recommendation:
+            target.errors.append(f"{label}.recommendation expected {expected_recommendation!r}, got {value.get('recommendation')!r}.")
 
 
 def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label: str) -> None:
@@ -9136,6 +10995,70 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.harness_handoff"
+    for field_name in (
+        "manifest_count",
+        "result_count",
+        "pair_count",
+        "passed_pair_count",
+        "failed_pair_count",
+        "schema_valid_pair_count",
+        "consistent_pair_count",
+        "missing_pair_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("runners", "providers", "models", "trace_formats"):
+        _validate_count_rows(value.get(field_name), target, f"{label}.{field_name}")
+    runs = value.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append(f"{label}.runs must be a list.")
+        runs = []
+    if _is_non_negative_int(value.get("pair_count")) and int(value["pair_count"]) != len(runs):
+        target.errors.append(f"{label}.pair_count expected {len(runs)}, got {value.get('pair_count')!r}.")
+
+    passed_count = 0
+    failed_count = 0
+    schema_valid_count = 0
+    consistent_count = 0
+    for index, row in enumerate(runs):
+        row_label = f"{label}.runs[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        for field_name in ("id", "scenario_id", "runner", "provider", "model", "manifest_path", "result_path", "trace_format"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{row_label}.{field_name} must be a non-empty string.")
+        for field_name in ("passed", "schema_valid", "consistent"):
+            if not isinstance(row.get(field_name), bool):
+                target.errors.append(f"{row_label}.{field_name} must be a boolean.")
+        if row.get("score") is not None and not isinstance(row.get("score"), (int, float)):
+            target.errors.append(f"{row_label}.score must be numeric when present.")
+        if not _is_string_list(row.get("schema_errors")):
+            target.errors.append(f"{row_label}.schema_errors must be a list of strings.")
+        if not _is_string_list(row.get("consistency_errors")):
+            target.errors.append(f"{row_label}.consistency_errors must be a list of strings.")
+        if row.get("passed") is True:
+            passed_count += 1
+        elif row.get("passed") is False:
+            failed_count += 1
+        if row.get("schema_valid") is True:
+            schema_valid_count += 1
+        if row.get("consistent") is True:
+            consistent_count += 1
+
+    expected_counts = {
+        "passed_pair_count": passed_count,
+        "failed_pair_count": failed_count,
+        "schema_valid_pair_count": schema_valid_count,
+        "consistent_pair_count": consistent_count,
+    }
+    for field_name, expected in expected_counts.items():
+        if _is_non_negative_int(value.get(field_name)) and int(value[field_name]) != expected:
+            target.errors.append(f"{label}.{field_name} expected {expected}, got {value.get(field_name)!r}.")
 
 
 def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTarget) -> None:

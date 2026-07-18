@@ -1,0 +1,695 @@
+{
+  "arms": [
+    {
+      "arm": "baseline",
+      "capabilities": {
+        "chat_completions": true,
+        "health": true,
+        "model_metadata": true,
+        "models": true,
+        "structured_outputs": "supported",
+        "tool_calls": "supported"
+      },
+      "checks": [
+        {
+          "details": {
+            "schema_version": "hfr.serving_profile.v1"
+          },
+          "id": "profile_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "base_url": "http://127.0.0.1:63647/v1"
+          },
+          "id": "endpoint_base_url",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "baseline",
+            "expected": "baseline"
+          },
+          "id": "profile_arm",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "eval_preflight_ready",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_health",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_models",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_model_metadata",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_chat_completions",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_tool_calls",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_structured_outputs",
+          "passed": true
+        },
+        {
+          "details": {
+            "expected": "Qwen/Qwen3-4B-Instruct-2507",
+            "identity": {
+              "adapter": {
+                "id": "",
+                "local": false,
+                "path": "",
+                "present": false
+              },
+              "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507",
+              "metadata_model": "Qwen/Qwen3-4B-Instruct-2507",
+              "observed_model_ids": [
+                "Qwen/Qwen3-4B-Instruct-2507"
+              ],
+              "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+              "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+            }
+          },
+          "id": "model_identity",
+          "passed": true
+        },
+        {
+          "details": {
+            "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/baseline/serving_lifecycle_run.json",
+            "schema_version": "hfr.serving_lifecycle_run.v1"
+          },
+          "id": "lifecycle_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "passed": true
+          },
+          "id": "lifecycle_passed",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "lifecycle_preflight",
+          "passed": true
+        },
+        {
+          "details": {
+            "cleanup": {
+              "attempted": true,
+              "exit_code_after_cleanup": -15,
+              "exit_code_before_cleanup": null,
+              "killed": false,
+              "process_group_id": 40529,
+              "terminated": true,
+              "terminated_signal_sent": true
+            }
+          },
+          "id": "lifecycle_cleanup",
+          "passed": true
+        }
+      ],
+      "endpoint": {
+        "base_url": "http://127.0.0.1:63647/v1"
+      },
+      "failed_checks": [],
+      "lifecycle": {
+        "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/baseline/serving_lifecycle_run.json",
+        "present": true
+      },
+      "model_identity": {
+        "adapter": {
+          "id": "",
+          "local": false,
+          "path": "",
+          "present": false
+        },
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507"
+        ],
+        "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+      },
+      "profile_arm": "baseline",
+      "profile_id": "baseline-transformers-qwen3-4b-instruct-2507",
+      "profile_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/baseline/serving_profile.json",
+      "ready_for_eval": true
+    },
+    {
+      "arm": "trace_only",
+      "capabilities": {
+        "chat_completions": true,
+        "health": true,
+        "model_metadata": true,
+        "models": true,
+        "structured_outputs": "supported",
+        "tool_calls": "supported"
+      },
+      "checks": [
+        {
+          "details": {
+            "schema_version": "hfr.serving_profile.v1"
+          },
+          "id": "profile_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "base_url": "http://127.0.0.1:63666/v1"
+          },
+          "id": "endpoint_base_url",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "trace_only",
+            "expected": "trace_only"
+          },
+          "id": "profile_arm",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "eval_preflight_ready",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_health",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_models",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_model_metadata",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_chat_completions",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_tool_calls",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_structured_outputs",
+          "passed": true
+        },
+        {
+          "details": {
+            "expected": "Qwen/Qwen3-4B-Instruct-2507",
+            "identity": {
+              "adapter": {
+                "files": [
+                  {
+                    "bytes": 1104,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_config.json",
+                    "sha256": "77bc2b643deb574a4ae525ac088ddd7907d101f4df2197606f5371bb494b396d"
+                  },
+                  {
+                    "bytes": 33096456,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_model.safetensors",
+                    "sha256": "e2cf1cbbeef4273ef09436d41a6f0227ab6f4a338f12307797c72780fc77fc42"
+                  },
+                  {
+                    "bytes": 695,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/tokenizer_config.json",
+                    "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+                  },
+                  {
+                    "bytes": 2630,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/chat_template.jinja",
+                    "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+                  }
+                ],
+                "id": "trace_sft_adapter",
+                "local": true,
+                "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+                "present": true
+              },
+              "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+              "metadata_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+              "observed_model_ids": [
+                "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+              ],
+              "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+              "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+            }
+          },
+          "id": "model_identity",
+          "passed": true
+        },
+        {
+          "details": {
+            "adapter": {
+              "files": [
+                {
+                  "bytes": 1104,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_config.json",
+                  "sha256": "77bc2b643deb574a4ae525ac088ddd7907d101f4df2197606f5371bb494b396d"
+                },
+                {
+                  "bytes": 33096456,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_model.safetensors",
+                  "sha256": "e2cf1cbbeef4273ef09436d41a6f0227ab6f4a338f12307797c72780fc77fc42"
+                },
+                {
+                  "bytes": 695,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/tokenizer_config.json",
+                  "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+                },
+                {
+                  "bytes": 2630,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/chat_template.jinja",
+                  "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+                }
+              ],
+              "id": "trace_sft_adapter",
+              "local": true,
+              "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+              "present": true
+            },
+            "expected": "trace_sft_adapter"
+          },
+          "id": "adapter_identity",
+          "passed": true
+        },
+        {
+          "details": {
+            "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_lifecycle_run.json",
+            "schema_version": "hfr.serving_lifecycle_run.v1"
+          },
+          "id": "lifecycle_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "passed": true
+          },
+          "id": "lifecycle_passed",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "lifecycle_preflight",
+          "passed": true
+        },
+        {
+          "details": {
+            "cleanup": {
+              "attempted": true,
+              "exit_code_after_cleanup": -15,
+              "exit_code_before_cleanup": null,
+              "killed": false,
+              "process_group_id": 40578,
+              "terminated": true,
+              "terminated_signal_sent": true
+            }
+          },
+          "id": "lifecycle_cleanup",
+          "passed": true
+        }
+      ],
+      "endpoint": {
+        "base_url": "http://127.0.0.1:63666/v1"
+      },
+      "failed_checks": [],
+      "lifecycle": {
+        "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_lifecycle_run.json",
+        "present": true
+      },
+      "model_identity": {
+        "adapter": {
+          "files": [
+            {
+              "bytes": 1104,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_config.json",
+              "sha256": "77bc2b643deb574a4ae525ac088ddd7907d101f4df2197606f5371bb494b396d"
+            },
+            {
+              "bytes": 33096456,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_model.safetensors",
+              "sha256": "e2cf1cbbeef4273ef09436d41a6f0227ab6f4a338f12307797c72780fc77fc42"
+            },
+            {
+              "bytes": 695,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/tokenizer_config.json",
+              "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+            },
+            {
+              "bytes": 2630,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/chat_template.jinja",
+              "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+            }
+          ],
+          "id": "trace_sft_adapter",
+          "local": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+          "present": true
+        },
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+        ],
+        "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+      },
+      "profile_arm": "trace_only",
+      "profile_id": "trace-only-transformers-trace-sft-adapter",
+      "profile_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_profile.json",
+      "ready_for_eval": true
+    },
+    {
+      "arm": "flightrecorder",
+      "capabilities": {
+        "chat_completions": true,
+        "health": true,
+        "model_metadata": true,
+        "models": true,
+        "structured_outputs": "supported",
+        "tool_calls": "supported"
+      },
+      "checks": [
+        {
+          "details": {
+            "schema_version": "hfr.serving_profile.v1"
+          },
+          "id": "profile_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "base_url": "http://127.0.0.1:63685/v1"
+          },
+          "id": "endpoint_base_url",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "flightrecorder",
+            "expected": "flightrecorder"
+          },
+          "id": "profile_arm",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "eval_preflight_ready",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_health",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_models",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_model_metadata",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": true
+          },
+          "id": "capability_chat_completions",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_tool_calls",
+          "passed": true
+        },
+        {
+          "details": {
+            "actual": "supported"
+          },
+          "id": "capability_structured_outputs",
+          "passed": true
+        },
+        {
+          "details": {
+            "expected": "Qwen/Qwen3-4B-Instruct-2507",
+            "identity": {
+              "adapter": {
+                "files": [
+                  {
+                    "bytes": 1104,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_config.json",
+                    "sha256": "f239d1ee1d2288ff93c5ed968a7a0a1a656f684773bffae92afa58b94044fc29"
+                  },
+                  {
+                    "bytes": 33096456,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_model.safetensors",
+                    "sha256": "d9d470c316adb5406fbee5b4a4cdce5ce3113755b7735292e6aff839a19b9331"
+                  },
+                  {
+                    "bytes": 695,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/tokenizer_config.json",
+                    "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+                  },
+                  {
+                    "bytes": 2630,
+                    "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/chat_template.jinja",
+                    "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+                  }
+                ],
+                "id": "fr_sft_dpo_adapter",
+                "local": true,
+                "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter",
+                "present": true
+              },
+              "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+              "metadata_model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+              "observed_model_ids": [
+                "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+              ],
+              "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+              "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+            }
+          },
+          "id": "model_identity",
+          "passed": true
+        },
+        {
+          "details": {
+            "adapter": {
+              "files": [
+                {
+                  "bytes": 1104,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_config.json",
+                  "sha256": "f239d1ee1d2288ff93c5ed968a7a0a1a656f684773bffae92afa58b94044fc29"
+                },
+                {
+                  "bytes": 33096456,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_model.safetensors",
+                  "sha256": "d9d470c316adb5406fbee5b4a4cdce5ce3113755b7735292e6aff839a19b9331"
+                },
+                {
+                  "bytes": 695,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/tokenizer_config.json",
+                  "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+                },
+                {
+                  "bytes": 2630,
+                  "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/chat_template.jinja",
+                  "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+                }
+              ],
+              "id": "fr_sft_dpo_adapter",
+              "local": true,
+              "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter",
+              "present": true
+            },
+            "expected": "fr_sft_dpo_adapter"
+          },
+          "id": "adapter_identity",
+          "passed": true
+        },
+        {
+          "details": {
+            "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_lifecycle_run.json",
+            "schema_version": "hfr.serving_lifecycle_run.v1"
+          },
+          "id": "lifecycle_schema",
+          "passed": true
+        },
+        {
+          "details": {
+            "passed": true
+          },
+          "id": "lifecycle_passed",
+          "passed": true
+        },
+        {
+          "details": {
+            "failed_checks": [],
+            "readiness": "ready"
+          },
+          "id": "lifecycle_preflight",
+          "passed": true
+        },
+        {
+          "details": {
+            "cleanup": {
+              "attempted": true,
+              "exit_code_after_cleanup": -15,
+              "exit_code_before_cleanup": null,
+              "killed": false,
+              "process_group_id": 40653,
+              "terminated": true,
+              "terminated_signal_sent": true
+            }
+          },
+          "id": "lifecycle_cleanup",
+          "passed": true
+        }
+      ],
+      "endpoint": {
+        "base_url": "http://127.0.0.1:63685/v1"
+      },
+      "failed_checks": [],
+      "lifecycle": {
+        "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_lifecycle_run.json",
+        "present": true
+      },
+      "model_identity": {
+        "adapter": {
+          "files": [
+            {
+              "bytes": 1104,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_config.json",
+              "sha256": "f239d1ee1d2288ff93c5ed968a7a0a1a656f684773bffae92afa58b94044fc29"
+            },
+            {
+              "bytes": 33096456,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_model.safetensors",
+              "sha256": "d9d470c316adb5406fbee5b4a4cdce5ce3113755b7735292e6aff839a19b9331"
+            },
+            {
+              "bytes": 695,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/tokenizer_config.json",
+              "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+            },
+            {
+              "bytes": 2630,
+              "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/chat_template.jinja",
+              "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+            }
+          ],
+          "id": "fr_sft_dpo_adapter",
+          "local": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter",
+          "present": true
+        },
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+        ],
+        "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+      },
+      "profile_arm": "flightrecorder",
+      "profile_id": "flightrecorder-transformers-fr-sft-dpo-adapter",
+      "profile_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_profile.json",
+      "ready_for_eval": true
+    }
+  ],
+  "failed_checks": [],
+  "generated_at": "2026-07-02T14:14:14Z",
+  "passed": true,
+  "requirements": {
+    "expected_adapters": {
+      "flightrecorder": "fr_sft_dpo_adapter",
+      "trace_only": "trace_sft_adapter"
+    },
+    "expected_models": {
+      "baseline": "Qwen/Qwen3-4B-Instruct-2507",
+      "flightrecorder": "Qwen/Qwen3-4B-Instruct-2507",
+      "trace_only": "Qwen/Qwen3-4B-Instruct-2507"
+    },
+    "require_structured_output": true,
+    "require_tool_call": true,
+    "required_arms": [
+      "baseline",
+      "trace_only",
+      "flightrecorder"
+    ],
+    "strict_profile_arm": true
+  },
+  "schema_version": "hfr.serving_endpoint_suite.v1"
+}

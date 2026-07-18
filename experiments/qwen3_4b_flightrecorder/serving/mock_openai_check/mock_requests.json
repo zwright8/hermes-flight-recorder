@@ -1,0 +1,39 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/healthz"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models/hfr-mock-model"
+    },
+    {
+      "method": "POST",
+      "model": "hfr-mock-model",
+      "path": "/v1/chat/completions",
+      "response_format": null,
+      "tool_count": 0
+    },
+    {
+      "method": "POST",
+      "model": "hfr-mock-model",
+      "path": "/v1/chat/completions",
+      "response_format": null,
+      "tool_count": 1
+    },
+    {
+      "method": "POST",
+      "model": "hfr-mock-model",
+      "path": "/v1/chat/completions",
+      "response_format": {
+        "type": "json_object"
+      },
+      "tool_count": 0
+    }
+  ]
+}

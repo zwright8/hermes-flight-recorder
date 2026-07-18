@@ -1,0 +1,55 @@
+{
+  "checks": {
+    "openai_core": {
+      "chat_completion": true,
+      "health": true,
+      "model_metadata": true,
+      "models": true
+    },
+    "structured_outputs": {
+      "error": null,
+      "json_parse_passed": true,
+      "parsed": {
+        "evidence": "hfr-structured-smoke",
+        "status": "ok"
+      },
+      "request": {
+        "response_format": {
+          "type": "json_object"
+        }
+      },
+      "response_ok": true,
+      "status": "supported",
+      "text": "{\"evidence\": \"hfr-structured-smoke\", \"status\": \"ok\"}"
+    },
+    "tool_calls": {
+      "error": null,
+      "request": {
+        "tool_choice": "auto",
+        "tool_names": [
+          "read_file"
+        ]
+      },
+      "response_ok": true,
+      "status": "supported",
+      "tool_call_count": 1,
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"path\": \"demo.txt\"}",
+            "name": "read_file"
+          },
+          "id": "call_hfr_mock_openai",
+          "type": "function"
+        }
+      ]
+    }
+  },
+  "engine": "transformers",
+  "generated_at": "2026-07-02T14:14:03Z",
+  "limitations": [],
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "profile_id": "baseline-transformers-qwen3-4b-instruct-2507",
+  "schema_version": "hfr.serving_compatibility_report.v1",
+  "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+}

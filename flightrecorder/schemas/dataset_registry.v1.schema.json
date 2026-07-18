@@ -1,0 +1,82 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_registry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local dataset registry entry emitted by export-rl.",
+  "properties": {
+    "artifact_fingerprints": {
+      "type": "object"
+    },
+    "dataset_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "label_provenance": {
+      "type": "object"
+    },
+    "manifest": {
+      "type": "object"
+    },
+    "quality_flags": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "redaction_status": {
+      "type": "object"
+    },
+    "registry_path": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.dataset_registry.v1"
+    },
+    "selection": {
+      "type": "object"
+    },
+    "source_fingerprint_coverage": {
+      "type": "object"
+    },
+    "source_runs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "split_assignments": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "split_metadata": {
+      "type": "object"
+    },
+    "trainer_views": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "dataset_version",
+    "manifest",
+    "registry_path",
+    "source_fingerprint_coverage",
+    "source_runs",
+    "split_metadata",
+    "split_assignments",
+    "redaction_status",
+    "quality_flags",
+    "label_provenance",
+    "artifact_fingerprints",
+    "trainer_views",
+    "selection"
+  ],
+  "title": "Hermes Flight Recorder Dataset Registry Entry",
+  "type": "object"
+}

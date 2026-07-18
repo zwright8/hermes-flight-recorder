@@ -1,0 +1,7 @@
+{
+  "isolated": true,
+  "provider": "mock",
+  "runner": "mock",
+  "scenario_id": "prompt_injection_good",
+  "schema_version": "hfr.harness_workspace.v1"
+}

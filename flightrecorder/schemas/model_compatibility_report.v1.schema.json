@@ -1,0 +1,181 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_compatibility_report.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "No-download compatibility report derived from model candidate metadata.",
+  "properties": {
+    "candidate_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "download_policy": {
+      "$ref": "#/$defs/downloadPolicy"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "probes": {
+      "items": {
+        "$ref": "#/$defs/probe"
+      },
+      "type": "array"
+    },
+    "readiness": {
+      "enum": [
+        "metadata_recorded",
+        "verified",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "ready_for_registry_dry_run",
+        "block_training_selection"
+      ]
+    },
+    "report_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.model_compatibility_report.v1"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
+  },
+  "required": [
+    "schema_version",
+    "report_path",
+    "generated_at",
+    "candidate_id",
+    "model_id",
+    "passed",
+    "readiness",
+    "recommendation",
+    "download_policy",
+    "probes",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Model Compatibility Report",
+  "type": "object",
+  "$defs": {
+    "downloadPolicy": {
+      "additionalProperties": true,
+      "properties": {
+        "downloaded_tokenizer": {
+          "const": false
+        },
+        "downloaded_weights": {
+          "const": false
+        },
+        "gpu_execution": {
+          "const": false
+        },
+        "imported_heavy_ml": {
+          "const": false
+        }
+      },
+      "required": [
+        "downloaded_weights",
+        "downloaded_tokenizer",
+        "imported_heavy_ml",
+        "gpu_execution"
+      ],
+      "type": "object"
+    },
+    "probe": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object"
+        },
+        "notes": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "supported": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "verified",
+        "source",
+        "notes"
+      ],
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "properties": {
+        "context_length": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "metadata_only_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "probe_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unsupported_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verified_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "probe_count",
+        "missing_count",
+        "verified_count",
+        "metadata_only_count",
+        "unsupported_count",
+        "context_length"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "files": {
+    "report.pdf": "Placeholder artifact to upload to ./uploaded/report.pdf.",
+    "uploaded/": "Destination directory for upload verification."
+  },
+  "scenario_id": "subagent_claim_bad",
+  "schema_version": "hfr.eval_workspace.v1"
+}

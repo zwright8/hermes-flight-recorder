@@ -1,0 +1,373 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/supervisor_state.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Persistent autonomy supervisor handoff state for agentic fine-tuning layer coordination.",
+  "properties": {
+    "active_layer": {
+      "$ref": "#/$defs/layer"
+    },
+    "blocked_packets": {
+      "items": {
+        "$ref": "#/$defs/packetRecord"
+      },
+      "type": "array"
+    },
+    "completed_packets": {
+      "items": {
+        "$ref": "#/$defs/packetRecord"
+      },
+      "type": "array"
+    },
+    "current_packet": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/packetRecord"
+        },
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "guardrails": {
+      "$ref": "#/$defs/guardrails"
+    },
+    "latest_artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      },
+      "type": "array"
+    },
+    "latest_verification": {
+      "items": {
+        "$ref": "#/$defs/verificationRef"
+      },
+      "type": "array"
+    },
+    "layer_status": {
+      "$ref": "#/$defs/layerStatusMap"
+    },
+    "next_packets": {
+      "items": {
+        "$ref": "#/$defs/packetRecord"
+      },
+      "type": "array"
+    },
+    "promotion_readiness": {
+      "$ref": "#/$defs/readinessMap"
+    },
+    "schema_version": {
+      "const": "hfr.autonomy.supervisor_state.v1"
+    },
+    "updated_at": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "updated_at",
+    "active_layer",
+    "current_packet",
+    "completed_packets",
+    "blocked_packets",
+    "next_packets",
+    "latest_artifacts",
+    "latest_verification",
+    "promotion_readiness",
+    "layer_status",
+    "guardrails"
+  ],
+  "title": "Hermes Flight Recorder Autonomy Supervisor State",
+  "type": "object",
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "$ref": "#/$defs/layer"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "layer"
+      ],
+      "type": "object"
+    },
+    "guardrails": {
+      "additionalProperties": true,
+      "properties": {
+        "disallow_expensive_training": {
+          "const": true
+        },
+        "disallow_model_promotion_without_governance": {
+          "const": true
+        },
+        "require_journal_checkpoint": {
+          "const": true
+        },
+        "require_redaction_before_training": {
+          "const": true
+        },
+        "require_verification_before_completion": {
+          "const": true
+        }
+      },
+      "required": [
+        "disallow_expensive_training",
+        "disallow_model_promotion_without_governance",
+        "require_redaction_before_training",
+        "require_verification_before_completion",
+        "require_journal_checkpoint"
+      ],
+      "type": "object"
+    },
+    "layer": {
+      "enum": [
+        "supervisor",
+        "evidence",
+        "harness",
+        "data",
+        "model",
+        "training",
+        "serving_demo",
+        "eval",
+        "governance"
+      ]
+    },
+    "layerStatus": {
+      "additionalProperties": true,
+      "properties": {
+        "next_packet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/readiness"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "layerStatusMap": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "eval": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "evidence": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "governance": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "harness": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "model": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "serving_demo": {
+          "$ref": "#/$defs/layerStatus"
+        },
+        "training": {
+          "$ref": "#/$defs/layerStatus"
+        }
+      },
+      "required": [
+        "evidence",
+        "harness",
+        "data",
+        "model",
+        "training",
+        "serving_demo",
+        "eval",
+        "governance"
+      ],
+      "type": "object"
+    },
+    "packetRecord": {
+      "additionalProperties": true,
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          },
+          "type": "array"
+        },
+        "blocked_reason": {
+          "type": "string"
+        },
+        "completed_at": {
+          "type": "string"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "layer": {
+          "$ref": "#/$defs/layer"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "in_progress",
+            "completed",
+            "blocked",
+            "cancelled"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "verification": {
+          "items": {
+            "$ref": "#/$defs/verificationRef"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "title",
+        "status",
+        "priority"
+      ],
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "not_started",
+        "in_progress",
+        "blocked",
+        "complete"
+      ]
+    },
+    "readinessMap": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/readiness"
+        },
+        "eval": {
+          "$ref": "#/$defs/readiness"
+        },
+        "evidence": {
+          "$ref": "#/$defs/readiness"
+        },
+        "governance": {
+          "$ref": "#/$defs/readiness"
+        },
+        "harness": {
+          "$ref": "#/$defs/readiness"
+        },
+        "model": {
+          "$ref": "#/$defs/readiness"
+        },
+        "serving_demo": {
+          "$ref": "#/$defs/readiness"
+        },
+        "training": {
+          "$ref": "#/$defs/readiness"
+        }
+      },
+      "required": [
+        "evidence",
+        "harness",
+        "data",
+        "model",
+        "training",
+        "serving_demo",
+        "eval",
+        "governance"
+      ],
+      "type": "object"
+    },
+    "verificationRef": {
+      "additionalProperties": true,
+      "properties": {
+        "artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "completed_at": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "not_run",
+            "blocked"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "status"
+      ],
+      "type": "object"
+    }
+  }
+}

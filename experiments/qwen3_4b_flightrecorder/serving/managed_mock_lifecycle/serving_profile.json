@@ -1,0 +1,77 @@
+{
+  "arm": "candidate",
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/compatibility_report.json",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_profile.json"
+  },
+  "capabilities": {
+    "chat_completions": true,
+    "health": true,
+    "model_metadata": true,
+    "models": true,
+    "streaming": "not_checked",
+    "structured_outputs": "supported",
+    "tool_calls": "supported"
+  },
+  "endpoint": {
+    "base_url": "http://127.0.0.1:18123/v1",
+    "chat_completions_url": "http://127.0.0.1:18123/v1/chat/completions",
+    "health_urls": [
+      "http://127.0.0.1:18123/healthz",
+      "http://127.0.0.1:18123/health",
+      "http://127.0.0.1:18123/version"
+    ],
+    "models_url": "http://127.0.0.1:18123/v1/models"
+  },
+  "engine_profile": {
+    "adapter_strategy": "PEFT adapter loaded into the local Transformers process",
+    "engine": "transformers",
+    "launch_command_template": "uv run --no-project scripts/serve_transformers_openai.py --model {model} --adapter {adapter} --host 127.0.0.1 --port {port}",
+    "local_script": "scripts/serve_transformers_openai.py",
+    "openai_compatible": true,
+    "required_checks": [
+      "health",
+      "models",
+      "model_metadata",
+      "chat_completion"
+    ],
+    "status": "mvp"
+  },
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python_version": "3.11.15",
+    "sglang_executable": null,
+    "vllm_executable": null
+  },
+  "eval_preflight": {
+    "failed_checks": [],
+    "readiness": "ready",
+    "ready": true,
+    "required_checks": [
+      "health",
+      "models",
+      "model_metadata",
+      "chat_completion"
+    ]
+  },
+  "generated_at": "2026-07-02T14:02:57Z",
+  "model_identity": {
+    "adapter": {
+      "id": "",
+      "local": false,
+      "path": "",
+      "present": false
+    },
+    "chat_response_model": "hfr-managed-mock",
+    "metadata_model": "hfr-managed-mock",
+    "observed_model_ids": [
+      "hfr-managed-mock"
+    ],
+    "requested_model": "hfr-managed-mock",
+    "served_model_id": "hfr-managed-mock"
+  },
+  "profile_id": "candidate-transformers-hfr-managed-mock",
+  "provider": "custom",
+  "schema_version": "hfr.serving_profile.v1"
+}

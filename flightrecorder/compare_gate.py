@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import apply_gate_decision_contract
+
 COMPARE_GATE_SCHEMA_VERSION = "hfr.compare_gate.v1"
 COMPARE_GATE_POLICY_SCHEMA_VERSION = "hfr.compare_gate.policy.v1"
 
@@ -259,7 +261,7 @@ def evaluate_compare_gate(
         _evaluate_task_family_gate(checks, gate, task_family_rows)
 
     passed = all(check["passed"] for check in checks)
-    return {
+    result = {
         "schema_version": COMPARE_GATE_SCHEMA_VERSION,
         "compare_export": str(compare_export_path),
         "passed": passed,
@@ -279,6 +281,21 @@ def evaluate_compare_gate(
             "validation": _validation_metrics(validation_summary),
         },
     }
+    return apply_gate_decision_contract(
+        result,
+        gate_id="compare_gate",
+        gate_label="Comparison-export gate",
+        key_metric_fields=(
+            "pair_count",
+            "candidate_win_count",
+            "baseline_win_count",
+            "task_completion_improvement_count",
+            "task_completion_regression_count",
+            "contract_drift_count",
+            "unverified_contract_count",
+            "validation",
+        ),
+    )
 
 
 def _evaluate_task_family_gate(

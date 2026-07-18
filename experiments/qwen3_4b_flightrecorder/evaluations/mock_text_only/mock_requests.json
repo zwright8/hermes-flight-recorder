@@ -1,0 +1,90 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tags"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/props"
+    },
+    {
+      "method": "GET",
+      "path": "/props"
+    },
+    {
+      "method": "GET",
+      "path": "/version"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models"
+    },
+    {
+      "message_count": 0,
+      "method": "POST",
+      "model": null,
+      "path": "/api/show",
+      "stream": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tags"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/props"
+    },
+    {
+      "method": "GET",
+      "path": "/props"
+    },
+    {
+      "method": "GET",
+      "path": "/version"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models/hfr-eval-mock"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tags"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/props"
+    },
+    {
+      "method": "GET",
+      "path": "/props"
+    },
+    {
+      "method": "GET",
+      "path": "/version"
+    },
+    {
+      "message_count": 2,
+      "method": "POST",
+      "model": "hfr-eval-mock",
+      "path": "/v1/chat/completions",
+      "stream": true
+    }
+  ]
+}

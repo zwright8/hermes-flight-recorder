@@ -1,0 +1,88 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Result archive emitted by scripts/train_agentic_lora.py after success, classified failure, or blocked launch.",
+  "properties": {
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "dpo_train_result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "failure": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "final_adapter_dir": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "input_manifests": {
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "trace_sft",
+        "fr_sft",
+        "fr_action_sft",
+        "fr_dpo",
+        "fr_sft_dpo",
+        "fr_reward_model",
+        "fr_step_rewards"
+      ]
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_training_result.v1"
+    },
+    "sft_train_result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "preflight_passed",
+        "preflight_blocked"
+      ]
+    },
+    "training_plan": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "status",
+    "mode",
+    "model",
+    "output_dir",
+    "training_plan",
+    "input_manifests",
+    "final_adapter_dir",
+    "sft_train_result",
+    "dpo_train_result",
+    "failure"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Training Result",
+  "type": "object"
+}

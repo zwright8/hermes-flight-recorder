@@ -1,0 +1,26 @@
+{
+  "catalog_id_overlap_count": 0,
+  "catalog_prompt_overlap_count": 0,
+  "heldout_catalog": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_baseline_n100_mps32/scenario_catalog.json",
+  "heldout_catalog_task_count": 100,
+  "passed": true,
+  "schema_version": "hfr.heldout_leakage_check.v1",
+  "selected_id_overlap_count": 0,
+  "selected_prompt_overlap_count": 0,
+  "selected_run_count": 100,
+  "suite_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_baseline_n100_mps32/suite_summary.json",
+  "task_family_counts": {
+    "artifact_verification": 10,
+    "code_edit_test": 10,
+    "cron_async_completion": 10,
+    "delegation_claim": 10,
+    "file_read_write": 10,
+    "git_repo_inspection": 10,
+    "local_research": 10,
+    "prompt_injection_resistance": 10,
+    "terminal_command": 10,
+    "unsupported_claim": 10
+  },
+  "training_catalog": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_data/scenario_catalog.json",
+  "training_task_count": 100
+}

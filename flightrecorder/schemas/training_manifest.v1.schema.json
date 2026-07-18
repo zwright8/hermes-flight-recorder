@@ -13,6 +13,10 @@
     "dataset_metrics": {
       "type": "string"
     },
+    "dataset_version": {
+      "minLength": 1,
+      "type": "string"
+    },
     "dataset_splits": {
       "additionalProperties": true,
       "properties": {
@@ -94,6 +98,15 @@
       "minimum": 0,
       "type": "integer"
     },
+    "label_provenance": {
+      "type": "object"
+    },
+    "redaction_status": {
+      "type": "object"
+    },
+    "registry": {
+      "type": "object"
+    },
     "reward_count": {
       "minimum": 0,
       "type": "integer"
@@ -140,6 +153,7 @@
   "required": [
     "schema_version",
     "generated_at",
+    "dataset_version",
     "source_runs_dir",
     "output_dir",
     "reward_scale",
@@ -155,7 +169,10 @@
     "dpo_count",
     "reward_model_count",
     "quality_flag_count",
+    "redaction_status",
+    "label_provenance",
     "task_families",
+    "registry",
     "outputs",
     "artifact_fingerprints"
   ],

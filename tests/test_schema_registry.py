@@ -33,6 +33,9 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_config", names)
         self.assertIn("state_validator_assertions", names)
         self.assertIn("run_digest", names)
+        self.assertIn("harness_run_manifest", names)
+        self.assertIn("harness_run_result", names)
+        self.assertIn("harness_replay_result", names)
         self.assertIn("live_smoke_summary", names)
         self.assertIn("live_verifier_smoke_summary", names)
         self.assertIn("openclaw_event", names)
@@ -41,6 +44,13 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("improvement_plan", names)
         self.assertIn("improvement_ledger", names)
         self.assertIn("improvement_ledger_gate", names)
+        self.assertIn("suite_gate", names)
+        self.assertIn("training_gate", names)
+        self.assertIn("compare_gate", names)
+        self.assertIn("reviewed_gate", names)
+        self.assertIn("serving_lifecycle_run", names)
+        self.assertIn("serving_endpoint_suite", names)
+        self.assertIn("serving_runtime_preflight", names)
         self.assertIn("training_manifest", names)
         self.assertIn("rl_episode", names)
         self.assertIn("rl_reward", names)
@@ -61,6 +71,13 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("trainer_preflight", names)
         self.assertIn("trainer_launch_check", names)
         self.assertIn("trainer_archive", names)
+        self.assertIn("model_scout_manifest", names)
+        self.assertIn("model_candidate", names)
+        self.assertIn("model_registry_entry", names)
+        self.assertIn("model_compatibility_report", names)
+        self.assertIn("model_registry", names)
+        self.assertIn("training_plan", names)
+        self.assertIn("supervisor_state", names)
         for record in records:
             schema = load_schema(record["name"])
             self.assertEqual(schema["$id"], record["id"])
@@ -373,6 +390,57 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "improvement_ledger_gate")
+
+    def test_supervisor_state_schema_accepts_current_state(self):
+        result = check_schema_file(ROOT / "experiments" / "autonomy" / "supervisor_state.json")
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "supervisor_state")
+
+    def test_supervisor_state_schema_requires_guardrails(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.autonomy.supervisor_state.v1",
+                "updated_at": "2026-07-02T00:00:00Z",
+                "active_layer": "evidence",
+                "current_packet": None,
+                "completed_packets": [],
+                "blocked_packets": [],
+                "next_packets": [],
+                "latest_artifacts": [],
+                "latest_verification": [],
+                "promotion_readiness": {
+                    "evidence": "in_progress",
+                    "harness": "not_started",
+                    "data": "not_started",
+                    "model": "not_started",
+                    "training": "not_started",
+                    "serving_demo": "not_started",
+                    "eval": "not_started",
+                    "governance": "not_started",
+                },
+                "layer_status": {
+                    "evidence": {"status": "in_progress", "summary": "Evidence layer is first in dependency order."},
+                    "harness": {"status": "not_started", "summary": "Waiting on evidence handoff."},
+                    "data": {"status": "not_started", "summary": "Waiting on evidence handoff."},
+                    "model": {"status": "not_started", "summary": "Waiting on data registry."},
+                    "training": {"status": "not_started", "summary": "Waiting on model and dataset registries."},
+                    "serving_demo": {"status": "not_started", "summary": "Waiting on training candidates."},
+                    "eval": {"status": "not_started", "summary": "Waiting on serving profiles."},
+                    "governance": {"status": "not_started", "summary": "Waiting on eval summaries."},
+                },
+                "guardrails": {
+                    "disallow_expensive_training": True,
+                    "disallow_model_promotion_without_governance": False,
+                    "require_redaction_before_training": True,
+                    "require_verification_before_completion": True,
+                    "require_journal_checkpoint": True,
+                },
+            }
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("$.guardrails.disallow_model_promotion_without_governance", "\n".join(result["errors"]))
 
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:

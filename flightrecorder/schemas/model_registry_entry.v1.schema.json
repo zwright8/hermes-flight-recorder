@@ -1,0 +1,126 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_registry_entry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "One model registry entry with a validated model candidate snapshot and lifecycle links.",
+  "properties": {
+    "adapters": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "candidate": {
+      "type": "object"
+    },
+    "candidate_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "datasets": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "entry_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "evals": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "license_status": {
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "promotion_decisions": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "registered_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.model_registry_entry.v1"
+    },
+    "status": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "training_eligible": {
+      "type": "boolean"
+    },
+    "training_runs": {
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "entry_id",
+    "candidate_id",
+    "registered_at",
+    "status",
+    "training_eligible",
+    "candidate",
+    "datasets",
+    "training_runs",
+    "adapters",
+    "evals",
+    "promotion_decisions"
+  ],
+  "title": "Hermes Flight Recorder Model Registry Entry",
+  "type": "object"
+}

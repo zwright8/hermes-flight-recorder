@@ -1,0 +1,7 @@
+{
+  "schema_version": "hfr.local_qwen3_4b_smoke.v1",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "loaded": true,
+  "device": "mps:0",
+  "answer": "qwen3 4b local smoke ok"
+}

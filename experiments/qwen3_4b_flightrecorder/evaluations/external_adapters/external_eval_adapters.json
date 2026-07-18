@@ -1,0 +1,223 @@
+{
+  "adapter_count": 4,
+  "adapters": [
+    {
+      "blocking_reasons": [
+        "missing_optional_dependency",
+        "missing_required_inputs",
+        "adapter_disabled_until_explicitly_enabled"
+      ],
+      "domain": "tool_calling",
+      "id": "bfcl",
+      "import_names": [
+        "bfcl_eval"
+      ],
+      "missing_imports": [
+        "bfcl_eval"
+      ],
+      "missing_inputs": [
+        "model_endpoint",
+        "tool_schema_set"
+      ],
+      "name": "Berkeley Function Calling Leaderboard",
+      "next_actions": [
+        "Install and pin optional dependency import(s) for bfcl: bfcl_eval.",
+        "Provide required adapter input(s): model_endpoint, tool_schema_set.",
+        "Rerun with --allow-installed only after dependency and input artifacts are intentionally available."
+      ],
+      "ready": false,
+      "reference": "https://gorilla.cs.berkeley.edu/leaderboard.html",
+      "required_inputs": [
+        "model_endpoint",
+        "tool_schema_set",
+        "identical_scenario_manifest"
+      ],
+      "runner_contract": {
+        "mode": "external_eval_adapter",
+        "must_emit_eval_summary": true,
+        "must_emit_repair_work_items_on_failure": true,
+        "must_not_claim_success_without_identical_scenarios": true,
+        "must_use_identical_scenario_manifest": true
+      },
+      "status": "blocked",
+      "suite_tags": [
+        "external",
+        "tool_calling",
+        "function_calling"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "missing_optional_dependency",
+        "missing_required_inputs",
+        "adapter_disabled_until_explicitly_enabled"
+      ],
+      "domain": "agentic_safety",
+      "id": "inspect_ai",
+      "import_names": [
+        "inspect_ai"
+      ],
+      "missing_imports": [
+        "inspect_ai"
+      ],
+      "missing_inputs": [
+        "model_endpoint",
+        "task_set",
+        "sandbox_policy"
+      ],
+      "name": "Inspect AI",
+      "next_actions": [
+        "Install and pin optional dependency import(s) for inspect_ai: inspect_ai.",
+        "Provide required adapter input(s): model_endpoint, task_set, sandbox_policy.",
+        "Rerun with --allow-installed only after dependency and input artifacts are intentionally available."
+      ],
+      "ready": false,
+      "reference": "https://inspect.aisi.org.uk/",
+      "required_inputs": [
+        "model_endpoint",
+        "task_set",
+        "sandbox_policy",
+        "identical_scenario_manifest"
+      ],
+      "runner_contract": {
+        "mode": "external_eval_adapter",
+        "must_emit_eval_summary": true,
+        "must_emit_repair_work_items_on_failure": true,
+        "must_not_claim_success_without_identical_scenarios": true,
+        "must_use_identical_scenario_manifest": true
+      },
+      "status": "blocked",
+      "suite_tags": [
+        "external",
+        "agentic_safety",
+        "custom_eval"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "missing_optional_dependency",
+        "missing_required_inputs",
+        "adapter_disabled_until_explicitly_enabled"
+      ],
+      "domain": "language_benchmark",
+      "id": "lm_eval_harness",
+      "import_names": [
+        "lm_eval"
+      ],
+      "missing_imports": [
+        "lm_eval"
+      ],
+      "missing_inputs": [
+        "model_endpoint_or_model_args",
+        "task_list"
+      ],
+      "name": "lm-evaluation-harness",
+      "next_actions": [
+        "Install and pin optional dependency import(s) for lm_eval_harness: lm_eval.",
+        "Provide required adapter input(s): model_endpoint_or_model_args, task_list.",
+        "Rerun with --allow-installed only after dependency and input artifacts are intentionally available."
+      ],
+      "ready": false,
+      "reference": "https://github.com/EleutherAI/lm-evaluation-harness",
+      "required_inputs": [
+        "model_endpoint_or_model_args",
+        "task_list",
+        "identical_scenario_manifest"
+      ],
+      "runner_contract": {
+        "mode": "external_eval_adapter",
+        "must_emit_eval_summary": true,
+        "must_emit_repair_work_items_on_failure": true,
+        "must_not_claim_success_without_identical_scenarios": true,
+        "must_use_identical_scenario_manifest": true
+      },
+      "status": "blocked",
+      "suite_tags": [
+        "external",
+        "language_benchmark",
+        "sanity_check"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "missing_optional_dependency",
+        "missing_required_inputs",
+        "adapter_disabled_until_explicitly_enabled"
+      ],
+      "domain": "coding_agent",
+      "id": "swe_bench",
+      "import_names": [
+        "swebench"
+      ],
+      "missing_imports": [
+        "swebench"
+      ],
+      "missing_inputs": [
+        "model_endpoint",
+        "repository_task_set",
+        "sandbox_policy"
+      ],
+      "name": "SWE-bench",
+      "next_actions": [
+        "Install and pin optional dependency import(s) for swe_bench: swebench.",
+        "Provide required adapter input(s): model_endpoint, repository_task_set, sandbox_policy.",
+        "Rerun with --allow-installed only after dependency and input artifacts are intentionally available."
+      ],
+      "ready": false,
+      "reference": "https://www.swebench.com/",
+      "required_inputs": [
+        "model_endpoint",
+        "repository_task_set",
+        "sandbox_policy",
+        "identical_scenario_manifest"
+      ],
+      "runner_contract": {
+        "mode": "external_eval_adapter",
+        "must_emit_eval_summary": true,
+        "must_emit_repair_work_items_on_failure": true,
+        "must_not_claim_success_without_identical_scenarios": true,
+        "must_use_identical_scenario_manifest": true
+      },
+      "status": "blocked",
+      "suite_tags": [
+        "external",
+        "coding_agent",
+        "repository_repair"
+      ]
+    }
+  ],
+  "blocking_reasons": [
+    "adapter_disabled_until_explicitly_enabled",
+    "missing_optional_dependency",
+    "missing_required_inputs"
+  ],
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python_version": "3.11.15"
+  },
+  "governance_handoff": {
+    "next_actions": [
+      "Keep blocked external adapters out of promotion evidence.",
+      "Resolve each adapter's missing optional dependency and required input artifacts before enabling it.",
+      "Use the same held-out scenario manifest for every baseline, trace-only, champion, and candidate external eval arm."
+    ],
+    "ready": false,
+    "recommendation": "keep_external_adapters_disabled",
+    "requires_identical_scenario_ids_for_cross_arm_claims": true,
+    "status": "blocked"
+  },
+  "inputs": {
+    "allow_installed": false,
+    "base_url": null,
+    "model": null,
+    "scenario_manifest": {
+      "exists": true,
+      "path": "experiments/qwen3_4b_flightrecorder/heldout_scenarios.json",
+      "sha256": "da9dccb20eb82837c8f8f789612770443575c2cdab5c6082d3cc911c0042b00e"
+    }
+  },
+  "ready": false,
+  "ready_adapter_count": 0,
+  "schema_version": "hfr.external_eval_adapters.v1",
+  "suite_id": "agentic_finetune_external_eval_adapters"
+}

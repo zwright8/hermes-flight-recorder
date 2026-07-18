@@ -1,0 +1,50 @@
+{
+  "created_at": "2026-06-29T19:11:39.820762+00:00",
+  "data_files": {
+    "fr_dpo": "experiments/qwen3_4b_flightrecorder/data/flightrecorder_combined_dpo.jsonl",
+    "fr_reward_model": "experiments/qwen3_4b_flightrecorder/data/flightrecorder_reward_model.jsonl",
+    "fr_sft": "experiments/qwen3_4b_flightrecorder/data/flightrecorder_sft.jsonl",
+    "fr_step_rewards": "experiments/qwen3_4b_flightrecorder/data/flightrecorder_step_rewards.jsonl",
+    "trace_sft": "experiments/qwen3_4b_flightrecorder/data/hermes_trace_only_sft.jsonl"
+  },
+  "experiment_dir": "experiments/qwen3_4b_flightrecorder",
+  "hub_model_id": "",
+  "hyperparameters": {
+    "batch_size": 1,
+    "dpo_epochs": 3.0,
+    "dpo_learning_rate": 1e-05,
+    "gradient_accumulation_steps": 4,
+    "gradient_checkpointing": true,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "lora_r": 16,
+    "max_length": 2048,
+    "max_steps": 1,
+    "sft_epochs": 3.0,
+    "sft_learning_rate": 0.0001
+  },
+  "mode": "fr_sft_dpo",
+  "model": "Qwen/Qwen3-0.6B",
+  "output_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_0_6b_smoke",
+  "prepared_counts": {
+    "dpo": 3,
+    "sft": 3
+  },
+  "push_to_hub": false,
+  "raw_counts": {
+    "fr_dpo": 3,
+    "fr_reward_model": 8,
+    "fr_sft": 3,
+    "fr_step_rewards": 21,
+    "trace_sft": 7
+  },
+  "schema_version": "hfr.agentic_lora_training_plan.v1",
+  "tracking": {
+    "report_to": [
+      "trackio"
+    ],
+    "run_name_prefix": "local-smoke",
+    "trackio_project": "hermes-flightrecorder-agentic",
+    "trackio_space_id": ""
+  }
+}

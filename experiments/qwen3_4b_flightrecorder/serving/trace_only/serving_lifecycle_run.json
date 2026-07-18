@@ -1,0 +1,88 @@
+{
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/compatibility_report.json",
+    "eval_stderr": null,
+    "eval_stdout": null,
+    "lifecycle_run": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_lifecycle_run.json",
+    "server_stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/server_stderr.txt",
+    "server_stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/server_stdout.txt",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_profile.json"
+  },
+  "cleanup": {
+    "attempted": true,
+    "exit_code_after_cleanup": -15,
+    "exit_code_before_cleanup": null,
+    "killed": false,
+    "process_group_id": 29811,
+    "terminated": true,
+    "terminated_signal_sent": true
+  },
+  "completed_at": "2026-07-03T15:48:32Z",
+  "eval": {
+    "reason": "no_eval_command",
+    "status": "skipped"
+  },
+  "generated_at": "2026-07-03T15:48:32Z",
+  "passed": true,
+  "preflight": {
+    "attempt_count": 3,
+    "attempts": [
+      {
+        "at": "2026-07-03T15:48:16Z",
+        "failed_checks": [
+          "health",
+          "models",
+          "model_metadata",
+          "chat_completion"
+        ],
+        "ready": false
+      },
+      {
+        "at": "2026-07-03T15:48:21Z",
+        "failed_checks": [
+          "health",
+          "models",
+          "model_metadata",
+          "chat_completion"
+        ],
+        "ready": false
+      },
+      {
+        "at": "2026-07-03T15:48:32Z",
+        "failed_checks": [],
+        "ready": true
+      }
+    ],
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/compatibility_report.json",
+    "failed_checks": [],
+    "passed": true,
+    "readiness": "ready",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_profile.json"
+  },
+  "schema_version": "hfr.serving_lifecycle_run.v1",
+  "server": {
+    "command": [
+      ".venv/bin/python",
+      "scripts/serve_transformers_openai.py",
+      "--model",
+      "Qwen/Qwen3-4B-Instruct-2507",
+      "--adapter",
+      "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18101",
+      "--max-new-tokens",
+      "64"
+    ],
+    "command_text": ".venv/bin/python scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --adapter experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter --host 127.0.0.1 --port 18101 --max-new-tokens 64",
+    "cwd": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder",
+    "exit_code_after_cleanup": -15,
+    "pid": 29811,
+    "stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/server_stderr.txt",
+    "stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/server_stdout.txt"
+  },
+  "started_at": "2026-07-03T15:48:16Z"
+}

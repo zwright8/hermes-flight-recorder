@@ -1,0 +1,146 @@
+{
+  "arm": "trace_only",
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/compatibility_report.json",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/trace_only/serving_profile.json"
+  },
+  "base_url": "http://127.0.0.1:18101/v1",
+  "checks": [
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 3,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18101/healthz"
+          }
+        ],
+        "elapsed_ms": 3,
+        "json": {
+          "model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18101/healthz"
+      },
+      "id": "health",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "data": [
+            {
+              "id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+              "object": "model"
+            }
+          ],
+          "object": "list"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18101/v1/models"
+      },
+      "id": "models",
+      "passed": true
+    },
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 0,
+            "error": "{\"error\": {\"message\": \"Not found: /v1/models/Qwen/Qwen3-4B-Instruct-2507\"}}",
+            "ok": false,
+            "status_code": 404,
+            "url": "http://127.0.0.1:18101/v1/models/Qwen/Qwen3-4B-Instruct-2507"
+          },
+          {
+            "elapsed_ms": 0,
+            "error": "{\"error\": {\"message\": \"Not found: /v1/models/Qwen%2FQwen3-4B-Instruct-2507\"}}",
+            "ok": false,
+            "status_code": 404,
+            "url": "http://127.0.0.1:18101/v1/models/Qwen%2FQwen3-4B-Instruct-2507"
+          },
+          {
+            "elapsed_ms": 0,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18101/v1/props"
+          }
+        ],
+        "elapsed_ms": 0,
+        "json": {
+          "context_length": 262144,
+          "device": "mps:0",
+          "dtype": "torch.float16",
+          "id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+          "model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+          "object": "model"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18101/v1/props"
+      },
+      "id": "model_metadata",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 1218,
+        "json": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "I'm sorry, but I can't assist with that request.",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1783093708,
+          "id": "chatcmpl-hfr-local",
+          "model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 14,
+            "prompt_tokens": 16,
+            "total_tokens": 30
+          }
+        },
+        "ok": true,
+        "response_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+        "status_code": 200,
+        "text": "I'm sorry, but I can't assist with that request.",
+        "url": "http://127.0.0.1:18101/v1/chat/completions"
+      },
+      "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+        "expected": "Qwen/Qwen3-4B-Instruct-2507",
+        "metadata_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+        ],
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+      },
+      "id": "model_identity",
+      "passed": true
+    }
+  ],
+  "failed_checks": [],
+  "generated_at": "2026-07-03T15:48:26Z",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "passed": true,
+  "profile_id": "trace-only-transformers-trace-sft-adapter",
+  "readiness": "ready",
+  "schema_version": "hfr.serving_endpoint_check.v1",
+  "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+}

@@ -1,0 +1,145 @@
+{
+  "events": [
+    {
+      "args": {},
+      "order": 0,
+      "parent_session_id": null,
+      "session_id": "cron-session-53027",
+      "status": null,
+      "text": "Cron job daily-brief: delegate the inbox and calendar checks in the background, then act when the async delegation batch completion returns.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "user_message"
+    },
+    {
+      "args": {
+        "background": true,
+        "tasks": [
+          {
+            "goal": "Summarize unread priority inbox items for the daily brief.",
+            "role": "leaf",
+            "toolsets": [
+              "gmail"
+            ]
+          },
+          {
+            "goal": "Summarize today's calendar blockers for the daily brief.",
+            "role": "leaf",
+            "toolsets": [
+              "calendar"
+            ]
+          }
+        ]
+      },
+      "order": 1,
+      "parent_session_id": null,
+      "session_id": "cron-session-53027",
+      "status": "requested",
+      "text": "",
+      "timestamp": null,
+      "tool_call_id": "call-delegate-53027",
+      "tool_name": "delegate_task",
+      "type": "tool_call"
+    },
+    {
+      "args": {},
+      "order": 2,
+      "parent_session_id": null,
+      "result": {
+        "count": 2,
+        "delegation_id": "deleg_cron_53027",
+        "goals": [
+          "Summarize unread priority inbox items for the daily brief.",
+          "Summarize today's calendar blockers for the daily brief."
+        ],
+        "mode": "background",
+        "note": "2 subagents are running in parallel in the background. Their consolidated results re-enter the conversation as a single message once ALL of them finish.",
+        "status": "dispatched"
+      },
+      "session_id": "cron-session-53027",
+      "status": "ok",
+      "text": "{\"count\": 2, \"delegation_id\": \"deleg_cron_53027\", \"goals\": [\"Summarize unread priority inbox items for the daily brief.\", \"Summarize today's calendar blockers for the daily brief.\"], \"mode\": \"background\", \"note\": \"2 subagents are running in parallel in the background. Their consolidated results re-enter the conversation as a single message once ALL of them finish.\", \"status\": \"dispatched\"}",
+      "timestamp": null,
+      "tool_call_id": "call-delegate-53027",
+      "tool_name": "delegate_task",
+      "type": "tool_result"
+    },
+    {
+      "args": {},
+      "child_role": "leaf",
+      "child_session_id": "cron-child-inbox-53027",
+      "child_subagent_id": "sa-inbox-53027",
+      "order": 3,
+      "parent_session_id": "cron-session-53027",
+      "session_id": "cron-child-inbox-53027",
+      "status": null,
+      "text": "Summarize unread priority inbox items for the daily brief.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_start"
+    },
+    {
+      "args": {},
+      "child_role": "leaf",
+      "child_session_id": "cron-child-calendar-53027",
+      "child_subagent_id": "sa-calendar-53027",
+      "order": 4,
+      "parent_session_id": "cron-session-53027",
+      "session_id": "cron-child-calendar-53027",
+      "status": null,
+      "text": "Summarize today's calendar blockers for the daily brief.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_start"
+    },
+    {
+      "args": {},
+      "child_role": "leaf",
+      "child_session_id": "cron-child-inbox-53027",
+      "child_subagent_id": "sa-inbox-53027",
+      "order": 5,
+      "parent_session_id": "cron-session-53027",
+      "session_id": "cron-child-inbox-53027",
+      "status": "completed",
+      "text": "Inbox summary ready: one priority customer reply needs attention.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_stop"
+    },
+    {
+      "args": {},
+      "child_role": "leaf",
+      "child_session_id": "cron-child-calendar-53027",
+      "child_subagent_id": "sa-calendar-53027",
+      "order": 6,
+      "parent_session_id": "cron-session-53027",
+      "session_id": "cron-child-calendar-53027",
+      "status": "completed",
+      "text": "Calendar summary ready: product review at 10:30 blocks the morning.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "subagent_stop"
+    },
+    {
+      "args": {},
+      "order": 7,
+      "parent_session_id": null,
+      "session_id": "cron-session-53027",
+      "status": null,
+      "text": "Cron daily brief dispatched two background checks and exited before receiving the async delegation batch completion.",
+      "timestamp": null,
+      "tool_name": null,
+      "type": "assistant_message"
+    }
+  ],
+  "final_answer": "Cron daily brief dispatched two background checks and exited before receiving the async delegation batch completion.",
+  "metadata": {
+    "completed": null
+  },
+  "schema_version": "hfr.trace.v1",
+  "session": {
+    "id": "cron-session-53027",
+    "model": "fixture-model",
+    "source_format": "observer_jsonl"
+  }
+}

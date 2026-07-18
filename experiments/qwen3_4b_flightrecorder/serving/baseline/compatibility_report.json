@@ -1,0 +1,48 @@
+{
+  "checks": {
+    "openai_core": {
+      "chat_completion": true,
+      "health": true,
+      "model_metadata": true,
+      "models": true
+    },
+    "structured_outputs": {
+      "error": null,
+      "json_parse_passed": true,
+      "parsed": {
+        "evidence": "The request was processed successfully and all required fields were provided.",
+        "status": "success"
+      },
+      "request": {
+        "response_format": {
+          "type": "json_object"
+        }
+      },
+      "response_ok": true,
+      "status": "supported",
+      "text": "{\n  \"status\": \"success\",\n  \"evidence\": \"The request was processed successfully and all required fields were provided.\"\n}"
+    },
+    "tool_calls": {
+      "error": null,
+      "request": {
+        "tool_choice": "auto",
+        "tool_names": [
+          "read_file"
+        ]
+      },
+      "response_ok": true,
+      "status": "not_verified",
+      "tool_call_count": 0,
+      "tool_calls": []
+    }
+  },
+  "engine": "transformers",
+  "generated_at": "2026-07-03T15:48:03Z",
+  "limitations": [
+    "Tool-call behavior was not verified by the smoke response."
+  ],
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "profile_id": "baseline-transformers-qwen3-4b-instruct-2507",
+  "schema_version": "hfr.serving_compatibility_report.v1",
+  "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+}

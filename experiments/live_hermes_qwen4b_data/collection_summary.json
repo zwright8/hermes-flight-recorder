@@ -1,0 +1,382 @@
+{
+  "definition_of_done_progress": {
+    "action_sft_rows": 312,
+    "complete": true,
+    "dpo_pairs": 160,
+    "live_episodes": 100,
+    "strict_validation_passed": true,
+    "target_action_sft_rows": 300,
+    "target_dpo_pairs": 100,
+    "target_live_episodes": 100
+  },
+  "error_count": 0,
+  "errors": [],
+  "expected_outcome_counts": {
+    "fail": 20,
+    "pass": 80
+  },
+  "generated_at": "2026-06-30T07:54:18.539738+00:00",
+  "metrics": {
+    "average_score": 89.4,
+    "critical_failure_counts": [
+      {
+        "count": 20,
+        "id": "final_answer"
+      },
+      {
+        "count": 20,
+        "id": "required_evidence"
+      },
+      {
+        "count": 2,
+        "id": "required_actions"
+      }
+    ],
+    "failed": 20,
+    "failed_rule_counts": [
+      {
+        "count": 20,
+        "id": "final_answer"
+      },
+      {
+        "count": 20,
+        "id": "required_evidence"
+      },
+      {
+        "count": 2,
+        "id": "required_actions"
+      }
+    ],
+    "max_score": 100,
+    "min_score": 20,
+    "pass_rate": 0.8,
+    "passed": 80,
+    "task_families": [
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "artifact_verification",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "code_edit_test",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "cron_async_completion",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "delegation_claim",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "file_read_write",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "git_repo_inspection",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "local_research",
+        "total": 10
+      },
+      {
+        "average_score": 84.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_actions"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_actions"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "prompt_injection_resistance",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "terminal_command",
+        "total": 10
+      },
+      {
+        "average_score": 90.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "final_answer"
+          },
+          {
+            "count": 2,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.8,
+        "passed": 8,
+        "task_family": "unsupported_claim",
+        "total": 10
+      }
+    ]
+  },
+  "review_queue": {
+    "failed_count": 20,
+    "item_count": 20,
+    "path": "experiments/live_hermes_qwen4b_data/review_queue"
+  },
+  "run_count": 100,
+  "schema_version": "hfr.live_hermes_collection_summary.v1",
+  "selected_count": 100,
+  "suite_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_data/suite_summary.json",
+  "task_family_counts": {
+    "artifact_verification": 10,
+    "code_edit_test": 10,
+    "cron_async_completion": 10,
+    "delegation_claim": 10,
+    "file_read_write": 10,
+    "git_repo_inspection": 10,
+    "local_research": 10,
+    "prompt_injection_resistance": 10,
+    "terminal_command": 10,
+    "unsupported_claim": 10
+  },
+  "training_export": {
+    "action_sft_count": 312,
+    "dpo_count": 160,
+    "episode_count": 100,
+    "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_data/training_export",
+    "reward_model_count": 100,
+    "sft_count": 80,
+    "step_reward_count": 62
+  },
+  "validation_report": {
+    "error_count": 0,
+    "passed": true,
+    "path": "experiments/live_hermes_qwen4b_data/validation_report.json",
+    "target_count": 102,
+    "warning_count": 0
+  }
+}

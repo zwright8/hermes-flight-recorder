@@ -1,0 +1,2 @@
+  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only
+I don't have access to the file `issue.md` in the current workspace, so I can't summarize its contents. Please provide the content of the file or confirm if it's available in the repository.

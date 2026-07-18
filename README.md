@@ -1,7 +1,9 @@
 # Hermes Flight Recorder
 
 <p align="center">
-  <img src="docs/assets/flight-recorder-logo.png" alt="Hermes Flight Recorder logo" width="220">
+  <img src="docs/assets/flight-recorder-logo.png" alt="Hermes Flight Recorder project mascot" width="220">
+  <br>
+  <strong>Project Mascot</strong>
 </p>
 
 [![CI](https://github.com/zwright8/hermes-flight-recorder/actions/workflows/ci.yml/badge.svg)](https://github.com/zwright8/hermes-flight-recorder/actions)
@@ -551,7 +553,11 @@ flightrecorder gate-export \
 
 The export can include episodes, terminal rewards, step rewards, preference
 pairs, SFT rows, DPO rows, reward-model rows, failure modes, curriculum
-metadata, dataset split manifests, dataset metrics, and a dataset card.
+metadata, dataset split manifests, dataset metrics, a dataset card, and a local
+`dataset_registry.json` entry. The manifest carries a stable `dataset_version`;
+the registry fingerprints that manifest and records source hashes, redaction
+status, split metadata, quality flags, and label provenance. Trainer-ready SFT
+and DPO-positive rows exclude final-answer-only success claims.
 
 For launch safety, the trainer flow is side-effect free until an external
 trainer consumes the approved plan:
@@ -605,12 +611,95 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --training-export runs/training_export \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --gate runs/suite_gate.json \
+  --require-harness \
+  --require-gate \
   --out runs/evidence_bundle.json
 ```
 
+Gate outputs include a common machine-readable decision contract:
+`readiness`, `recommendation`, `failed_checks`, `next_actions`, and a
+`decision` object with blocking checks and key metrics. `evidence-bundle
+--gate` treats a gate without that contract as weak evidence and blocks the
+handoff, even if the gate's top-level `passed` field is true.
+For Eval or Governance handoffs, add matched `--harness-manifest` and
+`--harness-result` inputs plus `--require-harness --require-gate` so the bundle
+blocks unless live/mock harness lineage and gate summaries are present.
+
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.
+
+## Harness Runner
+
+Use `scripts/hermes_harness.py` when Eval or Evidence workers need an isolated
+scenario run without hand-edited config. The harness writes a manifest before
+execution and a result after scoring, both with bundled schema contracts:
+
+- `harness_manifest.json` uses `hfr.harness_run_manifest.v1` and records the
+  runner, provider, model, scenario, output paths, sandbox paths, fake-secret
+  canaries, and effective tool policy.
+- `harness_result.json` uses `hfr.harness_run_result.v1` and links the sandbox,
+  tool policy, raw trace, scorecard, normal Flight Recorder artifacts, and
+  replay command.
+
+Run a local mock scenario with no external endpoint:
+
+```bash
+python3.11 scripts/hermes_harness.py run-scenario \
+  --scenario scenarios/prompt_injection_good.json \
+  --out runs/harness_prompt_injection_good \
+  --mock-response "Summary: autonomous evidence quality gates." \
+  --force
+
+flightrecorder validate --run runs/harness_prompt_injection_good --strict
+flightrecorder validate \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --strict
+```
+
+Probe mock compatibility metadata:
+
+```bash
+python3.11 scripts/hermes_harness.py probe-model \
+  --provider mock \
+  --model hfr-mock \
+  --out runs/harness_probe.json
+```
+
+Replay from the generated lineage:
+
+```bash
+python3.11 scripts/hermes_harness.py replay-trace \
+  --lineage runs/harness_prompt_injection_good/artifact_lineage.json \
+  --out runs/harness_prompt_injection_good_replay
+
+flightrecorder validate \
+  --harness-replay-result runs/harness_prompt_injection_good_replay/harness_replay_result.json \
+  --strict
+```
+
+The mock runner creates an isolated workspace and home under the run sandbox,
+writes fake-secret canaries into the sandbox home, captures the scenario policy
+and runtime tool policy in the manifest, emits observer JSONL, and scores it
+through the normal Flight Recorder artifact path.
+
+Live runner bridge:
+
+- `scripts/live_hermes_smoke.py`, `scripts/live_openclaw_smoke.py`, and
+  `scripts/live_coven_smoke.py` keep their existing summary files, and also
+  write `harness_manifest.json` plus `harness_result.json` in the smoke output
+  directory.
+- `scripts/evaluate_hermes_heldout.py` writes the same harness files inside each
+  per-scenario run directory and links them from `suite_summary.json` run rows.
+- `scripts/live_coven_smoke.py` writes the same manifest/result pair for
+  detached Coven stream-json sessions.
+- Live harness results preserve provider/model/base URL metadata, sandbox paths,
+  fake-secret canary hashes/files, process stdout/stderr paths, trace paths,
+  scorecards, and self-contained replay lineage so Eval and Evidence can audit
+  either mock or live runs through one contract.
 
 ## Live Hermes Collection
 
@@ -708,7 +797,9 @@ It also accepts Coven daemon/API event rows shaped like
 
 The live smoke installs or finds the Coven CLI, starts a real isolated daemon,
 creates a detached stream-json session, normalizes it, scores it, and writes a
-standard report:
+standard report. It also publishes `harness_manifest.json` and
+`harness_result.json` so Codex-style detached runs can be audited through the
+same sandbox/tool-policy/replay contract as Hermes and OpenClaw runs:
 
 ```bash
 python3.11 scripts/live_coven_smoke.py \

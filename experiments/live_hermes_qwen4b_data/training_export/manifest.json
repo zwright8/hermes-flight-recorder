@@ -1,0 +1,319 @@
+{
+  "artifact_fingerprints": {
+    "curriculum": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/curriculum.json",
+      "sha256": "3dbf42091971ed8b24cc462ef1abbcb04dbb3ffc1bc03da1e808071fbe99ab6e",
+      "size_bytes": 28857
+    },
+    "dataset_card": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/DATASET_CARD.md",
+      "sha256": "7fdbbd6de1c9b7053ca5b780930a5a7b751bb0f69b0755696138ffaef022e60c",
+      "size_bytes": 2545
+    },
+    "dataset_metrics": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/dataset_metrics.json",
+      "sha256": "7f7f65ffc761dd62e0a3eb41e4539be2f014992ef27933a20906171d4000a118",
+      "size_bytes": 9512
+    },
+    "dataset_splits": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/dataset_splits.json",
+      "sha256": "4823ac396e66d9931ffdc8dd558e2aefd065f4bc32e411a6a1fd247e6ce4ba31",
+      "size_bytes": 11356
+    },
+    "dpo": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/dpo.jsonl",
+      "sha256": "f14710e678b2e8766de5f6c1854156c9c80c9d49563b9f68acabbc5977cd77c3",
+      "size_bytes": 651584
+    },
+    "episodes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/episodes.jsonl",
+      "sha256": "f11c1caf3c380967133c397edadd3840737aa311e96244d263c82fb6a8d70b31",
+      "size_bytes": 811454
+    },
+    "failure_modes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/failure_modes.jsonl",
+      "sha256": "1502531c5e720ab8777b939252cde2af2e5c0b62ae6f901b926912031a56ff38",
+      "size_bytes": 100360
+    },
+    "preferences": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/preferences.jsonl",
+      "sha256": "760640a26b3a671cb8e1d2b215aa20282992f7c65d4333ac1013f5fdfe24ceed",
+      "size_bytes": 1937072
+    },
+    "reward_model": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/reward_model.jsonl",
+      "sha256": "1ee02137cca4cd15d663a0074d0f2f536993ba522f49649081a0a4ed851b6489",
+      "size_bytes": 229212
+    },
+    "rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/rewards.jsonl",
+      "sha256": "965341d56c5d9a5995e18c48335bbbb49fb77c3d6c33d01a6cf9da47866d452a",
+      "size_bytes": 430300
+    },
+    "sft": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/sft.jsonl",
+      "sha256": "d09ec7d6bd3032fa3ec99e08f3106fac3a02790b633461f86a2f35408ba8b1be",
+      "size_bytes": 180168
+    },
+    "step_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/step_rewards.jsonl",
+      "sha256": "e829a729b96de09de3f8f1e0b5e586956d4af186eb843edab3df388090bf0a32",
+      "size_bytes": 123472
+    },
+    "test_dpo": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/dpo.jsonl",
+      "sha256": "ad0f1dbbe6e34bc8b988f46abd72b612903f27dd7d339e305b6e77539912888d",
+      "size_bytes": 63872
+    },
+    "test_episodes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/episodes.jsonl",
+      "sha256": "3ab95d9e6f68f39f5bdea2e0f3c61ad50d536d81b4ecc15964bbc0ce290cfdec",
+      "size_bytes": 81504
+    },
+    "test_failure_modes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/failure_modes.jsonl",
+      "sha256": "9493316521957d5fd825ec75cef2785061b33897d61976d1b05d0c31501a91b8",
+      "size_bytes": 9410
+    },
+    "test_preferences": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/preferences.jsonl",
+      "sha256": "93391eab2bc312e29fc8788df88c436f9026528b2a07b61b2e44d8b73c3e2c39",
+      "size_bytes": 192816
+    },
+    "test_reward_model": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/reward_model.jsonl",
+      "sha256": "8a48a77b8312ee0d399c178c862ccff04e09229056b8b22d9364f29e6051be19",
+      "size_bytes": 22584
+    },
+    "test_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/rewards.jsonl",
+      "sha256": "fdd8d2ab7819b85920d2d22320a503fa383fccaba4cc48798312ce5b79221230",
+      "size_bytes": 42446
+    },
+    "test_sft": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/sft.jsonl",
+      "sha256": "53c3b0ec1e017c8a72f4e537ba7d2d8e45962363b35f3e814c289cd6fc23f113",
+      "size_bytes": 17792
+    },
+    "test_step_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/test/step_rewards.jsonl",
+      "sha256": "e2d36cd48d06c936c6166dc2d276c76afc17cdc6c525d218484e61e71681ce27",
+      "size_bytes": 11716
+    },
+    "train_dpo": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/dpo.jsonl",
+      "sha256": "b0b173b296f7986447bcfda8b6ad64c684b0efe2c87acd32d1537c6e627d7c44",
+      "size_bytes": 523536
+    },
+    "train_episodes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/episodes.jsonl",
+      "sha256": "df133216145b56a92c8f4a65cc526b33b9524e0f63a5041737026c4e8c0ca8ee",
+      "size_bytes": 651342
+    },
+    "train_failure_modes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/failure_modes.jsonl",
+      "sha256": "a7c5dfb4770a6c79c70f2d48eb94fcd3eaaa0e15276c3d735b6cde8e8450b18e",
+      "size_bytes": 81464
+    },
+    "train_preferences": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/preferences.jsonl",
+      "sha256": "ced6564f4f54994c28bd77fcc07e2de49c267ffdc092e7a455aa8ed60e89eb33",
+      "size_bytes": 1556928
+    },
+    "train_reward_model": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/reward_model.jsonl",
+      "sha256": "c070746934daf86b34da404a2f591d9132760aa86847e50a7e508e8b4d1755e3",
+      "size_bytes": 184048
+    },
+    "train_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/rewards.jsonl",
+      "sha256": "330711f367f410603ed767ca5235bcabd0a6c1fdc5f1edee71880f5f2a69e03c",
+      "size_bytes": 345264
+    },
+    "train_sft": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/sft.jsonl",
+      "sha256": "e7b17ac11178e82cd46071b3c1a093245a63743107036ff4a93243d6687627c7",
+      "size_bytes": 144648
+    },
+    "train_step_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/train/step_rewards.jsonl",
+      "sha256": "649dc4d520756e8eded85e05a93ec263d2eaef0eafa7b41def2fc12bd190ab87",
+      "size_bytes": 99932
+    },
+    "validation_dpo": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/dpo.jsonl",
+      "sha256": "3c8652c86cbfbe2d7428872d266c9d62b5f56ee585f4416fa9739f5830b556a7",
+      "size_bytes": 64176
+    },
+    "validation_episodes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/episodes.jsonl",
+      "sha256": "4d46f5c1c328431c4016fadcef4fcb0c6e77384455a3a778b76471aba4266ffe",
+      "size_bytes": 78608
+    },
+    "validation_failure_modes": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/failure_modes.jsonl",
+      "sha256": "328a00a4665548e1aee82116f5adfe4d9c2ae8f90cf570d915879ce6d131e649",
+      "size_bytes": 9486
+    },
+    "validation_preferences": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/preferences.jsonl",
+      "sha256": "3d9fbaae491d3596c72f476975f9dd85d61515a4967a49c69e97f3d9d068df8a",
+      "size_bytes": 187328
+    },
+    "validation_reward_model": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/reward_model.jsonl",
+      "sha256": "931407a22e62df795e72d9558bcdedd8b2cd88bfd96ccf7b3fd3ddcf123f913c",
+      "size_bytes": 22580
+    },
+    "validation_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/rewards.jsonl",
+      "sha256": "c84b61a24ac097604d778cc7f3af83a8e32e148d9cace5cd273581a547b0da67",
+      "size_bytes": 42590
+    },
+    "validation_sft": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/sft.jsonl",
+      "sha256": "166fca840c1f95b6d30618a7f56517dde7d5863c17c5f6275d98c0e48667ad79",
+      "size_bytes": 17728
+    },
+    "validation_step_rewards": {
+      "exists": true,
+      "path": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/step_rewards.jsonl",
+      "sha256": "63d90206c528dfaebfbb5ad5b11fdf385d741146dff116a4a5b5adc1ad8c9242",
+      "size_bytes": 11824
+    }
+  },
+  "dataset_splits": {
+    "episode_count": 100,
+    "family_exclusive": true,
+    "task_family_count": 10,
+    "test_episode_count": 10,
+    "train_episode_count": 80,
+    "validation_episode_count": 10
+  },
+  "dpo_count": 160,
+  "episode_count": 100,
+  "failure_mode_count": 42,
+  "generated_at": "2026-06-30T07:54:19.112522+00:00",
+  "max_pairs_per_family": 0,
+  "metadata": {
+    "base_model_target": "Qwen/Qwen3-4B-Instruct-2507",
+    "collection": "live_hermes_flightrecorder"
+  },
+  "min_score_gap": 1,
+  "notes": [
+    "Exports are built from normalized_trace.json and scorecard.json.",
+    "Use these artifacts as reward/eval data, not as a complete trainer.",
+    "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
+    "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
+    "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
+    "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
+    "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
+    "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
+    "episodes.jsonl includes source_lineage and source_fingerprints when the originating run emitted artifact_lineage.json.",
+    "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak."
+  ],
+  "output_dir": "experiments/live_hermes_qwen4b_data/training_export",
+  "outputs": {
+    "curriculum": "experiments/live_hermes_qwen4b_data/training_export/curriculum.json",
+    "dataset_card": "experiments/live_hermes_qwen4b_data/training_export/DATASET_CARD.md",
+    "dataset_metrics": "experiments/live_hermes_qwen4b_data/training_export/dataset_metrics.json",
+    "dataset_splits": "experiments/live_hermes_qwen4b_data/training_export/dataset_splits.json",
+    "dpo": "experiments/live_hermes_qwen4b_data/training_export/dpo.jsonl",
+    "episodes": "experiments/live_hermes_qwen4b_data/training_export/episodes.jsonl",
+    "failure_modes": "experiments/live_hermes_qwen4b_data/training_export/failure_modes.jsonl",
+    "manifest": "experiments/live_hermes_qwen4b_data/training_export/manifest.json",
+    "preferences": "experiments/live_hermes_qwen4b_data/training_export/preferences.jsonl",
+    "reward_model": "experiments/live_hermes_qwen4b_data/training_export/reward_model.jsonl",
+    "rewards": "experiments/live_hermes_qwen4b_data/training_export/rewards.jsonl",
+    "sft": "experiments/live_hermes_qwen4b_data/training_export/sft.jsonl",
+    "step_rewards": "experiments/live_hermes_qwen4b_data/training_export/step_rewards.jsonl",
+    "test_dpo": "experiments/live_hermes_qwen4b_data/training_export/splits/test/dpo.jsonl",
+    "test_episodes": "experiments/live_hermes_qwen4b_data/training_export/splits/test/episodes.jsonl",
+    "test_failure_modes": "experiments/live_hermes_qwen4b_data/training_export/splits/test/failure_modes.jsonl",
+    "test_preferences": "experiments/live_hermes_qwen4b_data/training_export/splits/test/preferences.jsonl",
+    "test_reward_model": "experiments/live_hermes_qwen4b_data/training_export/splits/test/reward_model.jsonl",
+    "test_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/test/rewards.jsonl",
+    "test_sft": "experiments/live_hermes_qwen4b_data/training_export/splits/test/sft.jsonl",
+    "test_step_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/test/step_rewards.jsonl",
+    "train_dpo": "experiments/live_hermes_qwen4b_data/training_export/splits/train/dpo.jsonl",
+    "train_episodes": "experiments/live_hermes_qwen4b_data/training_export/splits/train/episodes.jsonl",
+    "train_failure_modes": "experiments/live_hermes_qwen4b_data/training_export/splits/train/failure_modes.jsonl",
+    "train_preferences": "experiments/live_hermes_qwen4b_data/training_export/splits/train/preferences.jsonl",
+    "train_reward_model": "experiments/live_hermes_qwen4b_data/training_export/splits/train/reward_model.jsonl",
+    "train_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/train/rewards.jsonl",
+    "train_sft": "experiments/live_hermes_qwen4b_data/training_export/splits/train/sft.jsonl",
+    "train_step_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/train/step_rewards.jsonl",
+    "validation_dpo": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/dpo.jsonl",
+    "validation_episodes": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/episodes.jsonl",
+    "validation_failure_modes": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/failure_modes.jsonl",
+    "validation_preferences": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/preferences.jsonl",
+    "validation_reward_model": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/reward_model.jsonl",
+    "validation_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/rewards.jsonl",
+    "validation_sft": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/sft.jsonl",
+    "validation_step_rewards": "experiments/live_hermes_qwen4b_data/training_export/splits/validation/step_rewards.jsonl"
+  },
+  "preference_count": 160,
+  "quality_flag_count": 0,
+  "reward_count": 100,
+  "reward_model_count": 100,
+  "reward_scale": "score",
+  "run_count": 100,
+  "schema_version": "hfr.rl.manifest.v1",
+  "sft_count": 80,
+  "source_fingerprint_coverage": {
+    "episodes": 100,
+    "fully_verified": 100,
+    "unverified": 0,
+    "with_scenario_sha256": 100,
+    "with_source_trace_sha256": 100
+  },
+  "source_runs_dir": "experiments/live_hermes_qwen4b_data/runs",
+  "step_reward_count": 62,
+  "task_families": [
+    "artifact_verification",
+    "code_edit_test",
+    "cron_async_completion",
+    "delegation_claim",
+    "file_read_write",
+    "git_repo_inspection",
+    "local_research",
+    "prompt_injection_resistance",
+    "terminal_command",
+    "unsupported_claim"
+  ]
+}

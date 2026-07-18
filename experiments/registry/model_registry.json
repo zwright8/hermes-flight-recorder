@@ -1,0 +1,134 @@
+{
+  "alias_history": [
+    {
+      "alias": "candidate",
+      "moved_at": "2026-07-02T14:00:34Z",
+      "previous": null,
+      "reason": "",
+      "target": "local_mock_tiny_chat"
+    }
+  ],
+  "aliases": {
+    "candidate": "local_mock_tiny_chat",
+    "champion": null,
+    "rollback": null
+  },
+  "entries": {
+    "local_mock_tiny_chat": {
+      "adapters": [],
+      "candidate": {
+        "candidate_id": "local_mock_tiny_chat",
+        "compatibility": {
+          "chat_template": {
+            "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+            "status": "metadata_only"
+          },
+          "context_length": 2048,
+          "memory": {
+            "minimum_vram_gb": 0,
+            "notes": "Local mock candidate does not require GPU memory."
+          },
+          "quantization": {
+            "notes": "No quantization applies to the local mock candidate.",
+            "options": [
+              "none"
+            ]
+          },
+          "serving": {
+            "engines": [
+              "mock"
+            ],
+            "notes": "Usable only for registry and dry-run plan validation."
+          },
+          "structured_outputs": {
+            "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+            "supported": false
+          },
+          "tokenizer": {
+            "notes": "No tokenizer download is performed for this candidate.",
+            "status": "metadata_only"
+          },
+          "tool_calls": {
+            "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+            "supported": false
+          }
+        },
+        "license": {
+          "accepted_terms": true,
+          "license_id": "project-local-fixture",
+          "notes": [
+            "Local mock fixture for registry plumbing; not an external model-weight license."
+          ],
+          "review_status": "approved",
+          "reviewed_at": "2026-07-02T00:00:00Z",
+          "reviewer": "goal-4-model-layer-worker",
+          "source_url": "local://licenses/project-local-fixture",
+          "status": "approved",
+          "terms_url": "local://licenses/project-local-fixture/terms",
+          "training_allowed": true
+        },
+        "model_id": "local/mock-tiny-chat",
+        "notes": [
+          "Initial no-download candidate used to validate registry, alias, and dry-run plan behavior."
+        ],
+        "schema_version": "hfr.model_candidate.v1",
+        "source": {
+          "revision": "fixture-v1",
+          "type": "local_mock",
+          "url": "local://models/mock-tiny-chat"
+        }
+      },
+      "candidate_id": "local_mock_tiny_chat",
+      "datasets": [
+        {
+          "artifact_id": "mock-dataset-v1",
+          "kind": "dataset",
+          "linked_at": "2026-07-02T14:09:40Z",
+          "metadata": {
+            "redaction_status": "redacted"
+          },
+          "note": "Dry-run placeholder dataset for model-layer plan validation.",
+          "path": "experiments/registry/datasets/mock_dataset_manifest.json"
+        }
+      ],
+      "entry_id": "local_mock_tiny_chat",
+      "evals": [
+        {
+          "artifact_id": "eval-flightrecorder-heldout",
+          "kind": "eval",
+          "linked_at": "2026-07-02T14:10:13Z",
+          "metadata": {
+            "arm": "flightrecorder"
+          },
+          "note": "Held-out Flight Recorder eval summary linked for model lifecycle tracking.",
+          "path": "experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json"
+        }
+      ],
+      "license_status": "approved",
+      "notes": [],
+      "promotion_decisions": [],
+      "registered_at": "2026-07-02T14:00:34Z",
+      "schema_version": "hfr.model_registry_entry.v1",
+      "status": "registered",
+      "training_eligible": true,
+      "training_runs": [
+        {
+          "artifact_id": "local_mock_tiny_chat_sft_dry_run",
+          "kind": "training_run",
+          "linked_at": "2026-07-02T14:09:45Z",
+          "metadata": {
+            "dry_run": "true",
+            "mode": "sft"
+          },
+          "note": "Dry-run training-plan artifact; no trainer execution occurred.",
+          "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json"
+        }
+      ],
+      "updated_at": "2026-07-02T14:10:13Z"
+    }
+  },
+  "notes": [],
+  "registry_path": "experiments/registry/model_registry.json",
+  "schema_version": "hfr.model_registry.v1",
+  "updated_at": "2026-07-02T14:10:13Z"
+}

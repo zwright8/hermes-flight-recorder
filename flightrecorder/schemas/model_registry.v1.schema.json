@@ -1,0 +1,116 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_registry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local model registry container with entries, aliases, and alias movement history.",
+  "properties": {
+    "alias_history": {
+      "items": {
+        "$ref": "#/$defs/aliasMove"
+      },
+      "type": "array"
+    },
+    "aliases": {
+      "$ref": "#/$defs/aliases"
+    },
+    "entries": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "registry_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.model_registry.v1"
+    },
+    "updated_at": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "registry_path",
+    "updated_at",
+    "entries",
+    "aliases",
+    "alias_history"
+  ],
+  "title": "Hermes Flight Recorder Model Registry",
+  "type": "object",
+  "$defs": {
+    "aliasMove": {
+      "additionalProperties": true,
+      "properties": {
+        "alias": {
+          "enum": [
+            "candidate",
+            "champion",
+            "rollback"
+          ]
+        },
+        "moved_at": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "previous": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "alias",
+        "target",
+        "moved_at"
+      ],
+      "type": "object"
+    },
+    "aliases": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "champion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rollback": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "candidate",
+        "champion",
+        "rollback"
+      ],
+      "type": "object"
+    }
+  }
+}

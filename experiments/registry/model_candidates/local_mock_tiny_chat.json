@@ -1,0 +1,62 @@
+{
+  "candidate_id": "local_mock_tiny_chat",
+  "compatibility": {
+    "chat_template": {
+      "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+      "status": "metadata_only"
+    },
+    "context_length": 2048,
+    "memory": {
+      "minimum_vram_gb": 0,
+      "notes": "Local mock candidate does not require GPU memory."
+    },
+    "quantization": {
+      "notes": "No quantization applies to the local mock candidate.",
+      "options": [
+        "none"
+      ]
+    },
+    "serving": {
+      "engines": [
+        "mock"
+      ],
+      "notes": "Usable only for registry and dry-run plan validation."
+    },
+    "structured_outputs": {
+      "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+      "supported": false
+    },
+    "tokenizer": {
+      "notes": "No tokenizer download is performed for this candidate.",
+      "status": "metadata_only"
+    },
+    "tool_calls": {
+      "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+      "supported": false
+    }
+  },
+  "license": {
+    "accepted_terms": true,
+    "license_id": "project-local-fixture",
+    "notes": [
+      "Local mock fixture for registry plumbing; not an external model-weight license."
+    ],
+    "review_status": "approved",
+    "reviewed_at": "2026-07-02T00:00:00Z",
+    "reviewer": "goal-4-model-layer-worker",
+    "source_url": "local://licenses/project-local-fixture",
+    "status": "approved",
+    "terms_url": "local://licenses/project-local-fixture/terms",
+    "training_allowed": true
+  },
+  "model_id": "local/mock-tiny-chat",
+  "notes": [
+    "Initial no-download candidate used to validate registry, alias, and dry-run plan behavior."
+  ],
+  "schema_version": "hfr.model_candidate.v1",
+  "source": {
+    "revision": "fixture-v1",
+    "type": "local_mock",
+    "url": "local://models/mock-tiny-chat"
+  }
+}

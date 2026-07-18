@@ -1,0 +1,211 @@
+{
+  "blocked_reasons": [],
+  "checks": [
+    {
+      "id": "license_training_approved",
+      "passed": true,
+      "summary": "candidate license review is approved for training"
+    },
+    {
+      "id": "dataset_manifest_exists",
+      "passed": true,
+      "summary": "dataset manifest exists and was fingerprinted"
+    },
+    {
+      "id": "compatibility_report_passed",
+      "passed": true,
+      "summary": "compatibility report matches the selected model and passed no-download checks"
+    },
+    {
+      "id": "no_weight_download",
+      "passed": true,
+      "summary": "plan generation did not download model weights or tokenizers"
+    },
+    {
+      "id": "no_gpu_execution",
+      "passed": true,
+      "summary": "plan generation did not launch GPU work"
+    }
+  ],
+  "compatibility_report": {
+    "candidate_id": "local_mock_tiny_chat",
+    "download_policy": {
+      "downloaded_tokenizer": false,
+      "downloaded_weights": false,
+      "gpu_execution": false,
+      "imported_heavy_ml": false
+    },
+    "metadata_only_count": 2,
+    "missing_count": 0,
+    "model_id": "local/mock-tiny-chat",
+    "passed": true,
+    "path": "experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+    "probe_count": 8,
+    "readiness": "metadata_recorded",
+    "recommendation": "ready_for_registry_dry_run",
+    "sha256": "c25faab5bdc28e0d9aa933245a7e5b31cfedd05a201a3656402a5df42e964644",
+    "unsupported_count": 2,
+    "verified_count": 0
+  },
+  "compute": {
+    "accelerator_required": false,
+    "assumptions": {
+      "accelerator": "none",
+      "dry_run": "true"
+    },
+    "dry_run_only": true
+  },
+  "created_at": "2026-07-02T14:19:17Z",
+  "dataset": {
+    "dataset_id": "mock-dataset-v1",
+    "manifest_path": "experiments/registry/datasets/mock_dataset_manifest.json",
+    "manifest_sha256": "567bd3c8a17451c17ae47adf5669a74c5d5fe3ecaea1a3c6b715d4dc5270769a"
+  },
+  "dry_run": true,
+  "execution": {
+    "flight_recorder_downloaded_tokenizer": false,
+    "flight_recorder_downloaded_weights": false,
+    "flight_recorder_imported_heavy_ml": false,
+    "flight_recorder_launched_gpu_job": false,
+    "runner_must_revalidate_plan": true
+  },
+  "gpu_execution": false,
+  "model": {
+    "candidate": {
+      "candidate_id": "local_mock_tiny_chat",
+      "compatibility": {
+        "chat_template": {
+          "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+          "status": "metadata_only"
+        },
+        "context_length": 2048,
+        "memory": {
+          "minimum_vram_gb": 0,
+          "notes": "Local mock candidate does not require GPU memory."
+        },
+        "quantization": {
+          "notes": "No quantization applies to the local mock candidate.",
+          "options": [
+            "none"
+          ]
+        },
+        "serving": {
+          "engines": [
+            "mock"
+          ],
+          "notes": "Usable only for registry and dry-run plan validation."
+        },
+        "structured_outputs": {
+          "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+          "supported": false
+        },
+        "tokenizer": {
+          "notes": "No tokenizer download is performed for this candidate.",
+          "status": "metadata_only"
+        },
+        "tool_calls": {
+          "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+          "supported": false
+        }
+      },
+      "license": {
+        "accepted_terms": true,
+        "license_id": "project-local-fixture",
+        "notes": [
+          "Local mock fixture for registry plumbing; not an external model-weight license."
+        ],
+        "review_status": "approved",
+        "reviewed_at": "2026-07-02T00:00:00Z",
+        "reviewer": "goal-4-model-layer-worker",
+        "source_url": "local://licenses/project-local-fixture",
+        "status": "approved",
+        "terms_url": "local://licenses/project-local-fixture/terms",
+        "training_allowed": true
+      },
+      "model_id": "local/mock-tiny-chat",
+      "notes": [
+        "Initial no-download candidate used to validate registry, alias, and dry-run plan behavior."
+      ],
+      "schema_version": "hfr.model_candidate.v1",
+      "source": {
+        "revision": "fixture-v1",
+        "type": "local_mock",
+        "url": "local://models/mock-tiny-chat"
+      }
+    },
+    "candidate_id": "local_mock_tiny_chat",
+    "compatibility": {
+      "chat_template": {
+        "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+        "status": "metadata_only"
+      },
+      "context_length": 2048,
+      "memory": {
+        "minimum_vram_gb": 0,
+        "notes": "Local mock candidate does not require GPU memory."
+      },
+      "quantization": {
+        "notes": "No quantization applies to the local mock candidate.",
+        "options": [
+          "none"
+        ]
+      },
+      "serving": {
+        "engines": [
+          "mock"
+        ],
+        "notes": "Usable only for registry and dry-run plan validation."
+      },
+      "structured_outputs": {
+        "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+        "supported": false
+      },
+      "tokenizer": {
+        "notes": "No tokenizer download is performed for this candidate.",
+        "status": "metadata_only"
+      },
+      "tool_calls": {
+        "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+        "supported": false
+      }
+    },
+    "entry_id": "local_mock_tiny_chat",
+    "license": {
+      "accepted_terms": true,
+      "license_id": "project-local-fixture",
+      "notes": [
+        "Local mock fixture for registry plumbing; not an external model-weight license."
+      ],
+      "review_status": "approved",
+      "reviewed_at": "2026-07-02T00:00:00Z",
+      "reviewer": "goal-4-model-layer-worker",
+      "source_url": "local://licenses/project-local-fixture",
+      "status": "approved",
+      "terms_url": "local://licenses/project-local-fixture/terms",
+      "training_allowed": true
+    },
+    "model_id": "local/mock-tiny-chat",
+    "model_ref": "candidate"
+  },
+  "no_weight_download": true,
+  "notes": [
+    "This is a dry-run plan. It records metadata for a future trainer but does not import heavy ML packages.",
+    "Training runners must revalidate license, compatibility, dataset gates, and output paths before execution."
+  ],
+  "output": {
+    "output_dir": "experiments/registry/adapters/local_mock_tiny_chat_sft"
+  },
+  "passed": true,
+  "plan_path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+  "readiness": "ready",
+  "recommendation": "ready_for_dry_run_review",
+  "schema_version": "hfr.training_plan.v1",
+  "trainer": {
+    "hyperparameters": {
+      "learning_rate": "0.0001",
+      "max_steps": "0"
+    },
+    "mode": "sft",
+    "name": "local-test-trainer"
+  }
+}

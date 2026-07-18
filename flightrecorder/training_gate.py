@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import apply_gate_decision_contract
+
 TRAINING_GATE_SCHEMA_VERSION = "hfr.training_gate.v1"
 TRAINING_GATE_POLICY_SCHEMA_VERSION = "hfr.training_gate.policy.v1"
 
@@ -312,7 +314,7 @@ def evaluate_training_gate(
         _evaluate_task_family_gate(checks, gate, family_rows)
 
     passed = all(check["passed"] for check in checks)
-    return {
+    result = {
         "schema_version": TRAINING_GATE_SCHEMA_VERSION,
         "training_export": str(training_export_path),
         "passed": passed,
@@ -333,6 +335,23 @@ def evaluate_training_gate(
             "validation": _validation_metrics(validation_summary),
         },
     }
+    return apply_gate_decision_contract(
+        result,
+        gate_id="training_gate",
+        gate_label="Training-export gate",
+        key_metric_fields=(
+            "episode_count",
+            "pass_rate",
+            "average_score",
+            "quality_flag_count",
+            "source_fingerprint_coverage",
+            "trainer_view_source_fingerprint_coverage",
+            "task_completion",
+            "trace_signal",
+            "dataset_splits",
+            "validation",
+        ),
+    )
 
 
 def _evaluate_task_family_gate(checks: list[dict[str, Any]], gate: dict[str, Any], family_rows: dict[str, dict[str, Any]]) -> None:

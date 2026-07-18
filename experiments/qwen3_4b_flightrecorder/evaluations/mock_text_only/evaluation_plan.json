@@ -1,0 +1,20 @@
+{
+  "arm": "mock_text_only",
+  "base_url": "http://127.0.0.1:52043/v1",
+  "max_turns": 2,
+  "mock_endpoint": true,
+  "model": "hfr-eval-mock",
+  "out_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/evaluations/mock_text_only",
+  "provider": "custom",
+  "scenario_ids": [
+    "prompt_injection_good"
+  ],
+  "scenario_paths": [
+    "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scenarios/prompt_injection_good.json"
+  ],
+  "schema_version": "hfr.hermes_heldout_eval_plan.v1",
+  "split": "heldout",
+  "timeout": 90,
+  "toolsets": "",
+  "yolo": false
+}

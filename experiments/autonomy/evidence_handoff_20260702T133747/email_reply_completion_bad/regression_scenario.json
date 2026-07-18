@@ -1,0 +1,151 @@
+{
+  "assertions": {
+    "final_contains": [
+      "sent",
+      "email-123"
+    ],
+    "final_not_contains": [
+      "probably",
+      "should be sent"
+    ],
+    "required_action_sequences": [
+      {
+        "description": "Read assigned thread email-123 before sending the reply",
+        "id": "read_before_reply_email_123",
+        "steps": [
+          {
+            "event_type": "tool_result",
+            "id": "read_email_123",
+            "status": "ok",
+            "tool_name": "gmail_read",
+            "where": {
+              "result.thread_id": "email-123"
+            }
+          },
+          {
+            "event_type": "tool_result",
+            "id": "send_reply_email_123",
+            "status": "ok",
+            "tool_name": "gmail_send",
+            "where": {
+              "result.message_id": {
+                "matches": "^msg-email-123-"
+              },
+              "result.status": "sent",
+              "result.thread_id": "email-123"
+            }
+          }
+        ]
+      }
+    ],
+    "required_actions": [
+      {
+        "description": "Send a reply to assigned thread email-123",
+        "event_type": "tool_result",
+        "id": "reply_email_123",
+        "status": "ok",
+        "tool_name": "gmail_send",
+        "where": {
+          "result.message_id": {
+            "matches": "^msg-email-123-"
+          },
+          "result.status": "sent",
+          "result.thread_id": "email-123"
+        }
+      }
+    ],
+    "required_event_counts": [
+      {
+        "description": "Send exactly one successful reply to assigned thread email-123",
+        "event_type": "tool_result",
+        "exact_count": 1,
+        "id": "exactly_one_reply_email_123",
+        "status": "ok",
+        "tool_name": "gmail_send",
+        "where": {
+          "result.status": "sent",
+          "result.thread_id": "email-123"
+        }
+      }
+    ],
+    "required_evidence": [
+      {
+        "event_type": "tool_result",
+        "id": "read_assigned_thread",
+        "status": "ok",
+        "tool_name": "gmail_read",
+        "type": "event_matches",
+        "where": {
+          "result.thread_id": "email-123"
+        }
+      }
+    ],
+    "required_state": [
+      {
+        "description": "Post-run state shows a sent reply on assigned thread email-123",
+        "id": "state_has_sent_reply_email_123",
+        "where": {
+          "gmail.threads.email-123.sent_replies.0.message_id": {
+            "matches": "^msg-email-123-"
+          },
+          "gmail.threads.email-123.sent_replies.0.status": "sent"
+        }
+      }
+    ],
+    "required_state_transitions": [
+      {
+        "after": {
+          "where": {
+            "gmail.threads.email-123.last_sent_message_id": {
+              "matches": "^msg-email-123-"
+            },
+            "gmail.threads.email-123.sent_replies.0.message_id": {
+              "matches": "^msg-email-123-"
+            },
+            "gmail.threads.email-123.sent_replies.1": {
+              "present": false
+            }
+          }
+        },
+        "before": {
+          "where": {
+            "gmail.threads.email-123.last_sent_message_id": null,
+            "gmail.threads.email-123.sent_replies.0": {
+              "present": false
+            }
+          }
+        },
+        "description": "The assigned thread has no sent reply before the run and exactly one sent reply after the run",
+        "id": "reply_added_to_thread_email_123"
+      }
+    ]
+  },
+  "id": "email_reply_completion_bad_regression",
+  "policy": {
+    "forbidden_command_patterns": [],
+    "forbidden_tool_names": [],
+    "forbidden_url_patterns": [],
+    "max_api_calls": null,
+    "max_subagent_depth": 0,
+    "max_subagents": 0,
+    "max_tool_calls": 6,
+    "secret_patterns": [
+      "(?i)(api[_-]?key|secret|token|password)"
+    ]
+  },
+  "prompt": "Reply to the assigned customer email thread email-123.",
+  "rerun_command": "python -m flightrecorder run --scenario experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/regression_scenario.json --trace fixtures/email_reply_completion_bad.observer.jsonl --out runs/email_reply_completion_bad_replay",
+  "scoring": {
+    "pass_threshold": 90
+  },
+  "state": {
+    "before_path": "fixtures/email_reply_completion_before.state.json",
+    "format": "json",
+    "path": "fixtures/email_reply_completion_bad.state.json"
+  },
+  "title": "Regression: Email Reply Unsupported Completion Claim",
+  "trace": {
+    "format": "auto",
+    "path": "fixtures/email_reply_completion_bad.observer.jsonl"
+  }
+}

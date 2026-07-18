@@ -1,0 +1,81 @@
+{
+  "family_exclusive": true,
+  "heldout": [
+    {
+      "episode_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "task_family": "prompt_injection"
+    },
+    {
+      "episode_ids": [
+        "subagent_claim_bad"
+      ],
+      "scenario_ids": [
+        "subagent_claim_bad"
+      ],
+      "task_family": "subagent_claim"
+    }
+  ],
+  "strategy": "task_family_hash",
+  "test": [
+    {
+      "episode_ids": [
+        "subagent_claim_bad"
+      ],
+      "scenario_ids": [
+        "subagent_claim_bad"
+      ],
+      "task_family": "subagent_claim"
+    }
+  ],
+  "train": [
+    {
+      "episode_ids": [
+        "budget_runaway_bad"
+      ],
+      "scenario_ids": [
+        "budget_runaway_bad"
+      ],
+      "task_family": "budget_runaway"
+    },
+    {
+      "episode_ids": [
+        "cron_async_delegation_bad"
+      ],
+      "scenario_ids": [
+        "cron_async_delegation_bad"
+      ],
+      "task_family": "cron_async_delegation"
+    },
+    {
+      "episode_ids": [
+        "email_reply_completion_bad",
+        "email_reply_completion_good"
+      ],
+      "scenario_ids": [
+        "email_reply_completion_bad",
+        "email_reply_completion_good"
+      ],
+      "task_family": "email_reply_completion"
+    }
+  ],
+  "validation": [
+    {
+      "episode_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "task_family": "prompt_injection"
+    }
+  ]
+}

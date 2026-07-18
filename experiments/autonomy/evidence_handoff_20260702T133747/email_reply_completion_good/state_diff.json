@@ -1,0 +1,27 @@
+{
+  "change_count": 2,
+  "changed": true,
+  "changes": [
+    {
+      "after": "msg-email-123-001",
+      "before": null,
+      "kind": "changed",
+      "path": "gmail.threads.email-123.last_sent_message_id"
+    },
+    {
+      "after": {
+        "body_hash": "sha256:reply-body-demo-001",
+        "message_id": "msg-email-123-001",
+        "status": "sent",
+        "to": "customer@example.com"
+      },
+      "before": null,
+      "kind": "added",
+      "path": "gmail.threads.email-123.sent_replies.0"
+    }
+  ],
+  "max_changes": 200,
+  "schema_version": "hfr.state_diff.v1",
+  "summary": "2 state change(s) detected.",
+  "truncated": false
+}

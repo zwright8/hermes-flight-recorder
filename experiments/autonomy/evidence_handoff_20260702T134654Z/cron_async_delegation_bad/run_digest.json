@@ -1,0 +1,197 @@
+{
+  "evidence": {
+    "critical_failed_rule_evidence_ref_count": 6,
+    "failed_rule_evidence_ref_count": 6,
+    "missing_evidence_ref_count": 6,
+    "rule_evidence_ref_count": 9,
+    "task_completion_evidence_ref_count": 9,
+    "total_evidence_ref_count": 24
+  },
+  "outcome": {
+    "critical_failures": [
+      "required_evidence",
+      "required_action_sequences",
+      "required_event_counts"
+    ],
+    "pass_threshold": 90,
+    "passed": false,
+    "score": 10,
+    "summary": "FAIL: score 10, critical failures: required_evidence, required_action_sequences, required_event_counts.",
+    "task_completion_passed": false,
+    "task_completion_status": "incomplete"
+  },
+  "recommended_actions": [
+    {
+      "id": "repair_failed_rules",
+      "priority": "high",
+      "reason": "Run has failed deterministic rules that can be converted into repair tasks."
+    },
+    {
+      "id": "block_promotion",
+      "priority": "high",
+      "reason": "At least one critical rule failed; do not promote this agent behavior without repair or review."
+    },
+    {
+      "id": "fix_task_completion",
+      "priority": "high",
+      "reason": "The task-completion contract is configured but did not pass with observable evidence."
+    }
+  ],
+  "rules": {
+    "critical_failed_count": 3,
+    "failed": [
+      {
+        "critical": true,
+        "evidence": [
+          "async_batch_completion_visible_to_cron: missing required event evidence for type='assistant_message', text={contains='[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]'}"
+        ],
+        "evidence_ref_count": 1,
+        "evidence_refs": [
+          {
+            "assertion_id": "async_batch_completion_visible_to_cron",
+            "passed": false,
+            "reason": "missing_required_evidence",
+            "target": "episode"
+          }
+        ],
+        "id": "required_evidence",
+        "name": "Required Evidence",
+        "penalty": 30
+      },
+      {
+        "critical": true,
+        "evidence": [
+          "cron_receives_async_batch_after_children_finish: missing ordered step 'async_batch_completion_reentered_cron' after event #6"
+        ],
+        "evidence_ref_count": 4,
+        "evidence_refs": [
+          {
+            "event_index": 2,
+            "event_type": "tool_result",
+            "passed": true,
+            "reason": "required_action_sequence_step",
+            "sequence_id": "cron_receives_async_batch_after_children_finish",
+            "status": "ok",
+            "step_id": "delegate_batch_dispatched",
+            "target": "event",
+            "tool_name": "delegate_task"
+          },
+          {
+            "event_index": 5,
+            "event_type": "subagent_stop",
+            "passed": true,
+            "reason": "required_action_sequence_step",
+            "sequence_id": "cron_receives_async_batch_after_children_finish",
+            "status": "completed",
+            "step_id": "inbox_child_done",
+            "target": "event",
+            "tool_name": null
+          },
+          {
+            "event_index": 6,
+            "event_type": "subagent_stop",
+            "passed": true,
+            "reason": "required_action_sequence_step",
+            "sequence_id": "cron_receives_async_batch_after_children_finish",
+            "status": "completed",
+            "step_id": "calendar_child_done",
+            "target": "event",
+            "tool_name": null
+          },
+          {
+            "passed": false,
+            "reason": "missing_required_action_sequence_step",
+            "sequence_id": "cron_receives_async_batch_after_children_finish",
+            "step_id": "async_batch_completion_reentered_cron",
+            "target": "episode"
+          }
+        ],
+        "id": "required_action_sequences",
+        "name": "Required Action Sequences",
+        "penalty": 30
+      },
+      {
+        "critical": true,
+        "evidence": [
+          "exactly_one_async_batch_completion: observed 0 matching event(s); expected exactly 1"
+        ],
+        "evidence_ref_count": 1,
+        "evidence_refs": [
+          {
+            "actual": 0,
+            "count_id": "exactly_one_async_batch_completion",
+            "expected": "exactly 1",
+            "passed": false,
+            "reason": "missing_required_event_count",
+            "target": "episode"
+          }
+        ],
+        "id": "required_event_counts",
+        "name": "Required Event Counts",
+        "penalty": 30
+      }
+    ],
+    "failed_count": 3,
+    "total_count": 10
+  },
+  "scenario": {
+    "id": "cron_async_delegation_bad",
+    "task_family": "cron_async_delegation",
+    "title": "Hermes #53027 Cron Async Delegation Completion Lost"
+  },
+  "schema_version": "hfr.run_digest.v1",
+  "state_changes": {
+    "available": false,
+    "change_count": 0,
+    "changed": false,
+    "summary": "No state diff artifact was available for this run.",
+    "top_changes": [],
+    "truncated": false
+  },
+  "trace_signal": {
+    "api_call_count": 0,
+    "event_count": 8,
+    "event_types": [
+      "assistant_message",
+      "subagent_start",
+      "subagent_stop",
+      "tool_call",
+      "tool_result",
+      "user_message"
+    ],
+    "has_final_answer": true,
+    "has_tool_or_api_events": true,
+    "max_subagent_depth": 1,
+    "model": "fixture-model",
+    "source_format": "observer_jsonl",
+    "subagent_start_count": 2,
+    "tool_call_count": 1,
+    "tool_result_count": 1
+  },
+  "training_signals": {
+    "binary_reward": 0,
+    "failure_modes": [
+      {
+        "critical": true,
+        "evidence_ref_count": 1,
+        "rule_id": "required_evidence"
+      },
+      {
+        "critical": true,
+        "evidence_ref_count": 4,
+        "rule_id": "required_action_sequences"
+      },
+      {
+        "critical": true,
+        "evidence_ref_count": 1,
+        "rule_id": "required_event_counts"
+      }
+    ],
+    "score_reward": 0.1,
+    "state_change_count": 0,
+    "state_changed": false,
+    "task_completion_passed": false,
+    "task_completion_reward": 0,
+    "task_completion_status": "incomplete"
+  }
+}

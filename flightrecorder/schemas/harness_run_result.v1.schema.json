@@ -1,0 +1,142 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Harness run result linking sandbox, tool policy, trace, scorecard, and replay artifacts.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": true,
+      "properties": {
+        "lineage": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "normalized_trace": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "report": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "run_digest": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scorecard": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized_trace",
+        "scorecard",
+        "run_digest",
+        "report",
+        "lineage"
+      ],
+      "type": "object"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "model": {
+      "type": "object"
+    },
+    "provider": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "replay": {
+      "additionalProperties": true,
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "lineage": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "self_contained": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lineage",
+        "self_contained"
+      ],
+      "type": "object"
+    },
+    "runner": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sandbox": {
+      "type": "object"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.harness_run_result.v1"
+    },
+    "scorecard": {
+      "additionalProperties": true,
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "path",
+        "passed",
+        "score"
+      ],
+      "type": "object"
+    },
+    "tool_policy": {
+      "type": "object"
+    },
+    "trace": {
+      "additionalProperties": true,
+      "properties": {
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "runner",
+    "provider",
+    "model",
+    "scenario_id",
+    "sandbox",
+    "tool_policy",
+    "trace",
+    "scorecard",
+    "artifacts",
+    "replay"
+  ],
+  "title": "Hermes Flight Recorder Harness Run Result",
+  "type": "object"
+}

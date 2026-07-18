@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import apply_gate_decision_contract
 from .review import REVIEW_CONFIDENCE_LEVELS, REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
 
 REVIEWED_GATE_SCHEMA_VERSION = "hfr.reviewed_gate.v1"
@@ -172,7 +173,7 @@ def evaluate_reviewed_gate(
         _add_presence_check(checks, "require_task_family", family in task_families, {"task_family": family})
 
     passed = all(check["passed"] for check in checks)
-    return {
+    result = {
         "schema_version": REVIEWED_GATE_SCHEMA_VERSION,
         "reviewed_export": str(reviewed_export_path),
         "passed": passed,
@@ -197,6 +198,21 @@ def evaluate_reviewed_gate(
             "validation": _validation_metrics(validation_summary),
         },
     }
+    return apply_gate_decision_contract(
+        result,
+        gate_id="reviewed_gate",
+        gate_label="Reviewed-export gate",
+        key_metric_fields=(
+            "reviewed_label_count",
+            "accepted_count",
+            "rejected_count",
+            "high_confidence_label_count",
+            "medium_or_high_confidence_label_count",
+            "low_confidence_label_count",
+            "unknown_confidence_label_count",
+            "validation",
+        ),
+    )
 
 
 def _add_min_check(

@@ -1,0 +1,79 @@
+{
+  "definition_of_done_progress": {
+    "complete": false,
+    "target_action_sft_rows": 300,
+    "target_dpo_pairs": 100,
+    "target_live_episodes": 100
+  },
+  "error_count": 0,
+  "errors": [],
+  "expected_outcome_counts": {
+    "pass": 1
+  },
+  "generated_at": "2026-06-30T09:10:20.619285+00:00",
+  "metrics": {
+    "average_score": 50.0,
+    "critical_failure_counts": [
+      {
+        "count": 1,
+        "id": "final_answer"
+      },
+      {
+        "count": 1,
+        "id": "required_evidence"
+      }
+    ],
+    "failed": 1,
+    "failed_rule_counts": [
+      {
+        "count": 1,
+        "id": "final_answer"
+      },
+      {
+        "count": 1,
+        "id": "required_evidence"
+      }
+    ],
+    "max_score": 50,
+    "min_score": 50,
+    "pass_rate": 0.0,
+    "passed": 0,
+    "task_families": [
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 1,
+            "id": "final_answer"
+          },
+          {
+            "count": 1,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 1,
+        "failed_rule_counts": [
+          {
+            "count": 1,
+            "id": "final_answer"
+          },
+          {
+            "count": 1,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "file_read_write",
+        "total": 1
+      }
+    ]
+  },
+  "run_count": 1,
+  "schema_version": "hfr.live_hermes_collection_summary.v1",
+  "selected_count": 1,
+  "suite_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_baseline_mps32_smoke/suite_summary.json",
+  "task_family_counts": {
+    "file_read_write": 1
+  }
+}

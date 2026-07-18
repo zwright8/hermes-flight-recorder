@@ -1,0 +1,9 @@
+{
+  "arm": "flightrecorder",
+  "exit_code": 0,
+  "kept_temp_root": null,
+  "model": "Qwen/Qwen3-4B-Instruct-2507+fr_action_sft_dpo_adapter",
+  "scenario_id": "prompt_injection_bad",
+  "schema_version": "hfr.hermes_eval_run.v1",
+  "workspace": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/prompt_injection_bad/workspace"
+}

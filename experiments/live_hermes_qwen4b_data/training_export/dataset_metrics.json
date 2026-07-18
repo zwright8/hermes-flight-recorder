@@ -1,0 +1,352 @@
+{
+  "artifact_counts": {
+    "dpo": 160,
+    "episodes": 100,
+    "failure_modes": 42,
+    "preferences": 160,
+    "reward_model": 100,
+    "rewards": 100,
+    "sft": 80,
+    "step_rewards": 62
+  },
+  "average_reward": 0.894,
+  "average_score": 89.4,
+  "critical_failure_counts": [
+    {
+      "count": 20,
+      "id": "final_answer"
+    },
+    {
+      "count": 2,
+      "id": "required_actions"
+    },
+    {
+      "count": 20,
+      "id": "required_evidence"
+    }
+  ],
+  "dataset_splits": {
+    "episode_count": 100,
+    "family_exclusive": true,
+    "task_family_count": 10,
+    "test_episode_count": 10,
+    "train_episode_count": 80,
+    "validation_episode_count": 10
+  },
+  "episode_count": 100,
+  "failed": 20,
+  "failed_rule_counts": [
+    {
+      "count": 20,
+      "id": "final_answer"
+    },
+    {
+      "count": 2,
+      "id": "required_actions"
+    },
+    {
+      "count": 20,
+      "id": "required_evidence"
+    }
+  ],
+  "max_reward": 1.0,
+  "max_score": 100,
+  "metadata": {
+    "base_model_target": "Qwen/Qwen3-4B-Instruct-2507",
+    "collection": "live_hermes_flightrecorder"
+  },
+  "min_reward": 0.2,
+  "min_score": 20,
+  "pass_rate": 0.8,
+  "passed": 80,
+  "quality_flags": [],
+  "recommended_checks": [
+    "Review scenario policies before treating labels as training rewards.",
+    "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
+    "Inspect failure-mode and step-reward coverage before credit-assignment experiments.",
+    "Use validation output and the HTML reports alongside trainer-ready JSONL views."
+  ],
+  "reward_scale": "score",
+  "schema_version": "hfr.rl.dataset_metrics.v1",
+  "source_fingerprint_coverage": {
+    "episodes": 100,
+    "fully_verified": 100,
+    "unverified": 0,
+    "with_scenario_sha256": 100,
+    "with_source_trace_sha256": 100
+  },
+  "task_completion": {
+    "check_pass_rate": 0.8167,
+    "complete_count": 80,
+    "configured_count": 100,
+    "episode_count": 100,
+    "incomplete_count": 20,
+    "not_applicable_count": 0,
+    "passed_check_count": 98,
+    "required_check_count": 120,
+    "unknown_count": 0
+  },
+  "task_families": [
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "artifact_verification",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "code_edit_test",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "cron_async_completion",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "delegation_claim",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "file_read_write",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "git_repo_inspection",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "local_research",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 84.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 6,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 8,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "prompt_injection_resistance",
+      "trace_average_event_count": 10.4,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "terminal_command",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 90.0,
+      "dpo_count": 16,
+      "episode_count": 10,
+      "failed": 2,
+      "failure_mode_count": 4,
+      "pass_rate": 0.8,
+      "passed": 8,
+      "reward_model_count": 10,
+      "sft_count": 8,
+      "step_reward_count": 6,
+      "task_completion_complete": 8,
+      "task_completion_configured": 10,
+      "task_completion_incomplete": 2,
+      "task_family": "unsupported_claim",
+      "trace_average_event_count": 13.6,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 5,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    }
+  ],
+  "trace_signal": {
+    "api_call_count": 664,
+    "approval_event_count": 0,
+    "average_event_count": 13.28,
+    "empty_final_answer_count": 0,
+    "episode_count": 100,
+    "episodes_with_final_answer": 100,
+    "episodes_with_tool_or_api_events": 100,
+    "event_type_count": 5,
+    "event_type_counts": [
+      {
+        "count": 664,
+        "id": "api_call"
+      },
+      {
+        "count": 232,
+        "id": "tool_call"
+      },
+      {
+        "count": 232,
+        "id": "tool_result"
+      },
+      {
+        "count": 100,
+        "id": "assistant_message"
+      },
+      {
+        "count": 100,
+        "id": "user_message"
+      }
+    ],
+    "final_answer_rate": 1.0,
+    "max_event_count": 16,
+    "min_event_count": 4,
+    "risk_count": 0,
+    "risk_counts": [],
+    "subagent_event_count": 0,
+    "tool_call_count": 232,
+    "tool_or_api_episode_rate": 1.0,
+    "tool_result_count": 232,
+    "total_event_count": 1328
+  },
+  "trainer_view_source_fingerprint_coverage": {
+    "dpo_rows": 160,
+    "fully_verified": 340,
+    "fully_verified_rate": 1.0,
+    "reward_model_rows": 100,
+    "rows": 340,
+    "sft_rows": 80,
+    "unverified": 0
+  }
+}

@@ -1,0 +1,312 @@
+{
+  "artifact_counts": {
+    "dpo": 2,
+    "episodes": 7,
+    "failure_modes": 14,
+    "preferences": 2,
+    "reward_model": 7,
+    "rewards": 7,
+    "sft": 2,
+    "step_rewards": 23
+  },
+  "average_reward": 0.5071,
+  "average_score": 50.7143,
+  "critical_failure_counts": [
+    {
+      "count": 1,
+      "id": "budget"
+    },
+    {
+      "count": 1,
+      "id": "final_answer"
+    },
+    {
+      "count": 1,
+      "id": "forbidden_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_action_sequences"
+    },
+    {
+      "count": 1,
+      "id": "required_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_event_counts"
+    },
+    {
+      "count": 3,
+      "id": "required_evidence"
+    },
+    {
+      "count": 1,
+      "id": "required_state"
+    },
+    {
+      "count": 1,
+      "id": "required_state_transitions"
+    },
+    {
+      "count": 1,
+      "id": "secret_exposure"
+    }
+  ],
+  "dataset_splits": {
+    "episode_count": 7,
+    "family_exclusive": true,
+    "task_family_count": 5,
+    "test_episode_count": 1,
+    "train_episode_count": 4,
+    "validation_episode_count": 2
+  },
+  "episode_count": 7,
+  "failed": 5,
+  "failed_rule_counts": [
+    {
+      "count": 1,
+      "id": "budget"
+    },
+    {
+      "count": 1,
+      "id": "final_answer"
+    },
+    {
+      "count": 1,
+      "id": "forbidden_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_action_sequences"
+    },
+    {
+      "count": 1,
+      "id": "required_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_event_counts"
+    },
+    {
+      "count": 3,
+      "id": "required_evidence"
+    },
+    {
+      "count": 1,
+      "id": "required_state"
+    },
+    {
+      "count": 1,
+      "id": "required_state_transitions"
+    },
+    {
+      "count": 1,
+      "id": "secret_exposure"
+    }
+  ],
+  "max_reward": 1.0,
+  "max_score": 100,
+  "min_reward": 0.0,
+  "min_score": 0,
+  "pass_rate": 0.2857,
+  "passed": 2,
+  "quality_flags": [],
+  "recommended_checks": [
+    "Review scenario policies before treating labels as training rewards.",
+    "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
+    "Inspect failure-mode and step-reward coverage before credit-assignment experiments.",
+    "Use validation output and the HTML reports alongside trainer-ready JSONL views."
+  ],
+  "reward_scale": "score",
+  "schema_version": "hfr.rl.dataset_metrics.v1",
+  "source_fingerprint_coverage": {
+    "episodes": 7,
+    "fully_verified": 7,
+    "unverified": 0,
+    "with_scenario_sha256": 7,
+    "with_source_trace_sha256": 7
+  },
+  "task_completion": {
+    "check_pass_rate": 0.5652,
+    "complete_count": 2,
+    "configured_count": 6,
+    "episode_count": 7,
+    "incomplete_count": 4,
+    "not_applicable_count": 1,
+    "passed_check_count": 13,
+    "required_check_count": 23,
+    "unknown_count": 0
+  },
+  "task_families": [
+    {
+      "average_score": 75.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 1,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 3,
+      "task_completion_complete": 0,
+      "task_completion_configured": 0,
+      "task_completion_incomplete": 0,
+      "task_family": "budget_runaway",
+      "trace_average_event_count": 10.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 1,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 10.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 3,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 3,
+      "task_completion_complete": 0,
+      "task_completion_configured": 1,
+      "task_completion_incomplete": 1,
+      "task_family": "cron_async_delegation",
+      "trace_average_event_count": 8.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 6,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 50.0,
+      "dpo_count": 1,
+      "episode_count": 2,
+      "failed": 1,
+      "failure_mode_count": 5,
+      "pass_rate": 0.5,
+      "passed": 1,
+      "reward_model_count": 2,
+      "sft_count": 1,
+      "step_reward_count": 5,
+      "task_completion_complete": 1,
+      "task_completion_configured": 2,
+      "task_completion_incomplete": 1,
+      "task_family": "email_reply_completion",
+      "trace_average_event_count": 5.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 50.0,
+      "dpo_count": 1,
+      "episode_count": 2,
+      "failed": 1,
+      "failure_mode_count": 4,
+      "pass_rate": 0.5,
+      "passed": 1,
+      "reward_model_count": 2,
+      "sft_count": 1,
+      "step_reward_count": 11,
+      "task_completion_complete": 1,
+      "task_completion_configured": 2,
+      "task_completion_incomplete": 1,
+      "task_family": "prompt_injection",
+      "trace_average_event_count": 5.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 70.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 1,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 1,
+      "task_completion_complete": 0,
+      "task_completion_configured": 1,
+      "task_completion_incomplete": 1,
+      "task_family": "subagent_claim",
+      "trace_average_event_count": 4.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 1,
+      "trace_tool_or_api_episode_rate": 0.0
+    }
+  ],
+  "trace_signal": {
+    "api_call_count": 0,
+    "approval_event_count": 0,
+    "average_event_count": 6.0,
+    "empty_final_answer_count": 0,
+    "episode_count": 7,
+    "episodes_with_final_answer": 7,
+    "episodes_with_tool_or_api_events": 6,
+    "event_type_count": 6,
+    "event_type_counts": [
+      {
+        "count": 12,
+        "id": "tool_call"
+      },
+      {
+        "count": 7,
+        "id": "assistant_message"
+      },
+      {
+        "count": 7,
+        "id": "tool_result"
+      },
+      {
+        "count": 7,
+        "id": "user_message"
+      },
+      {
+        "count": 6,
+        "id": "subagent_start"
+      },
+      {
+        "count": 3,
+        "id": "subagent_stop"
+      }
+    ],
+    "final_answer_rate": 1.0,
+    "max_event_count": 10,
+    "min_event_count": 4,
+    "risk_count": 2,
+    "risk_counts": [
+      {
+        "count": 1,
+        "id": "no_tool_or_api_events"
+      },
+      {
+        "count": 1,
+        "id": "tool_call_result_imbalance"
+      }
+    ],
+    "subagent_event_count": 9,
+    "tool_call_count": 12,
+    "tool_or_api_episode_rate": 0.8571,
+    "tool_result_count": 7,
+    "total_event_count": 42
+  },
+  "trainer_view_source_fingerprint_coverage": {
+    "dpo_rows": 2,
+    "fully_verified": 11,
+    "fully_verified_rate": 1.0,
+    "reward_model_rows": 7,
+    "rows": 11,
+    "sft_rows": 2,
+    "unverified": 0
+  }
+}

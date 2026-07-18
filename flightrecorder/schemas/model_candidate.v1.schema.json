@@ -1,0 +1,161 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_candidate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Model candidate metadata used for local base-model scouting and training eligibility review.",
+  "properties": {
+    "candidate_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "compatibility": {
+      "$ref": "#/$defs/compatibility"
+    },
+    "license": {
+      "$ref": "#/$defs/licenseReview"
+    },
+    "model_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.model_candidate.v1"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    }
+  },
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "model_id",
+    "source",
+    "license",
+    "compatibility"
+  ],
+  "title": "Hermes Flight Recorder Model Candidate",
+  "type": "object",
+  "$defs": {
+    "compatibility": {
+      "additionalProperties": true,
+      "properties": {
+        "chat_template": {
+          "type": "object"
+        },
+        "context_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "memory": {
+          "type": "object"
+        },
+        "quantization": {
+          "type": "object"
+        },
+        "serving": {
+          "type": "object"
+        },
+        "structured_outputs": {
+          "type": "object"
+        },
+        "tokenizer": {
+          "type": "object"
+        },
+        "tool_calls": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "context_length",
+        "tokenizer",
+        "chat_template",
+        "serving",
+        "tool_calls",
+        "structured_outputs",
+        "quantization",
+        "memory"
+      ],
+      "type": "object"
+    },
+    "licenseReview": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted_terms": {
+          "type": "boolean"
+        },
+        "license_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "review_status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reviewed_at": {
+          "type": "string"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "source_url": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "terms_url": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "training_allowed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "license_id",
+        "source_url",
+        "review_status",
+        "accepted_terms",
+        "terms_url",
+        "training_allowed"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": true,
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "url": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "url"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "dpo_train_result": {
+    "epoch": 3.0,
+    "total_flos": 30090822653952.0,
+    "train_loss": 0.6878941456476847,
+    "train_runtime": 17.8341,
+    "train_samples_per_second": 0.336,
+    "train_steps_per_second": 0.336
+  },
+  "final_adapter_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter",
+  "mode": "fr_sft_dpo",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "output_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo",
+  "sft_train_result": {
+    "epoch": 3.0,
+    "total_flos": 2359866617856.0,
+    "train_loss": 5.286010265350342,
+    "train_runtime": 5.0785,
+    "train_samples_per_second": 0.591,
+    "train_steps_per_second": 0.591
+  }
+}

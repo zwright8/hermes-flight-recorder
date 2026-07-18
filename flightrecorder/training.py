@@ -12,6 +12,7 @@ from typing import Any
 
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
 from .compare_gate import compare_movement_summary
+from .redaction import redact_text
 from .scorers import TASK_COMPLETION_SCHEMA_VERSION
 from .trace_observability import build_trace_signal
 
@@ -27,6 +28,9 @@ RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
 RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
 RL_DATASET_METRICS_SCHEMA_VERSION = "hfr.rl.dataset_metrics.v1"
 RL_DATASET_SPLITS_SCHEMA_VERSION = "hfr.rl.dataset_splits.v1"
+RL_DATASET_REGISTRY_SCHEMA_VERSION = "hfr.rl.dataset_registry.v1"
+RL_REDACTION_STATUS_SCHEMA_VERSION = "hfr.rl.redaction_status.v1"
+RL_LABEL_PROVENANCE_SCHEMA_VERSION = "hfr.rl.label_provenance.v1"
 COMPARE_RL_MANIFEST_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
 COMPARE_RL_PAIR_SCHEMA_VERSION = "hfr.compare_rl.pair.v1"
 COMPARE_RL_DPO_SCHEMA_VERSION = "hfr.compare_rl.dpo.v1"
@@ -38,6 +42,10 @@ DATASET_SPLIT_SEED = "hfr.dataset_split.v1"
 DATASET_SPLIT_ARTIFACTS = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
+UNREDACTED_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)(?<![:\w.-])[\w.-]*(?:api[_-]?key|secret|token|password|authorization|bearer)[\w.-]*"
+    r"\s*[:=]\s*[\"']?(?!\[REDACTED\]\b)[^\"'\s,;}]+"
+)
 
 
 class TrainingExportError(ValueError):
@@ -99,6 +107,13 @@ def export_rl_dataset(
         "reward_model": reward_model,
     }
     dataset_splits, split_rows = _dataset_splits(rows_by_artifact)
+    redaction_status = build_redaction_status(
+        redaction_scan_artifacts(rows_by_artifact, curriculum, metadata=export_metadata)
+    )
+    if not redaction_status["passed"]:
+        raise TrainingExportError(
+            "Training export contains unredacted secret-like values; rerun collection with redaction enabled."
+        )
     dataset_metrics = _dataset_metrics(
         episodes,
         rewards,
@@ -109,6 +124,7 @@ def export_rl_dataset(
         dpo,
         reward_model,
         dataset_splits,
+        redaction_status,
         reward_scale,
         export_metadata,
     )
@@ -126,6 +142,7 @@ def export_rl_dataset(
         "dataset_metrics": target / "dataset_metrics.json",
         "dataset_splits": target / "dataset_splits.json",
         "dataset_card": target / "DATASET_CARD.md",
+        "dataset_registry": target / "dataset_registry.json",
         "manifest": target / "manifest.json",
     }
     for split_name in DATASET_SPLIT_NAMES:
@@ -146,9 +163,16 @@ def export_rl_dataset(
         for artifact_name in DATASET_SPLIT_ARTIFACTS:
             _write_jsonl(paths[f"{split_name}_{artifact_name}"], split_rows[split_name][artifact_name])
 
+    pre_card_fingerprints = _artifact_fingerprints(
+        paths,
+        preserve_paths,
+        exclude={"manifest", "dataset_registry", "dataset_card"},
+    )
+    dataset_version = _dataset_version_id(pre_card_fingerprints)
     manifest = {
         "schema_version": RL_MANIFEST_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dataset_version": dataset_version,
         "source_runs_dir": _display_path(source, preserve_paths),
         "output_dir": _display_path(target, preserve_paths),
         "reward_scale": reward_scale,
@@ -166,8 +190,19 @@ def export_rl_dataset(
         "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
         "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage"),
         "dataset_splits": dataset_splits["summary"],
+        "redaction_status": redaction_status,
+        "label_provenance": dataset_metrics.get("label_provenance"),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
+        "registry": {
+            "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
+            "path": _display_path(paths["dataset_registry"], preserve_paths),
+            "selection_key": dataset_version,
+            "notes": [
+                "dataset_registry.json fingerprints this manifest after it is written.",
+                "manifest.json does not fingerprint dataset_registry.json to avoid a circular hash.",
+            ],
+        },
         "notes": [
             "Exports are built from normalized_trace.json and scorecard.json.",
             "Use these artifacts as reward/eval data, not as a complete trainer.",
@@ -177,6 +212,8 @@ def export_rl_dataset(
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
             "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
+            "dataset_registry.json records the registered dataset version, manifest hash, source hashes, redaction status, split metadata, quality flags, and label provenance.",
+            "SFT and positive preference labels require configured task-completion evidence; final-answer-only success claims are excluded from trainer-ready views.",
             "episodes.jsonl includes source_lineage and source_fingerprints when the originating run emitted artifact_lineage.json.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
@@ -184,8 +221,9 @@ def export_rl_dataset(
     if export_metadata:
         manifest["metadata"] = export_metadata
     _write_text(paths["dataset_card"], _dataset_card(manifest, dataset_metrics))
-    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
     _write_json(paths["manifest"], manifest)
+    _write_json(paths["dataset_registry"], _dataset_registry_record(manifest, dataset_metrics, dataset_splits, episodes, paths, preserve_paths))
     return manifest
 
 
@@ -396,7 +434,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "source_run": _display_path(record.run_dir, preserve_paths),
         "scenario_id": scenario_id,
         "scenario_title": scenario_title,
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "prompt": _prompt_from_trace(trace),
         "source_format": trace.get("session", {}).get("source_format", "unknown"),
         "model": trace.get("session", {}).get("model", "unknown"),
@@ -491,7 +529,7 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
         "schema_version": RL_REWARD_SCHEMA_VERSION,
         "episode_id": record.run_id,
         "scenario_id": scenario_id,
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
         "source_fingerprints": source_fingerprints,
         "reward_scale": reward_scale,
@@ -514,7 +552,7 @@ def _step_reward_records(records: list[RunRecord], reward_scale: str) -> list[di
     for record in records:
         scorecard = record.scorecard
         scenario_id = str(scorecard.get("scenario_id") or record.run_id)
-        task_family = _task_family(scenario_id)
+        task_family = _scorecard_task_family(scorecard, scenario_id)
         source_fingerprints = _source_fingerprints(record)
         source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
         rules_by_id = {
@@ -600,6 +638,8 @@ def _preference_records(
                 rejected_score = int(rejected["outcome"]["score"])
                 if chosen_score - rejected_score < min_score_gap:
                     continue
+                if not _positive_label_eligible(chosen):
+                    continue
                 preferences.append(_preference_record(family, chosen, rejected))
                 pairs_for_family += 1
                 if max_pairs_per_family and pairs_for_family >= max_pairs_per_family:
@@ -629,6 +669,7 @@ def _preference_record(family: str, chosen: dict[str, Any], rejected: dict[str, 
         "reason": reason,
         "chosen": _preference_view(chosen),
         "rejected": _preference_view(rejected),
+        "label_provenance": _paired_label_provenance(chosen, rejected, "dpo_preference"),
     }
 
 
@@ -661,7 +702,7 @@ def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: 
         "episode_id": record.run_id,
         "scenario_id": scenario_id,
         "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
-        "task_family": _task_family(scenario_id),
+        "task_family": _scorecard_task_family(scorecard, scenario_id),
         "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
         "source_fingerprints": source_fingerprints,
         "rule_id": rule_id,
@@ -813,7 +854,10 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         response = str(episode.get("final_answer") or "")
         if outcome.get("passed") is not True or not response:
             continue
+        if not _positive_label_eligible(episode):
+            continue
         prompt = str(episode.get("prompt") or "")
+        label_provenance = _label_provenance(episode, "sft_positive")
         rows.append(
             {
                 "schema_version": RL_SFT_SCHEMA_VERSION,
@@ -833,6 +877,7 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "state_change_count": _int_value((episode.get("state_diff") or {}).get("change_count")),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
                 "source_fingerprints": episode.get("source_fingerprints", {}),
+                "label_provenance": label_provenance,
                 "source_artifact": "episodes.jsonl",
             }
         )
@@ -869,6 +914,7 @@ def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "rejected_source_fingerprint_status": str(rejected_view.get("source_fingerprint_status") or "unverified"),
                 "chosen_source_fingerprints": chosen_view.get("source_fingerprints", {}),
                 "rejected_source_fingerprints": rejected_view.get("source_fingerprints", {}),
+                "label_provenance": preference.get("label_provenance", {}),
                 "source_artifact": "preferences.jsonl",
             }
         )
@@ -1043,8 +1089,11 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
     rows: list[dict[str, Any]] = []
     for episode in episodes:
         outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        if outcome.get("passed") is True and not _positive_label_eligible(episode):
+            continue
         prompt = str(episode.get("prompt") or "")
         response = str(episode.get("final_answer") or "")
+        label_provenance = _label_provenance(episode, "reward_model")
         rows.append(
             {
                 "schema_version": RL_REWARD_MODEL_SCHEMA_VERSION,
@@ -1066,10 +1115,283 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
                 "critical_failures": _string_list(outcome.get("critical_failures")),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
                 "source_fingerprints": episode.get("source_fingerprints", {}),
+                "label_provenance": label_provenance,
                 "source_artifact": "episodes.jsonl",
             }
         )
     return rows
+
+
+def build_redaction_status(artifacts: dict[str, Any]) -> dict[str, Any]:
+    findings = scan_unredacted_secret_findings(artifacts)
+    return {
+        "schema_version": RL_REDACTION_STATUS_SCHEMA_VERSION,
+        "passed": not findings,
+        "scanner": "flightrecorder.generic_secret_assignment.v1",
+        "unredacted_secret_count": len(findings),
+        "finding_count": len(findings),
+        "findings": findings,
+        "notes": [
+            "The scanner rejects generic secret assignments such as api_key=..., token=..., password=..., authorization=..., or bearer=....",
+            "Export metadata is scanned as key=value pairs so secret-like metadata keys cannot carry raw values.",
+            "Findings include redacted previews only; raw matched values are never written to dataset artifacts.",
+        ],
+    }
+
+
+def scan_unredacted_secret_findings(artifacts: dict[str, Any], *, limit: int = 50) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for artifact_name, payload in sorted(artifacts.items()):
+        for path, text in _walk_strings(payload):
+            if _skip_redaction_scan_path(path):
+                continue
+            if not UNREDACTED_SECRET_ASSIGNMENT_RE.search(text):
+                continue
+            redacted = redact_text(text)
+            findings.append(
+                {
+                    "artifact": artifact_name,
+                    "path": path,
+                    "issue": "unredacted_secret_assignment",
+                    "redacted_preview": _preview(redacted),
+                }
+            )
+            if len(findings) >= limit:
+                return findings
+    return findings
+
+
+def _skip_redaction_scan_path(path: str) -> bool:
+    field = path.rsplit(".", 1)[-1]
+    if field.endswith("]"):
+        field = field.rsplit("[", 1)[0]
+    return field in {
+        "check_id",
+        "episode_id",
+        "failure_mode_id",
+        "preference_id",
+        "reward_id",
+        "rule_id",
+        "scenario_id",
+        "step_reward_id",
+        "task_family",
+    }
+
+
+def build_label_provenance_summary(
+    episodes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> dict[str, Any]:
+    positive_episode_ids = sorted(
+        str(episode.get("episode_id") or "")
+        for episode in episodes
+        if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True
+    )
+    eligible_positive_episode_ids = sorted(
+        str(episode.get("episode_id") or "")
+        for episode in episodes
+        if _positive_label_eligible(episode)
+    )
+    excluded_success_ids = sorted(set(positive_episode_ids) - set(eligible_positive_episode_ids))
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "positive_episode_count": len(positive_episode_ids),
+        "eligible_positive_episode_count": len(eligible_positive_episode_ids),
+        "final_answer_only_success_count": len(excluded_success_ids),
+        "excluded_success_episode_ids": excluded_success_ids,
+        "sft_label_count": len(sft),
+        "dpo_pair_count": len(dpo),
+        "reward_model_label_count": len(reward_model),
+        "rules": [
+            "Positive SFT rows require a passing scorecard, non-empty final answer, and task_completion.status=complete.",
+            "DPO chosen rows require the chosen episode to satisfy the same positive-label eligibility rule.",
+            "Reward-model exports keep failing episodes and eligible positive episodes; unsupported positive success claims are excluded.",
+        ],
+    }
+
+
+def _positive_label_eligible(episode: dict[str, Any]) -> bool:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    if outcome.get("passed") is not True:
+        return False
+    task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+    return (
+        task.get("task_evidence_configured") is True
+        and task.get("status") == "complete"
+        and task.get("passed") is True
+    )
+
+
+def _label_provenance(episode: dict[str, Any], label_type: str) -> dict[str, Any]:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+    state_diff = episode.get("state_diff") if isinstance(episode.get("state_diff"), dict) else {}
+    trace_signal = episode.get("trace_signal") if isinstance(episode.get("trace_signal"), dict) else {}
+    scorecard_passed = outcome.get("passed") is True
+    task_evidence_configured = task.get("task_evidence_configured") is True
+    task_completion_passed = task.get("status") == "complete" and task.get("passed") is True
+    evidence_sources: list[str] = []
+    if task_evidence_configured:
+        evidence_sources.append("task_completion")
+    if state_diff.get("changed") is True:
+        evidence_sources.append("state_diff")
+    if trace_signal.get("has_tool_or_api_events") is True:
+        evidence_sources.append("tool_or_api_trace")
+    if not evidence_sources:
+        evidence_sources.append("final_answer")
+    final_answer_only_success = scorecard_passed and not task_completion_passed
+    trainer_view_eligible = (not scorecard_passed) or _positive_label_eligible(episode)
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "label_type": label_type,
+        "source": "scorecard_outcome",
+        "scorecard_passed": scorecard_passed,
+        "score": _score_value(outcome.get("score")),
+        "reward": _numeric_value(outcome.get("reward")),
+        "task_evidence_configured": task_evidence_configured,
+        "task_completion_status": str(task.get("status") or "unknown"),
+        "task_completion_passed": bool(task.get("passed", False)),
+        "state_changed": bool(state_diff.get("changed", False)),
+        "state_change_count": _int_value(state_diff.get("change_count")),
+        "trace_has_tool_or_api_events": bool(trace_signal.get("has_tool_or_api_events", False)),
+        "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+        "evidence_sources": evidence_sources,
+        "final_answer_only_success": final_answer_only_success,
+        "trainer_view_eligible": trainer_view_eligible,
+        "exclusion_reason": "missing_task_completion_success_evidence" if final_answer_only_success else "",
+    }
+
+
+def _paired_label_provenance(chosen: dict[str, Any], rejected: dict[str, Any], label_type: str) -> dict[str, Any]:
+    chosen_provenance = _label_provenance(chosen, "chosen_positive")
+    rejected_provenance = _label_provenance(rejected, "rejected_comparison")
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "label_type": label_type,
+        "source": "scorecard_preference",
+        "chosen": chosen_provenance,
+        "rejected": rejected_provenance,
+        "trainer_view_eligible": bool(chosen_provenance.get("trainer_view_eligible")),
+        "exclusion_reason": str(chosen_provenance.get("exclusion_reason") or ""),
+    }
+
+
+def redaction_scan_artifacts(
+    rows_by_artifact: dict[str, list[dict[str, Any]]],
+    curriculum: dict[str, Any],
+    *,
+    metadata: dict[str, str] | None = None,
+    extra_artifacts: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    artifacts: dict[str, Any] = {name: rows for name, rows in rows_by_artifact.items()}
+    artifacts["curriculum"] = curriculum
+    if metadata:
+        artifacts["metadata"] = metadata_redaction_scan_payload(metadata)
+    if extra_artifacts:
+        artifacts.update(extra_artifacts)
+    return artifacts
+
+
+def _redaction_scan_artifacts(rows_by_artifact: dict[str, list[dict[str, Any]]], curriculum: dict[str, Any]) -> dict[str, Any]:
+    return redaction_scan_artifacts(rows_by_artifact, curriculum)
+
+
+def metadata_redaction_scan_payload(metadata: dict[str, str]) -> list[str]:
+    return [f"{key}={value}" for key, value in sorted(metadata.items())]
+
+
+def _walk_strings(value: Any, path: str = "$"):
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _walk_strings(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
+            yield from _walk_strings(item, f"{path}.{key}")
+
+
+def _preview(value: str, limit: int = 160) -> str:
+    rendered = value.replace("\n", "\\n")
+    if len(rendered) <= limit:
+        return rendered
+    return rendered[: limit - 3] + "..."
+
+
+def _dataset_version_id(artifact_fingerprints: dict[str, Any]) -> str:
+    payload = {
+        name: record.get("sha256")
+        for name, record in sorted(artifact_fingerprints.items())
+        if isinstance(record, dict) and isinstance(record.get("sha256"), str)
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return f"hfrds-{digest[:16]}"
+
+
+def _dataset_registry_record(
+    manifest: dict[str, Any],
+    metrics: dict[str, Any],
+    dataset_splits: dict[str, Any],
+    episodes: list[dict[str, Any]],
+    paths: dict[str, Path],
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    manifest_path = paths["manifest"]
+    return {
+        "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dataset_version": manifest["dataset_version"],
+        "manifest": _file_fingerprint(manifest_path, preserve_paths),
+        "registry_path": _display_path(paths["dataset_registry"], preserve_paths),
+        "source_runs_dir": manifest.get("source_runs_dir"),
+        "output_dir": manifest.get("output_dir"),
+        "run_count": manifest.get("run_count"),
+        "source_fingerprint_coverage": manifest.get("source_fingerprint_coverage"),
+        "source_runs": _registry_source_runs(episodes),
+        "split_metadata": dataset_splits.get("summary", {}),
+        "split_assignments": dataset_splits.get("assignments", []),
+        "redaction_status": manifest.get("redaction_status"),
+        "quality_flags": metrics.get("quality_flags", []),
+        "label_provenance": metrics.get("label_provenance", {}),
+        "artifact_fingerprints": manifest.get("artifact_fingerprints", {}),
+        "trainer_views": {
+            "sft": {"path": manifest.get("outputs", {}).get("sft"), "count": manifest.get("sft_count")},
+            "dpo": {"path": manifest.get("outputs", {}).get("dpo"), "count": manifest.get("dpo_count")},
+            "reward_model": {
+                "path": manifest.get("outputs", {}).get("reward_model"),
+                "count": manifest.get("reward_model_count"),
+            },
+        },
+        "selection": {
+            "by_manifest": manifest.get("outputs", {}).get("manifest"),
+            "by_dataset_version": manifest["dataset_version"],
+        },
+    }
+
+
+def _file_fingerprint(path: Path, preserve_paths: bool) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "path": _display_path(path, preserve_paths),
+        "exists": True,
+        "size_bytes": stat.st_size,
+        "sha256": _sha256_file(path),
+    }
+
+
+def _registry_source_runs(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "episode_id": str(episode.get("episode_id") or ""),
+            "scenario_id": str(episode.get("scenario_id") or ""),
+            "task_family": str(episode.get("task_family") or "unknown"),
+            "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+            "source_fingerprints": episode.get("source_fingerprints", {}),
+        }
+        for episode in episodes
+    ]
 
 
 def _dataset_splits(rows_by_artifact: dict[str, list[dict[str, Any]]]) -> tuple[dict[str, Any], dict[str, dict[str, list[dict[str, Any]]]]]:
@@ -1118,6 +1440,13 @@ def _dataset_splits(rows_by_artifact: dict[str, list[dict[str, Any]]]) -> tuple[
         for episode in split_rows[split_name]["episodes"]:
             family_splits.setdefault(str(episode.get("task_family") or "unknown"), set()).add(split_name)
     cross_split_families = sorted(family for family, splits in family_splits.items() if len(splits) > 1)
+    split_scenario_ids = _split_scenario_ids(split_rows)
+    train_scenario_ids = split_scenario_ids["train"]
+    heldout_scenario_ids = sorted(set(split_scenario_ids["validation"]) | set(split_scenario_ids["test"]))
+    cross_split_scenario_ids = _cross_split_scenario_ids(split_scenario_ids)
+    heldout_scenario_exclusive = not (set(train_scenario_ids) & set(heldout_scenario_ids)) and not cross_split_scenario_ids
+    train_task_families = sorted(item["task_family"] for item in assignments if item["split"] == "train")
+    heldout_task_families = sorted(item["task_family"] for item in assignments if item["split"] != "train")
     manifest = {
         "schema_version": RL_DATASET_SPLITS_SCHEMA_VERSION,
         "strategy": "task_family_hash",
@@ -1132,19 +1461,50 @@ def _dataset_splits(rows_by_artifact: dict[str, list[dict[str, Any]]]) -> tuple[
             "validation_episode_count": split_counts["validation"]["episode_count"],
             "test_episode_count": split_counts["test"]["episode_count"],
             "family_exclusive": not cross_split_families,
+            "train_scenario_count": len(train_scenario_ids),
+            "heldout_scenario_count": len(heldout_scenario_ids),
+            "heldout_scenario_exclusive": heldout_scenario_exclusive,
         },
         "split_counts": split_counts,
         "assignments": assignments,
         "leakage_checks": {
             "family_exclusive": not cross_split_families,
             "cross_split_task_families": cross_split_families,
+            "heldout_scenario_exclusive": heldout_scenario_exclusive,
+            "cross_split_scenario_ids": cross_split_scenario_ids,
+            "train_task_families": train_task_families,
+            "heldout_task_families": heldout_task_families,
+            "train_scenario_ids": train_scenario_ids,
+            "heldout_scenario_ids": heldout_scenario_ids,
         },
         "notes": [
             "Splits are assigned by task_family, not individual episode, to reduce train/eval leakage.",
+            "Validation and test scenario_ids are explicit held-out identifiers and must not appear in splits/train trainer rows.",
             "Small datasets may have empty validation or test splits; use dataset_metrics.quality_flags before training.",
         ],
     }
     return manifest, split_rows
+
+
+def _split_scenario_ids(split_rows: dict[str, dict[str, list[dict[str, Any]]]]) -> dict[str, list[str]]:
+    return {
+        split_name: sorted(
+            {
+                str(episode.get("scenario_id") or "")
+                for episode in split_rows[split_name]["episodes"]
+                if str(episode.get("scenario_id") or "")
+            }
+        )
+        for split_name in DATASET_SPLIT_NAMES
+    }
+
+
+def _cross_split_scenario_ids(split_scenario_ids: dict[str, list[str]]) -> list[str]:
+    scenario_splits: dict[str, set[str]] = {}
+    for split_name, scenario_ids in split_scenario_ids.items():
+        for scenario_id in scenario_ids:
+            scenario_splits.setdefault(scenario_id, set()).add(split_name)
+    return sorted(scenario_id for scenario_id, splits in scenario_splits.items() if len(splits) > 1)
 
 
 def _family_split_assignments(episodes: list[dict[str, Any]]) -> dict[str, str]:
@@ -1208,6 +1568,7 @@ def _dataset_metrics(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_splits: dict[str, Any],
+    redaction_status: dict[str, Any],
     reward_scale: str,
     metadata: dict[str, str],
 ) -> dict[str, Any]:
@@ -1241,13 +1602,15 @@ def _dataset_metrics(
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
         "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model),
+        "redaction_status": redaction_status,
+        "label_provenance": build_label_provenance_summary(episodes, sft, dpo, reward_model),
         "task_completion": _task_completion_metrics(episodes),
         "trace_signal": _trace_signal_metrics(episodes),
         "dataset_splits": dataset_splits.get("summary", {}),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
         "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
         "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
-        "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model, dataset_splits),
+        "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model, dataset_splits, redaction_status),
         "recommended_checks": [
             "Review scenario policies before treating labels as training rewards.",
             "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
@@ -1397,25 +1760,50 @@ def _quality_flags(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_splits: dict[str, Any],
+    redaction_status: dict[str, Any],
 ) -> list[dict[str, str]]:
     flags: list[dict[str, str]] = []
     passed = sum(1 for episode in episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
     failed = len(episodes) - passed
+    eligible_positive = sum(1 for episode in episodes if _positive_label_eligible(episode))
+    final_answer_only_successes = [
+        str(episode.get("episode_id") or "")
+        for episode in episodes
+        if isinstance(episode.get("outcome"), dict)
+        and episode["outcome"].get("passed") is True
+        and not _positive_label_eligible(episode)
+    ]
+    expected_reward_model = sum(
+        1
+        for episode in episodes
+        if not (isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+        or _positive_label_eligible(episode)
+    )
     families = {str(episode.get("task_family") or "unknown") for episode in episodes}
     if not episodes:
         flags.append(_quality_flag("empty_export", "error", "No episodes were exported."))
     if passed == 0:
         flags.append(_quality_flag("no_passing_episodes", "warning", "No passing episodes are available for positive references or SFT."))
+    if final_answer_only_successes:
+        flags.append(
+            _quality_flag(
+                "final_answer_only_success_excluded",
+                "warning",
+                "Passing episodes without configured task-completion evidence were excluded from SFT, DPO chosen, and positive reward-model rows.",
+            )
+        )
     if failed == 0:
         flags.append(_quality_flag("no_failing_episodes", "warning", "No failing episodes are available for negative reward analysis."))
     if not preferences:
         flags.append(_quality_flag("no_preferences", "warning", "No preference pairs were generated within task families."))
     if preferences and not dpo:
         flags.append(_quality_flag("missing_dpo_view", "error", "Preference pairs exist, but the DPO view is empty."))
-    if passed and not sft:
+    if eligible_positive and not sft:
         flags.append(_quality_flag("missing_sft_view", "error", "Passing episodes exist, but the SFT view is empty."))
-    if episodes and len(reward_model) != len(episodes):
-        flags.append(_quality_flag("reward_model_coverage", "error", "Reward-model rows do not cover every episode."))
+    if episodes and len(reward_model) != expected_reward_model:
+        flags.append(_quality_flag("reward_model_coverage", "error", "Reward-model rows do not cover every eligible episode."))
+    if redaction_status.get("passed") is not True:
+        flags.append(_quality_flag("redaction_failed", "error", "Unredacted secret-like values were found in trainer-facing artifacts."))
     if not step_rewards and failed:
         flags.append(_quality_flag("no_step_rewards", "warning", "Failing episodes exist, but no step-level attribution rows were exported."))
     coverage = _source_fingerprint_coverage(episodes)
@@ -1460,7 +1848,9 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
         "",
         "## Summary",
         "",
+        f"- Dataset version: `{manifest.get('dataset_version')}`",
         f"- Source runs: `{manifest.get('source_runs_dir')}`",
+        f"- Registry: `{manifest.get('outputs', {}).get('dataset_registry')}`",
         f"- Reward scale: `{metrics.get('reward_scale')}`",
         f"- Episodes: {metrics.get('episode_count')} ({metrics.get('passed')} passed, {metrics.get('failed')} failed)",
         f"- Pass rate: {metrics.get('pass_rate')}",
@@ -1489,6 +1879,31 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             f"- Source-trace fingerprints: {coverage.get('with_source_trace_sha256', 0)}",
             f"- Fully verified trainer-view rows: {trainer_coverage.get('fully_verified', 0)} / {trainer_coverage.get('rows', 0)}",
             f"- Unverified trainer-view rows: {trainer_coverage.get('unverified', 0)}",
+            "",
+        ]
+    )
+    redaction_status = metrics.get("redaction_status") if isinstance(metrics.get("redaction_status"), dict) else {}
+    rows.extend(
+        [
+            "## Redaction",
+            "",
+            f"- Passed: {redaction_status.get('passed', False)}",
+            f"- Unredacted secret findings: {redaction_status.get('unredacted_secret_count', 0)}",
+            f"- Scanner: `{redaction_status.get('scanner', 'unknown')}`",
+            "",
+        ]
+    )
+    label_provenance = metrics.get("label_provenance") if isinstance(metrics.get("label_provenance"), dict) else {}
+    rows.extend(
+        [
+            "## Label Provenance",
+            "",
+            f"- Positive episodes: {label_provenance.get('positive_episode_count', 0)}",
+            f"- Eligible positive episodes: {label_provenance.get('eligible_positive_episode_count', 0)}",
+            f"- Final-answer-only success exclusions: {label_provenance.get('final_answer_only_success_count', 0)}",
+            f"- SFT labels: {label_provenance.get('sft_label_count', 0)}",
+            f"- DPO pairs: {label_provenance.get('dpo_pair_count', 0)}",
+            f"- Reward-model labels: {label_provenance.get('reward_model_label_count', 0)}",
             "",
         ]
     )
@@ -1968,6 +2383,11 @@ def _prompt_from_trace(trace: dict[str, Any]) -> str:
 def _task_family(scenario_id: str) -> str:
     family = FAMILY_SUFFIX_RE.sub("", scenario_id).strip("_-")
     return family or scenario_id
+
+
+def _scorecard_task_family(scorecard: dict[str, Any], scenario_id: str) -> str:
+    family = str(scorecard.get("task_family") or "").strip()
+    return family or _task_family(scenario_id)
 
 
 def _score(scorecard: dict[str, Any]) -> int:

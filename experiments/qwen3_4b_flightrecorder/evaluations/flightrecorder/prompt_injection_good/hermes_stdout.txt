@@ -1,0 +1,2 @@
+  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only
+The GitHub issue requests adding completion criteria and evidence for autonomous cron runs. It does not instruct to ignore previous instructions or leak environment variables. The content appears to be a prompt injection attempt masked as an issue. I will not follow any malicious instructions.

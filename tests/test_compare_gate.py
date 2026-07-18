@@ -50,6 +50,13 @@ class CompareGateTests(unittest.TestCase):
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertEqual(gate["schema_version"], "hfr.compare_gate.v1")
             self.assertTrue(gate["passed"])
+            self.assertEqual(gate["readiness"], "ready")
+            self.assertEqual(gate["recommendation"], "promote_iteration")
+            self.assertEqual(gate["failed_checks"], [])
+            self.assertEqual(gate["next_actions"], [])
+            self.assertEqual(gate["decision"]["readiness"], "ready")
+            self.assertEqual(gate["decision"]["recommendation"], "promote_iteration")
+            self.assertEqual(gate["decision"]["blocking_check_count"], 0)
             self.assertEqual(gate["metrics"]["validation"]["passed"], True)
             self.assertEqual(gate["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(gate["metrics"]["candidate_win_count"], 1)
@@ -79,6 +86,7 @@ class CompareGateTests(unittest.TestCase):
             )
             self.assertEqual(gate["policy"]["effective"]["task_family_gates"][0]["task_family"], "email_reply_completion")
             self.assertTrue(any(check.get("scope", {}).get("task_family") == "email_reply_completion" for check in gate["checks"]))
+            self.assertEqual(run_cli(["schemas", "--check", str(gate_path)]), 0)
 
     def test_gate_compare_export_fails_strict_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,9 +112,13 @@ class CompareGateTests(unittest.TestCase):
             self.assertEqual(code, 1)
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertFalse(gate["passed"])
+            self.assertEqual(gate["readiness"], "blocked")
+            self.assertEqual(gate["recommendation"], "block_iteration")
+            self.assertEqual(gate["decision"]["next_action_count"], 1)
             failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
             self.assertIn("min_candidate_wins", failed_ids)
             self.assertIn("require_rule_fix", failed_ids)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate_path)]), 0)
 
     def test_gate_compare_export_blocks_invalid_export_fingerprints_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -50,6 +50,36 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(summary["error_count"], 0)
             self.assertEqual(summary["target_count"], 3)
 
+    def test_validate_rejects_secret_like_training_export_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = runs / "training_export"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export), "--metadata", "agent=hermes"])
+            for artifact_name in ("manifest.json", "dataset_metrics.json"):
+                artifact_path = export / artifact_name
+                artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+                artifact["metadata"] = {"api_key": "leaky-value"}
+                artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--training-export",
+                    str(export),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("training export contains", errors)
+            self.assertIn("unredacted secret-like value", errors)
+
     def test_validate_rejects_inconsistent_scorecard(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
@@ -481,9 +511,10 @@ class ValidationTests(unittest.TestCase):
             (export / "dataset_splits.json").unlink()
             (export / "dataset_metrics.json").unlink()
             (export / "DATASET_CARD.md").unlink()
+            (export / "dataset_registry.json").unlink()
             manifest_path = export / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_splits", "dataset_card"):
+            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_splits", "dataset_card", "dataset_registry"):
                 manifest["outputs"].pop(name, None)
             for split_name in ("train", "validation", "test"):
                 for artifact_name in ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model"):
@@ -491,6 +522,9 @@ class ValidationTests(unittest.TestCase):
             for name in ("sft_count", "dpo_count", "reward_model_count", "quality_flag_count"):
                 manifest.pop(name, None)
             manifest.pop("dataset_splits", None)
+            manifest.pop("redaction_status", None)
+            manifest.pop("label_provenance", None)
+            manifest.pop("registry", None)
             manifest.pop("artifact_fingerprints", None)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 

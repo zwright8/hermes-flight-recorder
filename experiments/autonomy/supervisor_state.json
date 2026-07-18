@@ -1,0 +1,2909 @@
+{
+  "active_layer": "evidence",
+  "blocked_packets": [
+    {
+      "artifacts": [
+        {
+          "description": "Fresh real-runtime preflight artifact: local model cache and adapters present; serving ML dependencies blocked.",
+          "kind": "serving_runtime_preflight",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json",
+          "sha256": "c5486006f55c27f5f341890e9965a2eec3bf32ea0d8cf8c36d6f313cd8c901c3"
+        },
+        {
+          "description": "Human-readable runtime preflight report with dependency table, adapter table, and managed command refs.",
+          "kind": "report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/SERVING_RUNTIME_PREFLIGHT.md",
+          "sha256": "92b5ea6da2de634329e77204e0bd2f5270db512b9c190266e3deaebfcceeadf7"
+        }
+      ],
+      "blocked_at": "2026-07-02T14:25:25Z",
+      "id": "serving_real_runtime_dependency_preflight_blocked",
+      "layer": "serving_demo",
+      "priority": "high",
+      "status": "blocked",
+      "summary": "Real Qwen3-4B managed serving capture is blocked because the current repo Python environment lacks torch, transformers, peft, and accelerate. The local model cache and trace_only/flightrecorder adapters exist and are hashed in serving_runtime_preflight.json.",
+      "title": "Real runtime serving capture blocked on serving dependencies",
+      "verification": [
+        {
+          "command": "uv run python scripts/preflight_serving_runtime.py --model Qwen/Qwen3-4B-Instruct-2507 --adapter trace_only=... --adapter flightrecorder=... --out experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json --report experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/SERVING_RUNTIME_PREFLIGHT.md --allow-blocked",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "blocked",
+          "summary": "Wrote a schema-checkable blocked preflight: model cache and adapter files present; torch, transformers, peft, and accelerate unavailable."
+        },
+        {
+          "command": "uv run python -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "Generated runtime preflight validates against hfr.serving_runtime_preflight.v1."
+        },
+        {
+          "command": "pgrep -fl 'serve_transformers_openai.py|mock_openai_serving.py|run_managed_serving_eval.py|check_openai_serving.py|build_serving_demo_report.py|verify_serving_profiles.py|preflight_serving_runtime.py|evaluate_hermes_heldout.py'",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "No matching serving/demo helper processes remained after verification."
+        }
+      ]
+    }
+  ],
+  "completed_packets": [
+    {
+      "artifacts": [
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "flightrecorder/training.py"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "flightrecorder/schemas/dataset_registry.v1.schema.json"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "flightrecorder/schemas/training_manifest.v1.schema.json"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "tests/test_training_export.py"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "TRAINING_PIPELINE.md"
+        },
+        {
+          "kind": "artifact",
+          "layer": "data",
+          "path": "README.md"
+        }
+      ],
+      "completed_at": "2026-07-02T13:50:08Z",
+      "id": "data_dataset_registry_contracts",
+      "layer": "data",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Observed concurrent data checkpoint for dataset registry, manifest, metrics, and validation coverage.",
+      "title": "Register dataset versions with redaction and label provenance",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_training_export",
+          "status": "pass"
+        },
+        {
+          "command": "python3 -m unittest tests.test_schema_registry",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/hermes_harness.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "harness",
+          "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "harness",
+          "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_deployment_hardening.py"
+        },
+        {
+          "description": "Bundled JSON Schema for harness_replay_result.json.",
+          "kind": "schema",
+          "layer": "harness",
+          "path": "flightrecorder/schemas/harness_replay_result.v1.schema.json"
+        }
+      ],
+      "completed_at": "2026-07-02T13:58:00Z",
+      "id": "harness_manifest_mock_runner_contracts",
+      "layer": "harness",
+      "priority": "high",
+      "started_at": "2026-07-02T13:35:25Z",
+      "status": "completed",
+      "summary": "Added a common harness facade with mock run_scenario/run_suite/probe/replay commands, isolated sandbox metadata, fake-secret canaries, tool-policy capture, trace capture, scorecard artifacts, replay references, bundled schemas for run and replay artifacts, validate flags, and nonzero CLI exits on failed harness scorecards.",
+      "title": "Add manifest-backed mock harness runner and validation contracts",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_deployment_hardening tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T13:58:00Z",
+          "status": "pass",
+          "summary": "16 touched tests passed, including harness artifact/replay coverage, failed-run exit-code regression, and schema catalog registration."
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile scripts/hermes_harness.py flightrecorder/cli.py flightrecorder/validation.py tests/test_deployment_hardening.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T13:58:00Z",
+          "status": "pass",
+          "summary": "Changed Python files compile successfully."
+        },
+        {
+          "command": "scripts/hermes_harness.py run-scenario + flightrecorder validate --run + flightrecorder validate --harness-manifest --harness-result + replay-trace + validate --harness-replay-result + probe-model",
+          "completed_at": "2026-07-02T13:58:00Z",
+          "status": "pass",
+          "summary": "Direct CLI smoke produced a validated mock run, validated harness run contracts, replayed from lineage, validated the replay receipt, and wrote a mock probe artifact."
+        },
+        {
+          "command": "architect subagent review after first pass",
+          "completed_at": "2026-07-02T13:58:00Z",
+          "status": "pass",
+          "summary": "Architect initially blocked on exit-code and replay-schema gaps; both were fixed and regression tested."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Writes serving profile, compatibility report, and readiness check artifacts.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/check_openai_serving.py",
+          "sha256": "2cbfa247d7ed39bcacfc5dc1934f22dc0ab9e149233ecfdd34389320cfc719f8"
+        },
+        {
+          "description": "Held-out evaluator can require a ready serving profile before running suites.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/evaluate_hermes_heldout.py",
+          "sha256": "667a6addfbf3302274c6748cfbb71013856ee8238a582a4fcd602cb8b913aebc"
+        },
+        {
+          "description": "Serving preflight, Eval guard, engine profile, and replay demo commands.",
+          "kind": "doc",
+          "layer": "serving_demo",
+          "path": "docs/serving-demo.md",
+          "sha256": "3c961a2471955c0032844ceb77b4dec598ae901adc6548bc4fd920f965c73a3e"
+        },
+        {
+          "description": "Managed-mock endpoint serving profile sample artifact.",
+          "kind": "serving_profile",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+          "sha256": "07eb5a44a2b2103059cdde813a9a371d3f67ad91b8b1254eb9a9045eb8e61b24"
+        },
+        {
+          "description": "Managed-mock tool-call and structured-output compatibility report.",
+          "kind": "compatibility_report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json",
+          "sha256": "badfac07c6057a70a8e95ac68c5c55e8bb71e58bc11028794280e1841397ef90"
+        },
+        {
+          "description": "Managed-mock endpoint readiness check summary.",
+          "kind": "serving_check",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json",
+          "sha256": "b8344c8d7197137772664274af56db62c0a646f2ac1062a4af46187f1629df4b"
+        }
+      ],
+      "completed_at": "2026-07-02T13:52:30Z",
+      "id": "serving_endpoint_preflight_profiles",
+      "layer": "serving_demo",
+      "priority": "high",
+      "started_at": "2026-07-02T13:45:00Z",
+      "status": "completed",
+      "summary": "Added a dependency-free endpoint preflight that writes serving_profile, compatibility_report, and serving_check artifacts for real or managed-mock OpenAI-compatible endpoints, plus held-out Eval validation for ready profiles.",
+      "title": "Add OpenAI-compatible serving preflight profiles and Eval guard",
+      "verification": [
+        {
+          "command": "uv run python -m unittest tests.test_serving_demo",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "5 tests passed for serving preflight artifacts, Eval profile validation, engine readiness metadata, and demo report links."
+        },
+        {
+          "command": "uv run python -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py scripts/evaluate_hermes_heldout.py scripts/build_agentic_finetune_experiment.py",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "Touched serving/demo scripts compile successfully."
+        },
+        {
+          "command": "uv run python scripts/check_openai_serving.py --mock-response 'hfr serving smoke ok' --require-tool-call --require-structured-output --model hfr-mock-model --out experiments/qwen3_4b_flightrecorder/serving/mock_openai_check",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "Managed mock endpoint passed health, models, metadata, chat, tool-call, structured-output, and identity checks."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Builds hfr.serving_demo_run.v1 JSON and Markdown replay reports from eval artifacts.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/build_serving_demo_report.py",
+          "sha256": "6a97771d324b54f8e3feaed6a7cd459686f15e85a86b856465192a64b64ffd82"
+        },
+        {
+          "description": "Regression coverage for serving preflight, Eval guard, and replay report artifacts.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_serving_demo.py",
+          "sha256": "f7928286470385f2abd701219fc339a7d61c7e32e4f44600b1598c00430ac99a"
+        },
+        {
+          "description": "Experiment bundle next commands now include serving preflight, Eval profile use, and demo report generation.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/build_agentic_finetune_experiment.py",
+          "sha256": "81342b1ce81a19bcc2a8fa6a9e1d0335c2090d86598729f68eb6fa27b2014a32"
+        },
+        {
+          "description": "Replayable base/trace-only/Flight Recorder demo run JSON.",
+          "kind": "demo_run",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+          "sha256": "4cfb49e3fc77ce45623282e78c53b2f9c7e1c95e46da643ba888e93233921f94"
+        },
+        {
+          "description": "Human-readable replay report with evidence-backed claims and scenario links.",
+          "kind": "report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
+          "sha256": "ed1e069750baf9439235a367ddb425a8fe5254a4dce848835e907d127b285a10"
+        }
+      ],
+      "completed_at": "2026-07-02T13:52:30Z",
+      "id": "serving_replay_demo_report",
+      "layer": "serving_demo",
+      "priority": "high",
+      "started_at": "2026-07-02T13:48:00Z",
+      "status": "completed",
+      "summary": "Added a demo report generator that consumes eval summaries or suite summaries and writes evidence-backed claims plus a scenario replay index linking traces, scorecards, run digests, lineage, and reports.",
+      "title": "Generate replayable base-vs-candidate demo artifacts",
+      "verification": [
+        {
+          "command": "uv run python scripts/build_serving_demo_report.py --arm baseline=experiments/qwen3_4b_flightrecorder/evaluations/baseline/evaluation_summary.json --arm trace_only=experiments/qwen3_4b_flightrecorder/evaluations/trace_only/evaluation_summary.json --arm flightrecorder=experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --out experiments/qwen3_4b_flightrecorder/serving/demo_run.json --report experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "Generated demo_run.json and DEMO_REPORT.md with 5 evidence-backed claims."
+        },
+        {
+          "command": "uv run python -m unittest tests.test_deployment_hardening",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "14 deployment hardening tests passed for shared harness/live-smoke contracts."
+        },
+        {
+          "command": "uv run python -m unittest discover",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "fail",
+          "summary": "318/319 tests passed; existing non-Goal-6 validation-layer failure remains in tests.test_validation.ValidationTests.test_validate_warns_on_legacy_training_export_without_trainer_views (non_strict returned 1 instead of 0)."
+        },
+        {
+          "command": "pgrep -fl 'serve_transformers_openai.py|check_openai_serving.py|build_serving_demo_report.py|evaluate_hermes_heldout.py'",
+          "completed_at": "2026-07-02T13:52:30Z",
+          "status": "pass",
+          "summary": "No matching serving/eval helper processes remained after terminating an unmanaged pre-existing local Transformers server on port 8002."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Public JSON Schema for compare export gate decisions.",
+          "kind": "schema",
+          "layer": "evidence",
+          "path": "flightrecorder/schemas/compare_gate.v1.schema.json"
+        },
+        {
+          "description": "Public JSON Schema for reviewed export gate decisions.",
+          "kind": "schema",
+          "layer": "evidence",
+          "path": "flightrecorder/schemas/reviewed_gate.v1.schema.json"
+        },
+        {
+          "description": "Schema manifest entries for compare_gate and reviewed_gate.",
+          "kind": "schema_manifest",
+          "layer": "evidence",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "description": "Regression checks that generated compare gate pass and block artifacts validate through the schema registry.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_compare_gate.py"
+        },
+        {
+          "description": "Regression checks that generated reviewed gate pass and block artifacts validate through the schema registry.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_reviewed_gate.py"
+        },
+        {
+          "description": "Registry coverage for the new compare and reviewed gate schema names.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_schema_registry.py"
+        },
+        {
+          "description": "Training handoff docs now list all schema-checkable gate result artifacts.",
+          "kind": "doc",
+          "layer": "evidence",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "completed_at": "2026-07-02T13:54:38Z",
+      "id": "evidence_compare_reviewed_gate_schema_contracts",
+      "layer": "evidence",
+      "priority": "medium",
+      "status": "completed",
+      "summary": "Registered compare and reviewed gate result schemas, covered generated pass/block gate artifacts with registry checks, and documented the shared gate decision contract alongside suite and training gates.",
+      "title": "Publish schema contracts for compare and reviewed gate decisions",
+      "verification": [
+        {
+          "command": ".venv/bin/python -m unittest tests.test_schema_registry tests.test_compare_gate tests.test_reviewed_gate",
+          "completed_at": "2026-07-02T13:54:38Z",
+          "status": "pass",
+          "summary": "34 schema registry, compare gate, and reviewed gate tests passed."
+        },
+        {
+          "command": "tmpdir=$(mktemp -d); .venv/bin/python -m flightrecorder schemas --name compare_gate --name reviewed_gate --write-dir \"$tmpdir\"",
+          "completed_at": "2026-07-02T13:54:38Z",
+          "status": "pass",
+          "summary": "The schema registry exported compare_gate, reviewed_gate, and a manifest into a temporary directory."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder schemas --check experiments/autonomy/supervisor_state.json",
+          "completed_at": "2026-07-02T13:54:38Z",
+          "status": "pass",
+          "summary": "Supervisor state validates after recording the compare/reviewed gate schema packet."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Policy-driven top-level promotion decision artifact builder.",
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py",
+          "sha256": "aacab95c89e0b6f20f53310816e11058dd76b3d8c46e1432df58bd4c7a02c7a1"
+        },
+        {
+          "description": "Adds promotion-decision generation and validation wiring.",
+          "kind": "cli",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py",
+          "sha256": "5499ac63bf3248e11cdd8081202241446d6b71d0f38dae471c85d9f87142121b"
+        },
+        {
+          "description": "Validates hfr.promotion_decision.v1 governance artifacts.",
+          "kind": "validator",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py",
+          "sha256": "1a46d051205a2e26250bb1c89f2ec003460095fc51a29653b73d2b6e8f453999"
+        },
+        {
+          "description": "Keeps model-registry timestamps Python 3.9 compatible for CLI verification.",
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/model_registry.py",
+          "sha256": "87b3489b69a47582961ef4f4fb8423e7d8c0f2382b3cdc161eb09b61e2a903cf"
+        },
+        {
+          "description": "Regression coverage for promotion decision blocking and allow cases.",
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "e05a20faad1b3a926d24639f4bc7ff136229d46df31dcfbb5d982e0267e9b908"
+        },
+        {
+          "description": "Strict demo policy for required artifacts, eval arms, gates, and critical blockers.",
+          "kind": "policy",
+          "layer": "governance",
+          "path": "examples/promotion_policy.demo.json",
+          "sha256": "e90289ad2b8f7e07f4172c712f05f47a73f40e02e1fb7e2656bfe9c0a7978b7b"
+        },
+        {
+          "description": "Goal 8 governance command, policy, and alias-movement boundary documentation.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-governance.md",
+          "sha256": "1c2642e6ad3aeedf9c4c4ebeecc603dc130930998b20809b2f3ec5bf9ff69b93"
+        },
+        {
+          "description": "Goal 8 deliverables now reference the promotion-decision command and validation sequence.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-autonomous-goals.md",
+          "sha256": "107cd265be53d6f072277364b785aa79392c28a100b704311cd452511ea930ab"
+        }
+      ],
+      "completed_at": "2026-07-02T13:56:34Z",
+      "depends_on": [],
+      "id": "governance_promotion_decision_artifact",
+      "layer": "governance",
+      "priority": "high",
+      "started_at": "2026-07-02T13:48:53Z",
+      "status": "completed",
+      "summary": "Added policy-driven promotion-decision generation, validation, strict demo policy, docs, and tests for cross-layer governance blocking conditions.",
+      "title": "Add top-level promotion decision artifact",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/model_registry.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T13:56:34Z",
+          "status": "pass",
+          "summary": "Governance builder, CLI, validator, model-registry compatibility patch, and tests compile under the local Python 3.9 runtime."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_compare_gate",
+          "completed_at": "2026-07-02T13:56:34Z",
+          "status": "pass",
+          "summary": "26 governance-adjacent tests passed, covering promotion decisions, promotion ledger gates, and compare gates."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/autonomy/supervisor_state.json",
+          "completed_at": "2026-07-02T13:56:34Z",
+          "status": "pass",
+          "summary": "Supervisor state schema validation passes after the Goal 8 merge."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Shared helper for gate readiness, recommendation, failed checks, next actions, and contract summaries.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/gate_contract.py"
+        },
+        {
+          "description": "Suite gate output now carries the unified evidence decision contract.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/suite_gate.py"
+        },
+        {
+          "description": "Training gate output now carries the unified evidence decision contract.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/training_gate.py"
+        },
+        {
+          "description": "Compare gate output now carries the unified evidence decision contract.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/compare_gate.py"
+        },
+        {
+          "description": "Reviewed gate output now carries the unified evidence decision contract.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/reviewed_gate.py"
+        },
+        {
+          "description": "Evidence bundles summarize and block malformed gate contracts.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/bundle.py"
+        },
+        {
+          "description": "Strict validation checks bundle gate contract shape and readiness/recommendation consistency.",
+          "kind": "validator",
+          "layer": "evidence",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "description": "Regression coverage for ready and blocked gate decision contracts.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_training_gate.py"
+        },
+        {
+          "description": "Regression coverage for suite gate decision contracts.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_cli_report.py"
+        },
+        {
+          "description": "Regression coverage for evidence bundles rejecting low-signal gate artifacts.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_evidence_bundle.py"
+        },
+        {
+          "description": "Public docs now describe the evidence gate decision fields and bundle enforcement.",
+          "kind": "doc",
+          "layer": "evidence",
+          "path": "README.md"
+        }
+      ],
+      "completed_at": "2026-07-02T13:57:22Z",
+      "depends_on": [],
+      "id": "evidence_unified_gate_decision_contract",
+      "layer": "evidence",
+      "priority": "high",
+      "started_at": "2026-07-02T13:35:02Z",
+      "status": "completed",
+      "summary": "Unified suite, training, compare, and reviewed gate handoffs around explicit readiness, recommendation, failed checks, next actions, and a decision contract; evidence bundles now block gates that omit or mismatch that contract.",
+      "title": "Unify readiness contracts for evidence gates",
+      "verification": [
+        {
+          "command": "python3.11 -m unittest tests.test_training_gate tests.test_compare_gate tests.test_reviewed_gate tests.test_cli_report tests.test_evidence_bundle",
+          "completed_at": "2026-07-02T13:57:22Z",
+          "status": "pass",
+          "summary": "80 focused evidence gate and bundle tests passed."
+        },
+        {
+          "command": "python3.11 -m flightrecorder validate --evidence-bundle <fresh evidence handoff>/evidence_bundle.json --strict && python3.11 -m flightrecorder schemas --check <fresh evidence handoff>/evidence_bundle.json",
+          "completed_at": "2026-07-02T13:57:22Z",
+          "status": "pass",
+          "summary": "Fresh run-suite evidence handoff with suite and training gates validated strictly, schema-checked, and reported valid ready gate contracts."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Action ledger gate decisions now expose failed checks and actionable next actions.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/action_gate.py"
+        },
+        {
+          "description": "Improvement ledger gate decisions now expose failed checks and actionable next actions.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/improvement_gate.py"
+        },
+        {
+          "description": "Promotion ledger gate decisions now expose failed checks and actionable next actions.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/promotion_gate.py"
+        },
+        {
+          "description": "Validation now checks ledger-gate decision next-action structure.",
+          "kind": "validator",
+          "layer": "evidence",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "description": "Regression coverage for action ledger gate ready and blocked next-action decisions.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_action_ledger.py"
+        },
+        {
+          "description": "Regression coverage for improvement ledger gate ready and blocked next-action decisions.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_improvement_gate.py"
+        },
+        {
+          "description": "Regression coverage for promotion ledger gate ready and blocked next-action decisions.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_promotion_ledger.py"
+        }
+      ],
+      "completed_at": "2026-07-02T13:57:22Z",
+      "depends_on": [
+        "evidence_unified_gate_decision_contract"
+      ],
+      "id": "evidence_ledger_gate_next_actions",
+      "layer": "evidence",
+      "priority": "high",
+      "started_at": "2026-07-02T13:47:00Z",
+      "status": "completed",
+      "summary": "Action, improvement, and promotion ledger gate decisions now include failed-check inventories and structured next actions, with validation rejecting malformed decision-action payloads.",
+      "title": "Add next-action contracts to ledger gates",
+      "verification": [
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T13:57:22Z",
+          "status": "pass",
+          "summary": "328 tests passed under the supported Python 3.11 runtime."
+        },
+        {
+          "command": "PYTHON=python3.11 ./release_check.sh",
+          "completed_at": "2026-07-02T13:57:22Z",
+          "status": "pass",
+          "summary": "Repository release check passed, including unit discovery, compileall, demo artifacts, schema checks, replay validation, and negative gate checks."
+        },
+        {
+          "command": "git diff --check",
+          "completed_at": "2026-07-02T13:57:22Z",
+          "status": "pass",
+          "summary": "No whitespace errors."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Gate contract validation now rejects contradictory passed/readiness/recommendation states.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/gate_contract.py"
+        },
+        {
+          "description": "Training exports scan persisted metadata as key=value pairs before writing registered evidence artifacts.",
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/training.py"
+        },
+        {
+          "description": "Training-export validation recomputes redaction over rows, curriculum, and persisted metadata surfaces.",
+          "kind": "validator",
+          "layer": "evidence",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "description": "Regression coverage for forged passed gates with failed checks.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_evidence_bundle.py"
+        },
+        {
+          "description": "Regression coverage for secret-like export metadata rejection.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_training_export.py"
+        },
+        {
+          "description": "Regression coverage for validation-time rejection of tampered secret-like metadata.",
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_validation.py"
+        }
+      ],
+      "completed_at": "2026-07-02T14:17:30Z",
+      "depends_on": [
+        "evidence_unified_gate_decision_contract",
+        "evidence_ledger_gate_next_actions"
+      ],
+      "id": "evidence_contract_blocker_closure",
+      "layer": "evidence",
+      "priority": "critical",
+      "started_at": "2026-07-02T13:57:22Z",
+      "status": "completed",
+      "summary": "Closed read-only architect blockers by rejecting contradictory gate contracts and scanning persisted training-export metadata before export and during validation.",
+      "title": "Close evidence contract semantic and redaction blockers",
+      "verification": [
+        {
+          "command": "python3.11 -m unittest tests.test_evidence_bundle",
+          "completed_at": "2026-07-02T14:17:30Z",
+          "status": "pass",
+          "summary": "10 evidence-bundle tests passed, including contradictory passed-gate blocking."
+        },
+        {
+          "command": "python3.11 -m unittest tests.test_training_export tests.test_validation",
+          "completed_at": "2026-07-02T14:17:30Z",
+          "status": "pass",
+          "summary": "39 training export and validation tests passed, including metadata redaction regressions."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T14:17:30Z",
+          "status": "pass",
+          "summary": "346 tests passed under the supported Python 3.11 runtime."
+        },
+        {
+          "command": "PYTHON=python3.11 ./release_check.sh",
+          "completed_at": "2026-07-02T14:17:30Z",
+          "status": "pass",
+          "summary": "Repository release check passed after blocker closure."
+        },
+        {
+          "command": "git diff --check",
+          "completed_at": "2026-07-02T14:17:30Z",
+          "status": "pass",
+          "summary": "No whitespace errors."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Model candidate, registry, alias, license, and dry-run plan builder/validation logic.",
+          "kind": "module",
+          "layer": "model",
+          "path": "flightrecorder/model_registry.py",
+          "sha256": "87b3489b69a47582961ef4f4fb8423e7d8c0f2382b3cdc161eb09b61e2a903cf"
+        },
+        {
+          "description": "CLI commands for candidate validation, registry register/list/alias/validate, and dry-run training plans.",
+          "kind": "cli",
+          "layer": "model",
+          "path": "flightrecorder/cli.py",
+          "sha256": "179bd9d561e5abf86892ba6fbd148835386841e3bf63b450da0c9d71ac836b07"
+        },
+        {
+          "description": "Central validation support for model candidates, registry entries, registries, and training plans.",
+          "kind": "validator",
+          "layer": "model",
+          "path": "flightrecorder/validation.py",
+          "sha256": "345d502083329ae46360abb6300d541944413bb7ac00a26458f0a8188fb7aea5"
+        },
+        {
+          "description": "Public model candidate JSON Schema.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_candidate.v1.schema.json",
+          "sha256": "b1e1d9dbfa41bcc1a2b44e26e16d9c0378786f3173b30cd0411a8bd8b8d5a312"
+        },
+        {
+          "description": "Public model registry entry JSON Schema.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_registry_entry.v1.schema.json",
+          "sha256": "0372ff53831c5a27e17ee9cf652f08cbbe7ee46fabd1921fa6001c2c94d70a06"
+        },
+        {
+          "description": "Public model registry JSON Schema.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_registry.v1.schema.json",
+          "sha256": "3acaa353e6ec4a7d271fab4358dad5e0ece5d2054ec27606b64dfd213c730784"
+        },
+        {
+          "description": "Public dry-run training plan JSON Schema.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/training_plan.v1.schema.json",
+          "sha256": "c5616e902019271057640ecdb5b9e2bd1d97069b2df857eef7c08831f7853c8b"
+        },
+        {
+          "description": "Schema catalog entries for model-layer contracts.",
+          "kind": "schema_catalog",
+          "layer": "model",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "9e1a14ef97c6e5bd9675d98f098aefc61a6aa5b27735d900b77e5a8b2f4a129b"
+        },
+        {
+          "description": "Regression tests for approved and blocked license states, aliases, CLI, schemas, and offline sentinels.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py",
+          "sha256": "4d6ee893264b7f8ffb1f46004ee7e8d57a150baaa6170dcc5ff2ddee6eadbcd0"
+        },
+        {
+          "description": "Schema catalog regression coverage for model-layer contracts.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "ad3a6c32f8aee9d076a4e8b483ee707d45ae4525faf90dce0ea4bda868cda0d5"
+        },
+        {
+          "description": "No-download local mock model candidate with approved license and compatibility metadata.",
+          "kind": "candidate",
+          "layer": "model",
+          "path": "experiments/registry/model_candidates/local_mock_tiny_chat.json",
+          "sha256": "f0b9872daf34a0390ad4df5c3e7e6fcf9bcb56ecc8fb55a3490b174be59602cf"
+        },
+        {
+          "description": "Generated local model registry with candidate alias.",
+          "kind": "registry",
+          "layer": "model",
+          "path": "experiments/registry/model_registry.json",
+          "sha256": "d2a45063d36e36f3fa77edec59190a0af3acbc6b47d16856e1e5679bf38eeaa4"
+        },
+        {
+          "description": "Generated dry-run training plan for the local mock candidate.",
+          "kind": "training_plan",
+          "layer": "model",
+          "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+          "sha256": "fb26253bb21f425f9886c92f9ef299a31309690458a978d8a4ab52518d99dd3e"
+        },
+        {
+          "description": "Model-layer registry, license gate, alias, and dry-run plan documentation.",
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md",
+          "sha256": "9e35fe5162edd587b848adf122068319d3f07ec60b182e30fe7440d573b2ee9d"
+        }
+      ],
+      "completed_at": "2026-07-02T14:02:18Z",
+      "id": "model_registry_license_dry_run_plan",
+      "layer": "model",
+      "priority": "high",
+      "started_at": "2026-07-02T13:35:39Z",
+      "status": "completed",
+      "summary": "Added dependency-free model candidate, registry entry, registry alias, and dry-run training-plan contracts. Unknown and non-approved license states are blocked from training selection; champion alias movement requires an explicit rollback target.",
+      "title": "Add local model registry license gates and dry-run training plans",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_model_registry",
+          "status": "pass",
+          "summary": "5 model registry tests passed."
+        },
+        {
+          "command": "python3 -m flightrecorder model-candidate validate --candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --require-training-eligible",
+          "status": "pass",
+          "summary": "Approved local mock candidate passed training-eligibility validation."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --strict",
+          "status": "pass",
+          "summary": "Candidate, registry, and dry-run plan semantic validation passed with zero warnings."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/registry/model_candidates/local_mock_tiny_chat.json --name model_candidate",
+          "status": "pass",
+          "summary": "Model candidate schema check passed."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/registry/model_registry.json --name model_registry",
+          "status": "pass",
+          "summary": "Model registry schema check passed."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --name training_plan",
+          "status": "pass",
+          "summary": "Training plan schema check passed."
+        },
+        {
+          "command": "python3 -m unittest tests.test_schema_registry",
+          "status": "pass",
+          "summary": "18 schema-registry tests passed."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Registry-backed dry-run planning, launch blocking, smoke fixture writing, result archives, and registry events for agentic LoRA training.",
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/train_agentic_lora.py"
+        },
+        {
+          "description": "Public dry-run training plan schema.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_training_plan.v1.schema.json"
+        },
+        {
+          "description": "Public success, blocked, and classified failure result archive schema.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_training_result.v1.schema.json"
+        },
+        {
+          "description": "Public JSONL training registry event schema.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_training_registry_event.v1.schema.json"
+        },
+        {
+          "description": "Focused tests for registry-backed plans, blocked launches, reward extension modes, result archives, and generated plan schema checks.",
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_lora_training_plan.py"
+        },
+        {
+          "description": "Goal 5 usage docs for modes, dry-run plans, registry inputs, smoke fixture, result archives, and schema checks.",
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:03:17Z",
+      "id": "training_registry_backed_plan_archives",
+      "layer": "training",
+      "priority": "high",
+      "started_at": "2026-07-02T13:52:00Z",
+      "status": "completed",
+      "summary": "Agentic LoRA training now produces registry-backed dry-run plans for trace SFT, curated SFT, action SFT, DPO, SFT-then-DPO, reward-model, and step-reward modes; non-dry-run launches require registered model and dataset inputs by default and archive blocked or failed results before heavy training proceeds.",
+      "title": "Add registry-backed agentic LoRA plans and result archives",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_lora_training_plan",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "6 focused training-layer tests passed."
+        },
+        {
+          "command": "python3 -m py_compile scripts/train_agentic_lora.py tests/test_agentic_lora_training_plan.py",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "Training script and focused test compile successfully."
+        },
+        {
+          "command": "python3 scripts/train_agentic_lora.py --mode fr_sft_dpo --dry-run --require-registered-inputs --experiment-dir /tmp/hfr-agentic-lora-smoke --model-manifest /tmp/hfr-agentic-lora-smoke/registry/model_candidate.json --dataset-manifest /tmp/hfr-agentic-lora-smoke/registry/dataset_version.json --output-dir /tmp/hfr-agentic-lora-smoke/out --limit 1 --disable-trackio",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "Registry-required SFT-then-DPO smoke plan passed with 28 checks and preserved full row counts."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-lora-smoke/out/fr_sft_dpo_plan.json",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "Generated SFT-then-DPO plan validated against hfr.agentic_lora_training_plan.v1."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Smoke fixture writer emits a schema-versioned no-download registered model/dataset fixture.",
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/train_agentic_lora.py"
+        },
+        {
+          "description": "Public schema for hfr.agentic_lora_smoke_fixture.v1 manifests.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_smoke_fixture.v1.schema.json"
+        },
+        {
+          "description": "Schema catalog now exposes agentic_lora_smoke_fixture.",
+          "kind": "schema_catalog",
+          "layer": "training",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "description": "Regression coverage validates both stdout and on-disk smoke_fixture.json through the schema registry.",
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_lora_training_plan.py"
+        },
+        {
+          "description": "Training docs now call out smoke_fixture.json and its schema-check command.",
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:03:17Z",
+      "depends_on": [
+        "training_registry_backed_plan_archives"
+      ],
+      "id": "training_smoke_fixture_schema_contract",
+      "layer": "training",
+      "priority": "medium",
+      "started_at": "2026-07-02T13:58:00Z",
+      "status": "completed",
+      "summary": "The no-download registered smoke fixture is now a first-class schema-checkable handoff artifact, and focused tests validate both the generated fixture manifest and the row-limited registry-backed plan that consumes it.",
+      "title": "Make the registered training smoke fixture schema-checkable",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_lora_training_plan",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "6 focused training-layer tests passed, including smoke fixture schema validation."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-lora-smoke/smoke_fixture.json",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "Generated smoke_fixture.json validated against hfr.agentic_lora_smoke_fixture.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --name agentic_lora_smoke_fixture --write-dir /tmp/hfr-agentic-lora-schema-export --force",
+          "completed_at": "2026-07-02T14:03:17Z",
+          "status": "pass",
+          "summary": "Schema export wrote the smoke fixture schema and catalog manifest."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Managed server lifecycle runner that starts, preflights, optionally evaluates, and terminates local serving processes.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/run_managed_serving_eval.py"
+        },
+        {
+          "description": "Dependency-free OpenAI-compatible mock server for lifecycle smoke tests.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/mock_openai_serving.py"
+        },
+        {
+          "description": "Public schema for hfr.serving_lifecycle_run.v1 lifecycle artifacts.",
+          "kind": "schema",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/serving_lifecycle_run.v1.schema.json"
+        },
+        {
+          "description": "Schema catalog entry for serving_lifecycle_run.",
+          "kind": "schema_manifest",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "description": "Regression coverage for managed lifecycle preflight, eval handoff, cleanup, and schema validation.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_serving_demo.py"
+        },
+        {
+          "description": "Registry smoke coverage for the serving lifecycle schema.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_schema_registry.py"
+        },
+        {
+          "description": "Managed lifecycle docs include smoke, Transformers eval, and schema-check commands.",
+          "kind": "doc",
+          "layer": "serving_demo",
+          "path": "docs/serving-demo.md"
+        },
+        {
+          "description": "Concrete managed-mock lifecycle smoke artifact with ready preflight and cleanup metadata.",
+          "kind": "serving_lifecycle_run",
+          "layer": "serving_demo",
+          "path": "experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_lifecycle_run.json"
+        }
+      ],
+      "completed_at": "2026-07-02T14:04:41Z",
+      "depends_on": [
+        "serving_endpoint_preflight_profiles"
+      ],
+      "id": "serving_process_lifecycle_wrapper",
+      "layer": "serving_demo",
+      "priority": "medium",
+      "status": "completed",
+      "summary": "Added and schema-covered a managed serving lifecycle path that starts a local server command, polls OpenAI-compatible preflight readiness, passes profile placeholders to optional Eval commands, records logs/PID/cleanup metadata, and terminates the process.",
+      "title": "Add managed local server lifecycle helper for eval loops",
+      "verification": [
+        {
+          "command": ".venv/bin/python -m unittest tests.test_serving_demo tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "24 serving/demo and schema-registry tests passed."
+        },
+        {
+          "command": ".venv/bin/python -m py_compile scripts/run_managed_serving_eval.py scripts/mock_openai_serving.py scripts/check_openai_serving.py tests/test_serving_demo.py",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "Managed lifecycle scripts and serving tests compile."
+        },
+        {
+          "command": "tmpdir=$(mktemp -d); .venv/bin/python -m flightrecorder schemas --name serving_lifecycle_run --write-dir \"$tmpdir\"",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "The schema registry exported serving_lifecycle_run and a manifest into a temporary directory."
+        },
+        {
+          "command": ".venv/bin/python scripts/run_managed_serving_eval.py --server-command \".venv/bin/python scripts/mock_openai_serving.py --port <free-port> --model hfr-managed-model\" --base-url http://127.0.0.1:<free-port>/v1 --model hfr-managed-model --out experiments/autonomy/serving_lifecycle_mock_20260702T140229Z --readiness-timeout 10 --probe-interval 0.2 --request-timeout 2 --require-tool-call --require-structured-output",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "Managed mock endpoint reached ready preflight, wrote serving artifacts, skipped Eval by configuration, and terminated with cleanup metadata."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder schemas --check experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_lifecycle_run.json",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "Generated lifecycle artifact validates against hfr.serving_lifecycle_run.v1."
+        },
+        {
+          "command": "pgrep -fl 'mock_openai_serving.py|serve_transformers_openai.py|run_managed_serving_eval.py' || true",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "No managed mock, Transformers serving, or lifecycle helper processes remained."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder schemas --check experiments/autonomy/supervisor_state.json",
+          "completed_at": "2026-07-02T14:04:41Z",
+          "status": "pass",
+          "summary": "Supervisor state validates after recording the serving lifecycle packet."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "No-download compatibility report builder and semantic validation.",
+          "kind": "module",
+          "layer": "model",
+          "path": "flightrecorder/model_registry.py",
+          "sha256": "c87f601d80e824031c8878657492fb4b4cc30cfcb0fe44625a02b8c8eae13608"
+        },
+        {
+          "description": "model-candidate compatibility-report command and validate flag.",
+          "kind": "cli",
+          "layer": "model",
+          "path": "flightrecorder/cli.py",
+          "sha256": "fb1deaf06e6c56bd7586059a79402e0be5aafe4b7d090fdc61f9736d08fc07bc"
+        },
+        {
+          "description": "Central validation for model compatibility reports.",
+          "kind": "validator",
+          "layer": "model",
+          "path": "flightrecorder/validation.py",
+          "sha256": "d4ce1443e3559115242e4018b5cc2c9ca490038eb53e25ae3923c4a10a53c217"
+        },
+        {
+          "description": "Public model compatibility report JSON Schema.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_compatibility_report.v1.schema.json",
+          "sha256": "ec48ceb4754c05b9d540628ef049421e61db7e0e0f7e4d418b142e895c46bb67"
+        },
+        {
+          "description": "Schema catalog entry for model_compatibility_report.",
+          "kind": "schema_catalog",
+          "layer": "model",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "10a3bd55bd7c6ee579efd351973a88e2b11711617c1d24ac39d49effde6b8a27"
+        },
+        {
+          "description": "Regression coverage for compatibility reports and no-download policy.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py",
+          "sha256": "6bb47f6e9e838220462b3ba829a3d688ca2b779c8777a82ea237c5ec74e9f999"
+        },
+        {
+          "description": "Schema catalog coverage for compatibility reports.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "740990d20c92e6e164591a86a1f5b22014d894c4f59cbe6e60e5eae5baba96c4"
+        },
+        {
+          "description": "Generated no-download compatibility report for the local mock candidate.",
+          "kind": "compatibility_report",
+          "layer": "model",
+          "path": "experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+          "sha256": "c25faab5bdc28e0d9aa933245a7e5b31cfedd05a201a3656402a5df42e964644"
+        },
+        {
+          "description": "Documentation for the compatibility-report command and validation flag.",
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md",
+          "sha256": "d7dd6047493a3abb59989d5deb49f7e603389cbe3c46901b4db5e80a37182e0e"
+        }
+      ],
+      "completed_at": "2026-07-02T14:06:52Z",
+      "id": "model_compatibility_report_artifacts",
+      "layer": "model",
+      "priority": "high",
+      "started_at": "2026-07-02T14:04:00Z",
+      "status": "completed",
+      "summary": "Added hfr.model_compatibility_report.v1 artifacts that record context, tokenizer, chat template, serving, tool-call, structured-output, quantization, and memory metadata without downloads, heavy ML imports, or GPU work.",
+      "title": "Add no-download model compatibility report artifacts",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry",
+          "status": "pass",
+          "summary": "23 tests passed for model registry and schema catalog coverage."
+        },
+        {
+          "command": "python3 -m flightrecorder model-candidate compatibility-report --candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --out experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+          "status": "pass",
+          "summary": "Generated an 8-probe no-download compatibility report."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility_reports/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --strict",
+          "status": "pass",
+          "summary": "Candidate, compatibility report, registry, and dry-run plan validation passed with zero warnings."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/registry/compatibility_reports/local_mock_tiny_chat.json --name model_compatibility_report",
+          "status": "pass",
+          "summary": "Compatibility report schema check passed."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Adds hfr.registry_alias_receipt.v1 builder gated by promotion decisions.",
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py",
+          "sha256": "dd7c644da0d50f43ee743bb88c958385f8adadaef1a0cfee768c7a43148d85f2"
+        },
+        {
+          "description": "Adds model-registry alias-receipt and validate --registry-alias-receipt wiring.",
+          "kind": "cli",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py",
+          "sha256": "fb1deaf06e6c56bd7586059a79402e0be5aafe4b7d090fdc61f9736d08fc07bc"
+        },
+        {
+          "description": "Validates dry-run registry alias receipts and source fingerprints.",
+          "kind": "validator",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py",
+          "sha256": "d4ce1443e3559115242e4018b5cc2c9ca490038eb53e25ae3923c4a10a53c217"
+        },
+        {
+          "description": "Covers ready alias receipts, blocked promotion decisions, and champion rollback requirements.",
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "a1c9ce1940903bfb99730d4e4c6b9332b7a07db5540dc9d2a09f0be1794a7004"
+        },
+        {
+          "description": "Documents promotion-decision and registry alias receipt workflows.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-governance.md",
+          "sha256": "1882fbb9c50d0810645c230681beb7994b83a75775af08ba1dc298d49069f886"
+        },
+        {
+          "description": "Goal 8 deliverables now include alias receipt validation and tests.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-autonomous-goals.md",
+          "sha256": "2aa8e7be0eb32ab193ba4d32c25df4713f2636c9a8b66227ac5043088683beee"
+        }
+      ],
+      "completed_at": "2026-07-02T14:07:44Z",
+      "depends_on": [
+        "governance_promotion_decision_artifact"
+      ],
+      "id": "governance_alias_movement_receipts",
+      "layer": "governance",
+      "priority": "high",
+      "started_at": "2026-07-02T14:00:00Z",
+      "status": "completed",
+      "summary": "Added side-effect-free registry alias receipts that require passing promotion decisions, registered targets, explicit champion rollback, validation, docs, and tests.",
+      "title": "Gate registry alias movement on validated promotion decisions",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/model_registry.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T14:07:44Z",
+          "status": "pass",
+          "summary": "Governance builder, CLI, validator, model registry support, and promotion decision tests compile under the local Python runtime."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_compare_gate",
+          "completed_at": "2026-07-02T14:07:44Z",
+          "status": "pass",
+          "summary": "29 governance-adjacent tests passed, including registry alias receipt coverage."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Adds --preflight-only dependency checks and preflight result archives before model downloads or training.",
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/train_agentic_lora.py"
+        },
+        {
+          "description": "Result archive schema now permits preflight_passed and preflight_blocked statuses.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_training_result.v1.schema.json"
+        },
+        {
+          "description": "Registry event schema now permits preflight_passed and preflight_blocked statuses.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_training_registry_event.v1.schema.json"
+        },
+        {
+          "description": "Regression coverage for preflight-only missing-dependency archives and registry events.",
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_lora_training_plan.py"
+        },
+        {
+          "description": "Documents launch preflight usage and preflight statuses.",
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:08:50Z",
+      "depends_on": [
+        "training_smoke_fixture_schema_contract"
+      ],
+      "id": "training_smoke_launch_dependency_preflight",
+      "layer": "training",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:04:00Z",
+      "status": "completed",
+      "summary": "Added a bounded --preflight-only path that validates the launch plan, checks trainer dependencies by module spec, writes preflight_passed or preflight_blocked result archives and registry events, and records that no model download, device allocation, or training started.",
+      "title": "Add bounded dependency preflight for tiny training smoke launches",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_lora_training_plan",
+          "completed_at": "2026-07-02T14:08:50Z",
+          "status": "pass",
+          "summary": "7 focused training-layer tests passed, including preflight-only missing dependency archives."
+        },
+        {
+          "command": "python3 -m py_compile scripts/train_agentic_lora.py tests/test_agentic_lora_training_plan.py",
+          "completed_at": "2026-07-02T14:08:50Z",
+          "status": "pass",
+          "summary": "Training script and focused test compile successfully."
+        },
+        {
+          "command": "python3 scripts/train_agentic_lora.py --mode fr_action_sft --preflight-only --require-registered-inputs --experiment-dir /tmp/hfr-agentic-lora-preflight --model-manifest /tmp/hfr-agentic-lora-preflight/registry/model_candidate.json --dataset-manifest /tmp/hfr-agentic-lora-preflight/registry/dataset_version.json --output-dir /tmp/hfr-agentic-lora-preflight/out --result-registry /tmp/hfr-agentic-lora-preflight/registry/training_events.jsonl --preflight-extra-dependency hfr_missing_trainer_dependency_for_test --disable-trackio",
+          "completed_at": "2026-07-02T14:08:50Z",
+          "status": "pass",
+          "summary": "Command intentionally exited 1 with preflight_blocked, classified missing dependencies, and recorded no model downloads or training start."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-lora-preflight/out/fr_action_sft_result.json",
+          "completed_at": "2026-07-02T14:08:50Z",
+          "status": "pass",
+          "summary": "Generated preflight result archive validated against hfr.agentic_lora_training_result.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check-jsonl /tmp/hfr-agentic-lora-preflight/registry/training_events.jsonl --name agentic_lora_training_registry_event",
+          "completed_at": "2026-07-02T14:08:50Z",
+          "status": "pass",
+          "summary": "Generated preflight registry event validated against hfr.agentic_lora_training_registry_event.v1."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Registry lifecycle link helper for datasets, training runs, adapters, evals, and promotion decisions.",
+          "kind": "module",
+          "layer": "model",
+          "path": "flightrecorder/model_registry.py",
+          "sha256": "90a55bf7de87ae537521cc51c68af678f29c5f077b00604c78ad976d50b283ea"
+        },
+        {
+          "description": "model-registry link command.",
+          "kind": "cli",
+          "layer": "model",
+          "path": "flightrecorder/cli.py",
+          "sha256": "cd27d264de7df7c10efbdfdd00592304a496c5a9daa0807b60736b8886a9c689"
+        },
+        {
+          "description": "Regression coverage for lifecycle link commands and helper errors.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py",
+          "sha256": "600a4639a193d62f418167d01a12c986b2198e1336f2c82157995d74c7fb8794"
+        },
+        {
+          "description": "Registry with dataset and dry-run training-plan links attached to local_mock_tiny_chat.",
+          "kind": "registry",
+          "layer": "model",
+          "path": "experiments/registry/model_registry.json",
+          "sha256": "ba63af11a5f0b29fc04ff5e01eecfa3f99475911b17f1dbd3b4d652960680d91"
+        },
+        {
+          "description": "Lifecycle link command documentation.",
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md",
+          "sha256": "428dd758efe71507dfa6883a266cd7bf1ceca88553f35a2ce260ba18f98b421b"
+        }
+      ],
+      "completed_at": "2026-07-02T14:10:27Z",
+      "id": "model_registry_lifecycle_links",
+      "layer": "model",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:09:00Z",
+      "status": "completed",
+      "summary": "Exercised and documented registry lifecycle links so model entries can point to dataset manifests, dry-run training plans, and eval summaries without hand-editing registry JSON.",
+      "title": "Attach lifecycle links to model registry entries",
+      "verification": [
+        {
+          "command": "python3 -m flightrecorder model-registry link --registry experiments/registry/model_registry.json --entry candidate --type dataset --artifact-id mock-dataset-v1 --path experiments/registry/datasets/mock_dataset_manifest.json --metadata redaction_status=redacted",
+          "status": "pass",
+          "summary": "Attached dataset link to local_mock_tiny_chat."
+        },
+        {
+          "command": "python3 -m flightrecorder model-registry link --registry experiments/registry/model_registry.json --entry candidate --type training-run --artifact-id local_mock_tiny_chat_sft_dry_run --path experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --metadata mode=sft --metadata dry_run=true",
+          "status": "pass",
+          "summary": "Attached dry-run training-plan link to local_mock_tiny_chat."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder model-registry link --registry experiments/registry/model_registry.json --entry candidate --type eval --artifact-id eval-flightrecorder-heldout --path experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --metadata arm=flightrecorder",
+          "status": "pass",
+          "summary": "Attached a concrete held-out eval summary link to local_mock_tiny_chat."
+        },
+        {
+          "command": ".venv/bin/python -m unittest tests.test_model_registry tests.test_schema_registry",
+          "status": "pass",
+          "summary": "24 model registry and schema registry tests passed, including all lifecycle link categories and helper error cases."
+        },
+        {
+          "command": ".venv/bin/python -m py_compile flightrecorder/model_registry.py flightrecorder/cli.py tests/test_model_registry.py",
+          "status": "pass",
+          "summary": "Touched model registry code and tests compile."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder validate --model-registry experiments/registry/model_registry.json --strict",
+          "status": "pass",
+          "summary": "Updated linked registry validated with zero warnings."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder schemas --check experiments/registry/model_registry.json --name model_registry",
+          "status": "pass",
+          "summary": "Updated linked registry validates against hfr.model_registry.v1."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Builds hfr.serving_endpoint_suite.v1 readiness matrices from per-arm serving profiles and optional lifecycle artifacts.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/verify_serving_profiles.py",
+          "sha256": "f5e149f5b3af46867fb2c45eb2dc8c1083300f136059b49c85a498f597972282"
+        },
+        {
+          "description": "Public schema for suite-level OpenAI-compatible serving readiness artifacts.",
+          "kind": "schema",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/serving_endpoint_suite.v1.schema.json",
+          "sha256": "810e551d84a1cf94721e54c25e513fdc1f5fdf129f74b32e30bea7eb24aecea0"
+        },
+        {
+          "description": "Schema catalog entry for serving_endpoint_suite.",
+          "kind": "schema_manifest",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "273ffdb57ee7b67f6516347b7ea670849daa7f3165fff981cf0754290dee7888"
+        },
+        {
+          "description": "Regression coverage for endpoint-suite readiness, missing required arms, lifecycle linkage, and schema validation.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_serving_demo.py",
+          "sha256": "8afa70c2cc5b77e70b7a4d68e4b9b6f4c8fa70d9ac303d48f43bdb68921033d7"
+        },
+        {
+          "description": "Schema registry catalog coverage for serving_endpoint_suite.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "019750f7f708dbc03e395d178349dbd3f7f1a6914938940ebcaad07b3a7572a7"
+        },
+        {
+          "description": "Serving docs now include endpoint-suite guard commands and artifact purpose.",
+          "kind": "doc",
+          "layer": "serving_demo",
+          "path": "docs/serving-demo.md",
+          "sha256": "d5a2eca75758e8daa5545c17d45cb72a4c6921a1c28defa3689bcd0260312f81"
+        },
+        {
+          "description": "Experiment bundle next commands and card now route through endpoint-suite verification before demos.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/build_agentic_finetune_experiment.py",
+          "sha256": "5c244c0578bfd2ab050e88a915bc006174533ea5a1b871e37609745fa2fc89b1"
+        },
+        {
+          "description": "Replayable mock endpoint readiness matrix proving required mock/candidate profiles are ready and compatible.",
+          "kind": "serving_endpoint_suite",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/serving_endpoint_suite.json",
+          "sha256": "e3027d448bbff5ce6cd2a2207b0a281a7326483acbb45b49ab0b164cdee0b3f9"
+        },
+        {
+          "description": "Human-readable endpoint readiness matrix linked to serving profiles and lifecycle evidence.",
+          "kind": "report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/SERVING_ENDPOINTS.md",
+          "sha256": "2fe5906eebadc24e29509d1199af661229dea4c949f6d02a37f338bb9601afb7"
+        },
+        {
+          "description": "Goal 6 Ralph context snapshot for this serving/demo work slice.",
+          "kind": "context",
+          "layer": "serving_demo",
+          "path": ".omx/context/serving-demo-goal6-20260702T141018Z.md",
+          "sha256": "88068a66886bfbe5042b6351a17cf8f501ab18246bbf1af2fe482f4ebd92d729"
+        }
+      ],
+      "completed_at": "2026-07-02T14:12:14Z",
+      "depends_on": [
+        "serving_endpoint_preflight_profiles",
+        "serving_process_lifecycle_wrapper"
+      ],
+      "id": "serving_endpoint_suite_guard",
+      "layer": "serving_demo",
+      "priority": "high",
+      "started_at": "2026-07-02T14:06:00Z",
+      "status": "completed",
+      "summary": "Added a suite-level guard that checks required serving profiles, Eval readiness, model/adapter identity, OpenAI core capabilities, tool-call and structured-output support, and optional lifecycle cleanup before endpoint artifacts are trusted for Eval or demo replay.",
+      "title": "Verify endpoint profile suites before Eval and replay",
+      "verification": [
+        {
+          "command": "uv run python -m unittest tests.test_serving_demo tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "9 focused serving/schema catalog tests passed."
+        },
+        {
+          "command": "uv run python -m py_compile scripts/verify_serving_profiles.py scripts/run_managed_serving_eval.py scripts/mock_openai_serving.py scripts/check_openai_serving.py scripts/build_serving_demo_report.py scripts/evaluate_hermes_heldout.py tests/test_serving_demo.py",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "Serving/demo scripts and tests compile successfully."
+        },
+        {
+          "command": "uv run python scripts/verify_serving_profiles.py --profile mock=experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json --profile candidate=experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_profile.json --lifecycle candidate=experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle_run.json --required-arm mock --required-arm candidate --expect-model mock=hfr-mock-model --expect-model candidate=hfr-managed-mock --require-tool-call --require-structured-output --out experiments/qwen3_4b_flightrecorder/serving/serving_endpoint_suite.json --report experiments/qwen3_4b_flightrecorder/serving/SERVING_ENDPOINTS.md",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "Generated a passing mock/candidate endpoint suite with tool-call, structured-output, identity, and lifecycle checks."
+        },
+        {
+          "command": "uv run python -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/serving_endpoint_suite.json",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "Generated endpoint-suite artifact validates against hfr.serving_endpoint_suite.v1."
+        },
+        {
+          "command": "uv run python -m unittest tests.test_serving_demo tests.test_deployment_hardening tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "41 serving/demo, harness, and schema-registry tests passed."
+        },
+        {
+          "command": "uv run python -m unittest discover",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "Full discovery suite passed: 343 tests in 16.490s."
+        },
+        {
+          "command": "pgrep -fl 'serve_transformers_openai.py|mock_openai_serving.py|run_managed_serving_eval.py|check_openai_serving.py|build_serving_demo_report.py|verify_serving_profiles.py|evaluate_hermes_heldout.py'",
+          "completed_at": "2026-07-02T14:12:14Z",
+          "status": "pass",
+          "summary": "No matching serving/demo helper processes remained after verification."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "baseline profile with endpoint, model identity, adapter identity, and compatibility summary.",
+          "kind": "serving_profile",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/baseline/serving_profile.json",
+          "sha256": "aaa89ef3edab475f9c5c33a825eb0c503d0de54876c2589deac9c57eb215f272"
+        },
+        {
+          "description": "baseline managed lifecycle receipt with preflight and cleanup metadata.",
+          "kind": "serving_lifecycle_run",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/baseline/serving_lifecycle_run.json",
+          "sha256": "d50579c2b39c2445a7a5c748e5f6c22ecf5663ae78c8150f56d39a4727979db3"
+        },
+        {
+          "description": "trace_only profile with endpoint, model identity, adapter identity, and compatibility summary.",
+          "kind": "serving_profile",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_profile.json",
+          "sha256": "90d37d3dfa29344b324c2fb5495cae1729aada94f551986ceb1ddd60603e87d4"
+        },
+        {
+          "description": "trace_only managed lifecycle receipt with preflight and cleanup metadata.",
+          "kind": "serving_lifecycle_run",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_lifecycle_run.json",
+          "sha256": "ae5d0b158f67622ea0a47b01fc51a5348b0ff1b4c48d6cfd2178e41af631eeb2"
+        },
+        {
+          "description": "flightrecorder profile with endpoint, model identity, adapter identity, and compatibility summary.",
+          "kind": "serving_profile",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_profile.json",
+          "sha256": "1a168d0455a86cfcc8b176dc6a2a70dd19ad13985024dffd260991ca747e547b"
+        },
+        {
+          "description": "flightrecorder managed lifecycle receipt with preflight and cleanup metadata.",
+          "kind": "serving_lifecycle_run",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_lifecycle_run.json",
+          "sha256": "24f1cbf2b5868715320173507f4d615fc2788a07920907414e1bff4433e9ca1e"
+        },
+        {
+          "description": "Strict baseline/trace_only/flightrecorder endpoint readiness matrix over the managed local-adapter mock captures.",
+          "kind": "serving_endpoint_suite",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/serving_endpoint_suite.json",
+          "sha256": "d02232a1ee6e71a4be5d1c9a731e5d4587186441b6fa20a4d3c50e71961bef34"
+        },
+        {
+          "description": "Human-readable three-arm serving endpoint readiness report.",
+          "kind": "report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/SERVING_ENDPOINTS.md",
+          "sha256": "048969313cf367287b101178d5568a2dd8574e04528b5530ce92e24ba463a1d7"
+        }
+      ],
+      "completed_at": "2026-07-02T14:15:31Z",
+      "depends_on": [
+        "serving_process_lifecycle_wrapper",
+        "serving_endpoint_suite_guard"
+      ],
+      "id": "serving_local_adapter_mock_profile_suite",
+      "layer": "serving_demo",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:17:00Z",
+      "status": "completed",
+      "summary": "Generated a no-download three-arm serving profile suite for baseline, trace_only, and Flight Recorder using lifecycle-managed OpenAI-compatible mock endpoints while hashing real local adapter directories for trace_only and flightrecorder arms.",
+      "title": "Capture local adapter identity profiles through managed mock endpoints",
+      "verification": [
+        {
+          "command": "uv run python <inline> calling scripts/run_managed_serving_eval.py for baseline, trace_only, and flightrecorder mock endpoints with real local adapter paths",
+          "completed_at": "2026-07-02T14:15:31Z",
+          "status": "pass",
+          "summary": "All three managed captures reached ready preflight, wrote serving artifacts, and terminated their mock servers."
+        },
+        {
+          "command": "uv run python scripts/verify_serving_profiles.py --profile baseline=... --profile trace_only=... --profile flightrecorder=... --lifecycle ... --required-arm baseline --required-arm trace_only --required-arm flightrecorder --expect-model ... --expect-adapter trace_only=trace_sft_adapter --expect-adapter flightrecorder=fr_sft_dpo_adapter --require-tool-call --require-structured-output --strict-profile-arm --out experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/serving_endpoint_suite.json --report experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/SERVING_ENDPOINTS.md",
+          "completed_at": "2026-07-02T14:15:31Z",
+          "status": "pass",
+          "summary": "Strict endpoint-suite guard passed for baseline, trace_only, and flightrecorder arms with model identity, adapter identity, tool-call, structured-output, and lifecycle checks."
+        },
+        {
+          "command": "uv run python -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/serving_endpoint_suite.json",
+          "completed_at": "2026-07-02T14:15:31Z",
+          "status": "pass",
+          "summary": "Three-arm endpoint suite validates against hfr.serving_endpoint_suite.v1."
+        },
+        {
+          "command": "uv run python -m flightrecorder schemas --check local_adapter_mock_suite/{baseline,trace_only,flightrecorder}/serving_lifecycle_run.json",
+          "completed_at": "2026-07-02T14:15:31Z",
+          "status": "pass",
+          "summary": "All three lifecycle receipts validate against hfr.serving_lifecycle_run.v1."
+        },
+        {
+          "command": "pgrep -fl 'serve_transformers_openai.py|mock_openai_serving.py|run_managed_serving_eval.py|check_openai_serving.py|build_serving_demo_report.py|verify_serving_profiles.py|evaluate_hermes_heldout.py'",
+          "completed_at": "2026-07-02T14:15:31Z",
+          "status": "pass",
+          "summary": "No matching serving/demo helper processes remained after the three-arm capture."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Writes --write-backend-recipes bundles from validated registry-backed agentic LoRA plans.",
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/train_agentic_lora.py"
+        },
+        {
+          "description": "Public schema for hfr.agentic_lora_backend_recipes.v1 external trainer recipe bundles.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_backend_recipes.v1.schema.json"
+        },
+        {
+          "description": "Schema catalog entry for agentic_lora_backend_recipes.",
+          "kind": "schema_catalog",
+          "layer": "training",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "description": "Regression coverage for schema-checked backend recipe bundles and inert recipe files.",
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_lora_training_plan.py"
+        },
+        {
+          "description": "Training docs now cover backend recipe extension artifacts and schema checks.",
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:15:36Z",
+      "depends_on": [
+        "training_registry_backed_plan_archives",
+        "training_smoke_launch_dependency_preflight"
+      ],
+      "id": "training_backend_recipe_extension_points",
+      "layer": "training",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:11:00Z",
+      "status": "completed",
+      "summary": "Added schema-checkable external trainer recipe bundles for Axolotl, LLaMA Factory, Unsloth, reward/process reward trainers, and future GRPO/RL extension points. The bundle requires a passing registry-backed plan and registered model/dataset manifests, then writes inert JSON recipes with an explicit external-runner execution boundary.",
+      "title": "Add trainer backend recipe extension artifacts",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_lora_training_plan",
+          "completed_at": "2026-07-02T14:15:36Z",
+          "status": "pass",
+          "summary": "8 focused training-layer tests passed, including backend recipe bundle coverage."
+        },
+        {
+          "command": "python3 -m py_compile scripts/train_agentic_lora.py tests/test_agentic_lora_training_plan.py",
+          "completed_at": "2026-07-02T14:15:36Z",
+          "status": "pass",
+          "summary": "Training script and focused test compile successfully."
+        },
+        {
+          "command": "python3 scripts/train_agentic_lora.py --mode fr_sft_dpo --write-backend-recipes /tmp/hfr-agentic-lora-recipes/recipes --require-registered-inputs --experiment-dir /tmp/hfr-agentic-lora-recipes/fixture --model-manifest /tmp/hfr-agentic-lora-recipes/fixture/registry/model_candidate.json --dataset-manifest /tmp/hfr-agentic-lora-recipes/fixture/registry/dataset_version.json --output-dir /tmp/hfr-agentic-lora-recipes/out --limit 1 --disable-trackio",
+          "completed_at": "2026-07-02T14:15:36Z",
+          "status": "pass",
+          "summary": "Generated Axolotl, LLaMA Factory, Unsloth, and reward/process/RL recipe artifacts from a registered SFT-then-DPO smoke plan without executing trainers."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-lora-recipes/recipes/backend_recipes.json",
+          "completed_at": "2026-07-02T14:15:36Z",
+          "status": "pass",
+          "summary": "Generated recipe bundle validated against hfr.agentic_lora_backend_recipes.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --name agentic_lora_backend_recipes --write-dir /tmp/hfr-agentic-lora-recipes/schema-export --force",
+          "completed_at": "2026-07-02T14:15:36Z",
+          "status": "pass",
+          "summary": "Schema export wrote the backend-recipes schema and catalog manifest."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Shared harness publisher for live/mock manifest and result contracts.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/hermes_harness.py",
+          "sha256": "04d724cf049ae4cb5ae0d31da6e6b97ab38230e5d550108d950abf83c2304bfa"
+        },
+        {
+          "description": "Live Hermes smoke publishes harness_manifest.json and harness_result.json.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_hermes_smoke.py",
+          "sha256": "cc9a4890cff578da3f61b15ed6977cdcec8b04daeec6872ff5b6bb58f24b039f"
+        },
+        {
+          "description": "Live OpenClaw smoke publishes common harness artifacts with sandbox/process metadata.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_openclaw_smoke.py",
+          "sha256": "61db9aea48e1d0796541e1855c79138c7003b48f06f9596f3b42753dc29cd9ea"
+        },
+        {
+          "description": "Live Coven smoke publishes common harness artifacts for detached stream-json sessions.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_coven_smoke.py",
+          "sha256": "1b384055657fa18b5eb10ebb18ca9dd017ea0fb1a51c34b8a42ce26431b81076"
+        },
+        {
+          "description": "Per-scenario held-out Eval runs link harness artifacts from suite rows.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/evaluate_hermes_heldout.py",
+          "sha256": "48474645717c7f319b256ea61fd819b01580c4cbe09ebc08edcdbb6f88250b10"
+        },
+        {
+          "description": "Regression coverage for Hermes-style and Coven-style harness manifest/result publication and validation.",
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_deployment_hardening.py",
+          "sha256": "e2c19e00274de3957dcb0edc4e271500b5b2ec7078e09b3a82396df35d92f398"
+        },
+        {
+          "description": "Harness Runner docs describe live smoke/eval/Coven bridge artifacts.",
+          "kind": "doc",
+          "layer": "harness",
+          "path": "README.md",
+          "sha256": "7a73c0195eed2ff7d8a89e93a61b9e5652eba3561368c19cccdefa52c669975d"
+        }
+      ],
+      "completed_at": "2026-07-02T14:20:08Z",
+      "id": "harness_live_provider_manifest_bridge",
+      "layer": "harness",
+      "priority": "high",
+      "started_at": "2026-07-02T13:58:00Z",
+      "status": "completed",
+      "summary": "Added a shared publisher for already-scored live traces and wired Hermes smoke, OpenClaw smoke, Coven smoke, and held-out Hermes Eval runs to emit harness_manifest.json and harness_result.json with provider/model/base URL, sandbox, fake-secret canary, process, trace, scorecard, artifact, and replay metadata.",
+      "title": "Bridge live providers into harness manifests",
+      "verification": [
+        {
+          "command": ".venv/bin/python -m unittest tests.test_deployment_hardening tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:20:08Z",
+          "status": "pass",
+          "summary": "17 tests passed, including Hermes-style and Coven-style harness publication validation plus schema catalog coverage."
+        },
+        {
+          "command": ".venv/bin/python -m py_compile scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py scripts/evaluate_hermes_heldout.py tests/test_deployment_hardening.py",
+          "completed_at": "2026-07-02T14:20:08Z",
+          "status": "pass",
+          "summary": "Harness helper, live smoke scripts, held-out evaluator, and deployment tests compile successfully."
+        },
+        {
+          "command": "scripts/hermes_harness.py run-scenario + flightrecorder validate --harness-manifest --harness-result + replay-trace + validate --harness-replay-result",
+          "completed_at": "2026-07-02T14:16:19Z",
+          "status": "pass",
+          "summary": "Direct CLI smoke produced validated mock harness artifacts, replayed lineage, and validated the replay receipt."
+        },
+        {
+          "command": "scripts/live_hermes_smoke.py --help && scripts/live_openclaw_smoke.py --help && scripts/evaluate_hermes_heldout.py --help",
+          "completed_at": "2026-07-02T14:16:19Z",
+          "status": "pass",
+          "summary": "Live/eval entry points parse successfully without external runtimes."
+        },
+        {
+          "command": "git diff --check (scoped tracked files) + git diff --check --no-index /dev/null scripts/hermes_harness.py",
+          "completed_at": "2026-07-02T14:16:19Z",
+          "status": "pass",
+          "summary": "No whitespace errors in touched tracked files or the untracked harness helper file."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Adds deterministic hfr.promotion_cards.v1 model/dataset card generation.",
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py",
+          "sha256": "ca0cd19dd6486d1c372c25e6f323d1605288073cb0d1f938cd99011a5f8dea5f"
+        },
+        {
+          "description": "Adds promotion-cards command and validate --promotion-cards wiring.",
+          "kind": "cli",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py",
+          "sha256": "8f29828ea5fc35e3107f48583dbc5c56f07e9e1c6f04189846fbdecff57f52d0"
+        },
+        {
+          "description": "Validates promotion card manifests, content hashes, required sections, and linked Markdown files.",
+          "kind": "validator",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py",
+          "sha256": "5cba3bf9698694236a9a985e330e1fcf867df03843432284aea6af4035e26503"
+        },
+        {
+          "description": "Covers generated cards feeding a passing promotion decision and blocked missing rollback source.",
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "937b4b07e295a9d77b7179fdc9302b98610aad7eb5121d36feacc9cad9e855f1"
+        },
+        {
+          "description": "Documents promotion-cards generation and validation flow.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-governance.md",
+          "sha256": "1f0b0762e009ee1d1771f4ae281650764869b27c5fbc2744d116749755325350"
+        },
+        {
+          "description": "Goal 8 deliverables now include promotion-cards command and tests.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-autonomous-goals.md",
+          "sha256": "14922efc78a94c8a645e7f0aaa93be3e1ddf5bacaccfa5102bd0c65fc361cfdd"
+        }
+      ],
+      "completed_at": "2026-07-02T14:17:28Z",
+      "depends_on": [
+        "governance_promotion_decision_artifact"
+      ],
+      "id": "governance_card_generation_templates",
+      "layer": "governance",
+      "priority": "high",
+      "started_at": "2026-07-02T14:10:00Z",
+      "status": "completed",
+      "summary": "Added deterministic model/dataset card generation, manifest validation, documentation, and tests that feed generated cards into promotion decisions.",
+      "title": "Generate required model and dataset cards from promotion evidence",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/model_registry.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T14:17:28Z",
+          "status": "pass",
+          "summary": "Governance card generator, CLI, validator, registry support, and tests compile under the local Python runtime."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_compare_gate",
+          "completed_at": "2026-07-02T14:17:28Z",
+          "status": "pass",
+          "summary": "31 governance-adjacent tests passed, including generated promotion cards."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Dry-run training plans can embed and validate matching no-download compatibility-report proof.",
+          "kind": "module",
+          "layer": "model",
+          "path": "flightrecorder/model_registry.py",
+          "sha256": "046b50c81c1669191f74021e5b11b635bc1cac70e0475ca39e7aac76569f3c90"
+        },
+        {
+          "description": "training-plan dry-run accepts --compatibility-report and fingerprints the report into generated plans.",
+          "kind": "cli",
+          "layer": "model",
+          "path": "flightrecorder/cli.py",
+          "sha256": "2e08bf4650e5f357e5215b8364485b2cd313e8189d0c2f666267b56f018bf942"
+        },
+        {
+          "description": "Training-plan validation surfaces compatibility-report path and hash details.",
+          "kind": "validator",
+          "layer": "model",
+          "path": "flightrecorder/validation.py",
+          "sha256": "c897470cb0e03b620e19d61b9c7068015488a028ace2cf2e506ad080475a84f0"
+        },
+        {
+          "description": "Public training-plan schema includes optional compatibility_report proof records.",
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/training_plan.v1.schema.json",
+          "sha256": "d0150565d2cf653935e2692c601f6e3007916c9d841f4a59f109b1a513d17988"
+        },
+        {
+          "description": "Regression coverage for embedded compatibility-report proofs, mismatches, and failed reports.",
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py",
+          "sha256": "c094446a62ef319ae6d9e156e3c6113e87f2d36a1c15593a495ca2e495dfeae0"
+        },
+        {
+          "description": "Documented compatibility-report proof option for dry-run training plans.",
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md",
+          "sha256": "1933b6794e04f7097080f35669c425b76f7b225bcec69aa9e7c5e6c6d35231a5"
+        },
+        {
+          "description": "Regenerated dry-run training plan with compatibility report path and sha256 proof.",
+          "kind": "training_plan",
+          "layer": "model",
+          "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+          "sha256": "d7e099ef7fe661fb2647c38b0abf24d378c785707b547ae037b3b85dace6be76"
+        },
+        {
+          "description": "Source compatibility report fingerprinted by the dry-run training plan.",
+          "kind": "compatibility_report",
+          "layer": "model",
+          "path": "experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+          "sha256": "c25faab5bdc28e0d9aa933245a7e5b31cfedd05a201a3656402a5df42e964644"
+        }
+      ],
+      "completed_at": "2026-07-02T14:22:00Z",
+      "id": "model_training_plan_compatibility_proofs",
+      "layer": "model",
+      "priority": "high",
+      "started_at": "2026-07-02T14:18:00Z",
+      "status": "completed",
+      "summary": "Dry-run training plans can now carry a validated, matching, no-download compatibility-report proof. Plans reject mismatched or failed compatibility reports and expose the proof hash through validation details.",
+      "title": "Bind compatibility-report proof into dry-run training plans",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/cli.py flightrecorder/validation.py tests/test_model_registry.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T14:19:00Z",
+          "status": "pass",
+          "summary": "Touched model registry code, CLI, validator, and tests compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:19:00Z",
+          "status": "pass",
+          "summary": "25 model registry and schema registry tests passed."
+        },
+        {
+          "command": "python3 -m flightrecorder training-plan dry-run --registry experiments/registry/model_registry.json --model candidate --dataset-id mock-dataset-v1 --dataset-manifest experiments/registry/datasets/mock_dataset_manifest.json --compatibility-report experiments/registry/compatibility_reports/local_mock_tiny_chat.json --trainer local-test-trainer --mode sft --output-dir experiments/registry/adapters/local_mock_tiny_chat_sft --hyperparameter learning_rate=0.0001 --hyperparameter max_steps=0 --compute accelerator=none --compute dry_run=true --out experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+          "completed_at": "2026-07-02T14:19:17Z",
+          "status": "pass",
+          "summary": "Generated a dry-run plan with compatibility_report path and sha256 proof; no training, GPU work, or downloads occurred."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility_reports/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --strict",
+          "completed_at": "2026-07-02T14:20:00Z",
+          "status": "pass",
+          "summary": "Candidate, compatibility report, registry, and dry-run plan validation passed with zero warnings."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --name training_plan && python3 -m flightrecorder schemas --check experiments/registry/compatibility_reports/local_mock_tiny_chat.json --name model_compatibility_report",
+          "completed_at": "2026-07-02T14:20:00Z",
+          "status": "pass",
+          "summary": "Training plan and compatibility report schema checks passed."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Codex-style Coven smoke now publishes harness artifacts with real temp sandbox, HOME, workspace, canaries, process metadata, and summary links.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_coven_smoke.py",
+          "sha256": "1b384055657fa18b5eb10ebb18ca9dd017ea0fb1a51c34b8a42ce26431b81076"
+        },
+        {
+          "description": "Fixture-based regression validates Coven smoke harness manifest/result publication without launching Coven.",
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_coven_integration.py",
+          "sha256": "3ae960b9672d38b3b8b27c6c7a3df47867be14f35e0e70017e191feb2250bbdd"
+        },
+        {
+          "description": "Harness docs now include Coven/Codex-style live bridge outputs.",
+          "kind": "doc",
+          "layer": "harness",
+          "path": "README.md",
+          "sha256": "39e479a720637e8957f44877f2cd315afc7298165405238c0ab7afc7491d578e"
+        },
+        {
+          "description": "Shared harness publisher consumed by the Coven live smoke writer.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/hermes_harness.py",
+          "sha256": "04d724cf049ae4cb5ae0d31da6e6b97ab38230e5d550108d950abf83c2304bfa"
+        }
+      ],
+      "completed_at": "2026-07-02T14:21:08Z",
+      "depends_on": [
+        "harness_live_provider_manifest_bridge"
+      ],
+      "id": "harness_codex_style_runner_contract",
+      "layer": "harness",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:16:19Z",
+      "status": "completed",
+      "summary": "Hardened the Codex-style Coven smoke bridge so detached runs publish common harness artifacts with temp sandbox, isolated HOME, fake-secret canaries, process metadata, summary links, and fixture-based regression validation.",
+      "title": "Harden Codex-style harness runner and replay coverage",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py scripts/evaluate_hermes_heldout.py tests/test_deployment_hardening.py tests/test_coven_integration.py",
+          "completed_at": "2026-07-02T14:21:08Z",
+          "status": "pass",
+          "summary": "Harness helper, live smoke scripts, held-out evaluator, and touched tests compile successfully."
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_deployment_hardening tests.test_coven_integration tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:21:08Z",
+          "status": "pass",
+          "summary": "20 tests passed, including mock harness, live Hermes-style, Coven/Codex-style harness publication, and schema catalog coverage."
+        },
+        {
+          "command": "Fixture Coven harness generation + python -m flightrecorder validate --harness-manifest --harness-result --strict",
+          "completed_at": "2026-07-02T14:21:08Z",
+          "status": "pass",
+          "summary": "Generated Coven harness artifacts from the fixture trace and validated them through the CLI validator in a subprocess."
+        },
+        {
+          "command": "scripts/live_coven_smoke.py --help",
+          "completed_at": "2026-07-02T14:21:08Z",
+          "status": "pass",
+          "summary": "Codex/Coven-style live smoke entry point parses successfully without external runtime setup."
+        },
+        {
+          "command": "git diff --check (scoped tracked files) + git diff --check --no-index /dev/null scripts/hermes_harness.py",
+          "completed_at": "2026-07-02T14:21:08Z",
+          "status": "pass",
+          "summary": "No whitespace errors in touched tracked files or the untracked harness helper file."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Adds hfr.promotion_release_record.v1 builder and release note rendering.",
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py",
+          "sha256": "b356e3afa983c70b694e4984194ca8db85feac250248d7acd0ccdca645d04be9"
+        },
+        {
+          "description": "Adds promotion-release-record command and validate --promotion-release-record wiring.",
+          "kind": "cli",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py",
+          "sha256": "2e08bf4650e5f357e5215b8364485b2cd313e8189d0c2f666267b56f018bf942"
+        },
+        {
+          "description": "Validates release records, component schemas, release notes, and decision shape.",
+          "kind": "validator",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py",
+          "sha256": "dd5b352a339bf3b39428ba4e02d54f6335aa015abc8c780c201b8381c1a48d01"
+        },
+        {
+          "description": "Covers release records binding passed governance artifacts and blocking failed alias receipts.",
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "069f29f8c1a89369b98e25ba358a74a81a17b97e345f00b3e5605c91cace8c7b"
+        },
+        {
+          "description": "Documents release-record generation and validation flow.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-governance.md",
+          "sha256": "3c6ff75f04229009aae7bbba54c84dbaf80afbba9c5d75fe92c27ae8df5cd0c0"
+        },
+        {
+          "description": "Goal 8 deliverables now include release records and tests.",
+          "kind": "doc",
+          "layer": "governance",
+          "path": "docs/agentic-finetune-autonomous-goals.md",
+          "sha256": "f279859a9ab7d671ca0bc49b2f68dc5e2ab3ba0c2dd9d6276cfe7993ba90e9aa"
+        }
+      ],
+      "completed_at": "2026-07-02T14:22:53Z",
+      "depends_on": [
+        "governance_promotion_decision_artifact",
+        "governance_card_generation_templates"
+      ],
+      "id": "governance_release_records",
+      "layer": "governance",
+      "priority": "high",
+      "started_at": "2026-07-02T14:18:00Z",
+      "status": "completed",
+      "summary": "Added side-effect-free release records and Markdown notes binding promotion decisions, cards, alias receipts, rollback targets, evals, docs, and tests.",
+      "title": "Record governance release evidence before promotion",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/model_registry.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T14:22:53Z",
+          "status": "pass",
+          "summary": "Governance release record builder, CLI, validator, registry support, and tests compile under the local Python runtime."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_compare_gate",
+          "completed_at": "2026-07-02T14:22:53Z",
+          "status": "pass",
+          "summary": "33 governance-adjacent tests passed, including promotion release records."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Dependency-free fail-closed external eval adapter planner.",
+          "kind": "script",
+          "layer": "eval",
+          "path": "scripts/plan_external_eval_adapters.py",
+          "sha256": "bc654e0e86abfe9dcf34237be1283d0e17b9d3e1e1b0a9f1ad4d19f3f7fc0238"
+        },
+        {
+          "description": "Regression tests for eval handoff and external adapter planner.",
+          "kind": "test",
+          "layer": "eval",
+          "path": "tests/test_agentic_eval_layer.py",
+          "sha256": "b741ac6310009aca62230daf3c5011e786977bebcce946557474a976aa1c7d8e"
+        },
+        {
+          "description": "Goal 7 eval-layer handoff, comparison, and external adapter instructions.",
+          "kind": "doc",
+          "layer": "eval",
+          "path": "docs/agentic-finetune-eval-layer.md",
+          "sha256": "8ec650b1d90cf3830bc62b7a37485c5fa6819b62021523a5baec77aba8e7f2da"
+        },
+        {
+          "description": "BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench readiness plan.",
+          "kind": "external_eval_adapter_plan",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/evaluations/external_adapters/external_eval_adapters.json",
+          "sha256": "74dc32f7e58d10ded90df143981817b0ce33dad2d9c7dd8518998dfbfc9bce2b"
+        },
+        {
+          "description": "Experiment README notes external eval adapters fail closed.",
+          "kind": "doc",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/README.md",
+          "sha256": "97288bba3d6aff1a28389d138903893b3aa908a45db1288b8f75475ec622b81a"
+        },
+        {
+          "description": "Ralph context snapshot for Goal 7 continuation.",
+          "kind": "ralph_context",
+          "layer": "eval",
+          "path": ".omx/context/eval-layer-goal7-20260702T141955Z.md",
+          "sha256": "ea6f6e179f1f7782ced4be488d5e77ba8b7ebe54ccd5d57dfeb253d8267b1c59"
+        },
+        {
+          "description": "Eval-layer PRD for Ralph planning gate.",
+          "kind": "prd",
+          "layer": "eval",
+          "path": ".omx/plans/prd-eval-layer-goal7.md",
+          "sha256": "ebb4a2df0933d391ecff732802d542502a0503ab2eb0bda6f30cc2d65ec119b4"
+        },
+        {
+          "description": "Eval-layer test spec for Ralph planning gate.",
+          "kind": "test_spec",
+          "layer": "eval",
+          "path": ".omx/plans/test-spec-eval-layer-goal7.md",
+          "sha256": "9abbf48170384908a582244d65026958934d1b83264cd5cd47dffca8a047446f"
+        }
+      ],
+      "completed_at": "2026-07-02T14:23:33Z",
+      "depends_on": [
+        "eval_governance_handoff_artifacts"
+      ],
+      "id": "eval_external_adapter_contract_stubs",
+      "layer": "eval",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:19:55Z",
+      "status": "completed",
+      "summary": "Added dependency-free BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench adapter plan artifacts that fail closed until optional dependencies and required input artifacts are explicitly available.",
+      "title": "Add fail-closed external eval adapter contract plans",
+      "verification": [
+        {
+          "command": ".venv/bin/python -m unittest tests.test_agentic_eval_layer",
+          "completed_at": "2026-07-02T14:23:33Z",
+          "status": "pass",
+          "summary": "5 tests passed, including fail-closed external adapter plan coverage."
+        },
+        {
+          "command": ".venv/bin/python -m py_compile scripts/plan_external_eval_adapters.py scripts/evaluate_hermes_heldout.py scripts/compare_agentic_finetune_results.py",
+          "completed_at": "2026-07-02T14:23:33Z",
+          "status": "pass",
+          "summary": "Eval scripts compile successfully."
+        },
+        {
+          "command": ".venv/bin/python scripts/plan_external_eval_adapters.py --scenario-manifest experiments/qwen3_4b_flightrecorder/heldout_scenarios.json --out experiments/qwen3_4b_flightrecorder/evaluations/external_adapters/external_eval_adapters.json",
+          "completed_at": "2026-07-02T14:23:33Z",
+          "status": "blocked",
+          "summary": "Expected fail-closed result: 4 adapters planned, 0 ready, blocked on optional dependencies, required inputs, and explicit enablement."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Dependency-free runtime preflight for local model cache, adapter files, serving dependencies, server script metadata, and managed command refs.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/preflight_serving_runtime.py",
+          "sha256": "fcb3125a41652f2f3539cf09a77c87b75aa4692712fa1dedebee4e55fb7da880"
+        },
+        {
+          "description": "Public schema for hfr.serving_runtime_preflight.v1 artifacts.",
+          "kind": "schema",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/serving_runtime_preflight.v1.schema.json",
+          "sha256": "87293002b964106cc87e436c9927e4d3f332872e4f862a20010d45f5161f81d2"
+        },
+        {
+          "description": "Schema catalog entry for serving_runtime_preflight.",
+          "kind": "schema_manifest",
+          "layer": "serving_demo",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "73b8f147e59144b80d78cd9e370228e8bdbeb3b28bcb63f974f988260924aa2e"
+        },
+        {
+          "description": "Runtime preflight regression coverage for ready fake dependencies and blocked missing dependencies.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_serving_demo.py",
+          "sha256": "aa02fa8ae61d34ecce03f83da656b72cea7d92dd8ea760e508821d09bbb379ff"
+        },
+        {
+          "description": "Schema registry coverage for serving_runtime_preflight.",
+          "kind": "test",
+          "layer": "serving_demo",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "8b94f1d910771d1b7c884d32fc8e0ca0359f641b40c73de60ac58424f1025144"
+        },
+        {
+          "description": "Serving docs now include the real-runtime preflight gate before heavyweight server launch.",
+          "kind": "doc",
+          "layer": "serving_demo",
+          "path": "docs/serving-demo.md",
+          "sha256": "43fdea51cdc12f247cf4d9f87c15327e9f85389cc3f5e2e18d70e036aae87e98"
+        },
+        {
+          "description": "Experiment next commands include serving runtime preflight before real serving launch commands.",
+          "kind": "script",
+          "layer": "serving_demo",
+          "path": "scripts/build_agentic_finetune_experiment.py",
+          "sha256": "5fe504e8aa4799e50a749d799500d698eb554fe00bc6d6cda8a4d93f8f1b9bd7"
+        },
+        {
+          "description": "Fresh real-runtime preflight artifact: local model cache and adapters present; serving ML dependencies blocked.",
+          "kind": "serving_runtime_preflight",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json",
+          "sha256": "c5486006f55c27f5f341890e9965a2eec3bf32ea0d8cf8c36d6f313cd8c901c3"
+        },
+        {
+          "description": "Human-readable runtime preflight report with dependency table, adapter table, and managed command refs.",
+          "kind": "report",
+          "layer": "serving_demo",
+          "path": "experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/SERVING_RUNTIME_PREFLIGHT.md",
+          "sha256": "92b5ea6da2de634329e77204e0bd2f5270db512b9c190266e3deaebfcceeadf7"
+        }
+      ],
+      "completed_at": "2026-07-02T14:25:25Z",
+      "depends_on": [
+        "serving_process_lifecycle_wrapper",
+        "serving_endpoint_suite_guard"
+      ],
+      "id": "serving_runtime_preflight_contract",
+      "layer": "serving_demo",
+      "priority": "high",
+      "started_at": "2026-07-02T14:20:00Z",
+      "status": "completed",
+      "summary": "Added a repeatable no-launch preflight for real serving runtime readiness that records model cache status, adapter file hashes, Python dependency availability, serving script metadata, and managed lifecycle command refs before any heavyweight server is started.",
+      "title": "Publish real runtime serving preflight contract",
+      "verification": [
+        {
+          "command": "uv run python -m unittest tests.test_serving_demo tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "11 focused serving/schema catalog tests passed."
+        },
+        {
+          "command": "uv run python scripts/preflight_serving_runtime.py --model Qwen/Qwen3-4B-Instruct-2507 --adapter trace_only=... --adapter flightrecorder=... --out experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json --report experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/SERVING_RUNTIME_PREFLIGHT.md --allow-blocked",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "blocked",
+          "summary": "Wrote a schema-checkable blocked preflight: model cache and adapter files present; torch, transformers, peft, and accelerate unavailable."
+        },
+        {
+          "command": "uv run python -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/real_runtime_preflight/serving_runtime_preflight.json",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "Generated runtime preflight validates against hfr.serving_runtime_preflight.v1."
+        },
+        {
+          "command": "uv run python -m py_compile scripts/preflight_serving_runtime.py scripts/verify_serving_profiles.py scripts/run_managed_serving_eval.py scripts/mock_openai_serving.py scripts/check_openai_serving.py scripts/build_serving_demo_report.py scripts/evaluate_hermes_heldout.py tests/test_serving_demo.py",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "Touched serving/demo scripts and tests compile successfully."
+        },
+        {
+          "command": "uv run python -m unittest tests.test_serving_demo tests.test_deployment_hardening tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "44 serving/demo, harness, and schema-registry tests passed."
+        },
+        {
+          "command": "uv run python -m unittest discover",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "fail",
+          "summary": "Full discovery failed with 25 Evidence-layer errors from flightrecorder.bundle.NameError: _summarize_harness_handoff is not defined; focused Goal 6 tests passed."
+        },
+        {
+          "command": "pgrep -fl 'serve_transformers_openai.py|mock_openai_serving.py|run_managed_serving_eval.py|check_openai_serving.py|build_serving_demo_report.py|verify_serving_profiles.py|preflight_serving_runtime.py|evaluate_hermes_heldout.py'",
+          "completed_at": "2026-07-02T14:25:25Z",
+          "status": "pass",
+          "summary": "No matching serving/demo helper processes remained after verification."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Live Hermes artifact writer now emits self-contained replay lineage.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_hermes_smoke.py",
+          "sha256": "9f2350a2d861347a5301f9883d796af512089aa6ca2e41f71a1ebeed196f0f1d"
+        },
+        {
+          "description": "Live OpenClaw artifact writer now emits self-contained replay lineage.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_openclaw_smoke.py",
+          "sha256": "4c4d4e69d9e23141133c0070482f2116c7e5098bfdc7c90c45f963ce5b8a4650"
+        },
+        {
+          "description": "Live Coven artifact writer now emits self-contained replay lineage.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/live_coven_smoke.py",
+          "sha256": "95f560fe0703c25c2f471ad78a64a3705713cdd142ec78b4747439288d6401e7"
+        },
+        {
+          "description": "Held-out Eval per-scenario artifacts now preserve replay-safe paths.",
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/evaluate_hermes_heldout.py",
+          "sha256": "6464537eaed7fddf8b9c857fb1e93097295fe02962e45339b591013b7ecd7a6d"
+        },
+        {
+          "description": "Cross-runner fixture matrix validates harness artifacts and replay receipts for Hermes-style, OpenClaw, and Coven traces plus failed scorecard publication.",
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_harness_replay_matrix.py",
+          "sha256": "28bbad1d93c9a935a54dc25d4671d4c016eda9cf1def3e7bcc602193118ba592"
+        },
+        {
+          "description": "Harness bridge docs now state that live harness results carry self-contained replay lineage.",
+          "kind": "doc",
+          "layer": "harness",
+          "path": "README.md",
+          "sha256": "a869ea38f1296971daf70c1c6e71abe5a32264b70182a19d03003da0bf8f3396"
+        }
+      ],
+      "completed_at": "2026-07-02T14:25:38Z",
+      "depends_on": [
+        "harness_manifest_mock_runner_contracts",
+        "harness_live_provider_manifest_bridge",
+        "harness_codex_style_runner_contract"
+      ],
+      "id": "harness_failure_replay_matrix",
+      "layer": "harness",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:21:08Z",
+      "status": "completed",
+      "summary": "Made live Hermes, OpenClaw, Coven, and held-out Eval artifacts replay-safe with preserved lineage paths, then added a fixture matrix that publishes harness manifests/results for Hermes-style, OpenClaw, and Coven traces, validates schemas, replays each lineage, and confirms failed scorecards still publish valid harness contracts.",
+      "title": "Add cross-runner failure and replay matrix coverage",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py scripts/evaluate_hermes_heldout.py tests/test_deployment_hardening.py tests/test_coven_integration.py tests/test_harness_replay_matrix.py",
+          "completed_at": "2026-07-02T14:25:38Z",
+          "status": "pass",
+          "summary": "Harness helper, live runners, held-out evaluator, and touched tests compile successfully."
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_deployment_hardening tests.test_coven_integration tests.test_harness_replay_matrix tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:25:38Z",
+          "status": "pass",
+          "summary": "22 tests passed, including cross-runner replay matrix and failed live-style harness contract coverage."
+        },
+        {
+          "command": "tests.test_harness_replay_matrix replay receipts",
+          "completed_at": "2026-07-02T14:25:38Z",
+          "status": "pass",
+          "summary": "Hermes-style observer, OpenClaw JSONL, and Coven JSONL fixture harness outputs replayed from artifact_lineage.json with passing harness_replay_result schemas."
+        },
+        {
+          "command": "git diff --check (scoped tracked files) + git diff --check --no-index /dev/null scripts/hermes_harness.py",
+          "completed_at": "2026-07-02T14:25:38Z",
+          "status": "pass",
+          "summary": "No whitespace errors in touched tracked files or the untracked harness helper file."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Training launcher now persists a model-registry lifecycle link plan beside result archives without mutating aliases.",
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/train_agentic_lora.py"
+        },
+        {
+          "description": "Public schema for hfr.agentic_lora_model_registry_link_plan.v1 side-effect-free lifecycle link plans.",
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_lora_model_registry_link_plan.v1.schema.json"
+        },
+        {
+          "description": "Schema catalog entry for agentic_lora_model_registry_link_plan.",
+          "kind": "schema_catalog",
+          "layer": "training",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "description": "Regression coverage for preflight result archives with model-registry link-plan output.",
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_lora_training_plan.py"
+        },
+        {
+          "description": "Training docs cover model-registry link-plan command usage and alias immutability.",
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "description": "Generated smoke link plan for a blocked preflight result archive.",
+          "kind": "model_registry_link_plan",
+          "layer": "training",
+          "path": "/tmp/hfr-agentic-lora-link-plan/registry/training_link_plan.json"
+        },
+        {
+          "description": "Generated blocked preflight training result archive used by the link plan.",
+          "kind": "training_result",
+          "layer": "training",
+          "path": "/tmp/hfr-agentic-lora-link-plan/out/fr_action_sft_result.json"
+        }
+      ],
+      "completed_at": "2026-07-02T14:27:16Z",
+      "depends_on": [
+        "training_registry_backed_plan_archives",
+        "model_registry_lifecycle_links",
+        "training_backend_recipe_extension_points"
+      ],
+      "id": "training_result_model_registry_links",
+      "layer": "training",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:16:00Z",
+      "status": "completed",
+      "summary": "Added a schema-checkable, side-effect-free model-registry link plan for training result archives and final adapter outputs. The plan emits exact model-registry lifecycle link argv for runner-owned execution while recording that Flight Recorder did not mutate the registry and did not move promotion aliases.",
+      "title": "Link training results back into model registry entries",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_lora_training_plan",
+          "completed_at": "2026-07-02T14:27:16Z",
+          "status": "pass",
+          "summary": "8 focused training-layer tests passed, including model-registry link-plan coverage."
+        },
+        {
+          "command": "python3 -m py_compile scripts/train_agentic_lora.py tests/test_agentic_lora_training_plan.py",
+          "completed_at": "2026-07-02T14:27:16Z",
+          "status": "pass",
+          "summary": "Training script and focused tests compile successfully."
+        },
+        {
+          "command": "python3 scripts/train_agentic_lora.py --mode fr_action_sft --preflight-only --require-registered-inputs --write-model-registry-link-plan /tmp/hfr-agentic-lora-link-plan/registry/training_link_plan.json ...",
+          "completed_at": "2026-07-02T14:27:16Z",
+          "status": "pass",
+          "summary": "Generated a blocked preflight result archive and ready-to-link lifecycle plan from registered smoke inputs without launching training."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-lora-link-plan/registry/training_link_plan.json",
+          "completed_at": "2026-07-02T14:27:16Z",
+          "status": "pass",
+          "summary": "Generated link plan validated against hfr.agentic_lora_model_registry_link_plan.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --name agentic_lora_model_registry_link_plan --write-dir /tmp/hfr-agentic-lora-link-plan/schema-export --force",
+          "completed_at": "2026-07-02T14:27:16Z",
+          "status": "pass",
+          "summary": "Schema export wrote the model-registry-link-plan schema and catalog manifest."
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "description": "Cross-arm comparison writes standalone repair and curriculum artifacts.",
+          "kind": "script",
+          "layer": "eval",
+          "path": "scripts/compare_agentic_finetune_results.py",
+          "sha256": "8aa78e61d6c32651f91f3830938d4de5a47da8f4c41cb07903e5ba48eafeca7e"
+        },
+        {
+          "description": "Regression tests for standalone eval repair and curriculum outputs.",
+          "kind": "test",
+          "layer": "eval",
+          "path": "tests/test_agentic_eval_layer.py",
+          "sha256": "a4e1942c276f015ccb1d52c68549294da7061b804ff7b39e74660b62204abfec"
+        },
+        {
+          "description": "Eval-layer docs for repair and curriculum output artifacts.",
+          "kind": "doc",
+          "layer": "eval",
+          "path": "docs/agentic-finetune-eval-layer.md",
+          "sha256": "e32fa95a7ec08d397dff34977f615a195e0598e6c36dd06422ae296e8ce3056c"
+        },
+        {
+          "description": "Standalone repair work item handoff from the current comparison.",
+          "kind": "eval_repair_work_items",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/eval_repair_work_items.json",
+          "sha256": "95ac8e4497b66b3ab5e08e7106d3c79c89dd22efb73656b5f656106ba55606e3"
+        },
+        {
+          "description": "Standalone curriculum suggestion handoff from the current comparison.",
+          "kind": "eval_curriculum_suggestions",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/eval_curriculum_suggestions.json",
+          "sha256": "2b997dc00dcde765475bdcd4a5c364317249034b9c74525c23fc4ac513b8ae68"
+        },
+        {
+          "description": "Comparison JSON now references repair and curriculum output artifact hashes.",
+          "kind": "eval_comparison",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/promotion_comparison.json",
+          "sha256": "bc44676c20e87ed265023be54f69c06dacf387da9d560c3d1b030aff5c1ab1a3"
+        },
+        {
+          "description": "Experiment README describes standalone eval repair outputs.",
+          "kind": "doc",
+          "layer": "eval",
+          "path": "experiments/qwen3_4b_flightrecorder/README.md",
+          "sha256": "0bbd3e403d492f7c547244a117efd41bf1fee768e2aaa59b99d59f811e1ff680"
+        },
+        {
+          "description": "Validation command tolerates absent optional parser attributes used by model-layer flags.",
+          "kind": "cli",
+          "layer": "eval",
+          "path": "flightrecorder/cli.py",
+          "sha256": "b92404a6fd45da65452bb60d3e90801e8c32cd6bc86fd69769729e7d4988f3ba"
+        }
+      ],
+      "completed_at": "2026-07-02T14:27:29Z",
+      "depends_on": [
+        "eval_governance_handoff_artifacts",
+        "eval_external_adapter_contract_stubs"
+      ],
+      "id": "eval_standalone_repair_curriculum_outputs",
+      "layer": "eval",
+      "priority": "medium",
+      "started_at": "2026-07-02T14:23:33Z",
+      "status": "completed",
+      "summary": "Comparison runs now write standalone eval_repair_work_items and eval_curriculum_suggestions artifacts beside the comparison JSON, with tests for mismatched-scenario pressure.",
+      "title": "Persist standalone repair and curriculum outputs from failed eval comparisons",
+      "verification": [
+        {
+          "command": ".venv/bin/python scripts/compare_agentic_finetune_results.py --baseline experiments/qwen3_4b_flightrecorder/evaluations/baseline/suite_summary.json --trace-only experiments/qwen3_4b_flightrecorder/evaluations/trace_only/suite_summary.json --flightrecorder experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/suite_summary.json --out experiments/qwen3_4b_flightrecorder/promotion_comparison.json --report experiments/qwen3_4b_flightrecorder/PROMOTION_REPORT.md",
+          "completed_at": "2026-07-02T14:27:29Z",
+          "status": "pass",
+          "summary": "Comparison regenerated and wrote standalone eval_repair_work_items.json and eval_curriculum_suggestions.json."
+        },
+        {
+          "command": ".venv/bin/python -m unittest tests.test_agentic_eval_layer tests.test_compare_gate tests.test_compare_rl_export",
+          "completed_at": "2026-07-02T14:27:29Z",
+          "status": "pass",
+          "summary": "20 tests passed, covering repair/curriculum artifacts and comparison-export validation."
+        },
+        {
+          "command": ".venv/bin/python -m flightrecorder validate --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/baseline/suite_summary.json --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/trace_only/suite_summary.json --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/suite_summary.json --strict",
+          "completed_at": "2026-07-02T14:27:29Z",
+          "status": "pass",
+          "summary": "Three held-out suite summaries validated in strict mode with zero errors and warnings."
+        },
+        {
+          "command": ".venv/bin/python -m py_compile flightrecorder/cli.py scripts/plan_external_eval_adapters.py scripts/evaluate_hermes_heldout.py scripts/compare_agentic_finetune_results.py",
+          "completed_at": "2026-07-02T14:27:29Z",
+          "status": "pass",
+          "summary": "Touched CLI and eval scripts compile successfully."
+        }
+      ]
+    }
+  ],
+  "current_packet": {
+    "depends_on": [
+      "harness_live_provider_manifest_bridge"
+    ],
+    "id": "evidence_live_harness_handoff_contracts",
+    "layer": "evidence",
+    "priority": "high",
+    "status": "ready",
+    "summary": "Require evidence bundles to carry live harness manifest/result lineage and gate summaries before downstream eval or governance consumers can proceed.",
+    "title": "Bind live harness outputs into evidence handoffs"
+  },
+  "guardrails": {
+    "disallow_expensive_training": true,
+    "disallow_model_promotion_without_governance": true,
+    "harness": "Do not claim live model quality without validated scorecards, replay lineage, and sandbox/tool-policy metadata.",
+    "require_journal_checkpoint": true,
+    "require_redaction_before_training": true,
+    "require_verification_before_completion": true
+  },
+  "latest_artifacts": [
+    {
+      "description": "Cross-arm comparison writes standalone repair and curriculum artifacts.",
+      "kind": "script",
+      "layer": "eval",
+      "path": "scripts/compare_agentic_finetune_results.py",
+      "sha256": "8aa78e61d6c32651f91f3830938d4de5a47da8f4c41cb07903e5ba48eafeca7e"
+    },
+    {
+      "description": "Regression tests for standalone eval repair and curriculum outputs.",
+      "kind": "test",
+      "layer": "eval",
+      "path": "tests/test_agentic_eval_layer.py",
+      "sha256": "a4e1942c276f015ccb1d52c68549294da7061b804ff7b39e74660b62204abfec"
+    },
+    {
+      "description": "Eval-layer docs for repair and curriculum output artifacts.",
+      "kind": "doc",
+      "layer": "eval",
+      "path": "docs/agentic-finetune-eval-layer.md",
+      "sha256": "e32fa95a7ec08d397dff34977f615a195e0598e6c36dd06422ae296e8ce3056c"
+    },
+    {
+      "description": "Standalone repair work item handoff from the current comparison.",
+      "kind": "eval_repair_work_items",
+      "layer": "eval",
+      "path": "experiments/qwen3_4b_flightrecorder/eval_repair_work_items.json",
+      "sha256": "95ac8e4497b66b3ab5e08e7106d3c79c89dd22efb73656b5f656106ba55606e3"
+    },
+    {
+      "description": "Standalone curriculum suggestion handoff from the current comparison.",
+      "kind": "eval_curriculum_suggestions",
+      "layer": "eval",
+      "path": "experiments/qwen3_4b_flightrecorder/eval_curriculum_suggestions.json",
+      "sha256": "2b997dc00dcde765475bdcd4a5c364317249034b9c74525c23fc4ac513b8ae68"
+    },
+    {
+      "description": "Comparison JSON now references repair and curriculum output artifact hashes.",
+      "kind": "eval_comparison",
+      "layer": "eval",
+      "path": "experiments/qwen3_4b_flightrecorder/promotion_comparison.json",
+      "sha256": "bc44676c20e87ed265023be54f69c06dacf387da9d560c3d1b030aff5c1ab1a3"
+    },
+    {
+      "description": "Experiment README describes standalone eval repair outputs.",
+      "kind": "doc",
+      "layer": "eval",
+      "path": "experiments/qwen3_4b_flightrecorder/README.md",
+      "sha256": "0bbd3e403d492f7c547244a117efd41bf1fee768e2aaa59b99d59f811e1ff680"
+    },
+    {
+      "description": "Validation command tolerates absent optional parser attributes used by model-layer flags.",
+      "kind": "cli",
+      "layer": "eval",
+      "path": "flightrecorder/cli.py",
+      "sha256": "b92404a6fd45da65452bb60d3e90801e8c32cd6bc86fd69769729e7d4988f3ba"
+    }
+  ],
+  "latest_report": {
+    "type": "daily_email",
+    "status": "sent",
+    "destination": "zacwright27@gmail.com",
+    "subject": "Hermes fine-tune infra daily update - 2026-07-17",
+    "reported_at": "2026-07-17T08:03:00Z",
+    "gmail_message_id": "19f6f196bc8bf007",
+    "summary": "Sent daily report; no new autonomy journal entries, commits, verification, or implementation artifacts recorded in the previous 24 hours."
+  },
+  "latest_verification": [
+    {
+      "command": ".venv/bin/python scripts/compare_agentic_finetune_results.py --baseline experiments/qwen3_4b_flightrecorder/evaluations/baseline/suite_summary.json --trace-only experiments/qwen3_4b_flightrecorder/evaluations/trace_only/suite_summary.json --flightrecorder experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/suite_summary.json --out experiments/qwen3_4b_flightrecorder/promotion_comparison.json --report experiments/qwen3_4b_flightrecorder/PROMOTION_REPORT.md",
+      "completed_at": "2026-07-02T14:27:29Z",
+      "status": "pass",
+      "summary": "Comparison regenerated and wrote standalone eval_repair_work_items.json and eval_curriculum_suggestions.json."
+    },
+    {
+      "command": ".venv/bin/python -m unittest tests.test_agentic_eval_layer tests.test_compare_gate tests.test_compare_rl_export",
+      "completed_at": "2026-07-02T14:27:29Z",
+      "status": "pass",
+      "summary": "20 tests passed, covering repair/curriculum artifacts and comparison-export validation."
+    },
+    {
+      "command": ".venv/bin/python -m flightrecorder validate --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/baseline/suite_summary.json --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/trace_only/suite_summary.json --suite-summary experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/suite_summary.json --strict",
+      "completed_at": "2026-07-02T14:27:29Z",
+      "status": "pass",
+      "summary": "Three held-out suite summaries validated in strict mode with zero errors and warnings."
+    },
+    {
+      "command": ".venv/bin/python -m py_compile flightrecorder/cli.py scripts/plan_external_eval_adapters.py scripts/evaluate_hermes_heldout.py scripts/compare_agentic_finetune_results.py",
+      "completed_at": "2026-07-02T14:27:29Z",
+      "status": "pass",
+      "summary": "Touched CLI and eval scripts compile successfully."
+    }
+  ],
+  "layer_status": {
+    "data": {
+      "next_packet": null,
+      "status": "in_progress",
+      "summary": "Dataset registry/redaction checkpoint observed; explicit registry selection remains open."
+    },
+    "eval": {
+      "next_packet": "eval_suite_tag_coverage_handoff",
+      "status": "in_progress",
+      "summary": "Held-out summaries, identical-scenario comparison enforcement, external adapter contracts, and standalone repair/curriculum outputs are in place. Remaining eval risk: expose suite-tag coverage for internal red-team, regression, task-completion, and harness-compatibility suites in eval summaries."
+    },
+    "evidence": {
+      "next_packet": "evidence_live_harness_handoff_contracts",
+      "status": "in_progress",
+      "summary": "Unified gate contracts, semantic gate invariants, metadata redaction scans, ledger-gate next-action contracts, and live harness publication are in place. Next evidence work should bind harness manifest/result lineage into evidence bundles."
+    },
+    "governance": {
+      "next_packet": "governance_alias_apply_guard",
+      "status": "in_progress",
+      "summary": "Promotion decisions, generated cards, alias receipts, and release records are in place; guarded alias mutation remains open."
+    },
+    "harness": {
+      "latest_packet": "harness_failure_replay_matrix",
+      "next_packet": "harness_tool_policy_enforcement_matrix",
+      "status": "in_progress",
+      "summary": "Harness artifacts now cover mock, Hermes-style, OpenClaw, held-out Eval, and Codex/Coven-style outputs with replay-safe lineage; tool-policy enforcement matrix coverage remains.",
+      "updated_at": "2026-07-02T14:25:38Z"
+    },
+    "model": {
+      "latest_packet": "model_training_plan_compatibility_proofs",
+      "next_packet": "model_alias_governance_receipts",
+      "status": "in_progress",
+      "summary": "Model registry, no-download compatibility reports, dry-run plans with compatibility proof hashes, and lifecycle link operations are in place. Alias governance receipt validation remains queued.",
+      "updated_at": "2026-07-02T14:22:00Z"
+    },
+    "serving_demo": {
+      "next_packet": "serving_real_runtime_profile_capture",
+      "status": "blocked",
+      "summary": "Mock/lifecycle/profile-suite paths are ready. A schema-checkable real-runtime preflight now proves model cache and adapters are present, but real Qwen3-4B capture remains blocked until torch, transformers, peft, and accelerate are available."
+    },
+    "training": {
+      "latest_packet": "training_result_model_registry_links",
+      "next_packet": "training_tiny_smoke_runtime_resolution",
+      "status": "in_progress",
+      "summary": "Registry-backed dry-run plans, action SFT mode selection, reward/process-reward extension points, result archives, local registry events, schema-checkable no-download smoke fixtures, preflight-only dependency archives, external trainer recipe bundles, and side-effect-free model-registry link plans are in place. Next training work should resolve the tiny smoke runtime or route through an external recipe runner before any bounded trainer launch."
+    }
+  },
+  "next_packets": [
+    {
+      "depends_on": [
+        "eval_standalone_repair_curriculum_outputs"
+      ],
+      "id": "eval_suite_tag_coverage_handoff",
+      "layer": "eval",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Next eval packet: make internal suite tags for held-out, prompt injection, forbidden actions, task completion, regression, red-team, and harness compatibility visible to Governance.",
+      "title": "Expose suite-tag coverage in eval plans and summaries"
+    },
+    {
+      "depends_on": [
+        "harness_live_provider_manifest_bridge"
+      ],
+      "id": "evidence_live_harness_handoff_contracts",
+      "layer": "evidence",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Require evidence bundles to carry live harness manifest/result lineage and gate summaries before downstream eval or governance consumers can proceed.",
+      "title": "Bind live harness outputs into evidence handoffs"
+    },
+    {
+      "depends_on": [
+        "model_registry_lifecycle_links"
+      ],
+      "id": "model_alias_governance_receipts",
+      "layer": "model",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Generate and validate registry alias receipt artifacts from promotion decisions before mutating champion, candidate, or rollback aliases.",
+      "title": "Validate registry alias governance receipts"
+    },
+    {
+      "depends_on": [
+        "training_registry_backed_plan_archives",
+        "training_backend_recipe_extension_points",
+        "training_result_model_registry_links"
+      ],
+      "id": "training_tiny_smoke_runtime_resolution",
+      "layer": "training",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Install or activate the trainer runtime, or route through an external recipe wrapper, then run only a bounded --limit smoke launch after registered inputs, redaction gates, license status, and preflight checks pass.",
+      "title": "Resolve tiny smoke training runtime dependencies"
+    },
+    {
+      "depends_on": [
+        "governance_alias_movement_receipts",
+        "governance_release_records"
+      ],
+      "id": "governance_alias_apply_guard",
+      "layer": "governance",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Add a guarded alias apply path that mutates registry aliases only after revalidating a passed alias receipt and release record against current file hashes.",
+      "title": "Require release records before registry alias mutation"
+    },
+    {
+      "depends_on": [
+        "harness_failure_replay_matrix"
+      ],
+      "id": "harness_tool_policy_enforcement_matrix",
+      "layer": "harness",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Add scenarios and checks that blocked commands, forbidden URLs, secret canaries, and allowed-tool metadata are consistently recorded and validated for mock and fixture-backed live-style harness outputs.",
+      "title": "Exercise tool-policy enforcement metadata across harness runners"
+    }
+  ],
+  "promotion_readiness": {
+    "data": "in_progress",
+    "eval": "in_progress",
+    "evidence": "in_progress",
+    "governance": "in_progress",
+    "harness": "in_progress",
+    "model": "in_progress",
+    "serving_demo": "blocked",
+    "training": "in_progress"
+  },
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-17T08:03:00Z"
+}

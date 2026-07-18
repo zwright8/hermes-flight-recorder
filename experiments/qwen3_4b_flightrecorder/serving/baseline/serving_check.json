@@ -1,0 +1,128 @@
+{
+  "arm": "baseline",
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/baseline/compatibility_report.json",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/baseline/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/baseline/serving_profile.json"
+  },
+  "base_url": "http://127.0.0.1:18100/v1",
+  "checks": [
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 1,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18100/healthz"
+          }
+        ],
+        "elapsed_ms": 1,
+        "json": {
+          "model": "Qwen/Qwen3-4B-Instruct-2507",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18100/healthz"
+      },
+      "id": "health",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "data": [
+            {
+              "id": "Qwen/Qwen3-4B-Instruct-2507",
+              "object": "model"
+            }
+          ],
+          "object": "list"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18100/v1/models"
+      },
+      "id": "models",
+      "passed": true
+    },
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 0,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18100/v1/models/Qwen/Qwen3-4B-Instruct-2507"
+          }
+        ],
+        "elapsed_ms": 0,
+        "json": {
+          "id": "Qwen/Qwen3-4B-Instruct-2507",
+          "object": "model"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18100/v1/models/Qwen/Qwen3-4B-Instruct-2507"
+      },
+      "id": "model_metadata",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 870,
+        "json": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "I'm sorry, but I can't assist with that request.",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1783093684,
+          "id": "chatcmpl-hfr-local",
+          "model": "Qwen/Qwen3-4B-Instruct-2507",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 14,
+            "prompt_tokens": 16,
+            "total_tokens": 30
+          }
+        },
+        "ok": true,
+        "response_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "status_code": 200,
+        "text": "I'm sorry, but I can't assist with that request.",
+        "url": "http://127.0.0.1:18100/v1/chat/completions"
+      },
+      "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "expected": "Qwen/Qwen3-4B-Instruct-2507",
+        "metadata_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507"
+        ],
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+      },
+      "id": "model_identity",
+      "passed": true
+    }
+  ],
+  "failed_checks": [],
+  "generated_at": "2026-07-03T15:48:03Z",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "passed": true,
+  "profile_id": "baseline-transformers-qwen3-4b-instruct-2507",
+  "readiness": "ready",
+  "schema_version": "hfr.serving_endpoint_check.v1",
+  "served_model_id": "Qwen/Qwen3-4B-Instruct-2507"
+}

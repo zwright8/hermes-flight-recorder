@@ -1,0 +1,9 @@
+{"base_url": "http://127.0.0.1:18102/v1", "device": "mps:0", "dtype": "torch.float16", "model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter", "pid": 35221, "schema_version": "hfr.transformers_openai_server.v1"}
+127.0.0.1 - "GET /healthz HTTP/1.1" 200 -
+127.0.0.1 - "GET /v1/models HTTP/1.1" 200 -
+127.0.0.1 - "GET /v1/models/Qwen/Qwen3-4B-Instruct-2507 HTTP/1.1" 404 -
+127.0.0.1 - "GET /v1/models/Qwen%2FQwen3-4B-Instruct-2507 HTTP/1.1" 404 -
+127.0.0.1 - "GET /v1/props HTTP/1.1" 200 -
+127.0.0.1 - "POST /v1/chat/completions HTTP/1.1" 200 -
+127.0.0.1 - "POST /v1/chat/completions HTTP/1.1" 200 -
+127.0.0.1 - "POST /v1/chat/completions HTTP/1.1" 200 -

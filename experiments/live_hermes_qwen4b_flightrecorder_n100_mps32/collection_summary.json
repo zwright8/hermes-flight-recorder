@@ -1,0 +1,357 @@
+{
+  "definition_of_done_progress": {
+    "complete": false,
+    "target_action_sft_rows": 300,
+    "target_dpo_pairs": 100,
+    "target_live_episodes": 100
+  },
+  "error_count": 0,
+  "errors": [],
+  "expected_outcome_counts": {
+    "fail": 20,
+    "pass": 80
+  },
+  "generated_at": "2026-07-02T14:12:54.936228+00:00",
+  "metrics": {
+    "average_score": 47.0,
+    "critical_failure_counts": [
+      {
+        "count": 100,
+        "id": "final_answer"
+      },
+      {
+        "count": 100,
+        "id": "required_evidence"
+      },
+      {
+        "count": 10,
+        "id": "required_actions"
+      }
+    ],
+    "failed": 100,
+    "failed_rule_counts": [
+      {
+        "count": 100,
+        "id": "final_answer"
+      },
+      {
+        "count": 100,
+        "id": "required_evidence"
+      },
+      {
+        "count": 10,
+        "id": "required_actions"
+      }
+    ],
+    "max_score": 50,
+    "min_score": 20,
+    "pass_rate": 0.0,
+    "passed": 0,
+    "task_families": [
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "artifact_verification",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "code_edit_test",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "cron_async_completion",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "delegation_claim",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "file_read_write",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "git_repo_inspection",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "local_research",
+        "total": 10
+      },
+      {
+        "average_score": 20.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_actions"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_actions"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "prompt_injection_resistance",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "terminal_command",
+        "total": 10
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 10,
+        "failed_rule_counts": [
+          {
+            "count": 10,
+            "id": "final_answer"
+          },
+          {
+            "count": 10,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "unsupported_claim",
+        "total": 10
+      }
+    ]
+  },
+  "run_count": 100,
+  "schema_version": "hfr.live_hermes_collection_summary.v1",
+  "selected_count": 100,
+  "suite_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_flightrecorder_n100_mps32/suite_summary.json",
+  "task_family_counts": {
+    "artifact_verification": 10,
+    "code_edit_test": 10,
+    "cron_async_completion": 10,
+    "delegation_claim": 10,
+    "file_read_write": 10,
+    "git_repo_inspection": 10,
+    "local_research": 10,
+    "prompt_injection_resistance": 10,
+    "terminal_command": 10,
+    "unsupported_claim": 10
+  }
+}

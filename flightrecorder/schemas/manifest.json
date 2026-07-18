@@ -74,6 +74,30 @@
       "name": "run_digest"
     },
     {
+      "artifact": "harness_run_manifest",
+      "artifact_schema_version": "hfr.harness_run_manifest.v1",
+      "description": "Common harness-run manifest emitted before mock or live scenario execution.",
+      "filename": "harness_run_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
+      "name": "harness_run_manifest"
+    },
+    {
+      "artifact": "harness_run_result",
+      "artifact_schema_version": "hfr.harness_run_result.v1",
+      "description": "Harness run result linking sandbox, tool policy, trace, scorecard, and replay artifacts.",
+      "filename": "harness_run_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
+      "name": "harness_run_result"
+    },
+    {
+      "artifact": "harness_replay_result",
+      "artifact_schema_version": "hfr.harness_replay_result.v1",
+      "description": "Harness replay receipt emitted after regenerating run artifacts from lineage.",
+      "filename": "harness_replay_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_replay_result.v1.schema.json",
+      "name": "harness_replay_result"
+    },
+    {
       "artifact": "live_smoke_summary",
       "artifact_schema_version": "hfr.live_smoke.summary.v2",
       "description": "Live Hermes runtime smoke summary emitted by scripts/live_hermes_smoke.py.",
@@ -152,6 +176,62 @@
       "filename": "improvement_ledger_gate.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/improvement_ledger_gate.v1.schema.json",
       "name": "improvement_ledger_gate"
+    },
+    {
+      "artifact": "suite_gate",
+      "artifact_schema_version": "hfr.suite_gate.v1",
+      "description": "Policy gate over run-suite metrics.",
+      "filename": "suite_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/suite_gate.v1.schema.json",
+      "name": "suite_gate"
+    },
+    {
+      "artifact": "training_gate",
+      "artifact_schema_version": "hfr.training_gate.v1",
+      "description": "Policy gate over export-rl training dataset readiness.",
+      "filename": "training_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/training_gate.v1.schema.json",
+      "name": "training_gate"
+    },
+    {
+      "artifact": "compare_gate",
+      "artifact_schema_version": "hfr.compare_gate.v1",
+      "description": "Policy gate over baseline/candidate comparison exports.",
+      "filename": "compare_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare_gate.v1.schema.json",
+      "name": "compare_gate"
+    },
+    {
+      "artifact": "reviewed_gate",
+      "artifact_schema_version": "hfr.reviewed_gate.v1",
+      "description": "Policy gate over human-reviewed trainer-ready exports.",
+      "filename": "reviewed_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_gate.v1.schema.json",
+      "name": "reviewed_gate"
+    },
+    {
+      "artifact": "serving_lifecycle_run",
+      "artifact_schema_version": "hfr.serving_lifecycle_run.v1",
+      "description": "Managed serving process lifecycle artifact emitted by run_managed_serving_eval.py.",
+      "filename": "serving_lifecycle_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle_run.v1.schema.json",
+      "name": "serving_lifecycle_run"
+    },
+    {
+      "artifact": "serving_endpoint_suite",
+      "artifact_schema_version": "hfr.serving_endpoint_suite.v1",
+      "description": "Suite-level readiness artifact for OpenAI-compatible serving profiles before Eval or demo replay.",
+      "filename": "serving_endpoint_suite.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_suite.v1.schema.json",
+      "name": "serving_endpoint_suite"
+    },
+    {
+      "artifact": "serving_runtime_preflight",
+      "artifact_schema_version": "hfr.serving_runtime_preflight.v1",
+      "description": "Dependency and artifact preflight for launching real local serving runtimes.",
+      "filename": "serving_runtime_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_runtime_preflight.v1.schema.json",
+      "name": "serving_runtime_preflight"
     },
     {
       "artifact": "training_manifest",
@@ -250,6 +330,14 @@
       "name": "dataset_splits"
     },
     {
+      "artifact": "dataset_registry",
+      "artifact_schema_version": "hfr.rl.dataset_registry.v1",
+      "description": "Local dataset registry entry emitted by export-rl.",
+      "filename": "dataset_registry.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_registry.v1.schema.json",
+      "name": "dataset_registry"
+    },
+    {
       "artifact": "compare_rl_manifest",
       "artifact_schema_version": "hfr.compare_rl.manifest.v1",
       "description": "Manifest for export-compare-rl improvement-pair handoffs.",
@@ -328,6 +416,110 @@
       "filename": "trainer_consumer_plan.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_consumer_plan.v1.schema.json",
       "name": "trainer_consumer_plan"
+    },
+    {
+      "artifact": "model_candidate",
+      "artifact_schema_version": "hfr.model_candidate.v1",
+      "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",
+      "filename": "model_candidate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_candidate.v1.schema.json",
+      "name": "model_candidate"
+    },
+    {
+      "artifact": "model_scout_manifest",
+      "artifact_schema_version": "hfr.model_scout_manifest.v1",
+      "description": "Base-model scouting manifest with candidate refs, selection policy, license posture, and compatibility proof links.",
+      "filename": "model_scout_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_scout_manifest.v1.schema.json",
+      "name": "model_scout_manifest"
+    },
+    {
+      "artifact": "model_registry_entry",
+      "artifact_schema_version": "hfr.model_registry_entry.v1",
+      "description": "One model registry entry linking a candidate snapshot to datasets, runs, adapters, evals, and promotions.",
+      "filename": "model_registry_entry.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_registry_entry.v1.schema.json",
+      "name": "model_registry_entry"
+    },
+    {
+      "artifact": "model_compatibility_report",
+      "artifact_schema_version": "hfr.model_compatibility_report.v1",
+      "description": "No-download compatibility report over tokenizer, chat template, serving, tool-call, structured-output, context, quantization, and memory metadata.",
+      "filename": "model_compatibility_report.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_compatibility_report.v1.schema.json",
+      "name": "model_compatibility_report"
+    },
+    {
+      "artifact": "model_registry",
+      "artifact_schema_version": "hfr.model_registry.v1",
+      "description": "Local model registry container with entries, aliases, rollback target, and alias history.",
+      "filename": "model_registry.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_registry.v1.schema.json",
+      "name": "model_registry"
+    },
+    {
+      "artifact": "training_plan",
+      "artifact_schema_version": "hfr.training_plan.v1",
+      "description": "Model-layer dry-run training plan written before downloads, heavy ML imports, or GPU work.",
+      "filename": "training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/training_plan.v1.schema.json",
+      "name": "training_plan"
+    },
+    {
+      "artifact": "agentic_lora_training_plan",
+      "artifact_schema_version": "hfr.agentic_lora_training_plan.v1",
+      "description": "Dry-run or launch-gating plan emitted by scripts/train_agentic_lora.py before heavy ML imports.",
+      "filename": "agentic_lora_training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_plan.v1.schema.json",
+      "name": "agentic_lora_training_plan"
+    },
+    {
+      "artifact": "agentic_lora_training_result",
+      "artifact_schema_version": "hfr.agentic_lora_training_result.v1",
+      "description": "Result archive emitted by scripts/train_agentic_lora.py after success, classified failure, or blocked launch.",
+      "filename": "agentic_lora_training_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_result.v1.schema.json",
+      "name": "agentic_lora_training_result"
+    },
+    {
+      "artifact": "agentic_lora_training_registry_event",
+      "artifact_schema_version": "hfr.agentic_lora_training_registry_event.v1",
+      "description": "Local JSONL registry event for training result/failure handoff.",
+      "filename": "agentic_lora_training_registry_event.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_registry_event.v1.schema.json",
+      "name": "agentic_lora_training_registry_event"
+    },
+    {
+      "artifact": "agentic_lora_smoke_fixture",
+      "artifact_schema_version": "hfr.agentic_lora_smoke_fixture.v1",
+      "description": "Registered tiny fixture manifest for no-download agentic LoRA smoke planning.",
+      "filename": "agentic_lora_smoke_fixture.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_smoke_fixture.v1.schema.json",
+      "name": "agentic_lora_smoke_fixture"
+    },
+    {
+      "artifact": "agentic_lora_backend_recipes",
+      "artifact_schema_version": "hfr.agentic_lora_backend_recipes.v1",
+      "description": "Side-effect-free external trainer recipe bundle emitted from a registry-backed agentic LoRA training plan.",
+      "filename": "agentic_lora_backend_recipes.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_backend_recipes.v1.schema.json",
+      "name": "agentic_lora_backend_recipes"
+    },
+    {
+      "artifact": "agentic_lora_model_registry_link_plan",
+      "artifact_schema_version": "hfr.agentic_lora_model_registry_link_plan.v1",
+      "description": "Side-effect-free model-registry lifecycle link plan for agentic LoRA training results.",
+      "filename": "agentic_lora_model_registry_link_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_model_registry_link_plan.v1.schema.json",
+      "name": "agentic_lora_model_registry_link_plan"
+    },
+    {
+      "artifact": "supervisor_state",
+      "artifact_schema_version": "hfr.autonomy.supervisor_state.v1",
+      "description": "Persistent autonomy supervisor state coordinating agentic fine-tuning layer work packets.",
+      "filename": "supervisor_state.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/supervisor_state.v1.schema.json",
+      "name": "supervisor_state"
     },
     {
       "artifact": "trainer_wrapper_dry_run",

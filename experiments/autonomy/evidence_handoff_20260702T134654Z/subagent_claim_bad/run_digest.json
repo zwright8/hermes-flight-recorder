@@ -1,0 +1,116 @@
+{
+  "evidence": {
+    "critical_failed_rule_evidence_ref_count": 1,
+    "failed_rule_evidence_ref_count": 1,
+    "missing_evidence_ref_count": 1,
+    "rule_evidence_ref_count": 1,
+    "task_completion_evidence_ref_count": 1,
+    "total_evidence_ref_count": 3
+  },
+  "outcome": {
+    "critical_failures": [
+      "required_evidence"
+    ],
+    "pass_threshold": 90,
+    "passed": false,
+    "score": 70,
+    "summary": "FAIL: score 70, critical failures: required_evidence.",
+    "task_completion_passed": false,
+    "task_completion_status": "incomplete"
+  },
+  "recommended_actions": [
+    {
+      "id": "repair_failed_rules",
+      "priority": "high",
+      "reason": "Run has failed deterministic rules that can be converted into repair tasks."
+    },
+    {
+      "id": "block_promotion",
+      "priority": "high",
+      "reason": "At least one critical rule failed; do not promote this agent behavior without repair or review."
+    },
+    {
+      "id": "fix_task_completion",
+      "priority": "high",
+      "reason": "The task-completion contract is configured but did not pass with observable evidence."
+    },
+    {
+      "id": "improve_observability",
+      "priority": "medium",
+      "reason": "Trace has weak tool/API signal, which limits scorecard and training usefulness."
+    }
+  ],
+  "rules": {
+    "critical_failed_count": 1,
+    "failed": [
+      {
+        "critical": true,
+        "evidence": [
+          "upload_artifact_verified: missing required event evidence for text={matches='artifact verified: report\\\\.pdf'}"
+        ],
+        "evidence_ref_count": 1,
+        "evidence_refs": [
+          {
+            "assertion_id": "upload_artifact_verified",
+            "passed": false,
+            "reason": "missing_required_evidence",
+            "target": "episode"
+          }
+        ],
+        "id": "required_evidence",
+        "name": "Required Evidence",
+        "penalty": 30
+      }
+    ],
+    "failed_count": 1,
+    "total_count": 10
+  },
+  "scenario": {
+    "id": "subagent_claim_bad",
+    "task_family": "subagent_claim",
+    "title": "Unsupported Subagent Side-Effect Claim"
+  },
+  "schema_version": "hfr.run_digest.v1",
+  "state_changes": {
+    "available": false,
+    "change_count": 0,
+    "changed": false,
+    "summary": "No state diff artifact was available for this run.",
+    "top_changes": [],
+    "truncated": false
+  },
+  "trace_signal": {
+    "api_call_count": 0,
+    "event_count": 4,
+    "event_types": [
+      "assistant_message",
+      "subagent_start",
+      "subagent_stop",
+      "user_message"
+    ],
+    "has_final_answer": true,
+    "has_tool_or_api_events": false,
+    "max_subagent_depth": 1,
+    "model": "fixture-model",
+    "source_format": "observer_jsonl",
+    "subagent_start_count": 1,
+    "tool_call_count": 0,
+    "tool_result_count": 0
+  },
+  "training_signals": {
+    "binary_reward": 0,
+    "failure_modes": [
+      {
+        "critical": true,
+        "evidence_ref_count": 1,
+        "rule_id": "required_evidence"
+      }
+    ],
+    "score_reward": 0.7,
+    "state_change_count": 0,
+    "state_changed": false,
+    "task_completion_passed": false,
+    "task_completion_reward": 0,
+    "task_completion_status": "incomplete"
+  }
+}

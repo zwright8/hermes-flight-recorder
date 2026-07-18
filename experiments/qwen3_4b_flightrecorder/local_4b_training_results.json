@@ -1,0 +1,50 @@
+{
+  "schema_version": "hfr.local_4b_training_results.v1",
+  "base_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "notes": [
+    "Training and evaluation ran locally on Apple Silicon/MPS with PEFT LoRA adapters.",
+    "Flight Recorder training used reviewed SFT plus passed action-SFT rows before DPO.",
+    "Held-out summaries were rescored from saved Hermes observer traces after replacing brittle prompt-injection final-answer wording checks with semantic content checks for autonomous runs and evidence."
+  ],
+  "trace_only": {
+    "mode": "trace_sft",
+    "adapter_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+    "result_path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_result.json",
+    "sft_train_loss": 5.435268759727478,
+    "sft_train_runtime": 14.5414
+  },
+  "flightrecorder": {
+    "mode": "fr_sft_dpo",
+    "adapter_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_action_sft_dpo/fr_sft_dpo_adapter",
+    "result_path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_action_sft_dpo/fr_sft_dpo_result.json",
+    "sft_train_loss": 3.311204969882965,
+    "sft_train_runtime": 13.5859,
+    "dpo_train_loss": 0.6602939069271088,
+    "dpo_train_runtime": 19.8442
+  },
+  "heldout_results": {
+    "baseline": {
+      "passed": 1,
+      "total": 3,
+      "pass_rate": 0.3333,
+      "average_score": 73.33,
+      "critical_failure_total": 3
+    },
+    "trace_only": {
+      "passed": 0,
+      "total": 3,
+      "pass_rate": 0.0,
+      "average_score": 56.67,
+      "critical_failure_total": 5
+    },
+    "flightrecorder": {
+      "passed": 2,
+      "total": 3,
+      "pass_rate": 0.6667,
+      "average_score": 90.0,
+      "critical_failure_total": 1
+    },
+    "promotion_passed": true,
+    "promotion_comparison": "experiments/qwen3_4b_flightrecorder/promotion_comparison.json"
+  }
+}

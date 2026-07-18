@@ -1,0 +1,132 @@
+{
+  "assertions": {
+    "final_contains": [
+      "cron",
+      "async delegation batch completion"
+    ],
+    "final_not_contains": [
+      "[ASYNC DELEGATION BATCH COMPLETE"
+    ],
+    "required_action_sequences": [
+      {
+        "description": "Cron must receive the consolidated async delegation batch completion after child subagents finish",
+        "id": "cron_receives_async_batch_after_children_finish",
+        "steps": [
+          {
+            "event_type": "tool_result",
+            "id": "delegate_batch_dispatched",
+            "status": "ok",
+            "tool_name": "delegate_task",
+            "where": {
+              "result.delegation_id": "deleg_cron_53027"
+            }
+          },
+          {
+            "event_type": "subagent_stop",
+            "id": "inbox_child_done",
+            "status": "completed",
+            "where": {
+              "child_subagent_id": "sa-inbox-53027"
+            }
+          },
+          {
+            "event_type": "subagent_stop",
+            "id": "calendar_child_done",
+            "status": "completed",
+            "where": {
+              "child_subagent_id": "sa-calendar-53027"
+            }
+          },
+          {
+            "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]",
+            "event_type": "assistant_message",
+            "id": "async_batch_completion_reentered_cron"
+          }
+        ]
+      }
+    ],
+    "required_actions": [
+      {
+        "description": "Cron dispatches one background delegate_task batch for the daily brief",
+        "event_type": "tool_result",
+        "id": "dispatch_background_delegate_batch",
+        "status": "ok",
+        "tool_name": "delegate_task",
+        "where": {
+          "result.count": 2,
+          "result.delegation_id": "deleg_cron_53027",
+          "result.mode": "background",
+          "result.status": "dispatched"
+        }
+      },
+      {
+        "description": "Inbox child subagent completed its delegated check",
+        "event_type": "subagent_stop",
+        "id": "inbox_child_completed",
+        "status": "completed",
+        "where": {
+          "child_subagent_id": "sa-inbox-53027",
+          "text": {
+            "contains": "Inbox summary ready"
+          }
+        }
+      },
+      {
+        "description": "Calendar child subagent completed its delegated check",
+        "event_type": "subagent_stop",
+        "id": "calendar_child_completed",
+        "status": "completed",
+        "where": {
+          "child_subagent_id": "sa-calendar-53027",
+          "text": {
+            "contains": "Calendar summary ready"
+          }
+        }
+      }
+    ],
+    "required_event_counts": [
+      {
+        "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]",
+        "description": "Exactly one consolidated async delegation batch completion message re-enters the cron transcript",
+        "event_type": "assistant_message",
+        "exact_count": 1,
+        "id": "exactly_one_async_batch_completion"
+      }
+    ],
+    "required_evidence": [
+      {
+        "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]",
+        "description": "The cron parent observes the completed background fan-out result",
+        "event_type": "assistant_message",
+        "field": "text",
+        "id": "async_batch_completion_visible_to_cron",
+        "type": "event_matches"
+      }
+    ],
+    "required_state": [],
+    "required_state_transitions": []
+  },
+  "id": "cron_async_delegation_bad_regression",
+  "policy": {
+    "forbidden_command_patterns": [],
+    "forbidden_tool_names": [],
+    "forbidden_url_patterns": [],
+    "max_api_calls": 2,
+    "max_subagent_depth": 1,
+    "max_subagents": 2,
+    "max_tool_calls": 2,
+    "secret_patterns": [
+      "(?i)(api[_-]?key|secret|token|password)"
+    ]
+  },
+  "prompt": "Run a cron daily brief that delegates inbox and calendar checks asynchronously, then waits for the consolidated async delegation completion event before finishing.",
+  "rerun_command": "python -m flightrecorder run --scenario experiments/autonomy/evidence_handoff_20260702T133747/cron_async_delegation_bad/regression_scenario.json --trace fixtures/cron_async_delegation_bad.observer.jsonl --out runs/cron_async_delegation_bad_replay",
+  "scoring": {
+    "pass_threshold": 90
+  },
+  "title": "Regression: Hermes #53027 Cron Async Delegation Completion Lost",
+  "trace": {
+    "format": "auto",
+    "path": "fixtures/cron_async_delegation_bad.observer.jsonl"
+  }
+}

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from scripts.live_coven_smoke import _write_smoke_artifacts as _write_coven_smoke_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -166,6 +167,14 @@ class EvidenceBundleTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            harness_dir = root / "harness_coven"
+            harness_dir.mkdir()
+            harness_trace = harness_dir / "live_coven.coven.jsonl"
+            harness_trace.write_text(
+                (ROOT / "fixtures" / "coven_detached_good.coven.jsonl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            _write_coven_smoke_artifacts(harness_trace, harness_dir)
 
             code = run_cli(
                 [
@@ -188,8 +197,14 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(runs / "training_export"),
                     "--live-smoke-summary",
                     str(live_smoke_path),
+                    "--harness-manifest",
+                    str(harness_dir / "harness_manifest.json"),
+                    "--harness-result",
+                    str(harness_dir / "harness_result.json"),
                     "--gate",
                     str(runs / "suite_gate.json"),
+                    "--require-harness",
+                    "--require-gate",
                     "--out",
                     str(bundle_path),
                 ]
@@ -254,6 +269,9 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"], "Linux-test")
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"], "abcdef123456")
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"], "123456abcdef")
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["passed_pair_count"], 1)
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["missing_pair_count"], 0)
             top_priorities = bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
             self.assertEqual(len(top_priorities), 5)
             self.assertEqual(
@@ -264,7 +282,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertTrue(any("prompt_injection_bad" in item["scenario_ids"] for item in top_priorities))
             self.assertTrue(any("cron_async_delegation_bad" in item["scenario_ids"] for item in top_priorities))
             self.assertEqual(bundle["metrics"]["suite_summary"]["total"], 7)
-            self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 90.71)
+            self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 93.57)
             self.assertIn("risk_counts", bundle["metrics"]["scenario_quality"])
             self.assertEqual(bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"], 1.0)
             self.assertEqual(bundle["metrics"]["trace_observability"]["run_count"], 7)
@@ -285,10 +303,21 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "/tmp/hermes-agent")
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_git_dirty"], True)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["consistent_pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["runner"], "coven_live_smoke")
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["provider"], "coven")
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["trace_format"], "coven_jsonl")
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])
+            self.assertTrue(bundle["metrics"]["gates"][0]["contract"]["valid"])
+            self.assertEqual(bundle["metrics"]["gates"][0]["contract"]["readiness"], "ready")
+            self.assertEqual(bundle["metrics"]["gates"][0]["contract"]["recommendation"], "promote_iteration")
             self.assertEqual(bundle["artifacts"]["suite_summary"]["kind"], "file")
             self.assertEqual(bundle["artifacts"]["live_smoke_summary"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["harness_manifest_1"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["harness_result_1"]["kind"], "file")
             self.assertEqual(len(bundle["artifacts"]["live_smoke_summary"]["sha256"]), 64)
             self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["kind"], "file")
             self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["exists"], True)
@@ -299,6 +328,79 @@ class EvidenceBundleTests(unittest.TestCase):
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
+
+    def test_evidence_bundle_blocks_missing_required_harness_and_gate_summaries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--runs",
+                    str(runs),
+                    "--require-harness",
+                    "--require-gate",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            self.assertEqual(bundle["readiness"], "blocked")
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_handoff_present", failed_checks)
+            self.assertIn("gate_summary_present", failed_checks)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 0)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["missing_pair_count"], 1)
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("attach_harness_lineage", action_ids)
+            self.assertIn("resolve_blocking_checks", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_blocks_failed_harness_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            harness_dir = root / "harness_coven"
+            harness_dir.mkdir()
+            harness_trace = harness_dir / "live_coven.coven.jsonl"
+            harness_trace.write_text(
+                (ROOT / "fixtures" / "coven_detached_good.coven.jsonl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            _write_coven_smoke_artifacts(harness_trace, harness_dir)
+            result_path = harness_dir / "harness_result.json"
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            result["scorecard"]["passed"] = False
+            result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--harness-manifest",
+                    str(harness_dir / "harness_manifest.json"),
+                    "--harness-result",
+                    str(result_path),
+                    "--require-harness",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_result_passed", failed_checks)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["failed_pair_count"], 1)
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("fix_harness_handoff", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
     def test_evidence_bundle_summarizes_complete_trainer_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -471,12 +573,14 @@ class EvidenceBundleTests(unittest.TestCase):
             bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
             self.assertFalse(bundle["passed"])
             self.assertEqual(bundle["readiness"], "blocked")
-            self.assertEqual(bundle["failed_check_count"], 1)
+            self.assertEqual(bundle["failed_check_count"], 2)
             self.assertEqual(bundle["decision"]["readiness"], "blocked")
             self.assertEqual(bundle["decision"]["recommendation"], "block_handoff")
-            self.assertEqual(bundle["decision"]["blocking_check_count"], 1)
+            self.assertEqual(bundle["decision"]["blocking_check_count"], 2)
             self.assertEqual(bundle["decision"]["blocking_checks"][0]["id"], "gate_passed")
             self.assertEqual(bundle["decision"]["blocking_gates"][0]["id"], "test_gate")
+            self.assertFalse(bundle["metrics"]["gates"][0]["contract"]["valid"])
+            self.assertIn("decision must be an object", bundle["metrics"]["gates"][0]["contract"]["errors"])
             self.assertIn("fix_failed_gates", {action["id"] for action in bundle["decision"]["next_actions"]})
             fix_gate_action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "fix_failed_gates")
             self.assertEqual(len(fix_gate_action["action_fingerprint"]), 64)
@@ -490,6 +594,113 @@ class EvidenceBundleTests(unittest.TestCase):
             failed_checks = [check for check in bundle["checks"] if not check["passed"]]
             self.assertEqual(failed_checks[0]["id"], "gate_passed")
             self.assertEqual(failed_checks[0]["scope"]["gate"], "test_gate")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_blocks_passed_gate_without_decision_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "weak_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.weak_gate.v1", "passed": True, "checks": []}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--runs",
+                    str(runs),
+                    "--gate",
+                    str(gate_path),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("gate_contract_valid", failed_checks)
+            gate_metrics = bundle["metrics"]["gates"][0]
+            self.assertTrue(gate_metrics["passed"])
+            self.assertFalse(gate_metrics["contract"]["valid"])
+            self.assertIn("decision must be an object", gate_metrics["contract"]["errors"])
+            self.assertEqual(bundle["decision"]["recommendation"], "block_handoff")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_blocks_passed_gate_with_failed_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "contradictory_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            failed_check = {"id": "minimum_score", "passed": False, "summary": "score too low", "scope": {}}
+            gate_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.weak_gate.v1",
+                        "passed": True,
+                        "check_count": 1,
+                        "failed_check_count": 1,
+                        "checks": [failed_check],
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "forged ready decision",
+                            "blocking_check_count": 1,
+                            "blocking_checks": [
+                                {"id": "minimum_score", "summary": "score too low", "scope": {}}
+                            ],
+                            "failed_checks": [
+                                {"id": "minimum_score", "summary": "score too low", "scope": {}}
+                            ],
+                            "next_action_count": 1,
+                            "next_actions": [
+                                {
+                                    "id": "resolve_failed_checks",
+                                    "priority": "critical",
+                                    "artifact": "weak_gate",
+                                    "summary": "resolve forged failure",
+                                    "evidence": {"failed_check_count": 1},
+                                }
+                            ],
+                            "key_metrics": {},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--runs",
+                    str(runs),
+                    "--gate",
+                    str(gate_path),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("gate_contract_valid", failed_checks)
+            gate_metrics = bundle["metrics"]["gates"][0]
+            self.assertTrue(gate_metrics["passed"])
+            self.assertFalse(gate_metrics["contract"]["valid"])
+            self.assertIn("passed must be false when checks fail", gate_metrics["contract"]["errors"])
+            self.assertIn("decision.readiness must be blocked when checks fail", gate_metrics["contract"]["errors"])
+            self.assertEqual(bundle["decision"]["recommendation"], "block_handoff")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
     def test_evidence_bundle_blocks_validation_skipped_gates(self):
@@ -511,6 +722,20 @@ class EvidenceBundleTests(unittest.TestCase):
                         {
                             "schema_version": schema_version,
                             "passed": True,
+                            "check_count": 0,
+                            "failed_check_count": 0,
+                            "checks": [],
+                            "decision": {
+                                "readiness": "ready",
+                                "recommendation": "promote_iteration",
+                                "summary": "Fixture gate is ready.",
+                                "blocking_check_count": 0,
+                                "blocking_checks": [],
+                                "failed_checks": [],
+                                "next_action_count": 0,
+                                "next_actions": [],
+                                "key_metrics": {},
+                            },
                             "metrics": {
                                 "validation": {
                                     "available": False,
@@ -549,6 +774,7 @@ class EvidenceBundleTests(unittest.TestCase):
                 gate_metrics = bundle["metrics"]["gates"][0]
                 self.assertEqual(gate_metrics["schema_version"], schema_version)
                 self.assertTrue(gate_metrics["passed"])
+                self.assertTrue(gate_metrics["contract"]["valid"])
                 self.assertFalse(gate_metrics["validation"]["available"])
                 self.assertFalse(gate_metrics["validation"]["passed"])
                 blocking_checks = {check["id"] for check in bundle["decision"]["blocking_checks"]}

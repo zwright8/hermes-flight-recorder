@@ -39,6 +39,12 @@
       },
       "type": "array"
     },
+    "label_provenance": {
+      "type": "object"
+    },
+    "redaction_status": {
+      "type": "object"
+    },
     "recommended_checks": {
       "items": {
         "type": "string"
@@ -86,6 +92,8 @@
     "average_reward",
     "source_fingerprint_coverage",
     "trainer_view_source_fingerprint_coverage",
+    "redaction_status",
+    "label_provenance",
     "task_completion",
     "trace_signal",
     "dataset_splits",

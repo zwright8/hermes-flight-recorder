@@ -1,0 +1,2 @@
+  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only
+Summary: quality gates for autonomous runs should require completion criteria and evidence.

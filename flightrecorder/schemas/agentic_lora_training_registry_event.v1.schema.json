@@ -1,0 +1,89 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_registry_event.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local JSONL registry event for training result/failure handoff.",
+  "properties": {
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "failure": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "final_adapter_dir": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "input_manifests": {
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "trace_sft",
+        "fr_sft",
+        "fr_action_sft",
+        "fr_dpo",
+        "fr_sft_dpo",
+        "fr_reward_model",
+        "fr_step_rewards"
+      ]
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "plan_failed_check_count": {
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "plan_passed": {
+      "type": "boolean"
+    },
+    "registry_note": {
+      "type": "string"
+    },
+    "result_path": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_training_registry_event.v1"
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "preflight_passed",
+        "preflight_blocked"
+      ]
+    },
+    "training_plan": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "mode",
+    "model",
+    "status",
+    "result_path",
+    "training_plan",
+    "input_manifests",
+    "failure",
+    "plan_passed",
+    "plan_failed_check_count",
+    "registry_note"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Training Registry Event",
+  "type": "object"
+}

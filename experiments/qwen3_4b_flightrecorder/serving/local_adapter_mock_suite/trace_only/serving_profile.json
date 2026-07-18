@@ -1,0 +1,99 @@
+{
+  "arm": "trace_only",
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/compatibility_report.json",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/trace_only/serving_profile.json"
+  },
+  "capabilities": {
+    "chat_completions": true,
+    "health": true,
+    "model_metadata": true,
+    "models": true,
+    "streaming": "not_checked",
+    "structured_outputs": "supported",
+    "tool_calls": "supported"
+  },
+  "endpoint": {
+    "base_url": "http://127.0.0.1:63666/v1",
+    "chat_completions_url": "http://127.0.0.1:63666/v1/chat/completions",
+    "health_urls": [
+      "http://127.0.0.1:63666/healthz",
+      "http://127.0.0.1:63666/health",
+      "http://127.0.0.1:63666/version"
+    ],
+    "models_url": "http://127.0.0.1:63666/v1/models"
+  },
+  "engine_profile": {
+    "adapter_strategy": "PEFT adapter loaded into the local Transformers process",
+    "engine": "transformers",
+    "launch_command_template": "uv run --no-project scripts/serve_transformers_openai.py --model {model} --adapter {adapter} --host 127.0.0.1 --port {port}",
+    "local_script": "scripts/serve_transformers_openai.py",
+    "openai_compatible": true,
+    "required_checks": [
+      "health",
+      "models",
+      "model_metadata",
+      "chat_completion"
+    ],
+    "status": "mvp"
+  },
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python_version": "3.11.15",
+    "sglang_executable": null,
+    "vllm_executable": null
+  },
+  "eval_preflight": {
+    "failed_checks": [],
+    "readiness": "ready",
+    "ready": true,
+    "required_checks": [
+      "health",
+      "models",
+      "model_metadata",
+      "chat_completion"
+    ]
+  },
+  "generated_at": "2026-07-02T14:14:03Z",
+  "model_identity": {
+    "adapter": {
+      "files": [
+        {
+          "bytes": 1104,
+          "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_config.json",
+          "sha256": "77bc2b643deb574a4ae525ac088ddd7907d101f4df2197606f5371bb494b396d"
+        },
+        {
+          "bytes": 33096456,
+          "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_model.safetensors",
+          "sha256": "e2cf1cbbeef4273ef09436d41a6f0227ab6f4a338f12307797c72780fc77fc42"
+        },
+        {
+          "bytes": 695,
+          "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/tokenizer_config.json",
+          "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+        },
+        {
+          "bytes": 2630,
+          "path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/chat_template.jinja",
+          "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+        }
+      ],
+      "id": "trace_sft_adapter",
+      "local": true,
+      "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter",
+      "present": true
+    },
+    "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+    "metadata_model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+    "observed_model_ids": [
+      "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+    ],
+    "requested_model": "Qwen/Qwen3-4B-Instruct-2507",
+    "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter"
+  },
+  "profile_id": "trace-only-transformers-trace-sft-adapter",
+  "provider": "custom",
+  "schema_version": "hfr.serving_profile.v1"
+}

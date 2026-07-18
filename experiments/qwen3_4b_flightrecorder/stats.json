@@ -1,0 +1,436 @@
+{
+  "all_source_trace_quality_audit": {
+    "critical_failure_counts": {
+      "budget": 1,
+      "final_answer": 1,
+      "forbidden_actions": 1,
+      "required_action_sequences": 2,
+      "required_actions": 1,
+      "required_event_counts": 2,
+      "required_evidence": 3,
+      "required_state": 1,
+      "required_state_transitions": 1,
+      "secret_exposure": 1
+    },
+    "failed_rule_counts": {
+      "budget": 1,
+      "final_answer": 1,
+      "forbidden_actions": 1,
+      "required_action_sequences": 2,
+      "required_actions": 1,
+      "required_event_counts": 2,
+      "required_evidence": 3,
+      "required_state": 1,
+      "required_state_transitions": 1,
+      "secret_exposure": 1
+    },
+    "known_failed": 5,
+    "known_failed_rate": 0.7143,
+    "known_passed": 2,
+    "rows": 7,
+    "task_completion_status_counts": {
+      "complete": 2,
+      "incomplete": 4,
+      "not_applicable": 1
+    }
+  },
+  "dataset_counts": {
+    "flightrecorder_action_sft": 3,
+    "flightrecorder_combined_dpo": 2,
+    "flightrecorder_compare_dpo": 1,
+    "flightrecorder_reviewed_dpo": 1,
+    "flightrecorder_reward_model": 4,
+    "flightrecorder_scorecard_dpo": 1,
+    "flightrecorder_sft": 1,
+    "flightrecorder_step_rewards": 11,
+    "hermes_trace_only_sft": 4
+  },
+  "flightrecorder_action_sft": {
+    "quality_gate_counts": {
+      "passed_scorecard_task_completion_action_trace": 3
+    },
+    "rows": 3,
+    "task_family_counts": {
+      "email_reply_completion": 3
+    }
+  },
+  "flightrecorder_dataset_metrics": {
+    "average_reward": 0.5071,
+    "average_score": 50.7143,
+    "dataset_splits": {
+      "episode_count": 7,
+      "family_exclusive": true,
+      "task_family_count": 5,
+      "test_episode_count": 1,
+      "train_episode_count": 4,
+      "validation_episode_count": 2
+    },
+    "episode_count": 7,
+    "failed": 5,
+    "pass_rate": 0.2857,
+    "passed": 2,
+    "quality_flags": [],
+    "task_completion": {
+      "check_pass_rate": 0.5652,
+      "complete_count": 2,
+      "configured_count": 6,
+      "episode_count": 7,
+      "incomplete_count": 4,
+      "not_applicable_count": 1,
+      "passed_check_count": 13,
+      "required_check_count": 23,
+      "unknown_count": 0
+    },
+    "trace_signal": {
+      "api_call_count": 0,
+      "approval_event_count": 0,
+      "average_event_count": 6.0,
+      "empty_final_answer_count": 0,
+      "episode_count": 7,
+      "episodes_with_final_answer": 7,
+      "episodes_with_tool_or_api_events": 6,
+      "event_type_count": 6,
+      "event_type_counts": [
+        {
+          "count": 12,
+          "id": "tool_call"
+        },
+        {
+          "count": 7,
+          "id": "assistant_message"
+        },
+        {
+          "count": 7,
+          "id": "tool_result"
+        },
+        {
+          "count": 7,
+          "id": "user_message"
+        },
+        {
+          "count": 6,
+          "id": "subagent_start"
+        },
+        {
+          "count": 3,
+          "id": "subagent_stop"
+        }
+      ],
+      "final_answer_rate": 1.0,
+      "max_event_count": 10,
+      "min_event_count": 4,
+      "risk_count": 2,
+      "risk_counts": [
+        {
+          "count": 1,
+          "id": "no_tool_or_api_events"
+        },
+        {
+          "count": 1,
+          "id": "tool_call_result_imbalance"
+        }
+      ],
+      "subagent_event_count": 9,
+      "tool_call_count": 12,
+      "tool_or_api_episode_rate": 0.8571,
+      "tool_result_count": 7,
+      "total_event_count": 42
+    }
+  },
+  "flightrecorder_dpo": {
+    "combined_rows": 2,
+    "compare_rows": 1,
+    "reviewed_rows": 1,
+    "scorecard_rows": 1,
+    "task_family_counts": {
+      "email_reply_completion": 2
+    }
+  },
+  "flightrecorder_reward_model": {
+    "label_counts": {
+      "accept": 1,
+      "reject": 3
+    },
+    "rows": 4,
+    "task_family_counts": {
+      "budget_runaway": 1,
+      "cron_async_delegation": 1,
+      "email_reply_completion": 2
+    }
+  },
+  "flightrecorder_sft": {
+    "human_label_counts": {
+      "accept": 1
+    },
+    "quality_gate_counts": {
+      "human_reviewed_accept": 1
+    },
+    "rows": 1,
+    "task_family_counts": {
+      "email_reply_completion": 1
+    }
+  },
+  "gates": {
+    "compare_gate": {
+      "available": true,
+      "check_count": 32,
+      "failed_check_count": 0,
+      "metric_keys": [
+        "baseline_win_count",
+        "baseline_win_scenarios",
+        "candidate_win_count",
+        "candidate_win_scenarios",
+        "contract_drift_count",
+        "dpo_count",
+        "fixed_rule_counts",
+        "new_critical_failure_counts",
+        "pair_count",
+        "regressed_rule_counts",
+        "skipped_pair_count",
+        "task_completion_improvement_count",
+        "task_completion_improvement_scenarios",
+        "task_completion_regression_count",
+        "task_completion_regression_scenarios",
+        "task_families",
+        "unverified_contract_count",
+        "validation"
+      ],
+      "passed": true,
+      "path": "runs/compare_gate.json"
+    },
+    "evidence_bundle": {
+      "available": true,
+      "check_count": 12,
+      "failed_check_count": 0,
+      "metric_keys": [
+        "evidence_coverage",
+        "repair_queue",
+        "run_digest_coverage",
+        "scenario_quality",
+        "suite_summary",
+        "trace_observability",
+        "training_export",
+        "validation"
+      ],
+      "passed": true,
+      "path": "runs/evidence_bundle.json"
+    },
+    "reviewed_gate": {
+      "available": true,
+      "check_count": 14,
+      "failed_check_count": 0,
+      "metric_keys": [
+        "accepted_count",
+        "confidence_counts",
+        "dpo_count",
+        "high_confidence_label_count",
+        "label_counts",
+        "low_confidence_label_count",
+        "medium_or_high_confidence_label_count",
+        "preference_count",
+        "rejected_count",
+        "reviewed_label_count",
+        "reward_model_count",
+        "sft_count",
+        "task_families",
+        "unknown_confidence_label_count",
+        "validation"
+      ],
+      "passed": true,
+      "path": "runs/reviewed_gate.json"
+    },
+    "training_gate": {
+      "available": true,
+      "check_count": 50,
+      "failed_check_count": 0,
+      "metric_keys": [
+        "artifact_counts",
+        "average_score",
+        "dataset_splits",
+        "episode_count",
+        "pass_rate",
+        "quality_flag_count",
+        "source_fingerprint_coverage",
+        "task_completion",
+        "trace_signal",
+        "trainer_view_source_fingerprint_coverage",
+        "validation"
+      ],
+      "passed": true,
+      "path": "runs/training_gate.json"
+    }
+  },
+  "generated_at": "2026-06-29T20:57:31.630099+00:00",
+  "heldout": {
+    "family_exclusive": true,
+    "heldout": [
+      {
+        "episode_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good"
+        ],
+        "scenario_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good"
+        ],
+        "task_family": "prompt_injection"
+      },
+      {
+        "episode_ids": [
+          "subagent_claim_bad"
+        ],
+        "scenario_ids": [
+          "subagent_claim_bad"
+        ],
+        "task_family": "subagent_claim"
+      }
+    ],
+    "strategy": "task_family_hash",
+    "test": [
+      {
+        "episode_ids": [
+          "subagent_claim_bad"
+        ],
+        "scenario_ids": [
+          "subagent_claim_bad"
+        ],
+        "task_family": "subagent_claim"
+      }
+    ],
+    "train": [
+      {
+        "episode_ids": [
+          "budget_runaway_bad"
+        ],
+        "scenario_ids": [
+          "budget_runaway_bad"
+        ],
+        "task_family": "budget_runaway"
+      },
+      {
+        "episode_ids": [
+          "cron_async_delegation_bad"
+        ],
+        "scenario_ids": [
+          "cron_async_delegation_bad"
+        ],
+        "task_family": "cron_async_delegation"
+      },
+      {
+        "episode_ids": [
+          "email_reply_completion_bad",
+          "email_reply_completion_good"
+        ],
+        "scenario_ids": [
+          "email_reply_completion_bad",
+          "email_reply_completion_good"
+        ],
+        "task_family": "email_reply_completion"
+      }
+    ],
+    "validation": [
+      {
+        "episode_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good"
+        ],
+        "scenario_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good"
+        ],
+        "task_family": "prompt_injection"
+      }
+    ]
+  },
+  "hermes_trace_only_quality_audit_not_used_as_labels": {
+    "critical_failure_counts": {
+      "budget": 1,
+      "required_action_sequences": 2,
+      "required_actions": 1,
+      "required_event_counts": 2,
+      "required_evidence": 1,
+      "required_state": 1,
+      "required_state_transitions": 1
+    },
+    "failed_rule_counts": {
+      "budget": 1,
+      "required_action_sequences": 2,
+      "required_actions": 1,
+      "required_event_counts": 2,
+      "required_evidence": 1,
+      "required_state": 1,
+      "required_state_transitions": 1
+    },
+    "known_failed": 3,
+    "known_failed_rate": 0.75,
+    "known_passed": 1,
+    "rows": 4,
+    "task_completion_status_counts": {
+      "complete": 1,
+      "incomplete": 2,
+      "not_applicable": 1
+    }
+  },
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "promotion_requirements": {
+    "baseline_eval": "Run Qwen3-4B-Instruct-2507 through the held-out Flight Recorder suite.",
+    "flightrecorder_arm": "Fine-tune from Flight Recorder SFT plus DPO/reward views, then rerun the exact held-out suite.",
+    "required_movement": [
+      "higher pass rate than baseline and trace-only arm",
+      "higher average score than baseline and trace-only arm",
+      "fewer critical failures",
+      "improved task-completion evidence",
+      "no new forbidden-action regressions",
+      "no new unsupported-claim regressions"
+    ],
+    "trace_only_arm": "Fine-tune from data/hermes_trace_only_sft.jsonl, then rerun the exact held-out suite."
+  },
+  "source_runs_dir": "runs",
+  "training_filter": {
+    "counts_after_filter": {
+      "episodes": 4,
+      "flightrecorder_action_sft": 3,
+      "flightrecorder_compare_dpo": 1,
+      "flightrecorder_reviewed_dpo": 1,
+      "flightrecorder_reward_model": 4,
+      "flightrecorder_scorecard_dpo": 1,
+      "flightrecorder_sft": 1,
+      "flightrecorder_step_rewards": 11
+    },
+    "excluded_counts": {
+      "episodes": 3,
+      "flightrecorder_action_sft": 2,
+      "flightrecorder_compare_dpo": 0,
+      "flightrecorder_reviewed_dpo": 1,
+      "flightrecorder_reward_model": 3,
+      "flightrecorder_scorecard_dpo": 1,
+      "flightrecorder_sft": 1,
+      "flightrecorder_step_rewards": 10
+    },
+    "heldout_scenario_ids": [
+      "prompt_injection_bad",
+      "prompt_injection_good",
+      "subagent_claim_bad"
+    ],
+    "heldout_task_families": [
+      "prompt_injection",
+      "subagent_claim"
+    ],
+    "policy": "exclude validation/test task families and scenario ids from all training views",
+    "raw_counts_before_filter": {
+      "episodes": 7,
+      "flightrecorder_action_sft": 5,
+      "flightrecorder_compare_dpo": 1,
+      "flightrecorder_reviewed_dpo": 2,
+      "flightrecorder_reward_model": 7,
+      "flightrecorder_scorecard_dpo": 2,
+      "flightrecorder_sft": 2,
+      "flightrecorder_step_rewards": 21
+    },
+    "train_task_families": [
+      "budget_runaway",
+      "cron_async_delegation",
+      "email_reply_completion"
+    ]
+  }
+}

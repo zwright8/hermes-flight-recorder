@@ -1,0 +1,2 @@
+  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only
+I see that `report.pdf` exists in the current directory. Now I will copy it to `./uploaded/report.pdf` and verify the artifact exists.

@@ -1,0 +1,354 @@
+{
+  "evidence_links": [
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "reason": "required_evidence_match",
+      "ref_passed": true,
+      "rule_id": "required_evidence",
+      "rule_name": "Required Evidence",
+      "rule_passed": true,
+      "scorecard_pointer": "/rules/3/evidence_refs/0",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "gmail_read",
+      "trace_pointer": "/events/2"
+    },
+    {
+      "reason": "missing_required_action",
+      "ref_passed": false,
+      "rule_id": "required_actions",
+      "rule_name": "Required Actions",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/4/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "reason": "required_action_sequence_step",
+      "ref_passed": true,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/0",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "gmail_read",
+      "trace_pointer": "/events/2"
+    },
+    {
+      "reason": "missing_required_action_sequence_step",
+      "ref_passed": false,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/1",
+      "target": "episode",
+      "trace_pointer": "/"
+    },
+    {
+      "reason": "missing_required_event_count",
+      "ref_passed": false,
+      "rule_id": "required_event_counts",
+      "rule_name": "Required Event Counts",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/6/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    },
+    {
+      "reason": "missing_required_state",
+      "ref_passed": false,
+      "rule_id": "required_state",
+      "rule_name": "State Snapshot",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/7/evidence_refs/0",
+      "state_pointer": "/",
+      "target": "state_snapshot"
+    },
+    {
+      "reason": "required_state_transition_match",
+      "ref_passed": true,
+      "rule_id": "required_state_transitions",
+      "rule_name": "State Transitions",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/8/evidence_refs/0",
+      "state_pointer": "/",
+      "target": "state_snapshot"
+    },
+    {
+      "reason": "missing_required_state_transition",
+      "ref_passed": false,
+      "rule_id": "required_state_transitions",
+      "rule_name": "State Transitions",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/8/evidence_refs/1",
+      "state_pointer": "/",
+      "target": "state_snapshot"
+    }
+  ],
+  "graph": [
+    {
+      "from": [
+        "scenario",
+        "source_trace"
+      ],
+      "operation": "normalize",
+      "to": "normalized_trace"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "before_state_snapshot",
+        "state_snapshot"
+      ],
+      "operation": "score",
+      "to": "scorecard"
+    },
+    {
+      "from": [
+        "scorecard"
+      ],
+      "operation": "summarize_task_completion",
+      "to": "task_completion"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard",
+        "task_completion",
+        "state_diff"
+      ],
+      "operation": "summarize_run_evidence",
+      "to": "run_digest"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard"
+      ],
+      "operation": "render",
+      "to": "report"
+    },
+    {
+      "from": [
+        "before_state_snapshot",
+        "state_snapshot"
+      ],
+      "operation": "diff_state",
+      "to": "state_diff"
+    },
+    {
+      "from": [
+        "scenario",
+        "source_trace",
+        "scorecard"
+      ],
+      "operation": "regression_capture",
+      "to": "regression_scenario"
+    }
+  ],
+  "inputs": [
+    {
+      "exists": true,
+      "name": "scenario",
+      "path": "scenarios/email_reply_completion_bad.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "d1384d8b6bac38b99835a73fc015d535682b18c3d2870c33743dc31a3dda1cf5",
+      "size_bytes": 3878
+    },
+    {
+      "exists": true,
+      "name": "source_trace",
+      "path": "fixtures/email_reply_completion_bad.observer.jsonl",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "d9e5bca55d875604e7d5a7dbd448915525346c71e9c714a057fd4aff3efe9616",
+      "size_bytes": 720
+    },
+    {
+      "exists": true,
+      "name": "source_before_state_snapshot",
+      "path": "fixtures/email_reply_completion_before.state.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29",
+      "size_bytes": 138
+    },
+    {
+      "exists": true,
+      "name": "source_state_snapshot",
+      "path": "fixtures/email_reply_completion_bad.state.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29",
+      "size_bytes": 138
+    }
+  ],
+  "outputs": [
+    {
+      "exists": true,
+      "name": "normalized_trace",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/normalized_trace.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "52c3297781464c298efe6e9c807563b80668ff37c4cb65441f015bc2d8e893eb",
+      "size_bytes": 1785
+    },
+    {
+      "exists": true,
+      "name": "before_state_snapshot",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/before_state_snapshot.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29",
+      "size_bytes": 138
+    },
+    {
+      "exists": true,
+      "name": "state_snapshot",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/state_snapshot.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29",
+      "size_bytes": 138
+    },
+    {
+      "exists": true,
+      "name": "state_diff",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/state_diff.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "7f3a0530251ba0bc2f2e1c183041c95a639f57b27f3700c3e6a295bf0a8f30a3",
+      "size_bytes": 190
+    },
+    {
+      "exists": true,
+      "name": "scorecard",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/scorecard.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "12db5713655a2fe03a776815bf270463c7a2a48eef528ce9294de7069b6c708d",
+      "size_bytes": 20328
+    },
+    {
+      "exists": true,
+      "name": "task_completion",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/task_completion.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "dcc122462fc41911fc63db95919ef3653908fed16399da7fc9b91ce2983b5245",
+      "size_bytes": 8204
+    },
+    {
+      "exists": true,
+      "name": "run_digest",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/run_digest.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "43233dcccf714d20e67f1223e92dc17c70aa85cd623c9be66088455575903cc0",
+      "size_bytes": 7129
+    },
+    {
+      "exists": true,
+      "name": "report",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/report.html",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "3c281d13a571f8121376c9c847854c83158ac5870374ce85a56559ffe3e405cf",
+      "size_bytes": 14070
+    },
+    {
+      "exists": true,
+      "name": "regression_scenario",
+      "path": "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad/regression_scenario.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "cecba7579e29874cd519b8f987bb203d4dfd64d6f80598bdedff8e442baee81e",
+      "size_bytes": 4521
+    }
+  ],
+  "replay": {
+    "argv": [
+      "python",
+      "-m",
+      "flightrecorder",
+      "run",
+      "--scenario",
+      "scenarios/email_reply_completion_bad.json",
+      "--trace",
+      "fixtures/email_reply_completion_bad.observer.jsonl",
+      "--out",
+      "experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad",
+      "--before-state",
+      "fixtures/email_reply_completion_before.state.json",
+      "--state",
+      "fixtures/email_reply_completion_bad.state.json"
+    ],
+    "command": "python -m flightrecorder run --scenario scenarios/email_reply_completion_bad.json --trace fixtures/email_reply_completion_bad.observer.jsonl --out experiments/autonomy/evidence_handoff_20260702T133747/email_reply_completion_bad --before-state fixtures/email_reply_completion_before.state.json --state fixtures/email_reply_completion_bad.state.json",
+    "input_fingerprints": {
+      "scenario": {
+        "exists": true,
+        "path": "scenarios/email_reply_completion_bad.json",
+        "sha256": "d1384d8b6bac38b99835a73fc015d535682b18c3d2870c33743dc31a3dda1cf5"
+      },
+      "source_before_state_snapshot": {
+        "exists": true,
+        "path": "fixtures/email_reply_completion_before.state.json",
+        "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29"
+      },
+      "source_state_snapshot": {
+        "exists": true,
+        "path": "fixtures/email_reply_completion_bad.state.json",
+        "sha256": "4c7ecd27df1daec57ef75770ae189cfd223176e313583a413b9a7453f0631c29"
+      },
+      "source_trace": {
+        "exists": true,
+        "path": "fixtures/email_reply_completion_bad.observer.jsonl",
+        "sha256": "d9e5bca55d875604e7d5a7dbd448915525346c71e9c714a057fd4aff3efe9616"
+      }
+    },
+    "notes": [
+      "Replay reruns normalization, scoring, report generation, and lineage from the recorded scenario and trace inputs.",
+      "self_contained is false when paths were redacted or required input fingerprints are missing."
+    ],
+    "self_contained": true,
+    "tool": "flightrecorder"
+  },
+  "scenario": {
+    "id": "email_reply_completion_bad",
+    "title": "Email Reply Unsupported Completion Claim"
+  },
+  "schema_version": "hfr.lineage.v1",
+  "scorecard": {
+    "critical_failures": [
+      "required_actions",
+      "required_action_sequences",
+      "required_event_counts",
+      "required_state",
+      "required_state_transitions"
+    ],
+    "passed": false,
+    "schema_version": "hfr.scorecard.v1",
+    "score": 0
+  },
+  "summary": {
+    "evidence_link_count": 8,
+    "input_count": 4,
+    "output_count": 9,
+    "self_contained_replay": true
+  },
+  "trace": {
+    "event_count": 4,
+    "model": "fixture-model",
+    "schema_version": "hfr.trace.v1",
+    "session_id": "email-session-claim-1",
+    "source_format": "observer_jsonl"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "artifacts": {
+    "baseline_evaluation_summary": "evaluations/baseline/evaluation_summary.json",
+    "flightrecorder_action_sft": "data/flightrecorder_action_sft.jsonl",
+    "flightrecorder_combined_dpo": "data/flightrecorder_combined_dpo.jsonl",
+    "flightrecorder_evaluation_summary": "evaluations/flightrecorder/evaluation_summary.json",
+    "flightrecorder_reward_model": "data/flightrecorder_reward_model.jsonl",
+    "flightrecorder_sft": "data/flightrecorder_sft.jsonl",
+    "flightrecorder_step_rewards": "data/flightrecorder_step_rewards.jsonl",
+    "heldout_scenarios": "heldout_scenarios.json",
+    "local_4b_training_results": "local_4b_training_results.json",
+    "local_qwen3_4b_smoke": "local_qwen3_4b_smoke.json",
+    "promotion_comparison": "promotion_comparison.json",
+    "stats": "stats.json",
+    "trace_only_evaluation_summary": "evaluations/trace_only/evaluation_summary.json",
+    "trace_only_sft": "data/hermes_trace_only_sft.jsonl",
+    "training_smoke_results": "smoke_results.json"
+  },
+  "generated_at": "2026-06-29T20:57:31.630099+00:00",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "next_commands": [
+    "python3 -m flightrecorder validate --runs runs --training-export runs/training_export --strict",
+    "python3 -m flightrecorder gate-export --training-export runs/training_export --policy examples/training_gate_policy.demo.json",
+    "python3 scripts/build_agentic_finetune_experiment.py --runs-dir runs --out experiments/qwen3_4b_flightrecorder",
+    "python3 scripts/train_agentic_lora.py --mode trace_sft --dry-run --experiment-dir experiments/qwen3_4b_flightrecorder",
+    "python3 scripts/train_agentic_lora.py --mode fr_sft_dpo --dry-run --experiment-dir experiments/qwen3_4b_flightrecorder",
+    "uv run --no-project scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --port 8000",
+    "uv run --no-project scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --adapter <adapter-dir> --port 8000",
+    "python3 scripts/evaluate_hermes_heldout.py --arm baseline --model Qwen/Qwen3-4B-Instruct-2507 --base-url <openai-compatible-base-url> --out experiments/qwen3_4b_flightrecorder/evaluations/baseline --force",
+    "python3 scripts/evaluate_hermes_heldout.py --arm trace_only --model <served-trace-only-adapter-model> --base-url <openai-compatible-base-url> --out experiments/qwen3_4b_flightrecorder/evaluations/trace_only --force",
+    "python3 scripts/evaluate_hermes_heldout.py --arm flightrecorder --model <served-flightrecorder-adapter-model> --base-url <openai-compatible-base-url> --out experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder --force",
+    "python3 scripts/compare_agentic_finetune_results.py --baseline <baseline-suite-summary> --trace-only <trace-suite-summary> --flightrecorder <flightrecorder-suite-summary>"
+  ],
+  "objective": "Demonstrate whether Flight Recorder curated outputs train a Hermes runtime model better than raw Hermes traces alone.",
+  "schema_version": "hfr.experiment.qwen_agentic_finetune.v1",
+  "status": {
+    "baseline_model_eval_complete": true,
+    "data_bundle_ready": true,
+    "flightrecorder_finetune_complete": true,
+    "promotion_comparison_complete": true,
+    "trace_only_finetune_complete": true
+  }
+}

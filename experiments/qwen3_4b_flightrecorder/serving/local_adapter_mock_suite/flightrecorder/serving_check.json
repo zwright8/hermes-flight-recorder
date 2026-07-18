@@ -1,0 +1,174 @@
+{
+  "arm": "flightrecorder",
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/compatibility_report.json",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/local_adapter_mock_suite/flightrecorder/serving_profile.json"
+  },
+  "base_url": "http://127.0.0.1:63685/v1",
+  "checks": [
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 1,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:63685/healthz"
+          }
+        ],
+        "elapsed_ms": 1,
+        "json": {
+          "model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:63685/healthz"
+      },
+      "id": "health",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "data": [
+            {
+              "id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+              "object": "model"
+            }
+          ],
+          "object": "list"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:63685/v1/models"
+      },
+      "id": "models",
+      "passed": true
+    },
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 0,
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:63685/v1/models/Qwen/Qwen3-4B-Instruct-2507"
+          }
+        ],
+        "elapsed_ms": 0,
+        "json": {
+          "id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+          "object": "model"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:63685/v1/models/Qwen/Qwen3-4B-Instruct-2507"
+      },
+      "id": "model_metadata",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "hfr serving smoke ok",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1783001643,
+          "id": "chatcmpl-hfr-mock-openai",
+          "model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 8,
+            "total_tokens": 12
+          }
+        },
+        "ok": true,
+        "response_model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+        "status_code": 200,
+        "text": "hfr serving smoke ok",
+        "url": "http://127.0.0.1:63685/v1/chat/completions"
+      },
+      "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "error": null,
+        "request": {
+          "tool_choice": "auto",
+          "tool_names": [
+            "read_file"
+          ]
+        },
+        "response_ok": true,
+        "status": "supported",
+        "tool_call_count": 1,
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"path\": \"demo.txt\"}",
+              "name": "read_file"
+            },
+            "id": "call_hfr_mock_openai",
+            "type": "function"
+          }
+        ]
+      },
+      "id": "tool_call_required",
+      "passed": true
+    },
+    {
+      "details": {
+        "error": null,
+        "json_parse_passed": true,
+        "parsed": {
+          "evidence": "hfr-structured-smoke",
+          "status": "ok"
+        },
+        "request": {
+          "response_format": {
+            "type": "json_object"
+          }
+        },
+        "response_ok": true,
+        "status": "supported",
+        "text": "{\"evidence\": \"hfr-structured-smoke\", \"status\": \"ok\"}"
+      },
+      "id": "structured_output_required",
+      "passed": true
+    },
+    {
+      "details": {
+        "chat_response_model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+        "expected": "Qwen/Qwen3-4B-Instruct-2507",
+        "metadata_model": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter",
+        "observed_model_ids": [
+          "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+        ],
+        "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+      },
+      "id": "model_identity",
+      "passed": true
+    }
+  ],
+  "failed_checks": [],
+  "generated_at": "2026-07-02T14:14:03Z",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "passed": true,
+  "profile_id": "flightrecorder-transformers-fr-sft-dpo-adapter",
+  "readiness": "ready",
+  "schema_version": "hfr.serving_endpoint_check.v1",
+  "served_model_id": "Qwen/Qwen3-4B-Instruct-2507+fr_sft_dpo_adapter"
+}

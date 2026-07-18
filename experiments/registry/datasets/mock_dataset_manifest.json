@@ -1,0 +1,9 @@
+{
+  "artifact_count": 0,
+  "dataset_id": "mock-dataset-v1",
+  "notes": [
+    "Placeholder dataset manifest for dry-run model-layer plan validation only."
+  ],
+  "redaction_status": "redacted",
+  "schema_version": "hfr.test_dataset_manifest.v1"
+}

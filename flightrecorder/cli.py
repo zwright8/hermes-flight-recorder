@@ -43,6 +43,16 @@ from .compare_gate import (
 from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
+from .governance import (
+    PromotionDecisionError,
+    PromotionPolicyError,
+    apply_registry_alias_receipt,
+    build_promotion_cards,
+    build_promotion_release_record,
+    build_registry_alias_receipt,
+    build_promotion_decision,
+    load_promotion_policy,
+)
 from .improvement_gate import (
     IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
     ImprovementLedgerGateError,
@@ -53,6 +63,18 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
+from .model_registry import (
+    LINK_TYPE_ALIASES,
+    ModelRegistryError,
+    add_model_registry_link,
+    build_dry_run_training_plan,
+    build_model_compatibility_report,
+    list_model_registry_entries,
+    load_model_registry,
+    model_candidate_errors,
+    move_model_alias,
+    register_model_candidate,
+)
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -163,6 +185,8 @@ def main(argv: list[str] | None = None) -> int:
         RunDigestError,
         EvidenceCoverageError,
         EvidenceBundleError,
+        PromotionDecisionError,
+        PromotionPolicyError,
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
@@ -176,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerGatePolicyError,
         PromotionLedgerError,
         PromotionArchiveError,
+        ModelRegistryError,
         ReplayError,
         SchemaRegistryError,
         OSError,
@@ -775,39 +800,53 @@ def cmd_scenario_quality(args: argparse.Namespace) -> int:
 def cmd_validate(args: argparse.Namespace) -> int:
     summary = validate_artifacts(
         runs_dir=args.runs,
-        run_dirs=args.run,
-        training_export_dir=args.training_export,
-        compare_export_dir=args.compare_export,
-        review_export_dir=args.review_export,
-        reviewed_export_dir=args.reviewed_export,
-        evidence_coverage_paths=args.evidence_coverage,
-        evidence_bundle_paths=args.evidence_bundle,
-        improvement_plan_paths=args.improvement_plan,
-        improvement_ledger_paths=args.improvement_ledger,
-        improvement_ledger_gate_paths=args.improvement_ledger_gate,
-        action_ledger_paths=args.action_ledger,
-        action_ledger_gate_paths=args.action_ledger_gate,
-        decision_gate_paths=args.decision_gate,
-        promotion_ledger_paths=args.promotion_ledger,
-        promotion_ledger_gate_paths=args.promotion_ledger_gate,
-        promotion_archive_paths=args.promotion_archive,
-        trainer_preflight_paths=args.trainer_preflight,
-        trainer_launch_check_paths=args.trainer_launch_check,
-        trainer_archive_paths=args.trainer_archive,
-        trainer_archive_check_paths=args.trainer_archive_check,
-        trainer_consumer_plan_paths=args.trainer_consumer_plan,
-        trainer_wrapper_dry_run_paths=args.trainer_wrapper_dry_run,
-        repair_queue_paths=args.repair_queue,
-        replay_bundle_paths=args.replay_bundle,
-        trace_observability_paths=args.trace_observability,
-        review_calibration_paths=args.review_calibration,
-        scenario_quality_paths=args.scenario_quality,
-        suite_summary_paths=args.suite_summary,
-        suite_trend_paths=args.suite_trend,
-        state_snapshot_paths=args.state_snapshot,
-        state_diff_paths=args.state_diff,
-        run_digest_paths=args.run_digest,
-        live_smoke_summary_paths=args.live_smoke_summary,
+        run_dirs=getattr(args, "run", []),
+        training_export_dir=getattr(args, "training_export", None),
+        compare_export_dir=getattr(args, "compare_export", None),
+        review_export_dir=getattr(args, "review_export", None),
+        reviewed_export_dir=getattr(args, "reviewed_export", None),
+        evidence_coverage_paths=getattr(args, "evidence_coverage", []),
+        evidence_bundle_paths=getattr(args, "evidence_bundle", []),
+        improvement_plan_paths=getattr(args, "improvement_plan", []),
+        improvement_ledger_paths=getattr(args, "improvement_ledger", []),
+        improvement_ledger_gate_paths=getattr(args, "improvement_ledger_gate", []),
+        action_ledger_paths=getattr(args, "action_ledger", []),
+        action_ledger_gate_paths=getattr(args, "action_ledger_gate", []),
+        decision_gate_paths=getattr(args, "decision_gate", []),
+        promotion_decision_paths=getattr(args, "promotion_decision", []),
+        promotion_cards_paths=getattr(args, "promotion_cards", []),
+        promotion_release_record_paths=getattr(args, "promotion_release_record", []),
+        registry_alias_receipt_paths=getattr(args, "registry_alias_receipt", []),
+        registry_alias_apply_paths=getattr(args, "registry_alias_apply", []),
+        promotion_ledger_paths=getattr(args, "promotion_ledger", []),
+        promotion_ledger_gate_paths=getattr(args, "promotion_ledger_gate", []),
+        promotion_archive_paths=getattr(args, "promotion_archive", []),
+        trainer_preflight_paths=getattr(args, "trainer_preflight", []),
+        trainer_launch_check_paths=getattr(args, "trainer_launch_check", []),
+        trainer_archive_paths=getattr(args, "trainer_archive", []),
+        trainer_archive_check_paths=getattr(args, "trainer_archive_check", []),
+        trainer_consumer_plan_paths=getattr(args, "trainer_consumer_plan", []),
+        trainer_wrapper_dry_run_paths=getattr(args, "trainer_wrapper_dry_run", []),
+        model_scout_manifest_paths=getattr(args, "model_scout_manifest", []),
+        model_candidate_paths=getattr(args, "model_candidate", []),
+        model_compatibility_report_paths=getattr(args, "model_compatibility_report", []),
+        model_registry_entry_paths=getattr(args, "model_registry_entry", []),
+        model_registry_paths=getattr(args, "model_registry", []),
+        training_plan_paths=getattr(args, "training_plan", []),
+        repair_queue_paths=getattr(args, "repair_queue", []),
+        replay_bundle_paths=getattr(args, "replay_bundle", []),
+        trace_observability_paths=getattr(args, "trace_observability", []),
+        review_calibration_paths=getattr(args, "review_calibration", []),
+        scenario_quality_paths=getattr(args, "scenario_quality", []),
+        suite_summary_paths=getattr(args, "suite_summary", []),
+        suite_trend_paths=getattr(args, "suite_trend", []),
+        state_snapshot_paths=getattr(args, "state_snapshot", []),
+        state_diff_paths=getattr(args, "state_diff", []),
+        run_digest_paths=getattr(args, "run_digest", []),
+        harness_manifest_paths=getattr(args, "harness_manifest", []),
+        harness_result_paths=getattr(args, "harness_result", []),
+        harness_replay_result_paths=getattr(args, "harness_replay_result", []),
+        live_smoke_summary_paths=getattr(args, "live_smoke_summary", []),
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -951,7 +990,11 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trainer_archive_check_path=args.trainer_archive_check,
         trainer_consumer_plan_path=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
+        harness_manifest_paths=args.harness_manifest,
+        harness_result_paths=args.harness_result,
         gate_paths=args.gate,
+        require_harness=args.require_harness,
+        require_gate=args.require_gate,
         preserve_paths=args.preserve_paths,
     )
     _write_json(Path(args.out), bundle)
@@ -1039,6 +1082,85 @@ def cmd_promotion_archive(args: argparse.Namespace) -> int:
     return 0 if archive["passed"] else 1
 
 
+def cmd_promotion_decision(args: argparse.Namespace) -> int:
+    policy = load_promotion_policy(args.policy) if args.policy else None
+    metadata = _metadata_options(args.metadata)
+    decision = build_promotion_decision(
+        out_path=args.out,
+        artifacts=_key_path_options(args.artifact),
+        evals=_key_path_options(args.eval),
+        gates=_key_path_options(args.gate),
+        policy=policy,
+        policy_path=args.policy,
+        preserve_paths=args.preserve_paths,
+        metadata=metadata,
+    )
+    _write_json(Path(args.out), decision)
+    print(
+        f"{'READY' if decision['passed'] else 'BLOCKED'} promotion-decision "
+        f"checks={decision['check_count'] - decision['failed_check_count']}/{decision['check_count']} "
+        f"out={args.out}"
+    )
+    return 0 if decision["passed"] else 1
+
+
+def cmd_promotion_cards(args: argparse.Namespace) -> int:
+    policy = load_promotion_policy(args.policy) if args.policy else None
+    cards = build_promotion_cards(
+        out_dir=args.out_dir,
+        manifest_path=args.manifest_out,
+        artifacts=_key_path_options(args.artifact),
+        evals=_key_path_options(args.eval),
+        gates=_key_path_options(args.gate),
+        policy=policy,
+        policy_path=args.policy,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    card_paths = {
+        "model_card": Path(args.out_dir) / "MODEL_CARD.md",
+        "dataset_card": Path(args.out_dir) / "DATASET_CARD.md",
+    }
+    for role, path in card_paths.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(cards["cards"][role]["content"], encoding="utf-8")
+    manifest_path = Path(args.manifest_out) if args.manifest_out else Path(args.out_dir) / "promotion_cards.json"
+    _write_json(manifest_path, cards)
+    print(
+        f"{'READY' if cards['passed'] else 'BLOCKED'} promotion-cards "
+        f"cards={cards['metrics']['card_count']} "
+        f"checks={cards['check_count'] - cards['failed_check_count']}/{cards['check_count']} out={manifest_path}"
+    )
+    return 0 if cards["passed"] else 1
+
+
+def cmd_promotion_release_record(args: argparse.Namespace) -> int:
+    policy = load_promotion_policy(args.policy) if args.policy else None
+    record = build_promotion_release_record(
+        release_id=args.release_id,
+        out_path=args.out,
+        notes_path=args.notes_out,
+        promotion_decision_path=args.promotion_decision,
+        promotion_cards_path=args.promotion_cards,
+        registry_alias_receipt_path=args.registry_alias_receipt,
+        rollback_path=args.rollback,
+        evals=_key_path_options(args.eval),
+        policy=policy,
+        policy_path=args.policy,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    notes_path = Path(args.notes_out) if args.notes_out else Path(args.out).with_name("RELEASE_NOTES.md")
+    notes_path.parent.mkdir(parents=True, exist_ok=True)
+    notes_path.write_text(record["release_notes"]["content"], encoding="utf-8")
+    _write_json(Path(args.out), record)
+    print(
+        f"{'READY' if record['passed'] else 'BLOCKED'} promotion-release-record "
+        f"release={record['release_id']} checks={record['check_count'] - record['failed_check_count']}/{record['check_count']} out={args.out}"
+    )
+    return 0 if record["passed"] else 1
+
+
 def cmd_trainer_archive(args: argparse.Namespace) -> int:
     archive = build_trainer_archive(
         out_dir=args.out,
@@ -1091,6 +1213,201 @@ def cmd_trainer_consumer_plan(args: argparse.Namespace) -> int:
         f"external_code={plan['metrics']['external_code_file_count']} out={args.out}"
     )
     return 0 if plan["passed"] else 1
+
+
+def cmd_model_candidate_validate(args: argparse.Namespace) -> int:
+    candidate_path = Path(args.candidate)
+    candidate = _read_json(candidate_path)
+    errors = model_candidate_errors(candidate, require_training_eligible=args.require_training_eligible)
+    summary = {
+        "schema_version": "hfr.model_candidate.validation.v1",
+        "candidate_path": str(candidate_path),
+        "passed": not errors,
+        "require_training_eligible": args.require_training_eligible,
+        "error_count": len(errors),
+        "errors": errors,
+    }
+    if args.out:
+        _write_json(Path(args.out), summary)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if summary["passed"] else 1
+
+
+def cmd_model_scout_validate(args: argparse.Namespace) -> int:
+    summary = validate_artifacts(model_scout_manifest_paths=[args.manifest], strict=args.strict)
+    if args.out:
+        _write_json(Path(args.out), summary)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if summary["passed"] else 1
+
+
+def cmd_model_candidate_compatibility_report(args: argparse.Namespace) -> int:
+    candidate = _read_json(Path(args.candidate))
+    report = build_model_compatibility_report(
+        candidate,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), report)
+    print(f"wrote model compatibility report {args.out}")
+    return 0 if report["passed"] else 1
+
+
+def cmd_model_registry_validate(args: argparse.Namespace) -> int:
+    registry = load_model_registry(args.registry)
+    summary = {
+        "schema_version": "hfr.model_registry.validation.v1",
+        "registry_path": str(Path(args.registry)),
+        "passed": True,
+        "entry_count": len(registry.get("entries", {})),
+        "aliases": registry.get("aliases", {}),
+    }
+    if args.out:
+        _write_json(Path(args.out), summary)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0
+
+
+def cmd_model_registry_register(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    candidate = _read_json(Path(args.candidate))
+    registry = register_model_candidate(registry, candidate, status=args.status)
+    _write_json(registry_path, registry)
+    print(f"registered {candidate['candidate_id']} in {registry_path}")
+    return 0
+
+
+def cmd_model_registry_list(args: argparse.Namespace) -> int:
+    registry = load_model_registry(args.registry)
+    rows = list_model_registry_entries(registry)
+    if args.json:
+        print(json.dumps(rows, indent=2, sort_keys=True, ensure_ascii=False))
+    else:
+        for row in rows:
+            aliases = ",".join(row["aliases"]) if row["aliases"] else "-"
+            print(
+                f"{row['entry_id']}\tmodel={row['model_id']}\t"
+                f"eligible={str(row['training_eligible']).lower()}\tlicense={row['license_status']}\taliases={aliases}"
+            )
+    return 0
+
+
+def cmd_model_registry_alias(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    registry = move_model_alias(
+        registry,
+        alias=args.alias,
+        target=args.target,
+        rollback_target=args.rollback_target,
+        reason=args.reason or "",
+    )
+    _write_json(registry_path, registry)
+    print(f"moved alias {args.alias} -> {args.target} in {registry_path}")
+    return 0
+
+
+def cmd_model_registry_apply_alias_receipt(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    alias_receipt_path = Path(args.registry_alias_receipt)
+    release_record_path = Path(args.promotion_release_record)
+    alias_receipt = _read_json(alias_receipt_path)
+    release_record = _read_json(release_record_path)
+    apply_record, updated_registry = apply_registry_alias_receipt(
+        registry=registry,
+        registry_path=registry_path,
+        registry_alias_receipt=alias_receipt,
+        registry_alias_receipt_path=alias_receipt_path,
+        promotion_release_record=release_record,
+        promotion_release_record_path=release_record_path,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        metadata=dict(args.metadata or []),
+    )
+    if updated_registry is not None:
+        _write_json(registry_path, updated_registry)
+    _write_json(Path(args.out), apply_record)
+    print(
+        f"{'READY' if apply_record['passed'] else 'BLOCKED'} registry-alias-apply "
+        f"{apply_record['alias_update']['alias']} -> {apply_record['alias_update']['target']} out={args.out}"
+    )
+    return 0 if apply_record["passed"] else 1
+
+
+def cmd_model_registry_link(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    registry = add_model_registry_link(
+        registry,
+        entry_ref=args.entry,
+        link_type=args.type,
+        artifact_id=args.artifact_id or "",
+        path=args.path or "",
+        kind=args.kind or "",
+        metadata=dict(args.metadata or []),
+        note=args.note or "",
+    )
+    _write_json(registry_path, registry)
+    entry = registry["entries"][args.entry if args.entry in registry["entries"] else registry["aliases"].get(args.entry, args.entry)]
+    print(f"linked {args.type} to {entry['entry_id']} in {registry_path}")
+    return 0
+
+
+def cmd_model_registry_alias_receipt(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    promotion_decision_path = Path(args.promotion_decision)
+    registry = load_model_registry(registry_path)
+    promotion_decision = _read_json(promotion_decision_path)
+    receipt = build_registry_alias_receipt(
+        registry=registry,
+        registry_path=registry_path,
+        promotion_decision=promotion_decision,
+        promotion_decision_path=promotion_decision_path,
+        alias=args.alias,
+        target=args.target,
+        rollback_target=args.rollback_target,
+        reason=args.reason or "",
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        metadata=dict(args.metadata or []),
+    )
+    _write_json(Path(args.out), receipt)
+    print(
+        f"{'READY' if receipt['passed'] else 'BLOCKED'} registry-alias-receipt "
+        f"{receipt['alias_update']['alias']} -> {receipt['alias_update']['target']} out={args.out}"
+    )
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_training_plan_dry_run(args: argparse.Namespace) -> int:
+    registry = load_model_registry(args.registry)
+    compatibility_report = _read_json(Path(args.compatibility_report)) if args.compatibility_report else None
+    plan = build_dry_run_training_plan(
+        registry,
+        model_ref=args.model,
+        dataset_id=args.dataset_id,
+        dataset_manifest=args.dataset_manifest,
+        trainer=args.trainer,
+        mode=args.mode,
+        output_dir=args.output_dir,
+        out_path=args.out,
+        hyperparameters=dict(args.hyperparameter or []),
+        compute=dict(args.compute or []),
+        compatibility_report=compatibility_report,
+        compatibility_report_path=args.compatibility_report,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), plan)
+    print(f"wrote dry-run training plan {args.out}")
+    return 0
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -1857,6 +2174,26 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
+    validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
+    validate.add_argument("--promotion-cards", action="append", default=[], help="Validate one promotion_cards.json; may be repeated")
+    validate.add_argument(
+        "--promotion-release-record",
+        action="append",
+        default=[],
+        help="Validate one promotion_release_record.json; may be repeated",
+    )
+    validate.add_argument(
+        "--registry-alias-receipt",
+        action="append",
+        default=[],
+        help="Validate one registry_alias_receipt.json; may be repeated",
+    )
+    validate.add_argument(
+        "--registry-alias-apply",
+        action="append",
+        default=[],
+        help="Validate one registry_alias_apply JSON file; may be repeated",
+    )
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
@@ -1886,6 +2223,22 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one trainer_wrapper_dry_run.json; may be repeated",
     )
+    validate.add_argument("--model-scout-manifest", action="append", default=[], help="Validate one model_scout_manifest JSON file; may be repeated")
+    validate.add_argument("--model-candidate", action="append", default=[], help="Validate one model_candidate JSON file; may be repeated")
+    validate.add_argument(
+        "--model-compatibility-report",
+        action="append",
+        default=[],
+        help="Validate one model_compatibility_report JSON file; may be repeated",
+    )
+    validate.add_argument(
+        "--model-registry-entry",
+        action="append",
+        default=[],
+        help="Validate one model_registry_entry JSON file; may be repeated",
+    )
+    validate.add_argument("--model-registry", action="append", default=[], help="Validate one model_registry JSON file; may be repeated")
+    validate.add_argument("--training-plan", action="append", default=[], help="Validate one training_plan JSON file; may be repeated")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -1896,6 +2249,9 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
     validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
     validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")
+    validate.add_argument("--harness-manifest", action="append", default=[], help="Validate one harness_manifest.json; may be repeated")
+    validate.add_argument("--harness-result", action="append", default=[], help="Validate one harness_result.json; may be repeated")
+    validate.add_argument("--harness-replay-result", action="append", default=[], help="Validate one harness_replay_result.json; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
@@ -1998,7 +2354,11 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trainer-archive-check", help="trainer_archive_check.json included in the handoff")
     evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
     evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
+    evidence_bundle.add_argument("--harness-manifest", action="append", default=[], help="harness_manifest.json included in the handoff; may be repeated")
+    evidence_bundle.add_argument("--harness-result", action="append", default=[], help="harness_result.json included in the handoff; may be repeated")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
+    evidence_bundle.add_argument("--require-harness", action="store_true", help="Block unless at least one matched harness manifest/result pair is included")
+    evidence_bundle.add_argument("--require-gate", action="store_true", help="Block unless at least one gate summary is included")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
 
@@ -2139,6 +2499,120 @@ def _parser() -> argparse.ArgumentParser:
         help="Allow absolute original paths in the archive manifest; use only for private local debugging",
     )
     promotion_archive.set_defaults(func=cmd_promotion_archive)
+
+    promotion_decision = subparsers.add_parser(
+        "promotion-decision",
+        help="Build a top-level governance decision before registry alias movement",
+    )
+    promotion_decision.add_argument("--out", required=True, help="Write promotion_decision.json to this path")
+    promotion_decision.add_argument("--policy", help="Versioned promotion policy JSON file")
+    promotion_decision.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="ROLE=PATH",
+        help="Governance artifact, e.g. evidence_bundle=path or model_card=path; may be repeated",
+    )
+    promotion_decision.add_argument(
+        "--eval",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="ARM=PATH",
+        help="Held-out eval summary, e.g. base=path, trace_only=path, frontier=path, champion=path, candidate=path",
+    )
+    promotion_decision.add_argument(
+        "--gate",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="GATE=PATH",
+        help="Required gate artifact, e.g. training_gate=path, compare_gate=path, safety_gate=path",
+    )
+    promotion_decision.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach governance metadata to the decision artifact; may be repeated",
+    )
+    promotion_decision.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the decision output")
+    promotion_decision.set_defaults(func=cmd_promotion_decision)
+
+    promotion_cards = subparsers.add_parser(
+        "promotion-cards",
+        help="Generate deterministic model and dataset cards for a promotion packet",
+    )
+    promotion_cards.add_argument("--out-dir", required=True, help="Directory for MODEL_CARD.md, DATASET_CARD.md, and promotion_cards.json")
+    promotion_cards.add_argument("--manifest-out", help="Write promotion_cards.json to this path instead of <out-dir>/promotion_cards.json")
+    promotion_cards.add_argument("--policy", help="Versioned promotion policy JSON file")
+    promotion_cards.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="ROLE=PATH",
+        help="Governance source artifact, e.g. dataset_manifest=path or rollback=path; may be repeated",
+    )
+    promotion_cards.add_argument(
+        "--eval",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="ARM=PATH",
+        help="Held-out eval summary, e.g. base=path, trace_only=path, frontier=path, champion=path, candidate=path",
+    )
+    promotion_cards.add_argument(
+        "--gate",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="GATE=PATH",
+        help="Gate artifact to summarize, e.g. training_gate=path, compare_gate=path, safety_gate=path",
+    )
+    promotion_cards.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach governance metadata to the card manifest; may be repeated",
+    )
+    promotion_cards.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the card manifest")
+    promotion_cards.set_defaults(func=cmd_promotion_cards)
+
+    promotion_release_record = subparsers.add_parser(
+        "promotion-release-record",
+        help="Bind passed governance artifacts and release notes before final promotion",
+    )
+    promotion_release_record.add_argument("--release-id", required=True, help="Stable release identifier")
+    promotion_release_record.add_argument("--out", required=True, help="Write promotion_release_record.json to this path")
+    promotion_release_record.add_argument("--notes-out", help="Write Markdown release notes to this path; defaults beside --out")
+    promotion_release_record.add_argument("--policy", help="Versioned promotion policy JSON file")
+    promotion_release_record.add_argument("--promotion-decision", required=True, help="promotion_decision.json for this release")
+    promotion_release_record.add_argument("--promotion-cards", required=True, help="promotion_cards.json for this release")
+    promotion_release_record.add_argument("--registry-alias-receipt", required=True, help="registry_alias_receipt.json for this release")
+    promotion_release_record.add_argument("--rollback", required=True, help="rollback metadata JSON for this release")
+    promotion_release_record.add_argument(
+        "--eval",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="ARM=PATH",
+        help="Held-out eval summary, e.g. base=path, trace_only=path, frontier=path, champion=path, candidate=path",
+    )
+    promotion_release_record.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach governance metadata to the release record; may be repeated",
+    )
+    promotion_release_record.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the release record")
+    promotion_release_record.set_defaults(func=cmd_promotion_release_record)
 
     gate_promotion_ledger = subparsers.add_parser(
         "gate-promotion-ledger",
@@ -2575,6 +3049,156 @@ def _parser() -> argparse.ArgumentParser:
     )
     trainer_consumer_plan.set_defaults(func=cmd_trainer_consumer_plan)
 
+    model_scout = subparsers.add_parser("model-scout", help="Validate model scout manifests")
+    model_scout_subparsers = model_scout.add_subparsers(dest="model_scout_command", required=True)
+    model_scout_validate = model_scout_subparsers.add_parser("validate", help="Validate a model scout manifest")
+    model_scout_validate.add_argument("--manifest", required=True, help="model_scout_manifest JSON file to validate")
+    model_scout_validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
+    model_scout_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_scout_validate.set_defaults(func=cmd_model_scout_validate)
+
+    model_candidate = subparsers.add_parser("model-candidate", help="Validate model candidate metadata")
+    model_candidate_subparsers = model_candidate.add_subparsers(dest="model_candidate_command", required=True)
+    model_candidate_validate = model_candidate_subparsers.add_parser("validate", help="Validate a model candidate manifest")
+    model_candidate_validate.add_argument("--candidate", required=True, help="model_candidate JSON file to validate")
+    model_candidate_validate.add_argument(
+        "--require-training-eligible",
+        action="store_true",
+        help="Also require approved license, terms, and training allowance",
+    )
+    model_candidate_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_candidate_validate.set_defaults(func=cmd_model_candidate_validate)
+    model_candidate_compatibility = model_candidate_subparsers.add_parser(
+        "compatibility-report",
+        help="Write a no-download compatibility report from candidate metadata",
+    )
+    model_candidate_compatibility.add_argument("--candidate", required=True, help="model_candidate JSON file to inspect")
+    model_candidate_compatibility.add_argument("--out", required=True, help="Write model_compatibility_report JSON to this path")
+    model_candidate_compatibility.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in report output")
+    model_candidate_compatibility.set_defaults(func=cmd_model_candidate_compatibility_report)
+
+    model_registry = subparsers.add_parser("model-registry", help="Manage the local model registry")
+    model_registry_subparsers = model_registry.add_subparsers(dest="model_registry_command", required=True)
+    model_registry_validate = model_registry_subparsers.add_parser("validate", help="Validate a model registry")
+    model_registry_validate.add_argument("--registry", required=True, help="model_registry JSON file to validate")
+    model_registry_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_registry_validate.set_defaults(func=cmd_model_registry_validate)
+    model_registry_register = model_registry_subparsers.add_parser("register", help="Register or update a model candidate")
+    model_registry_register.add_argument("--registry", required=True, help="model_registry JSON file to update")
+    model_registry_register.add_argument("--candidate", required=True, help="model_candidate JSON file to register")
+    model_registry_register.add_argument("--status", default="registered", help="Registry lifecycle status for this entry")
+    model_registry_register.set_defaults(func=cmd_model_registry_register)
+    model_registry_list = model_registry_subparsers.add_parser("list", help="List model registry entries")
+    model_registry_list.add_argument("--registry", required=True, help="model_registry JSON file to list")
+    model_registry_list.add_argument("--json", action="store_true", help="Print machine-readable JSON instead of tabular text")
+    model_registry_list.set_defaults(func=cmd_model_registry_list)
+    model_registry_alias = model_registry_subparsers.add_parser("alias", help="Move a registry alias")
+    model_registry_alias.add_argument("--registry", required=True, help="model_registry JSON file to update")
+    model_registry_alias.add_argument("--alias", required=True, choices=["candidate", "champion", "rollback"], help="Alias to move")
+    model_registry_alias.add_argument("--target", required=True, help="Registered entry id to target")
+    model_registry_alias.add_argument(
+        "--rollback-target",
+        help="Required explicit rollback entry id when moving champion",
+    )
+    model_registry_alias.add_argument("--reason", default="", help="Human-readable reason recorded in alias history")
+    model_registry_alias.set_defaults(func=cmd_model_registry_alias)
+    model_registry_apply_alias_receipt = model_registry_subparsers.add_parser(
+        "apply-alias-receipt",
+        help="Mutate registry aliases only after revalidating a passed alias receipt and release record",
+    )
+    model_registry_apply_alias_receipt.add_argument("--registry", required=True, help="model_registry JSON file to update")
+    model_registry_apply_alias_receipt.add_argument("--registry-alias-receipt", required=True, help="registry_alias_receipt JSON file")
+    model_registry_apply_alias_receipt.add_argument("--promotion-release-record", required=True, help="promotion_release_record JSON file")
+    model_registry_apply_alias_receipt.add_argument("--out", required=True, help="Write registry_alias_apply JSON to this path")
+    model_registry_apply_alias_receipt.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach governance metadata to the apply record; may be repeated",
+    )
+    model_registry_apply_alias_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the apply record")
+    model_registry_apply_alias_receipt.set_defaults(func=cmd_model_registry_apply_alias_receipt)
+    model_registry_link = model_registry_subparsers.add_parser(
+        "link",
+        help="Attach a dataset, training run, adapter, eval, or promotion-decision artifact to a registry entry",
+    )
+    model_registry_link.add_argument("--registry", required=True, help="model_registry JSON file to update")
+    model_registry_link.add_argument("--entry", required=True, help="Registry entry id or alias to update")
+    model_registry_link.add_argument("--type", required=True, choices=sorted(LINK_TYPE_ALIASES), help="Lifecycle link type")
+    model_registry_link.add_argument("--artifact-id", default="", help="Stable artifact id to record")
+    model_registry_link.add_argument("--path", default="", help="Artifact path to record")
+    model_registry_link.add_argument("--kind", default="", help="Optional artifact kind override")
+    model_registry_link.add_argument("--note", default="", help="Human-readable note for this link")
+    model_registry_link.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach link metadata; may be repeated",
+    )
+    model_registry_link.set_defaults(func=cmd_model_registry_link)
+    model_registry_alias_receipt = model_registry_subparsers.add_parser(
+        "alias-receipt",
+        help="Write a governance receipt for a proposed alias move without mutating the registry",
+    )
+    model_registry_alias_receipt.add_argument("--registry", required=True, help="model_registry JSON file to inspect")
+    model_registry_alias_receipt.add_argument("--promotion-decision", required=True, help="Validated promotion_decision JSON file")
+    model_registry_alias_receipt.add_argument("--alias", required=True, choices=["candidate", "champion", "rollback"], help="Alias to plan")
+    model_registry_alias_receipt.add_argument("--target", required=True, help="Registered entry id to target")
+    model_registry_alias_receipt.add_argument(
+        "--rollback-target",
+        help="Required explicit rollback entry id when planning a champion move",
+    )
+    model_registry_alias_receipt.add_argument("--reason", default="", help="Human-readable reason for the planned alias history")
+    model_registry_alias_receipt.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach governance metadata to the receipt; may be repeated",
+    )
+    model_registry_alias_receipt.add_argument("--out", required=True, help="Write registry alias receipt JSON to this path")
+    model_registry_alias_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the receipt output")
+    model_registry_alias_receipt.set_defaults(func=cmd_model_registry_alias_receipt)
+
+    training_plan = subparsers.add_parser("training-plan", help="Build model-layer training plans")
+    training_plan_subparsers = training_plan.add_subparsers(dest="training_plan_command", required=True)
+    training_plan_dry_run = training_plan_subparsers.add_parser(
+        "dry-run",
+        help="Write a dry-run training plan without downloads or GPU work",
+    )
+    training_plan_dry_run.add_argument("--registry", required=True, help="model_registry JSON file")
+    training_plan_dry_run.add_argument("--model", required=True, help="Registry entry id or alias")
+    training_plan_dry_run.add_argument("--dataset-id", required=True, help="Dataset version id for this plan")
+    training_plan_dry_run.add_argument("--dataset-manifest", required=True, help="Dataset manifest JSON path")
+    training_plan_dry_run.add_argument("--compatibility-report", help="Optional model_compatibility_report JSON to fingerprint into the plan")
+    training_plan_dry_run.add_argument("--trainer", required=True, help="Trainer backend or wrapper name")
+    training_plan_dry_run.add_argument("--mode", required=True, help="Training mode, such as sft or dpo")
+    training_plan_dry_run.add_argument("--output-dir", required=True, help="Planned adapter/checkpoint output directory")
+    training_plan_dry_run.add_argument("--out", required=True, help="Write training_plan JSON to this path")
+    training_plan_dry_run.add_argument(
+        "--hyperparameter",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach a hyperparameter to the dry-run plan; may be repeated",
+    )
+    training_plan_dry_run.add_argument(
+        "--compute",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach a compute assumption to the dry-run plan; may be repeated",
+    )
+    training_plan_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in plan output")
+    training_plan_dry_run.set_defaults(func=cmd_training_plan_dry_run)
+
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_rl.add_argument("--out", required=True, help="Output directory for evidence and trainer-ready artifacts")
@@ -2790,6 +3414,13 @@ def _metadata_options(items: list[tuple[str, str]]) -> dict[str, str]:
     for key, value in items:
         metadata[key] = value
     return metadata
+
+
+def _key_path_options(items: list[tuple[str, str]]) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    for key, value in items:
+        paths[key] = value
+    return paths
 
 
 def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) -> None:

@@ -1,0 +1,139 @@
+{
+  "adapters": {
+    "flightrecorder": {
+      "exists": true,
+      "files": {
+        "adapter_config.json": {
+          "bytes": 1104,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_config.json",
+          "sha256": "f239d1ee1d2288ff93c5ed968a7a0a1a656f684773bffae92afa58b94044fc29"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 33096456,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/adapter_model.safetensors",
+          "sha256": "d9d470c316adb5406fbee5b4a4cdce5ce3113755b7735292e6aff839a19b9331"
+        },
+        "chat_template.jinja": {
+          "bytes": 2630,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/chat_template.jinja",
+          "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+        },
+        "tokenizer_config.json": {
+          "bytes": 695,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter/tokenizer_config.json",
+          "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+        }
+      },
+      "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter"
+    },
+    "trace_only": {
+      "exists": true,
+      "files": {
+        "adapter_config.json": {
+          "bytes": 1104,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_config.json",
+          "sha256": "77bc2b643deb574a4ae525ac088ddd7907d101f4df2197606f5371bb494b396d"
+        },
+        "adapter_model.safetensors": {
+          "bytes": 33096456,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/adapter_model.safetensors",
+          "sha256": "e2cf1cbbeef4273ef09436d41a6f0227ab6f4a338f12307797c72780fc77fc42"
+        },
+        "chat_template.jinja": {
+          "bytes": 2630,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/chat_template.jinja",
+          "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+        },
+        "tokenizer_config.json": {
+          "bytes": 695,
+          "exists": true,
+          "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter/tokenizer_config.json",
+          "sha256": "e7979df876a7bccca3d4300c252ba4a13657c7ac23e62a98498c8b56dfac39ab"
+        }
+      },
+      "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter"
+    }
+  },
+  "blocked_checks": [],
+  "command_refs": [
+    {
+      "arm": "baseline",
+      "managed_eval_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/run_managed_serving_eval.py --server-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '\"'\"'{port}'\"'\"' --max-new-tokens 64' --base-url 'http://127.0.0.1:{port}/v1' --model Qwen/Qwen3-4B-Instruct-2507 --arm baseline --out experiments/qwen3_4b_flightrecorder/serving/baseline --require-structured-output --eval-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/evaluate_hermes_heldout.py --arm baseline --model Qwen/Qwen3-4B-Instruct-2507 --base-url {base_url} --serving-profile {serving_profile} --out experiments/qwen3_4b_flightrecorder/evaluations/baseline --force'",
+      "server_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '{port}' --max-new-tokens 64"
+    },
+    {
+      "arm": "trace_only",
+      "managed_eval_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/run_managed_serving_eval.py --server-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '\"'\"'{port}'\"'\"' --max-new-tokens 64 --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter' --base-url 'http://127.0.0.1:{port}/v1' --model Qwen/Qwen3-4B-Instruct-2507 --arm trace_only --out experiments/qwen3_4b_flightrecorder/serving/trace_only --require-structured-output --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter --eval-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/evaluate_hermes_heldout.py --arm trace_only --model Qwen/Qwen3-4B-Instruct-2507 --base-url {base_url} --serving-profile {serving_profile} --out experiments/qwen3_4b_flightrecorder/evaluations/trace_only --force'",
+      "server_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '{port}' --max-new-tokens 64 --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_trace_sft/trace_sft_adapter"
+    },
+    {
+      "arm": "flightrecorder",
+      "managed_eval_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/run_managed_serving_eval.py --server-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '\"'\"'{port}'\"'\"' --max-new-tokens 64 --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter' --base-url 'http://127.0.0.1:{port}/v1' --model Qwen/Qwen3-4B-Instruct-2507 --arm flightrecorder --out experiments/qwen3_4b_flightrecorder/serving/flightrecorder --require-structured-output --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter --eval-command '/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python scripts/evaluate_hermes_heldout.py --arm flightrecorder --model Qwen/Qwen3-4B-Instruct-2507 --base-url {base_url} --serving-profile {serving_profile} --out experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder --force'",
+      "server_command": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port '{port}' --max-new-tokens 64 --adapter /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/adapters/qwen3_4b_local_fr_sft_dpo/fr_sft_dpo_adapter"
+    }
+  ],
+  "dependencies": {
+    "accelerate": {
+      "available": true,
+      "origin": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/lib/python3.11/site-packages/accelerate/__init__.py",
+      "runtime_python": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python"
+    },
+    "peft": {
+      "available": true,
+      "origin": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/lib/python3.11/site-packages/peft/__init__.py",
+      "runtime_python": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python"
+    },
+    "torch": {
+      "available": true,
+      "origin": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/lib/python3.11/site-packages/torch/__init__.py",
+      "runtime_python": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python"
+    },
+    "transformers": {
+      "available": true,
+      "origin": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/lib/python3.11/site-packages/transformers/__init__.py",
+      "runtime_python": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python_executable": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python",
+    "python_version": "3.11.15",
+    "serving_runtime_python": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python",
+    "sglang_executable": null,
+    "uv_executable": "/opt/homebrew/bin/uv",
+    "vllm_executable": null
+  },
+  "generated_at": "2026-07-03T15:52:20Z",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "model_cache": {
+    "bytes": 16121793014,
+    "exists": true,
+    "path": "/Users/zacharywright/.cache/huggingface/hub/models--Qwen--Qwen3-4B-Instruct-2507"
+  },
+  "passed": true,
+  "readiness": "ready",
+  "runtime": {
+    "exists": true,
+    "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/.venv/bin/python",
+    "python_version": "3.11.15"
+  },
+  "schema_version": "hfr.serving_runtime_preflight.v1",
+  "server_script": {
+    "declared_dependencies": [
+      "accelerate",
+      "peft",
+      "torch",
+      "transformers"
+    ],
+    "exists": true,
+    "path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scripts/serve_transformers_openai.py",
+    "sha256": "ac9d8c51c109419c06224a369e20fc2697781361646435ba137cfebe36bd2daa"
+  }
+}

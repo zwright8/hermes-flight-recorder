@@ -100,8 +100,12 @@ flightrecorder evidence-bundle \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
+  --require-harness \
+  --require-gate \
   --out runs/evidence_bundle.json
 ```
 
@@ -110,6 +114,9 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+Use `--require-harness --require-gate` for Eval or Governance handoffs so a
+bundle cannot pass without matched harness manifest/result lineage and at least
+one gate summary.
 When trainer handoff artifacts are available, include them in a second
 trainer-facing bundle so the final preflight, launch-check, archive,
 archive-check, consumer-plan, and wrapper dry-run chain is visible in one
@@ -596,21 +603,30 @@ The export directory contains:
   `reward_model` rows for external trainers.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
+- `dataset_registry.json`: local registry entry for the dataset version. It
+  fingerprints `manifest.json` and records source hashes, split metadata,
+  redaction status, quality flags, label provenance, and trainer-view counts.
 - `manifest.json`: generation settings, counts, output paths, artifact
-  fingerprints, caveats, and optional experiment metadata.
+  fingerprints, dataset version, registry pointer, caveats, and optional
+  experiment metadata.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
-use the redacted evidence surface rather than raw sensitive traces. When a run
-contains `artifact_lineage.json`, each episode also includes `source_lineage`
-and `source_fingerprints` so downstream training rows can be traced back to the
-provenance graph and filtered by the scenario/source-trace hashes that produced
-the label.
+use the redacted evidence surface rather than raw sensitive traces. Export
+registration fails if trainer-facing artifacts contain unredacted secret-like
+assignments such as `api_key=...`, `token=...`, or `Authorization: ...`. When a
+run contains `artifact_lineage.json`, each episode also includes
+`source_lineage` and `source_fingerprints` so downstream training rows can be
+traced back to the provenance graph and filtered by the scenario/source-trace
+hashes that produced the label.
 The manifest fingerprints each generated JSONL, JSON, and Markdown export
 artifact except the manifest itself, including every split file.
-`flightrecorder validate --training-export` recomputes those SHA-256 hashes,
-verifies split row counts, and checks that task families do not leak across
-train/validation/test files. This lets a training launcher reject stale,
-swapped, leaky, or partially copied export files before they reach a trainer.
+`dataset_registry.json` fingerprints the completed manifest, so the manifest
+does not fingerprint the registry itself and avoids a circular hash.
+`flightrecorder validate --training-export` recomputes SHA-256 hashes,
+redaction status, label provenance, split row counts, and registry lineage. It
+also checks that task families do not leak across train/validation/test files.
+This lets a training launcher reject stale, swapped, leaky, unredacted, or
+partially copied export files before they reach a trainer.
 New scorecards also emit `task_completion`, a compact verdict over required
 evidence, required actions, ordered action sequences, event counts, and optional
 post-run state snapshots. Scenarios can also define
@@ -620,6 +636,11 @@ pre-run state to the required post-run state. Exported episodes, rewards,
 preferences, SFT rows, DPO rows, reward-model rows, and baseline/candidate
 comparison rows carry that verdict so training jobs can filter for
 evidence-backed completion instead of relying on final-answer text.
+SFT rows and DPO chosen examples are generated only from positive episodes with
+configured task-completion evidence and `task_completion.status=complete`.
+Positive reward-model rows follow the same rule, while failed episodes remain
+available as negative reward/curriculum signal. This prevents final-answer-only
+success claims from becoming trainer-ready data.
 Use `flightrecorder capture-state` when the post-run state starts as local
 artifacts, connector JSON, or explicit observed facts:
 
@@ -861,16 +882,21 @@ simple rows without losing the audit trail.
   coverage, tool/API visibility, and trace observability risks,
 - dataset split metrics for train/validation/test episode counts and
   task-family exclusivity,
+- redaction status from the trainer-facing artifact scan,
+- label-provenance counts for eligible positives, excluded final-answer-only
+  successes, SFT labels, DPO pairs, and reward-model labels,
 - failed-rule and critical-failure counts,
 - task-family coverage with SFT/DPO/reward-model/step-reward counts,
 - quality flags such as missing positives, missing negatives, missing
-  preferences, missing step attribution, or single-family coverage.
+  preferences, missing step attribution, final-answer-only success exclusions,
+  or single-family coverage.
 
 `DATASET_CARD.md` renders the same signal for human review. Treat it as the
 first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
 job. The card helps answer: "Do we have enough positive examples, negative
 pressure, task-family coverage, and attribution to learn anything meaningful?"
-It also shows whether the held-out splits exist and whether the split assignment
+It also shows the dataset version, registry path, redaction result, label
+provenance, whether held-out splits exist, and whether the split assignment
 keeps each task family exclusive.
 When `--metadata` is provided, the card also shows an experiment metadata table
 so humans can tell which candidate/config the export represents.
@@ -905,6 +931,16 @@ family-exclusive dataset splits, and maximum quality-flag counts.
 `gate-export` validates the export and manifest artifact fingerprints by default; set
 `strict_validation` in policy, or pass `--strict-validation`, when warnings
 should also block a training handoff.
+`gate-suite`, `gate-export`, `gate-compare-export`, and `gate-reviewed` emit
+schema-checkable gate results with `readiness`, `recommendation`,
+`failed_checks`, and `next_actions` fields:
+
+```bash
+flightrecorder schemas --check runs/suite_gate.json
+flightrecorder schemas --check runs/training_gate.json
+flightrecorder schemas --check runs/compare_gate.json
+flightrecorder schemas --check runs/reviewed_gate.json
+```
 
 After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, build a `trainer-archive`, then have the external launcher
@@ -1009,6 +1045,8 @@ reward_model = [
     json.loads(line)
     for line in Path("runs/training_export/reward_model.jsonl").read_text().splitlines()
 ]
+manifest = json.loads(Path("runs/training_export/manifest.json").read_text())
+dataset_registry = json.loads(Path("runs/training_export/dataset_registry.json").read_text())
 dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text())
 dataset_splits = json.loads(Path("runs/training_export/dataset_splits.json").read_text())
 dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text()
@@ -1033,8 +1071,12 @@ test_episodes = [
 
 Recommended first uses:
 
-- filter passing episodes into SFT candidates,
-- filter or weight examples by `task_completion.status` before training,
+- select a dataset by `manifest["dataset_version"]` and verify
+  `dataset_registry["manifest"]["sha256"]` before reading trainer views,
+- use `sft.jsonl` directly for SFT candidates; it already excludes
+  final-answer-only positive labels,
+- filter or weight examples by `label_provenance` and
+  `task_completion.status` before training,
 - filter or weight examples by `trace_signal` before training,
 - convert preference records into chosen/rejected pairs,
 - feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,

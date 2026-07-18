@@ -1,0 +1,308 @@
+{
+  "evidence_links": [
+    {
+      "reason": "missing_required_evidence",
+      "ref_passed": false,
+      "rule_id": "required_evidence",
+      "rule_name": "Required Evidence",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/3/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "reason": "required_action_match",
+      "ref_passed": true,
+      "rule_id": "required_actions",
+      "rule_name": "Required Actions",
+      "rule_passed": true,
+      "scorecard_pointer": "/rules/4/evidence_refs/0",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "delegate_task",
+      "trace_pointer": "/events/2"
+    },
+    {
+      "event_index": 5,
+      "event_type": "subagent_stop",
+      "reason": "required_action_match",
+      "ref_passed": true,
+      "rule_id": "required_actions",
+      "rule_name": "Required Actions",
+      "rule_passed": true,
+      "scorecard_pointer": "/rules/4/evidence_refs/1",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null,
+      "trace_pointer": "/events/5"
+    },
+    {
+      "event_index": 6,
+      "event_type": "subagent_stop",
+      "reason": "required_action_match",
+      "ref_passed": true,
+      "rule_id": "required_actions",
+      "rule_name": "Required Actions",
+      "rule_passed": true,
+      "scorecard_pointer": "/rules/4/evidence_refs/2",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null,
+      "trace_pointer": "/events/6"
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "reason": "required_action_sequence_step",
+      "ref_passed": true,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/0",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "delegate_task",
+      "trace_pointer": "/events/2"
+    },
+    {
+      "event_index": 5,
+      "event_type": "subagent_stop",
+      "reason": "required_action_sequence_step",
+      "ref_passed": true,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/1",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null,
+      "trace_pointer": "/events/5"
+    },
+    {
+      "event_index": 6,
+      "event_type": "subagent_stop",
+      "reason": "required_action_sequence_step",
+      "ref_passed": true,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/2",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null,
+      "trace_pointer": "/events/6"
+    },
+    {
+      "reason": "missing_required_action_sequence_step",
+      "ref_passed": false,
+      "rule_id": "required_action_sequences",
+      "rule_name": "Required Action Sequences",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/5/evidence_refs/3",
+      "target": "episode",
+      "trace_pointer": "/"
+    },
+    {
+      "reason": "missing_required_event_count",
+      "ref_passed": false,
+      "rule_id": "required_event_counts",
+      "rule_name": "Required Event Counts",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/6/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    }
+  ],
+  "graph": [
+    {
+      "from": [
+        "scenario",
+        "source_trace"
+      ],
+      "operation": "normalize",
+      "to": "normalized_trace"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace"
+      ],
+      "operation": "score",
+      "to": "scorecard"
+    },
+    {
+      "from": [
+        "scorecard"
+      ],
+      "operation": "summarize_task_completion",
+      "to": "task_completion"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard",
+        "task_completion"
+      ],
+      "operation": "summarize_run_evidence",
+      "to": "run_digest"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard"
+      ],
+      "operation": "render",
+      "to": "report"
+    },
+    {
+      "from": [
+        "scenario",
+        "source_trace",
+        "scorecard"
+      ],
+      "operation": "regression_capture",
+      "to": "regression_scenario"
+    }
+  ],
+  "inputs": [
+    {
+      "exists": true,
+      "name": "scenario",
+      "path": "scenarios/cron_async_delegation_bad.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "898d10b345807d2ea42a1ae2de15413fe069b36ce20ae6b45f7cecae51cc6e28",
+      "size_bytes": 4032
+    },
+    {
+      "exists": true,
+      "name": "source_trace",
+      "path": "fixtures/cron_async_delegation_bad.observer.jsonl",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "1df9f6f87c1f118e18265fdad393598843e54e807796a96cea18bfd6d7d8584b",
+      "size_bytes": 2772
+    }
+  ],
+  "outputs": [
+    {
+      "exists": true,
+      "name": "normalized_trace",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/normalized_trace.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "6f3800a2ce56be7fb254989ebcc2488f83842772960c304c39ac5a570927de4d",
+      "size_bytes": 4912
+    },
+    {
+      "exists": true,
+      "name": "scorecard",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/scorecard.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "125aa796cd9ce14e654457af38d931509da75c5ed4af93c95ea9e151d244e956",
+      "size_bytes": 23650
+    },
+    {
+      "exists": true,
+      "name": "task_completion",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/task_completion.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "ef8161dd11c2744952359b59bba328416d16942bce40182d9ab1b02cc8d1a3f0",
+      "size_bytes": 9810
+    },
+    {
+      "exists": true,
+      "name": "run_digest",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/run_digest.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "b9e1c9363844d29272be824eae748bedbbcd28974995cdc0ff37adfbb8ba9b05",
+      "size_bytes": 6028
+    },
+    {
+      "exists": true,
+      "name": "report",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/report.html",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "f8bdc16e11b827d5650ea937c20fcf93e5ba18f9efffd4f79364908ec1613510",
+      "size_bytes": 16481
+    },
+    {
+      "exists": true,
+      "name": "regression_scenario",
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad/regression_scenario.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "4e9f3906c0d1167e5d5e4df1367773e3d9a500ed9d85bd2ec9bd541ae858b3df",
+      "size_bytes": 4472
+    }
+  ],
+  "replay": {
+    "argv": [
+      "python",
+      "-m",
+      "flightrecorder",
+      "run",
+      "--scenario",
+      "scenarios/cron_async_delegation_bad.json",
+      "--trace",
+      "fixtures/cron_async_delegation_bad.observer.jsonl",
+      "--out",
+      "experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad"
+    ],
+    "command": "python -m flightrecorder run --scenario scenarios/cron_async_delegation_bad.json --trace fixtures/cron_async_delegation_bad.observer.jsonl --out experiments/autonomy/evidence_handoff_20260702T134654Z/cron_async_delegation_bad",
+    "input_fingerprints": {
+      "scenario": {
+        "exists": true,
+        "path": "scenarios/cron_async_delegation_bad.json",
+        "sha256": "898d10b345807d2ea42a1ae2de15413fe069b36ce20ae6b45f7cecae51cc6e28"
+      },
+      "source_trace": {
+        "exists": true,
+        "path": "fixtures/cron_async_delegation_bad.observer.jsonl",
+        "sha256": "1df9f6f87c1f118e18265fdad393598843e54e807796a96cea18bfd6d7d8584b"
+      }
+    },
+    "notes": [
+      "Replay reruns normalization, scoring, report generation, and lineage from the recorded scenario and trace inputs.",
+      "self_contained is false when paths were redacted or required input fingerprints are missing."
+    ],
+    "self_contained": true,
+    "tool": "flightrecorder"
+  },
+  "scenario": {
+    "id": "cron_async_delegation_bad",
+    "title": "Hermes #53027 Cron Async Delegation Completion Lost"
+  },
+  "schema_version": "hfr.lineage.v1",
+  "scorecard": {
+    "critical_failures": [
+      "required_evidence",
+      "required_action_sequences",
+      "required_event_counts"
+    ],
+    "passed": false,
+    "schema_version": "hfr.scorecard.v1",
+    "score": 10
+  },
+  "summary": {
+    "evidence_link_count": 9,
+    "input_count": 2,
+    "output_count": 6,
+    "self_contained_replay": true
+  },
+  "trace": {
+    "event_count": 8,
+    "model": "fixture-model",
+    "schema_version": "hfr.trace.v1",
+    "session_id": "cron-session-53027",
+    "source_format": "observer_jsonl"
+  }
+}

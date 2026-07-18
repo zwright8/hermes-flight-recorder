@@ -20,6 +20,9 @@
     "quality_gate": {
       "type": "string"
     },
+    "label_provenance": {
+      "type": "object"
+    },
     "response": {
       "type": "string"
     },
@@ -77,6 +80,7 @@
     "task_completion_passed",
     "source_fingerprint_status",
     "source_fingerprints",
+    "label_provenance",
     "source_artifact"
   ],
   "title": "Hermes Flight Recorder RL SFT Row",

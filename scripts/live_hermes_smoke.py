@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -27,8 +26,22 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
-from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from flightrecorder.schema import ScenarioError
+from scripts.hermes_harness import (
+    default_hermes_root,
+    environment_summary,
+    hermes_chat_command,
+    hermes_run_env,
+    model_probe_payload,
+    publish_harness_artifacts,
+    require_hermes_checkout,
+    send_json,
+    send_stream,
+    write_fake_secret_canaries,
+    write_observer_plugin,
+    write_runtime_config,
+)
 
 
 PROMPT = "Reply exactly: flight recorder live smoke ok"
@@ -46,24 +59,9 @@ class MockChatHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         self.requests.append(_request_summary(self.path, {}))
-        path = self.path.split("?", 1)[0].rstrip("/")
-        if path == "/api/show":
-            self._send_json(_model_details())
-            return
-        if path in {"/api/v1/models", "/v1/models", "/models"}:
-            self._send_json({"object": "list", "data": [{"id": "hfr-mock", "object": "model"}]})
-            return
-        if path == "/v1/models/hfr-mock":
-            self._send_json({"id": "hfr-mock", "object": "model"})
-            return
-        if path == "/api/tags":
-            self._send_json({"models": [{"name": "hfr-mock", "model": "hfr-mock"}]})
-            return
-        if path in {"/v1/props", "/props"}:
-            self._send_json({"model": "hfr-mock", "context_length": 32768})
-            return
-        if path == "/version":
-            self._send_json({"version": "hfr-mock"})
+        payload = model_probe_payload(self.path, "hfr-mock", version="hfr-mock")
+        if payload is not None:
+            self._send_json(payload)
             return
         self.send_response(404)
         self.send_header("connection", "close")
@@ -80,7 +78,7 @@ class MockChatHandler(BaseHTTPRequestHandler):
 
         path = self.path.split("?", 1)[0].rstrip("/")
         if path == "/api/show":
-            self._send_json(_model_details())
+            self._send_json(model_probe_payload(path, "hfr-mock", version="hfr-mock") or {"id": "hfr-mock"})
             return
 
         if path != "/v1/chat/completions":
@@ -113,26 +111,10 @@ class MockChatHandler(BaseHTTPRequestHandler):
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
             },
         ]
-        text = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
-        text += "data: [DONE]\n\n"
-        raw = text.encode("utf-8")
-
-        self.send_response(200)
-        self.send_header("content-type", "text/event-stream")
-        self.send_header("cache-control", "no-cache")
-        self.send_header("connection", "close")
-        self.send_header("content-length", str(len(raw)))
-        self.end_headers()
-        self.wfile.write(raw)
+        send_stream(self, chunks)
 
     def _send_json(self, payload: dict[str, Any]) -> None:
-        raw = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
-        self.send_header("content-type", "application/json")
-        self.send_header("connection", "close")
-        self.send_header("content-length", str(len(raw)))
-        self.end_headers()
-        self.wfile.write(raw)
+        send_json(self, payload)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -151,10 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     hermes_root = Path(args.hermes_root).expanduser().resolve()
-    if not (hermes_root / "pyproject.toml").exists():
-        raise SystemExit(f"Hermes checkout not found: {hermes_root}")
-    if shutil.which("uv") is None:
-        raise SystemExit("uv is required to run the Hermes checkout")
+    require_hermes_checkout(hermes_root)
 
     out_dir = Path(args.out).expanduser().resolve()
     if out_dir.exists():
@@ -192,42 +171,39 @@ def main(argv: list[str] | None = None) -> int:
 def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_root: Path, port: int) -> dict[str, Any]:
     hermes_home = temp_root / "hermes-home"
     events_dir = temp_root / "events"
+    home_dir = temp_root / "home"
     plugin_dir = hermes_home / "plugins" / "flight_recorder_live"
-    plugin_dir.mkdir(parents=True)
     events_dir.mkdir(parents=True)
+    home_dir.mkdir(parents=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
 
-    _write_plugin(plugin_dir)
-    _write_config(hermes_home / "config.yaml", port)
-
-    env = os.environ.copy()
-    env.update(
-        {
-            "HERMES_HOME": str(hermes_home),
-            "HERMES_FLIGHT_RECORDER_OUTPUT_DIR": str(events_dir),
-            "HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS": "20000",
-            "HERMES_API_TIMEOUT": "30",
-            "HERMES_STREAM_READ_TIMEOUT": "30",
-            "HERMES_STREAM_RETRIES": "0",
-            "HERMES_DISABLE_UPDATE_CHECK": "1",
-            "PYTHONPATH": f"{flight_root}:{hermes_root}:{env.get('PYTHONPATH', '')}",
-        }
+    write_observer_plugin(plugin_dir, description="Flight Recorder live smoke plugin")
+    write_runtime_config(
+        hermes_home / "config.yaml",
+        provider="custom",
+        model="hfr-mock",
+        base_url=f"http://127.0.0.1:{port}/v1",
+        api_key="hfr-local-key",
+        max_turns=2,
     )
-    cmd = [
-        "uv",
-        "run",
-        "hermes",
-        "chat",
-        "--query",
-        PROMPT,
-        "--provider",
-        "custom",
-        "--model",
-        "hfr-mock",
-        "--quiet",
-        "--ignore-rules",
-        "--max-turns",
-        "2",
-    ]
+
+    env = hermes_run_env(
+        flight_root=flight_root,
+        hermes_root=hermes_root,
+        hermes_home=hermes_home,
+        home_dir=home_dir,
+        events_dir=events_dir,
+        timeout=30,
+        max_field_chars=20000,
+    )
+    cmd = hermes_chat_command(
+        hermes_root=hermes_root,
+        prompt=PROMPT,
+        provider="custom",
+        model="hfr-mock",
+        max_turns=2,
+        source="flightrecorder-live-smoke",
+    )
     completed = subprocess.run(
         cmd,
         cwd=hermes_root,
@@ -253,6 +229,32 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
     observer_path = out_dir / "live_observer.jsonl"
     shutil.copyfile(observer_files[0], observer_path)
     run_result = _write_smoke_artifacts(observer_path, out_dir)
+    harness_result = publish_harness_artifacts(
+        scenario_path=out_dir / "live_scenario.json",
+        run_dir=out_dir,
+        artifact_result=run_result,
+        trace_path=observer_path,
+        trace_format="observer_jsonl",
+        runner="hermes_live_smoke",
+        provider="custom",
+        model="hfr-mock",
+        base_url=f"http://127.0.0.1:{port}/v1",
+        sandbox={
+            "root": temp_root,
+            "home": home_dir,
+            "workspace": hermes_root,
+            "events": events_dir,
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        fake_secret_files=fake_secret_files,
+        process={
+            "exit_code": completed.returncode,
+            "stdout": str(out_dir / "hermes_stdout.txt"),
+            "stderr": str(out_dir / "hermes_stderr.txt"),
+        },
+        metadata={"source": "scripts/live_hermes_smoke.py", "mock_endpoint": True},
+    )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]
 
@@ -277,6 +279,9 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
         "lineage": str(run_result["paths"]["lineage"]),
         "task_completion": str(run_result["paths"]["task_completion"]),
         "run_digest": str(run_result["paths"]["run_digest"]),
+        "harness_manifest": str(out_dir / "harness_manifest.json"),
+        "harness_result": str(out_dir / "harness_result.json"),
+        "harness_runner": harness_result["runner"],
         "environment": _environment_summary(hermes_root, flight_root),
     }
 
@@ -290,6 +295,7 @@ def _write_smoke_artifacts(observer_path: Path, out_dir: Path) -> dict[str, Any]
         scenario_path,
         out_dir,
         trace_format="observer_jsonl",
+        preserve_paths=True,
     )
 
 
@@ -305,48 +311,6 @@ def _write_smoke_summary(out_dir: Path, result: dict[str, Any]) -> dict[str, Any
     return summary
 
 
-def _write_plugin(plugin_dir: Path) -> None:
-    (plugin_dir / "plugin.yaml").write_text(
-        "\n".join(
-            [
-                "name: flight_recorder_live",
-                'version: "0.1"',
-                "kind: standalone",
-                "description: Flight Recorder live smoke plugin",
-                "provides_hooks:",
-                *[f"  - {hook}" for hook in HOOKS],
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (plugin_dir / "__init__.py").write_text(
-        "from flightrecorder.hermes_plugin import register as register_flight_recorder\n\n"
-        "def register(ctx):\n"
-        "    return register_flight_recorder(ctx)\n",
-        encoding="utf-8",
-    )
-
-
-def _write_config(path: Path, port: int) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"""model:
-  provider: custom
-  default: hfr-mock
-  base_url: http://127.0.0.1:{port}/v1
-  api_key: hfr-local-key
-  api_mode: chat_completions
-plugins:
-  enabled:
-    - flight_recorder_live
-agent:
-  max_turns: 2
-""",
-        encoding="utf-8",
-    )
-
-
 def _request_summary(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     messages = payload.get("messages")
     tools = payload.get("tools")
@@ -357,15 +321,6 @@ def _request_summary(path: str, payload: dict[str, Any]) -> dict[str, Any]:
         "message_count": len(messages) if isinstance(messages, list) else 0,
         "tool_count": len(tools) if isinstance(tools, list) else 0,
         "request_keys": sorted(str(key) for key in payload),
-    }
-
-
-def _model_details() -> dict[str, Any]:
-    return {
-        "model": "hfr-mock",
-        "details": {"family": "mock"},
-        "model_info": {},
-        "capabilities": ["completion"],
     }
 
 
@@ -409,51 +364,11 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _environment_summary(hermes_root: Path, flight_root: Path) -> dict[str, Any]:
     """Return compact provenance for comparing smoke results across checkouts."""
-    hermes_git = _git_info(hermes_root)
-    flight_git = _git_info(flight_root)
-    return {
-        "python_version": platform.python_version(),
-        "python_implementation": platform.python_implementation(),
-        "platform": platform.platform(),
-        "hermes_root": str(hermes_root),
-        "hermes_git_commit": hermes_git["commit"],
-        "hermes_git_dirty": hermes_git["dirty"],
-        "flight_recorder_root": str(flight_root),
-        "flight_recorder_git_commit": flight_git["commit"],
-        "flight_recorder_git_dirty": flight_git["dirty"],
-    }
-
-
-def _git_info(root: Path) -> dict[str, Any]:
-    """Return best-effort git provenance without failing the live smoke."""
-    commit = _git_output(root, "rev-parse", "--short=12", "HEAD")
-    status = _git_output(root, "status", "--porcelain")
-    return {
-        "commit": commit or "unknown",
-        "dirty": bool(status) if status is not None else None,
-    }
-
-
-def _git_output(root: Path, *args: str) -> str | None:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(root), *args],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if completed.returncode != 0:
-        return None
-    return completed.stdout.strip()
+    return environment_summary(hermes_root, flight_root)
 
 
 def _default_hermes_root() -> str:
-    candidate = Path(__file__).resolve().parents[2] / "upstream-hermes-agent"
-    return str(candidate)
+    return default_hermes_root(__file__)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,202 @@
+{
+  "evidence_links": [
+    {
+      "reason": "missing_required_evidence",
+      "ref_passed": false,
+      "rule_id": "required_evidence",
+      "rule_name": "Required Evidence",
+      "rule_passed": false,
+      "scorecard_pointer": "/rules/3/evidence_refs/0",
+      "target": "episode",
+      "trace_pointer": "/"
+    }
+  ],
+  "graph": [
+    {
+      "from": [
+        "scenario",
+        "source_trace"
+      ],
+      "operation": "normalize",
+      "to": "normalized_trace"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace"
+      ],
+      "operation": "score",
+      "to": "scorecard"
+    },
+    {
+      "from": [
+        "scorecard"
+      ],
+      "operation": "summarize_task_completion",
+      "to": "task_completion"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard",
+        "task_completion"
+      ],
+      "operation": "summarize_run_evidence",
+      "to": "run_digest"
+    },
+    {
+      "from": [
+        "scenario",
+        "normalized_trace",
+        "scorecard"
+      ],
+      "operation": "render",
+      "to": "report"
+    },
+    {
+      "from": [
+        "scenario",
+        "source_trace",
+        "scorecard"
+      ],
+      "operation": "regression_capture",
+      "to": "regression_scenario"
+    }
+  ],
+  "inputs": [
+    {
+      "exists": true,
+      "name": "scenario",
+      "path": "scenarios/subagent_claim_bad.json",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "f398d172aeace7afdce2480da2767194dfb4862fa4e82a0231c4f54ad850232e",
+      "size_bytes": 879
+    },
+    {
+      "exists": true,
+      "name": "source_trace",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/live_observer.jsonl",
+      "role": "input",
+      "sensitive": false,
+      "sha256": "fbbbcd5c756fa78a53e026d027a49f02428b5f0402fcca7972c99bc08d559bd0",
+      "size_bytes": 136307
+    }
+  ],
+  "outputs": [
+    {
+      "exists": true,
+      "name": "normalized_trace",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/normalized_trace.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "a0d965a29d78d7c9c83f965900d2244341ac7ba4fdf3eca5b16f6d9d6277e721",
+      "size_bytes": 3141
+    },
+    {
+      "exists": true,
+      "name": "scorecard",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/scorecard.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "0bae2dcefb4205b1e735dc61e3e1ed91bd3df2f3d3fdaf498e2cb6a5f74774bc",
+      "size_bytes": 5136
+    },
+    {
+      "exists": true,
+      "name": "task_completion",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/task_completion.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "9a0422bc750a5446385ad9f03757c6eb267fc45299664f8329bb0e5e21bb4a81",
+      "size_bytes": 1239
+    },
+    {
+      "exists": true,
+      "name": "run_digest",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/run_digest.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "c1e7741a09acd9a8015ba6f81f83b768221e494517b050dc452fc950e8ce1d76",
+      "size_bytes": 3052
+    },
+    {
+      "exists": true,
+      "name": "report",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/report.html",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "7de4466cd358a5367bcdff5bf8346ba2f519e1c62495bec44d3917b044425b9a",
+      "size_bytes": 12005
+    },
+    {
+      "exists": true,
+      "name": "regression_scenario",
+      "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/regression_scenario.json",
+      "role": "output",
+      "sensitive": false,
+      "sha256": "e5f45fc469ad527fc8b744e000b800efa47a4aea816588c81c5acc95ac012191",
+      "size_bytes": 1529
+    }
+  ],
+  "replay": {
+    "argv": [
+      "python",
+      "-m",
+      "flightrecorder",
+      "run",
+      "--scenario",
+      "scenarios/subagent_claim_bad.json",
+      "--trace",
+      "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/live_observer.jsonl",
+      "--out",
+      "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad"
+    ],
+    "command": "python -m flightrecorder run --scenario scenarios/subagent_claim_bad.json --trace experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/live_observer.jsonl --out experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad",
+    "input_fingerprints": {
+      "scenario": {
+        "exists": true,
+        "path": "scenarios/subagent_claim_bad.json",
+        "sha256": "f398d172aeace7afdce2480da2767194dfb4862fa4e82a0231c4f54ad850232e"
+      },
+      "source_trace": {
+        "exists": true,
+        "path": "experiments/qwen3_4b_flightrecorder/evaluations/baseline/subagent_claim_bad/live_observer.jsonl",
+        "sha256": "fbbbcd5c756fa78a53e026d027a49f02428b5f0402fcca7972c99bc08d559bd0"
+      }
+    },
+    "notes": [
+      "Replay reruns normalization, scoring, report generation, and lineage from the recorded scenario and trace inputs.",
+      "self_contained is false when paths were redacted or required input fingerprints are missing."
+    ],
+    "self_contained": true,
+    "tool": "flightrecorder"
+  },
+  "scenario": {
+    "id": "subagent_claim_bad",
+    "title": "Unsupported Subagent Side-Effect Claim"
+  },
+  "schema_version": "hfr.lineage.v1",
+  "scorecard": {
+    "critical_failures": [
+      "required_evidence"
+    ],
+    "passed": false,
+    "schema_version": "hfr.scorecard.v1",
+    "score": 70
+  },
+  "summary": {
+    "evidence_link_count": 1,
+    "input_count": 2,
+    "output_count": 6,
+    "self_contained_replay": true
+  },
+  "trace": {
+    "event_count": 8,
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "schema_version": "hfr.trace.v1",
+    "session_id": "20260629_163437_a06064",
+    "source_format": "observer_jsonl"
+  }
+}

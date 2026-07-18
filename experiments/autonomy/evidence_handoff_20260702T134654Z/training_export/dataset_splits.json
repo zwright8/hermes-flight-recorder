@@ -1,0 +1,146 @@
+{
+  "artifact_names": [
+    "episodes",
+    "rewards",
+    "step_rewards",
+    "preferences",
+    "failure_modes",
+    "sft",
+    "dpo",
+    "reward_model"
+  ],
+  "assignments": [
+    {
+      "episode_count": 1,
+      "episode_ids": [
+        "budget_runaway_bad"
+      ],
+      "scenario_ids": [
+        "budget_runaway_bad"
+      ],
+      "split": "train",
+      "task_family": "budget_runaway"
+    },
+    {
+      "episode_count": 1,
+      "episode_ids": [
+        "cron_async_delegation_bad"
+      ],
+      "scenario_ids": [
+        "cron_async_delegation_bad"
+      ],
+      "split": "train",
+      "task_family": "cron_async_delegation"
+    },
+    {
+      "episode_count": 2,
+      "episode_ids": [
+        "email_reply_completion_bad",
+        "email_reply_completion_good"
+      ],
+      "scenario_ids": [
+        "email_reply_completion_bad",
+        "email_reply_completion_good"
+      ],
+      "split": "train",
+      "task_family": "email_reply_completion"
+    },
+    {
+      "episode_count": 2,
+      "episode_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good"
+      ],
+      "split": "validation",
+      "task_family": "prompt_injection"
+    },
+    {
+      "episode_count": 1,
+      "episode_ids": [
+        "subagent_claim_bad"
+      ],
+      "scenario_ids": [
+        "subagent_claim_bad"
+      ],
+      "split": "test",
+      "task_family": "subagent_claim"
+    }
+  ],
+  "leakage_checks": {
+    "cross_split_task_families": [],
+    "family_exclusive": true
+  },
+  "notes": [
+    "Splits are assigned by task_family, not individual episode, to reduce train/eval leakage.",
+    "Small datasets may have empty validation or test splits; use dataset_metrics.quality_flags before training."
+  ],
+  "ratios": {
+    "test": 0.1,
+    "train": 0.8,
+    "validation": 0.1
+  },
+  "schema_version": "hfr.rl.dataset_splits.v1",
+  "seed": "hfr.dataset_split.v1",
+  "split_counts": {
+    "test": {
+      "artifacts": {
+        "dpo": 0,
+        "episodes": 1,
+        "failure_modes": 1,
+        "preferences": 0,
+        "reward_model": 1,
+        "rewards": 1,
+        "sft": 0,
+        "step_rewards": 1
+      },
+      "episode_count": 1,
+      "task_family_count": 1
+    },
+    "train": {
+      "artifacts": {
+        "dpo": 1,
+        "episodes": 4,
+        "failure_modes": 9,
+        "preferences": 1,
+        "reward_model": 4,
+        "rewards": 4,
+        "sft": 1,
+        "step_rewards": 11
+      },
+      "episode_count": 4,
+      "task_family_count": 3
+    },
+    "validation": {
+      "artifacts": {
+        "dpo": 1,
+        "episodes": 2,
+        "failure_modes": 4,
+        "preferences": 1,
+        "reward_model": 2,
+        "rewards": 2,
+        "sft": 1,
+        "step_rewards": 11
+      },
+      "episode_count": 2,
+      "task_family_count": 1
+    }
+  },
+  "split_names": [
+    "train",
+    "validation",
+    "test"
+  ],
+  "strategy": "task_family_hash",
+  "summary": {
+    "episode_count": 7,
+    "family_exclusive": true,
+    "task_family_count": 5,
+    "test_episode_count": 1,
+    "train_episode_count": 4,
+    "validation_episode_count": 2
+  }
+}

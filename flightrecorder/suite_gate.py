@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import apply_gate_decision_contract
+
 SUITE_GATE_SCHEMA_VERSION = "hfr.suite_gate.v1"
 SUITE_GATE_POLICY_SCHEMA_VERSION = "hfr.suite_gate.policy.v1"
 
@@ -113,7 +115,7 @@ def evaluate_suite_gate(
         _evaluate_task_family_gate(checks, gate, family_rows)
 
     passed = all(check["passed"] for check in checks)
-    return {
+    result = {
         "schema_version": SUITE_GATE_SCHEMA_VERSION,
         "suite_summary": str(suite_summary_path),
         "passed": passed,
@@ -128,6 +130,12 @@ def evaluate_suite_gate(
             "critical_failure_total": _total_count(metrics.get("critical_failure_counts")),
         },
     }
+    return apply_gate_decision_contract(
+        result,
+        gate_id="suite_gate",
+        gate_label="Suite gate",
+        key_metric_fields=("pass_rate", "average_score", "failed", "error_count", "critical_failure_total"),
+    )
 
 
 def _evaluate_task_family_gate(checks: list[dict[str, Any]], gate: dict[str, Any], family_rows: dict[str, dict[str, Any]]) -> None:

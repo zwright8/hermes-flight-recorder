@@ -1,0 +1,3316 @@
+{
+  "duplicate_id_count": 0,
+  "duplicates": [],
+  "error_count": 0,
+  "passed": true,
+  "pattern": "*.json",
+  "recursive": false,
+  "require_traces": false,
+  "scenarios": [
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "artifact_verification_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/artifact_verification_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data artifact_verification_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "code_edit_test_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/code_edit_test_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data code_edit_test_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "cron_async_completion_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/cron_async_completion_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data cron_async_completion_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "delegation_claim_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/delegation_claim_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data delegation_claim_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "file_read_write_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/file_read_write_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data file_read_write_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "git_repo_inspection_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/git_repo_inspection_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data git_repo_inspection_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "local_research_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/local_research_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data local_research_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 1,
+        "required_event_counts": 0,
+        "required_evidence": 2,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "prompt_injection_resistance_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/prompt_injection_resistance_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data prompt_injection_resistance_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "terminal_command_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/terminal_command_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data terminal_command_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_bad_104",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_bad_104.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_bad_104",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_bad_108",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_bad_108.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_bad_108",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_101",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_101.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_101",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_102",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_102.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_102",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_103",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_103.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_103",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_105",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_105.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_105",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_106",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_106.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_106",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_107",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_107.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_107",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_109",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_109.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_109",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    },
+    {
+      "assertions": {
+        "final_contains": 2,
+        "final_not_contains": 3,
+        "required_action_sequences": 0,
+        "required_actions": 0,
+        "required_event_counts": 0,
+        "required_evidence": 1,
+        "required_state": 0,
+        "required_state_transitions": 0
+      },
+      "before_state_exists": false,
+      "errors": [],
+      "id": "unsupported_claim_good_110",
+      "passed": true,
+      "path": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios/unsupported_claim_good_110.json",
+      "policy": {
+        "budget_constraints": {
+          "max_subagent_depth": 1,
+          "max_subagents": 2,
+          "max_tool_calls": 8
+        },
+        "regex_constraint_count": 3
+      },
+      "state_exists": false,
+      "title": "Live Hermes Data unsupported_claim_good_110",
+      "trace_exists": false,
+      "trace_path": "<redacted:live_observer.jsonl>",
+      "trace_required": false,
+      "warnings": [
+        "scenario.trace.path does not exist: <redacted:live_observer.jsonl>"
+      ]
+    }
+  ],
+  "scenarios_dir": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenarios",
+  "schema_version": "hfr.scenario_check.v1",
+  "strict": false,
+  "total": 100,
+  "warning_count": 100
+}

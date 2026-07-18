@@ -1,0 +1,350 @@
+{
+  "artifact_fingerprints": {
+    "curriculum": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/curriculum.json",
+      "sha256": "bd2f83afde27c7bdf0f3d06f4e9e5913e1b6a889c3643a7ae1e8865b4a7ee009",
+      "size_bytes": 19774
+    },
+    "dataset_card": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/DATASET_CARD.md",
+      "sha256": "258a15b8b8b01216343a2b11065b46a42bc9c5b7fed5f4b69f6f13b9feb84217",
+      "size_bytes": 2685
+    },
+    "dataset_metrics": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_metrics.json",
+      "sha256": "640c5763f157e632a1ccb015ef73e18a8ffaab08fe4da6c21fb57ffb43164c3c",
+      "size_bytes": 8530
+    },
+    "dataset_splits": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_splits.json",
+      "sha256": "eec90ce0cb5b4c061c610209fca369dd3917ab74a3328fbfcc8ac5b2d304f519",
+      "size_bytes": 3194
+    },
+    "dpo": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dpo.jsonl",
+      "sha256": "10a4063d0d9e9aa74e5f4a497195e5f0574210da3a9766c21803af8cadce57f6",
+      "size_bytes": 8148
+    },
+    "episodes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/episodes.jsonl",
+      "sha256": "e801be1646d9a7dfd83915b46ff380bb98212ddb670f6df49d660ea7c85d0a01",
+      "size_bytes": 55733
+    },
+    "failure_modes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/failure_modes.jsonl",
+      "sha256": "5db84699043394f92dd570de96ef08573ab0fd9c536133b331953c3695894cfc",
+      "size_bytes": 30243
+    },
+    "preferences": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/preferences.jsonl",
+      "sha256": "84a9128a855c427c962233281b28456c1458ed127d033555f70faf4b5611cb33",
+      "size_bytes": 30864
+    },
+    "reward_model": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/reward_model.jsonl",
+      "sha256": "6bd715b84a5a817fdffbcfa3902324c330e3e6566d95f2fdf0486af5bccac43b",
+      "size_bytes": 14969
+    },
+    "rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/rewards.jsonl",
+      "sha256": "5cfed0097b86bc2cb33ae1eebbd1ddfd88de04afcd0bea3c18f872f5a6fba41c",
+      "size_bytes": 39046
+    },
+    "sft": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/sft.jsonl",
+      "sha256": "274564012227acf5aa3c4e0103ed614abf4ef19a46e86229d7d828e26d192f7b",
+      "size_bytes": 4200
+    },
+    "step_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/step_rewards.jsonl",
+      "sha256": "f9d910cc31b5105e8b3359adb5a3a198d3534ba0cff6b13275d3252c83221f6a",
+      "size_bytes": 32322
+    },
+    "test_dpo": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/dpo.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_episodes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/episodes.jsonl",
+      "sha256": "15f3fa5ecb8bcba7c6720a9d83a65a5a1cb4b6ef7cbd1e1df703a2209733793b",
+      "size_bytes": 4372
+    },
+    "test_failure_modes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/failure_modes.jsonl",
+      "sha256": "fc95013b1db790344e82ee0a47d78357c6f1bf2b9a1d0257869c8e5988944eb0",
+      "size_bytes": 1544
+    },
+    "test_preferences": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/preferences.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_reward_model": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/reward_model.jsonl",
+      "sha256": "1885fb58c84c2c586f8313feefa76ae8abde5065a1d61530c99018d48ff65a81",
+      "size_bytes": 1880
+    },
+    "test_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/rewards.jsonl",
+      "sha256": "072a664fede126216d70b252d8edca35e6d52f93f98435b162d456e1f4a0ed56",
+      "size_bytes": 3638
+    },
+    "test_sft": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/sft.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_step_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/step_rewards.jsonl",
+      "sha256": "ce26d07e454f084700901ab0f376778db978cdc4886394a0490df920d19cd180",
+      "size_bytes": 1308
+    },
+    "train_dpo": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/dpo.jsonl",
+      "sha256": "157c5d4f10aa0d5ca900c5644998882e30bde4f18feed471609383de3b3fc4b4",
+      "size_bytes": 4177
+    },
+    "train_episodes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/episodes.jsonl",
+      "sha256": "5e320817b9d9ce31f243ec0561d1facf2945ad3c63f1b0b0a5f17daf0d21aa91",
+      "size_bytes": 39751
+    },
+    "train_failure_modes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/failure_modes.jsonl",
+      "sha256": "41c3efe90357d1799102f727034aa431d6de6b2b4cf9e161260e4a28be7306e4",
+      "size_bytes": 18758
+    },
+    "train_preferences": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/preferences.jsonl",
+      "sha256": "cd42867342e06ce609e59d417252017332f9928e5dcc46f62c7d43c61a756711",
+      "size_bytes": 19865
+    },
+    "train_reward_model": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/reward_model.jsonl",
+      "sha256": "c1843933c6eb4c0a399d33d75b612a4de5579c2d4baf9630945f0e8198dcfa37",
+      "size_bytes": 8776
+    },
+    "train_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/rewards.jsonl",
+      "sha256": "0593c617a7fe4e0668bd48587857df37d25b17a75280e779f84d6931403e8063",
+      "size_bytes": 23221
+    },
+    "train_sft": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/sft.jsonl",
+      "sha256": "72e897ebdb9215b243cd6701297a89fdb2f6df4479febed8d2d9827ba80ffe7b",
+      "size_bytes": 2113
+    },
+    "train_step_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/step_rewards.jsonl",
+      "sha256": "3e9737137b0ff43a335c5aa4a8c0285c6c26d6b4e81446ab424df67a901f6bd8",
+      "size_bytes": 16073
+    },
+    "validation_dpo": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/dpo.jsonl",
+      "sha256": "4fb9590f4bf477f01b81bbe7c23f0c93670438eb2970f772bf92b8013ab92a73",
+      "size_bytes": 3971
+    },
+    "validation_episodes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/episodes.jsonl",
+      "sha256": "046afb297fa2ec6c52142c46c4333c1f635feba1b86eb63514b2af9455e0d166",
+      "size_bytes": 11610
+    },
+    "validation_failure_modes": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/failure_modes.jsonl",
+      "sha256": "73363a06b32e6145d3bbce6458bbdcd1e54cedd20b68a1a28fa29c1dddea5a02",
+      "size_bytes": 9941
+    },
+    "validation_preferences": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/preferences.jsonl",
+      "sha256": "6cd760afccf7e0d930ebb367ab580a3a3d61e2f73b096d5494a0be63a5de0e5f",
+      "size_bytes": 10999
+    },
+    "validation_reward_model": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/reward_model.jsonl",
+      "sha256": "bd680a3c1fdd4188b613ba4a62439c56ae2895a013bd1a759a6f990295302292",
+      "size_bytes": 4313
+    },
+    "validation_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/rewards.jsonl",
+      "sha256": "4f0f05727d7d720c0c405f935550c093179d2c6115ab8e863f4eebcd6259dcf6",
+      "size_bytes": 12187
+    },
+    "validation_sft": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/sft.jsonl",
+      "sha256": "f962a1fbdbec404ca5169a79f1611ba057aee4a57227c9f31a7aace73fd6cff3",
+      "size_bytes": 2087
+    },
+    "validation_step_rewards": {
+      "exists": true,
+      "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/step_rewards.jsonl",
+      "sha256": "4b21abc4a0962dfdb6e8e8d353bb99c998011bebf3e7a098d5b079f5255146b7",
+      "size_bytes": 14941
+    }
+  },
+  "dataset_splits": {
+    "episode_count": 7,
+    "family_exclusive": true,
+    "task_family_count": 5,
+    "test_episode_count": 1,
+    "train_episode_count": 4,
+    "validation_episode_count": 2
+  },
+  "dataset_version": "hfrds-8c428c4dcf70041d",
+  "dpo_count": 2,
+  "episode_count": 7,
+  "failure_mode_count": 14,
+  "generated_at": "2026-07-02T13:47:02.799054+00:00",
+  "label_provenance": {
+    "dpo_pair_count": 2,
+    "eligible_positive_episode_count": 2,
+    "excluded_success_episode_ids": [],
+    "final_answer_only_success_count": 0,
+    "positive_episode_count": 2,
+    "reward_model_label_count": 7,
+    "rules": [
+      "Positive SFT rows require a passing scorecard, non-empty final answer, and task_completion.status=complete.",
+      "DPO chosen rows require the chosen episode to satisfy the same positive-label eligibility rule.",
+      "Reward-model exports keep failing episodes and eligible positive episodes; unsupported positive success claims are excluded."
+    ],
+    "schema_version": "hfr.rl.label_provenance.v1",
+    "sft_label_count": 2
+  },
+  "max_pairs_per_family": 0,
+  "min_score_gap": 1,
+  "notes": [
+    "Exports are built from normalized_trace.json and scorecard.json.",
+    "Use these artifacts as reward/eval data, not as a complete trainer.",
+    "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
+    "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
+    "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
+    "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
+    "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
+    "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
+    "dataset_registry.json records the registered dataset version, manifest hash, source hashes, redaction status, split metadata, quality flags, and label provenance.",
+    "SFT and positive preference labels require configured task-completion evidence; final-answer-only success claims are excluded from trainer-ready views.",
+    "episodes.jsonl includes source_lineage and source_fingerprints when the originating run emitted artifact_lineage.json.",
+    "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak."
+  ],
+  "output_dir": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export",
+  "outputs": {
+    "curriculum": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/curriculum.json",
+    "dataset_card": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/DATASET_CARD.md",
+    "dataset_metrics": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_metrics.json",
+    "dataset_registry": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_registry.json",
+    "dataset_splits": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_splits.json",
+    "dpo": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dpo.jsonl",
+    "episodes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/episodes.jsonl",
+    "failure_modes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/failure_modes.jsonl",
+    "manifest": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/manifest.json",
+    "preferences": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/preferences.jsonl",
+    "reward_model": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/reward_model.jsonl",
+    "rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/rewards.jsonl",
+    "sft": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/sft.jsonl",
+    "step_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/step_rewards.jsonl",
+    "test_dpo": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/dpo.jsonl",
+    "test_episodes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/episodes.jsonl",
+    "test_failure_modes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/failure_modes.jsonl",
+    "test_preferences": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/preferences.jsonl",
+    "test_reward_model": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/reward_model.jsonl",
+    "test_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/rewards.jsonl",
+    "test_sft": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/sft.jsonl",
+    "test_step_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/test/step_rewards.jsonl",
+    "train_dpo": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/dpo.jsonl",
+    "train_episodes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/episodes.jsonl",
+    "train_failure_modes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/failure_modes.jsonl",
+    "train_preferences": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/preferences.jsonl",
+    "train_reward_model": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/reward_model.jsonl",
+    "train_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/rewards.jsonl",
+    "train_sft": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/sft.jsonl",
+    "train_step_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/train/step_rewards.jsonl",
+    "validation_dpo": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/dpo.jsonl",
+    "validation_episodes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/episodes.jsonl",
+    "validation_failure_modes": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/failure_modes.jsonl",
+    "validation_preferences": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/preferences.jsonl",
+    "validation_reward_model": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/reward_model.jsonl",
+    "validation_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/rewards.jsonl",
+    "validation_sft": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/sft.jsonl",
+    "validation_step_rewards": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/splits/validation/step_rewards.jsonl"
+  },
+  "preference_count": 2,
+  "quality_flag_count": 0,
+  "redaction_status": {
+    "finding_count": 0,
+    "findings": [],
+    "notes": [
+      "The scanner rejects generic secret assignments such as api_key=..., token=..., password=..., authorization=..., or bearer=....",
+      "Findings include redacted previews only; raw matched values are never written to dataset artifacts."
+    ],
+    "passed": true,
+    "scanner": "flightrecorder.generic_secret_assignment.v1",
+    "schema_version": "hfr.rl.redaction_status.v1",
+    "unredacted_secret_count": 0
+  },
+  "registry": {
+    "notes": [
+      "dataset_registry.json fingerprints this manifest after it is written.",
+      "manifest.json does not fingerprint dataset_registry.json to avoid a circular hash."
+    ],
+    "path": "experiments/autonomy/evidence_handoff_20260702T134654Z/training_export/dataset_registry.json",
+    "schema_version": "hfr.rl.dataset_registry.v1",
+    "selection_key": "hfrds-8c428c4dcf70041d"
+  },
+  "reward_count": 7,
+  "reward_model_count": 7,
+  "reward_scale": "score",
+  "run_count": 7,
+  "schema_version": "hfr.rl.manifest.v1",
+  "sft_count": 2,
+  "source_fingerprint_coverage": {
+    "episodes": 7,
+    "fully_verified": 7,
+    "unverified": 0,
+    "with_scenario_sha256": 7,
+    "with_source_trace_sha256": 7
+  },
+  "source_runs_dir": "experiments/autonomy/evidence_handoff_20260702T134654Z",
+  "step_reward_count": 23,
+  "task_families": [
+    "budget_runaway",
+    "cron_async_delegation",
+    "email_reply_completion",
+    "prompt_injection",
+    "subagent_claim"
+  ]
+}

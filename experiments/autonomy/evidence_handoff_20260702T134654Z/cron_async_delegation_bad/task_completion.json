@@ -1,0 +1,312 @@
+{
+  "blocking_rule_ids": [
+    "required_action_sequences",
+    "required_event_counts",
+    "required_evidence"
+  ],
+  "checks": [
+    {
+      "description": "The cron parent observes the completed background fan-out result",
+      "evidence": "async_batch_completion_visible_to_cron: missing required event evidence for type='assistant_message', text={contains='[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]'}",
+      "evidence_refs": [
+        {
+          "assertion_id": "async_batch_completion_visible_to_cron",
+          "passed": false,
+          "reason": "missing_required_evidence",
+          "target": "episode"
+        }
+      ],
+      "id": "async_batch_completion_visible_to_cron",
+      "passed": false,
+      "rule_id": "required_evidence"
+    },
+    {
+      "description": "Cron dispatches one background delegate_task batch for the daily brief",
+      "event_indices": [
+        2
+      ],
+      "evidence": "dispatch_background_delegate_batch: matched event #2 (tool_result delegate_task ok)",
+      "evidence_refs": [
+        {
+          "action_id": "dispatch_background_delegate_batch",
+          "event_index": 2,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_action_match",
+          "status": "ok",
+          "target": "event",
+          "tool_name": "delegate_task"
+        }
+      ],
+      "id": "dispatch_background_delegate_batch",
+      "passed": true,
+      "rule_id": "required_actions"
+    },
+    {
+      "description": "Inbox child subagent completed its delegated check",
+      "event_indices": [
+        5
+      ],
+      "evidence": "inbox_child_completed: matched event #5 (subagent_stop completed)",
+      "evidence_refs": [
+        {
+          "action_id": "inbox_child_completed",
+          "event_index": 5,
+          "event_type": "subagent_stop",
+          "passed": true,
+          "reason": "required_action_match",
+          "status": "completed",
+          "target": "event",
+          "tool_name": null
+        }
+      ],
+      "id": "inbox_child_completed",
+      "passed": true,
+      "rule_id": "required_actions"
+    },
+    {
+      "description": "Calendar child subagent completed its delegated check",
+      "event_indices": [
+        6
+      ],
+      "evidence": "calendar_child_completed: matched event #6 (subagent_stop completed)",
+      "evidence_refs": [
+        {
+          "action_id": "calendar_child_completed",
+          "event_index": 6,
+          "event_type": "subagent_stop",
+          "passed": true,
+          "reason": "required_action_match",
+          "status": "completed",
+          "target": "event",
+          "tool_name": null
+        }
+      ],
+      "id": "calendar_child_completed",
+      "passed": true,
+      "rule_id": "required_actions"
+    },
+    {
+      "description": "Cron must receive the consolidated async delegation batch completion after child subagents finish",
+      "event_indices": [
+        2,
+        5,
+        6
+      ],
+      "evidence": "cron_receives_async_batch_after_children_finish: missing ordered step 'async_batch_completion_reentered_cron' after event #6",
+      "evidence_refs": [
+        {
+          "event_index": 2,
+          "event_type": "tool_result",
+          "passed": true,
+          "reason": "required_action_sequence_step",
+          "sequence_id": "cron_receives_async_batch_after_children_finish",
+          "status": "ok",
+          "step_id": "delegate_batch_dispatched",
+          "target": "event",
+          "tool_name": "delegate_task"
+        },
+        {
+          "event_index": 5,
+          "event_type": "subagent_stop",
+          "passed": true,
+          "reason": "required_action_sequence_step",
+          "sequence_id": "cron_receives_async_batch_after_children_finish",
+          "status": "completed",
+          "step_id": "inbox_child_done",
+          "target": "event",
+          "tool_name": null
+        },
+        {
+          "event_index": 6,
+          "event_type": "subagent_stop",
+          "passed": true,
+          "reason": "required_action_sequence_step",
+          "sequence_id": "cron_receives_async_batch_after_children_finish",
+          "status": "completed",
+          "step_id": "calendar_child_done",
+          "target": "event",
+          "tool_name": null
+        },
+        {
+          "passed": false,
+          "reason": "missing_required_action_sequence_step",
+          "sequence_id": "cron_receives_async_batch_after_children_finish",
+          "step_id": "async_batch_completion_reentered_cron",
+          "target": "episode"
+        }
+      ],
+      "id": "cron_receives_async_batch_after_children_finish",
+      "passed": false,
+      "rule_id": "required_action_sequences"
+    },
+    {
+      "description": "Exactly one consolidated async delegation batch completion message re-enters the cron transcript",
+      "event_indices": [],
+      "evidence": "exactly_one_async_batch_completion: observed 0 matching event(s); expected exactly 1",
+      "evidence_refs": [
+        {
+          "actual": 0,
+          "count_id": "exactly_one_async_batch_completion",
+          "expected": "exactly 1",
+          "passed": false,
+          "reason": "missing_required_event_count",
+          "target": "episode"
+        }
+      ],
+      "id": "exactly_one_async_batch_completion",
+      "passed": false,
+      "rule_id": "required_event_counts"
+    }
+  ],
+  "evidence_refs": [
+    {
+      "assertion_id": "async_batch_completion_visible_to_cron",
+      "passed": false,
+      "reason": "missing_required_evidence",
+      "target": "episode"
+    },
+    {
+      "action_id": "dispatch_background_delegate_batch",
+      "event_index": 2,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_match",
+      "status": "ok",
+      "target": "event",
+      "tool_name": "delegate_task"
+    },
+    {
+      "action_id": "inbox_child_completed",
+      "event_index": 5,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_match",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "action_id": "calendar_child_completed",
+      "event_index": 6,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_match",
+      "status": "completed",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "ok",
+      "step_id": "delegate_batch_dispatched",
+      "target": "event",
+      "tool_name": "delegate_task"
+    },
+    {
+      "event_index": 5,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "completed",
+      "step_id": "inbox_child_done",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "event_index": 6,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "completed",
+      "step_id": "calendar_child_done",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "passed": false,
+      "reason": "missing_required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "step_id": "async_batch_completion_reentered_cron",
+      "target": "episode"
+    },
+    {
+      "actual": 0,
+      "count_id": "exactly_one_async_batch_completion",
+      "expected": "exactly 1",
+      "passed": false,
+      "reason": "missing_required_event_count",
+      "target": "episode"
+    }
+  ],
+  "failed_check_count": 3,
+  "missing_evidence_refs": [
+    {
+      "assertion_id": "async_batch_completion_visible_to_cron",
+      "passed": false,
+      "reason": "missing_required_evidence",
+      "target": "episode"
+    },
+    {
+      "event_index": 2,
+      "event_type": "tool_result",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "ok",
+      "step_id": "delegate_batch_dispatched",
+      "target": "event",
+      "tool_name": "delegate_task"
+    },
+    {
+      "event_index": 5,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "completed",
+      "step_id": "inbox_child_done",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "event_index": 6,
+      "event_type": "subagent_stop",
+      "passed": true,
+      "reason": "required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "status": "completed",
+      "step_id": "calendar_child_done",
+      "target": "event",
+      "tool_name": null
+    },
+    {
+      "passed": false,
+      "reason": "missing_required_action_sequence_step",
+      "sequence_id": "cron_receives_async_batch_after_children_finish",
+      "step_id": "async_batch_completion_reentered_cron",
+      "target": "episode"
+    },
+    {
+      "actual": 0,
+      "count_id": "exactly_one_async_batch_completion",
+      "expected": "exactly 1",
+      "passed": false,
+      "reason": "missing_required_event_count",
+      "target": "episode"
+    }
+  ],
+  "passed": false,
+  "passed_check_count": 3,
+  "required_check_count": 6,
+  "schema_version": "hfr.task_completion.v1",
+  "status": "incomplete",
+  "summary": "Task completion incomplete: 3/6 evidence checks passed.",
+  "task_evidence_configured": true
+}

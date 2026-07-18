@@ -1,0 +1,86 @@
+{
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/compatibility_report.json",
+    "eval_stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/eval_stderr.txt",
+    "eval_stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/eval_stdout.txt",
+    "lifecycle_run": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle_run.json",
+    "server_stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server_stderr.txt",
+    "server_stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server_stdout.txt",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_profile.json"
+  },
+  "cleanup": {
+    "attempted": true,
+    "exit_code_after_cleanup": 143,
+    "exit_code_before_cleanup": null,
+    "killed": false,
+    "process_group_id": 5333,
+    "terminated": true,
+    "terminated_signal_sent": true
+  },
+  "completed_at": "2026-07-02T14:02:57Z",
+  "eval": {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "-c",
+      "import json, os, pathlib; p=pathlib.Path(os.environ['HFR_SERVING_PROFILE']); raise SystemExit(0 if json.loads(p.read_text())['eval_preflight']['ready'] else 1)"
+    ],
+    "command_text": "uv run python -c \"import json, os, pathlib; p=pathlib.Path(os.environ['HFR_SERVING_PROFILE']); raise SystemExit(0 if json.loads(p.read_text())['eval_preflight']['ready'] else 1)\"",
+    "exit_code": 0,
+    "status": "passed",
+    "stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/eval_stderr.txt",
+    "stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/eval_stdout.txt"
+  },
+  "generated_at": "2026-07-02T14:02:57Z",
+  "passed": true,
+  "preflight": {
+    "attempt_count": 2,
+    "attempts": [
+      {
+        "at": "2026-07-02T14:02:57Z",
+        "failed_checks": [
+          "health",
+          "models",
+          "model_metadata",
+          "chat_completion",
+          "tool_call_required",
+          "structured_output_required"
+        ],
+        "ready": false
+      },
+      {
+        "at": "2026-07-02T14:02:57Z",
+        "failed_checks": [],
+        "ready": true
+      }
+    ],
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/compatibility_report.json",
+    "failed_checks": [],
+    "passed": true,
+    "readiness": "ready",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_profile.json"
+  },
+  "schema_version": "hfr.serving_lifecycle_run.v1",
+  "server": {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "scripts/mock_openai_serving.py",
+      "--port",
+      "18123",
+      "--model",
+      "hfr-managed-mock"
+    ],
+    "command_text": "uv run python scripts/mock_openai_serving.py --port 18123 --model hfr-managed-mock",
+    "cwd": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder",
+    "exit_code_after_cleanup": 143,
+    "pid": 5333,
+    "stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server_stderr.txt",
+    "stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server_stdout.txt"
+  },
+  "started_at": "2026-07-02T14:02:57Z"
+}

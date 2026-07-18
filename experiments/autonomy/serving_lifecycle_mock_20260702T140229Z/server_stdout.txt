@@ -1,0 +1,1 @@
+{"base_url": "http://127.0.0.1:60823/v1", "model": "hfr-managed-model", "schema_version": "hfr.mock_openai_serving.v1"}

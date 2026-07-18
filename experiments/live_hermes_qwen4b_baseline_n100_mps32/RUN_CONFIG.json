@@ -1,0 +1,30 @@
+{
+  "schema_version": "hfr.baseline_run_config.v1",
+  "baseline_name": "live_hermes_qwen4b_baseline_n100_mps32",
+  "baseline_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "runtime": "Hermes CLI with Flight Recorder observer plugin",
+  "serving_path": "scripts/serve_transformers_openai.py",
+  "server": {
+    "command": "uv run --no-project scripts/serve_transformers_openai.py --model Qwen/Qwen3-4B-Instruct-2507 --port 8000 --device auto --max-new-tokens 32",
+    "base_url": "http://127.0.0.1:8000/v1",
+    "resolved_device": "mps:0",
+    "dtype": "torch.float16",
+    "max_new_tokens": 32
+  },
+  "collector": {
+    "command": "python3.11 scripts/collect_live_hermes_data.py --run --force --skip-export --out experiments/live_hermes_qwen4b_baseline_n100_mps32 --base-url http://127.0.0.1:8000/v1 --model Qwen/Qwen3-4B-Instruct-2507 --provider custom --timeout 120 --max-turns 4",
+    "timeout_seconds": 120,
+    "max_turns": 4,
+    "provider": "custom"
+  },
+  "heldout": {
+    "catalog": "experiments/live_hermes_qwen4b_baseline_n100_mps32/scenario_catalog.json",
+    "target_episodes": 100,
+    "index_offset": 100,
+    "per_family": 10
+  },
+  "notes": [
+    "The final N100 baseline uses a 32-token local generation cap because the same laptop repeatedly killed the MPS server during N100 attempts at a 128-token cap.",
+    "Future baseline, trace-only adapter, and Flight Recorder adapter comparisons should use the same run config unless all arms are rerun under a new config."
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "artifacts": {
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/compatibility_report.json",
+    "eval_stderr": null,
+    "eval_stdout": null,
+    "lifecycle_run": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_lifecycle_run.json",
+    "server_stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/server_stderr.txt",
+    "server_stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/server_stdout.txt",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_profile.json"
+  },
+  "cleanup": {
+    "attempted": true,
+    "exit_code_after_cleanup": -15,
+    "exit_code_before_cleanup": null,
+    "killed": false,
+    "process_group_id": 99572,
+    "terminated": true,
+    "terminated_signal_sent": true
+  },
+  "completed_at": "2026-07-02T14:02:29Z",
+  "eval": {
+    "reason": "no_eval_command",
+    "status": "skipped"
+  },
+  "generated_at": "2026-07-02T14:02:29Z",
+  "passed": true,
+  "preflight": {
+    "attempt_count": 2,
+    "attempts": [
+      {
+        "at": "2026-07-02T14:02:29Z",
+        "failed_checks": [
+          "health",
+          "models",
+          "model_metadata",
+          "chat_completion",
+          "tool_call_required",
+          "structured_output_required"
+        ],
+        "ready": false
+      },
+      {
+        "at": "2026-07-02T14:02:29Z",
+        "failed_checks": [],
+        "ready": true
+      }
+    ],
+    "compatibility_report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/compatibility_report.json",
+    "failed_checks": [],
+    "passed": true,
+    "readiness": "ready",
+    "serving_check": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_check.json",
+    "serving_profile": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/serving_profile.json"
+  },
+  "schema_version": "hfr.serving_lifecycle_run.v1",
+  "server": {
+    "command": [
+      ".venv/bin/python",
+      "scripts/mock_openai_serving.py",
+      "--port",
+      "60823",
+      "--model",
+      "hfr-managed-model"
+    ],
+    "command_text": ".venv/bin/python scripts/mock_openai_serving.py --port 60823 --model hfr-managed-model",
+    "cwd": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder",
+    "exit_code_after_cleanup": -15,
+    "pid": 99572,
+    "stderr": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/server_stderr.txt",
+    "stdout": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/autonomy/serving_lifecycle_mock_20260702T140229Z/server_stdout.txt"
+  },
+  "started_at": "2026-07-02T14:02:29Z"
+}

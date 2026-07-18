@@ -1,0 +1,129 @@
+{
+  "candidate_id": "local_mock_tiny_chat",
+  "download_policy": {
+    "downloaded_tokenizer": false,
+    "downloaded_weights": false,
+    "gpu_execution": false,
+    "imported_heavy_ml": false
+  },
+  "generated_at": "2026-07-02T14:05:59Z",
+  "model_id": "local/mock-tiny-chat",
+  "notes": [
+    "This report records compatibility metadata without downloading weights or tokenizers.",
+    "Future serving workers should replace metadata_only probes with verified serving/tokenizer checks."
+  ],
+  "passed": true,
+  "probes": [
+    {
+      "id": "context",
+      "metadata": {
+        "context_length": 2048
+      },
+      "notes": "Recorded context length is 2048 tokens.",
+      "source": "model_candidate.compatibility.context_length",
+      "status": "recorded",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "tokenizer",
+      "metadata": {
+        "notes": "No tokenizer download is performed for this candidate.",
+        "status": "metadata_only"
+      },
+      "notes": "No tokenizer download is performed for this candidate.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "chat_template",
+      "metadata": {
+        "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+        "status": "metadata_only"
+      },
+      "notes": "Template supplied by the mock harness; no tokenizer or template download is required.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "serving",
+      "metadata": {
+        "engines": [
+          "mock"
+        ],
+        "notes": "Usable only for registry and dry-run plan validation."
+      },
+      "notes": "Usable only for registry and dry-run plan validation.",
+      "source": "model_candidate.compatibility",
+      "status": "recorded",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "tool_calls",
+      "metadata": {
+        "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+        "supported": false
+      },
+      "notes": "Not probed; future compatibility work must verify tool-call behavior before promotion.",
+      "source": "model_candidate.compatibility",
+      "status": "recorded",
+      "supported": false,
+      "verified": false
+    },
+    {
+      "id": "structured_outputs",
+      "metadata": {
+        "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+        "supported": false
+      },
+      "notes": "Not probed; future serving work must verify structured outputs before promotion.",
+      "source": "model_candidate.compatibility",
+      "status": "recorded",
+      "supported": false,
+      "verified": false
+    },
+    {
+      "id": "quantization",
+      "metadata": {
+        "notes": "No quantization applies to the local mock candidate.",
+        "options": [
+          "none"
+        ]
+      },
+      "notes": "No quantization applies to the local mock candidate.",
+      "source": "model_candidate.compatibility",
+      "status": "recorded",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "memory",
+      "metadata": {
+        "minimum_vram_gb": 0,
+        "notes": "Local mock candidate does not require GPU memory."
+      },
+      "notes": "Local mock candidate does not require GPU memory.",
+      "source": "model_candidate.compatibility",
+      "status": "recorded",
+      "supported": null,
+      "verified": false
+    }
+  ],
+  "readiness": "metadata_recorded",
+  "recommendation": "ready_for_registry_dry_run",
+  "report_path": "experiments/registry/compatibility_reports/local_mock_tiny_chat.json",
+  "schema_version": "hfr.model_compatibility_report.v1",
+  "summary": {
+    "context_length": 2048,
+    "metadata_only_count": 2,
+    "missing_count": 0,
+    "probe_count": 8,
+    "unsupported_count": 2,
+    "verified_count": 0
+  }
+}

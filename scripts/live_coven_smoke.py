@@ -23,6 +23,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
+from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
 
 
 SUMMARY_SCHEMA_VERSION = "hfr.coven.live_smoke.summary.v1"
@@ -53,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         base_env = _node_env(os.environ.copy(), args.node_bin_dir)
         coven_bin = _resolve_coven_binary(args, temp_root, out_dir, base_env)
-        result, env = _run_live_session(coven_bin, out_dir, temp_root, base_env)
+        result, env = _run_live_session(coven_bin, out_dir, temp_root, base_env, keep_temp=args.keep_temp)
     finally:
         if coven_bin is not None and env is not None:
             _run_coven(coven_bin, ["daemon", "stop"], env, out_dir, "coven_daemon_stop", timeout=30)
@@ -107,19 +108,31 @@ def _resolve_coven_binary(args: argparse.Namespace, temp_root: Path, out_dir: Pa
     return binary
 
 
-def _run_live_session(coven_bin: Path, out_dir: Path, temp_root: Path, base_env: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+def _run_live_session(
+    coven_bin: Path,
+    out_dir: Path,
+    temp_root: Path,
+    base_env: dict[str, str],
+    *,
+    keep_temp: bool,
+) -> tuple[dict[str, Any], dict[str, str]]:
     flight_root = Path(__file__).resolve().parents[1]
     coven_home = temp_root / "coven-home"
+    home_dir = temp_root / "home"
     workspace = temp_root / "workspace"
+    events_dir = temp_root / "events"
     fake_bin = temp_root / "fake-bin"
     coven_home.mkdir(parents=True)
+    home_dir.mkdir(parents=True)
     workspace.mkdir(parents=True)
+    events_dir.mkdir(parents=True)
     fake_bin.mkdir(parents=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
     (workspace / "README.md").write_text("# Coven Flight Recorder Smoke\n", encoding="utf-8")
     _write_fake_codex(fake_bin)
 
     env = dict(base_env)
-    env.update({"COVEN_HOME": str(coven_home), "NO_COLOR": "1"})
+    env.update({"COVEN_HOME": str(coven_home), "HOME": str(home_dir), "NO_COLOR": "1"})
     env["PATH"] = os.pathsep.join([str(fake_bin), str(coven_bin.parent), env.get("PATH", "")])
 
     version = _command_output(coven_bin, "--version", env=env) or "unknown"
@@ -159,8 +172,42 @@ def _run_live_session(coven_bin: Path, out_dir: Path, temp_root: Path, base_env:
     sessions = _run_coven(coven_bin, ["sessions", "--json", "--all"], env, out_dir, "coven_sessions_json", timeout=30, cwd=workspace)
     session_found = _session_found(sessions.stdout, session_id)
 
-    run_result = _write_smoke_artifacts(coven_trace, out_dir)
+    run_result = _write_smoke_artifacts(
+        coven_trace,
+        out_dir,
+        sandbox={
+            "root": temp_root,
+            "home": home_dir,
+            "workspace": workspace,
+            "events": events_dir,
+            "coven_home": str(coven_home),
+            "fake_bin": str(fake_bin),
+            "ephemeral": True,
+            "audit_artifacts_kept": keep_temp,
+        },
+        fake_secret_files=fake_secret_files,
+        process={
+            "daemon_start_exit_code": start.returncode,
+            "daemon_status_exit_code": status.returncode,
+            "coven_exit_code": run.returncode,
+            "sessions_exit_code": sessions.returncode,
+            "daemon_start_stdout": str(out_dir / "coven_daemon_start_stdout.txt"),
+            "daemon_start_stderr": str(out_dir / "coven_daemon_start_stderr.txt"),
+            "daemon_status_stdout": str(out_dir / "coven_daemon_status_stdout.txt"),
+            "daemon_status_stderr": str(out_dir / "coven_daemon_status_stderr.txt"),
+            "run_stdout": str(out_dir / "coven_run_detached_stdout.txt"),
+            "run_stderr": str(out_dir / "coven_run_detached_stderr.txt"),
+            "sessions_stdout": str(out_dir / "coven_sessions_json_stdout.txt"),
+            "sessions_stderr": str(out_dir / "coven_sessions_json_stderr.txt"),
+        },
+        metadata={
+            "source": "scripts/live_coven_smoke.py",
+            "detached": True,
+            "codex_shim": str(fake_bin / "codex"),
+        },
+    )
     scorecard = run_result["scorecard"]
+    harness_result = run_result["harness_result"]
     report_path = run_result["paths"]["report"]
     passed = (
         daemon_started
@@ -189,20 +236,51 @@ def _run_live_session(coven_bin: Path, out_dir: Path, temp_root: Path, base_env:
             "lineage": str(run_result["paths"]["lineage"]),
             "task_completion": str(run_result["paths"]["task_completion"]),
             "run_digest": str(run_result["paths"]["run_digest"]),
+            "harness_manifest": str(out_dir / "harness_manifest.json"),
+            "harness_result": str(out_dir / "harness_result.json"),
+            "harness_runner": harness_result["runner"],
             "environment": _environment_summary(coven_bin, flight_root, env),
         },
         env,
     )
 
 
-def _write_smoke_artifacts(coven_trace: Path, out_dir: Path) -> dict[str, Any]:
+def _write_smoke_artifacts(
+    coven_trace: Path,
+    out_dir: Path,
+    *,
+    sandbox: dict[str, Any] | None = None,
+    fake_secret_files: list[str | Path] | None = None,
+    process: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     scenario_path = out_dir / "live_coven_scenario.json"
     _write_json(scenario_path, _scenario(Path(coven_trace.name)))
-    return _run_scenario_artifacts(
+    result = _run_scenario_artifacts(
         scenario_path,
         out_dir,
         trace_format="coven_jsonl",
+        preserve_paths=True,
     )
+    harness_metadata = {"source": "scripts/live_coven_smoke.py"}
+    if metadata:
+        harness_metadata.update(metadata)
+    harness_result = publish_harness_artifacts(
+        scenario_path=scenario_path,
+        run_dir=out_dir,
+        artifact_result=result,
+        trace_path=coven_trace,
+        trace_format="coven_jsonl",
+        runner="coven_live_smoke",
+        provider="coven",
+        model=MODEL_REF,
+        sandbox=sandbox or {"root": out_dir, "home": out_dir, "workspace": out_dir, "events": out_dir},
+        fake_secret_files=fake_secret_files,
+        process=process,
+        metadata=harness_metadata,
+    )
+    result["harness_result"] = harness_result
+    return result
 
 
 def _scenario(trace_path: Path) -> dict[str, Any]:

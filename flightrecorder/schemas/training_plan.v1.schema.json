@@ -1,0 +1,196 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/training_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run model training plan that records model, dataset, trainer, output, and compute assumptions without launching training.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "compute": {
+      "type": "object"
+    },
+    "compatibility_report": {
+      "$ref": "#/$defs/compatibilityReport"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "dataset": {
+      "type": "object"
+    },
+    "dry_run": {
+      "const": true
+    },
+    "execution": {
+      "type": "object"
+    },
+    "gpu_execution": {
+      "const": false
+    },
+    "model": {
+      "type": "object"
+    },
+    "no_weight_download": {
+      "const": true
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output": {
+      "type": "object"
+    },
+    "passed": {
+      "const": true
+    },
+    "plan_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "ready_for_dry_run_review",
+        "block_training_plan"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.training_plan.v1"
+    },
+    "trainer": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "plan_path",
+    "created_at",
+    "dry_run",
+    "no_weight_download",
+    "gpu_execution",
+    "passed",
+    "readiness",
+    "recommendation",
+    "model",
+    "dataset",
+    "trainer",
+    "output",
+    "compute",
+    "execution",
+    "checks",
+    "blocked_reasons"
+  ],
+  "title": "Hermes Flight Recorder Training Plan",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "compatibilityReport": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "download_policy": {
+          "type": "object"
+        },
+        "metadata_only_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "const": true
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "probe_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "readiness": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recommendation": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "unsupported_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verified_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "candidate_id",
+        "model_id",
+        "passed",
+        "readiness",
+        "recommendation",
+        "probe_count",
+        "verified_count",
+        "metadata_only_count",
+        "missing_count",
+        "unsupported_count",
+        "download_policy"
+      ],
+      "type": "object"
+    }
+  }
+}

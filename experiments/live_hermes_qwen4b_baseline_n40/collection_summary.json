@@ -1,0 +1,373 @@
+{
+  "definition_of_done_progress": {
+    "complete": false,
+    "target_action_sft_rows": 300,
+    "target_dpo_pairs": 100,
+    "target_live_episodes": 100
+  },
+  "error_count": 0,
+  "errors": [],
+  "expected_outcome_counts": {
+    "fail": 10,
+    "pass": 30
+  },
+  "generated_at": "2026-06-30T08:51:40.294744+00:00",
+  "metrics": {
+    "average_score": 47.88,
+    "critical_failure_counts": [
+      {
+        "count": 40,
+        "id": "required_evidence"
+      },
+      {
+        "count": 38,
+        "id": "final_answer"
+      },
+      {
+        "count": 3,
+        "id": "required_actions"
+      },
+      {
+        "count": 1,
+        "id": "forbidden_actions"
+      }
+    ],
+    "failed": 40,
+    "failed_rule_counts": [
+      {
+        "count": 40,
+        "id": "required_evidence"
+      },
+      {
+        "count": 38,
+        "id": "final_answer"
+      },
+      {
+        "count": 3,
+        "id": "required_actions"
+      },
+      {
+        "count": 1,
+        "id": "forbidden_actions"
+      }
+    ],
+    "max_score": 70,
+    "min_score": 15,
+    "pass_rate": 0.0,
+    "passed": 0,
+    "task_families": [
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "artifact_verification",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "code_edit_test",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "cron_async_completion",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "delegation_claim",
+        "total": 4
+      },
+      {
+        "average_score": 60.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "required_evidence"
+          },
+          {
+            "count": 2,
+            "id": "final_answer"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "required_evidence"
+          },
+          {
+            "count": 2,
+            "id": "final_answer"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "file_read_write",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "git_repo_inspection",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "local_research",
+        "total": 4
+      },
+      {
+        "average_score": 18.75,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          },
+          {
+            "count": 3,
+            "id": "required_actions"
+          },
+          {
+            "count": 1,
+            "id": "forbidden_actions"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          },
+          {
+            "count": 3,
+            "id": "required_actions"
+          },
+          {
+            "count": 1,
+            "id": "forbidden_actions"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "prompt_injection_resistance",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "terminal_command",
+        "total": 4
+      },
+      {
+        "average_score": 50.0,
+        "critical_failure_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "failed": 4,
+        "failed_rule_counts": [
+          {
+            "count": 4,
+            "id": "final_answer"
+          },
+          {
+            "count": 4,
+            "id": "required_evidence"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "unsupported_claim",
+        "total": 4
+      }
+    ]
+  },
+  "run_count": 40,
+  "schema_version": "hfr.live_hermes_collection_summary.v1",
+  "selected_count": 40,
+  "suite_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_baseline_n40/suite_summary.json",
+  "task_family_counts": {
+    "artifact_verification": 4,
+    "code_edit_test": 4,
+    "cron_async_completion": 4,
+    "delegation_claim": 4,
+    "file_read_write": 4,
+    "git_repo_inspection": 4,
+    "local_research": 4,
+    "prompt_injection_resistance": 4,
+    "terminal_command": 4,
+    "unsupported_claim": 4
+  }
+}

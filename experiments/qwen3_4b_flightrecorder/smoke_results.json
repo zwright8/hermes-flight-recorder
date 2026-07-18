@@ -1,0 +1,82 @@
+{
+  "schema_version": "hfr.agentic_training_smoke_results.v2",
+  "primary_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "smoke_model": "Qwen/Qwen3-0.6B",
+  "note": "Smoke results prove the training pipeline executes for both comparison arms on held-out-filtered data. They do not prove the primary 4B agentic-improvement claim.",
+  "data_filter": {
+    "policy": "exclude validation/test task families and scenario ids from all training views",
+    "train_task_families": [
+      "budget_runaway",
+      "cron_async_delegation",
+      "email_reply_completion"
+    ],
+    "heldout_task_families": [
+      "prompt_injection",
+      "subagent_claim"
+    ],
+    "heldout_scenario_ids": [
+      "prompt_injection_bad",
+      "prompt_injection_good",
+      "subagent_claim_bad"
+    ]
+  },
+  "environment_constraints": {
+    "hf_jobs": {
+      "status": "blocked",
+      "error": "402 Payment Required: Pre-paid credit balance is insufficient - add more credits to your account to use Jobs."
+    },
+    "local_primary_4b": {
+      "baseline_load_and_eval": "complete",
+      "fine_tuning": "not_safe_on_this_workstation",
+      "reason": "Qwen3-4B weights fit for inference after cache cleanup, but local disk/memory margin is too small for primary 4B LoRA training and repeated adapter evaluation."
+    }
+  },
+  "runs": {
+    "trace_only_sft": {
+      "model": "Qwen/Qwen3-0.6B",
+      "mode": "trace_sft",
+      "limit": 1,
+      "max_steps": 1,
+      "max_length": 512,
+      "gradient_accumulation_steps": 1,
+      "gradient_checkpointing": false,
+      "adapter_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_0_6b_filtered_smoke_trace_sft/trace_sft_adapter",
+      "result_path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_0_6b_filtered_smoke_trace_sft/trace_sft_result.json",
+      "sft_train_result": {
+        "epoch": 1.0,
+        "total_flos": 86507520000.0,
+        "train_loss": 4.310786247253418,
+        "train_runtime": 1.7172,
+        "train_samples_per_second": 0.582,
+        "train_steps_per_second": 0.582
+      }
+    },
+    "flightrecorder_sft_dpo": {
+      "model": "Qwen/Qwen3-0.6B",
+      "mode": "fr_sft_dpo",
+      "limit": 1,
+      "max_steps": 1,
+      "max_length": 512,
+      "gradient_accumulation_steps": 1,
+      "gradient_checkpointing": false,
+      "adapter_dir": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_0_6b_filtered_smoke_fr_sft_dpo/fr_sft_dpo_adapter",
+      "result_path": "experiments/qwen3_4b_flightrecorder/adapters/qwen3_0_6b_filtered_smoke_fr_sft_dpo/fr_sft_dpo_result.json",
+      "sft_train_result": {
+        "epoch": 1.0,
+        "total_flos": 108134400000.0,
+        "train_loss": 3.1585066318511963,
+        "train_runtime": 1.1763,
+        "train_samples_per_second": 0.85,
+        "train_steps_per_second": 0.85
+      },
+      "dpo_train_result": {
+        "epoch": 1.0,
+        "total_flos": 221113221120.0,
+        "train_loss": 0.6931471824645996,
+        "train_runtime": 1.4052,
+        "train_samples_per_second": 0.712,
+        "train_steps_per_second": 0.712
+      }
+    }
+  }
+}

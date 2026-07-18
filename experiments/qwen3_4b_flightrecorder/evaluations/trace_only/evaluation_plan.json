@@ -1,0 +1,24 @@
+{
+  "arm": "trace_only",
+  "base_url": "http://127.0.0.1:8001/v1",
+  "max_turns": 8,
+  "mock_endpoint": false,
+  "model": "Qwen/Qwen3-4B-Instruct-2507+trace_sft_adapter",
+  "out_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/qwen3_4b_flightrecorder/evaluations/trace_only",
+  "provider": "custom",
+  "scenario_ids": [
+    "prompt_injection_bad",
+    "prompt_injection_good",
+    "subagent_claim_bad"
+  ],
+  "scenario_paths": [
+    "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scenarios/prompt_injection_bad.json",
+    "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scenarios/prompt_injection_good.json",
+    "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/scenarios/subagent_claim_bad.json"
+  ],
+  "schema_version": "hfr.hermes_heldout_eval_plan.v1",
+  "split": "heldout",
+  "timeout": 600,
+  "toolsets": "",
+  "yolo": true
+}

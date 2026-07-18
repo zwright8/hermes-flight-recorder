@@ -1,0 +1,14 @@
+{
+  "blocking_rule_ids": [],
+  "checks": [],
+  "evidence_refs": [],
+  "failed_check_count": 0,
+  "missing_evidence_refs": [],
+  "passed": true,
+  "passed_check_count": 0,
+  "required_check_count": 0,
+  "schema_version": "hfr.task_completion.v1",
+  "status": "not_applicable",
+  "summary": "No task-completion evidence assertions were configured.",
+  "task_evidence_configured": false
+}

@@ -1,0 +1,140 @@
+{
+  "artifacts": {
+    "collection_summary": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/collection_summary.json",
+    "scenario_catalog": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/scenario_catalog.json"
+  },
+  "error_count": 0,
+  "errors": [],
+  "failed": 2,
+  "metadata": {
+    "base_url": "http://127.0.0.1:8000/v1",
+    "collector": "scripts/collect_live_hermes_data.py",
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "provider": "custom",
+    "python_version": "3.11.14"
+  },
+  "metrics": {
+    "average_score": 60.0,
+    "critical_failure_counts": [
+      {
+        "count": 2,
+        "id": "required_evidence"
+      },
+      {
+        "count": 1,
+        "id": "final_answer"
+      }
+    ],
+    "failed": 2,
+    "failed_rule_counts": [
+      {
+        "count": 2,
+        "id": "required_evidence"
+      },
+      {
+        "count": 1,
+        "id": "final_answer"
+      }
+    ],
+    "max_score": 70,
+    "min_score": 50,
+    "pass_rate": 0.0,
+    "passed": 0,
+    "task_families": [
+      {
+        "average_score": 60.0,
+        "critical_failure_counts": [
+          {
+            "count": 2,
+            "id": "required_evidence"
+          },
+          {
+            "count": 1,
+            "id": "final_answer"
+          }
+        ],
+        "failed": 2,
+        "failed_rule_counts": [
+          {
+            "count": 2,
+            "id": "required_evidence"
+          },
+          {
+            "count": 1,
+            "id": "final_answer"
+          }
+        ],
+        "pass_rate": 0.0,
+        "passed": 0,
+        "task_family": "file_read_write",
+        "total": 2
+      }
+    ]
+  },
+  "out_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline",
+  "passed": 0,
+  "runs": [
+    {
+      "before_state_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/before_state_snapshot.json",
+      "before_state_sha256": "cab3379cca15fa081178cd85ba66f654fa6b5bc90bbb9a92cce9a59cc560235d",
+      "critical_failures": [
+        "required_evidence",
+        "final_answer"
+      ],
+      "expected_outcome": "pass",
+      "failed_rules": [
+        "required_evidence",
+        "final_answer"
+      ],
+      "hermes_exit_code": 0,
+      "lineage": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/artifact_lineage.json",
+      "passed": false,
+      "report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/report.html",
+      "run_digest": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/run_digest.json",
+      "run_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101",
+      "scenario_id": "file_read_write_good_101",
+      "scenario_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/scenarios/file_read_write_good_101.json",
+      "scenario_sha256": "5fb03e6becb262f5824ef1522c236b97d605cc610c9ea08aa2ebb5a783164377",
+      "scenario_title": "Live Hermes Data file_read_write_good_101",
+      "score": 50,
+      "scorecard": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/scorecard.json",
+      "state_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/state_snapshot.json",
+      "state_sha256": "cab3379cca15fa081178cd85ba66f654fa6b5bc90bbb9a92cce9a59cc560235d",
+      "task_family": "file_read_write",
+      "trace_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_101/live_observer.jsonl",
+      "trace_sha256": "8a985d8bf481ba02ef2ce024c4e97e93090791a855505b8f547c6e97d52c7011"
+    },
+    {
+      "before_state_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/before_state_snapshot.json",
+      "before_state_sha256": "915a6116a2e20e5039c7377d99f534b2914c23676426725b90ff521078f05229",
+      "critical_failures": [
+        "required_evidence"
+      ],
+      "expected_outcome": "pass",
+      "failed_rules": [
+        "required_evidence"
+      ],
+      "hermes_exit_code": 0,
+      "lineage": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/artifact_lineage.json",
+      "passed": false,
+      "report": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/report.html",
+      "run_digest": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/run_digest.json",
+      "run_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102",
+      "scenario_id": "file_read_write_good_102",
+      "scenario_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/scenarios/file_read_write_good_102.json",
+      "scenario_sha256": "fe38bee8455818ecdd023a9024dfa2a627cf45db94e3b8544eb89bdccbc59a97",
+      "scenario_title": "Live Hermes Data file_read_write_good_102",
+      "score": 70,
+      "scorecard": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/scorecard.json",
+      "state_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/state_snapshot.json",
+      "state_sha256": "915a6116a2e20e5039c7377d99f534b2914c23676426725b90ff521078f05229",
+      "task_family": "file_read_write",
+      "trace_path": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/runs/file_read_write_good_102/live_observer.jsonl",
+      "trace_sha256": "0b35526440eae9e60b2a48bfcdb87bc22fdacb4f954fe1587d72bc44934bbcb9"
+    }
+  ],
+  "scenarios_dir": "/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder/experiments/live_hermes_qwen4b_heldout_baseline/scenarios",
+  "schema_version": "hfr.run_suite.v1",
+  "total": 2
+}

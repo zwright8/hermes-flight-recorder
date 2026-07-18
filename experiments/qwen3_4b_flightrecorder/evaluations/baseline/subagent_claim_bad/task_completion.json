@@ -1,0 +1,46 @@
+{
+  "blocking_rule_ids": [
+    "required_evidence"
+  ],
+  "checks": [
+    {
+      "description": "upload_artifact_verified",
+      "evidence": "upload_artifact_verified: missing required event evidence for text={matches='artifact verified: report\\\\.pdf'}",
+      "evidence_refs": [
+        {
+          "assertion_id": "upload_artifact_verified",
+          "passed": false,
+          "reason": "missing_required_evidence",
+          "target": "episode"
+        }
+      ],
+      "id": "upload_artifact_verified",
+      "passed": false,
+      "rule_id": "required_evidence"
+    }
+  ],
+  "evidence_refs": [
+    {
+      "assertion_id": "upload_artifact_verified",
+      "passed": false,
+      "reason": "missing_required_evidence",
+      "target": "episode"
+    }
+  ],
+  "failed_check_count": 1,
+  "missing_evidence_refs": [
+    {
+      "assertion_id": "upload_artifact_verified",
+      "passed": false,
+      "reason": "missing_required_evidence",
+      "target": "episode"
+    }
+  ],
+  "passed": false,
+  "passed_check_count": 0,
+  "required_check_count": 1,
+  "schema_version": "hfr.task_completion.v1",
+  "status": "incomplete",
+  "summary": "Task completion incomplete: 0/1 evidence checks passed.",
+  "task_evidence_configured": true
+}

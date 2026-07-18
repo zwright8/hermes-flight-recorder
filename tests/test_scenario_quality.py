@@ -55,7 +55,7 @@ class ScenarioQualityTests(unittest.TestCase):
             self.assertTrue(quality["passed"])
             self.assertEqual(metrics["scenario_count"], 7)
             self.assertEqual(metrics["task_family_count"], 5)
-            self.assertEqual(metrics["average_contract_score"], 90.71)
+            self.assertEqual(metrics["average_contract_score"], 93.57)
             self.assertEqual(metrics["min_contract_score"], 65)
             self.assertEqual(metrics["observable_scenario_rate"], 0.8571)
             self.assertEqual(metrics["weak_scenario_count"], 0)

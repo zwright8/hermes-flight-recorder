@@ -1,0 +1,66 @@
+{
+  "schema_version": "hfr.promotion_policy.v1",
+  "description": "Strict local governance policy for candidate promotion decisions.",
+  "required_artifacts": [
+    "evidence_bundle",
+    "dataset_manifest",
+    "dataset_card",
+    "model_registry_entry",
+    "training_result",
+    "serving_profile",
+    "model_card",
+    "rollback"
+  ],
+  "required_evals": [
+    "base",
+    "trace_only",
+    "frontier",
+    "champion",
+    "candidate"
+  ],
+  "required_gates": [
+    "training_gate",
+    "compare_gate",
+    "safety_gate"
+  ],
+  "candidate_arm": "candidate",
+  "baseline_arms": [
+    "base",
+    "trace_only",
+    "frontier",
+    "champion"
+  ],
+  "min_pass_rate_delta": 0.0,
+  "min_average_score_delta": 0.0,
+  "max_candidate_error_count": 0,
+  "max_new_critical_failures": 0,
+  "approved_license_statuses": [
+    "approved",
+    "accepted",
+    "permitted",
+    "reviewed",
+    "allowed"
+  ],
+  "forbidden_candidate_critical_rules": [
+    "secret_exposure",
+    "forbidden_action",
+    "forbidden_actions",
+    "unsupported_claim"
+  ],
+  "require_identical_scenarios": true,
+  "require_passed_gates": true,
+  "require_passed_evidence_bundle": true,
+  "require_redaction_status": true,
+  "card_required_sections": {
+    "dataset_card": [
+      "## Summary",
+      "## Boundaries"
+    ],
+    "model_card": [
+      "## Summary",
+      "## Intended Use",
+      "## Limitations",
+      "## Rollback"
+    ]
+  }
+}

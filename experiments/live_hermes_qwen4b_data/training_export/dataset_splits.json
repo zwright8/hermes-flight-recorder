@@ -1,0 +1,377 @@
+{
+  "artifact_names": [
+    "episodes",
+    "rewards",
+    "step_rewards",
+    "preferences",
+    "failure_modes",
+    "sft",
+    "dpo",
+    "reward_model"
+  ],
+  "assignments": [
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "artifact_verification_bad_004",
+        "artifact_verification_bad_008",
+        "artifact_verification_good_001",
+        "artifact_verification_good_002",
+        "artifact_verification_good_003",
+        "artifact_verification_good_005",
+        "artifact_verification_good_006",
+        "artifact_verification_good_007",
+        "artifact_verification_good_009",
+        "artifact_verification_good_010"
+      ],
+      "scenario_ids": [
+        "artifact_verification_bad_004",
+        "artifact_verification_bad_008",
+        "artifact_verification_good_001",
+        "artifact_verification_good_002",
+        "artifact_verification_good_003",
+        "artifact_verification_good_005",
+        "artifact_verification_good_006",
+        "artifact_verification_good_007",
+        "artifact_verification_good_009",
+        "artifact_verification_good_010"
+      ],
+      "split": "train",
+      "task_family": "artifact_verification"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "code_edit_test_bad_004",
+        "code_edit_test_bad_008",
+        "code_edit_test_good_001",
+        "code_edit_test_good_002",
+        "code_edit_test_good_003",
+        "code_edit_test_good_005",
+        "code_edit_test_good_006",
+        "code_edit_test_good_007",
+        "code_edit_test_good_009",
+        "code_edit_test_good_010"
+      ],
+      "scenario_ids": [
+        "code_edit_test_bad_004",
+        "code_edit_test_bad_008",
+        "code_edit_test_good_001",
+        "code_edit_test_good_002",
+        "code_edit_test_good_003",
+        "code_edit_test_good_005",
+        "code_edit_test_good_006",
+        "code_edit_test_good_007",
+        "code_edit_test_good_009",
+        "code_edit_test_good_010"
+      ],
+      "split": "train",
+      "task_family": "code_edit_test"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "cron_async_completion_bad_004",
+        "cron_async_completion_bad_008",
+        "cron_async_completion_good_001",
+        "cron_async_completion_good_002",
+        "cron_async_completion_good_003",
+        "cron_async_completion_good_005",
+        "cron_async_completion_good_006",
+        "cron_async_completion_good_007",
+        "cron_async_completion_good_009",
+        "cron_async_completion_good_010"
+      ],
+      "scenario_ids": [
+        "cron_async_completion_bad_004",
+        "cron_async_completion_bad_008",
+        "cron_async_completion_good_001",
+        "cron_async_completion_good_002",
+        "cron_async_completion_good_003",
+        "cron_async_completion_good_005",
+        "cron_async_completion_good_006",
+        "cron_async_completion_good_007",
+        "cron_async_completion_good_009",
+        "cron_async_completion_good_010"
+      ],
+      "split": "train",
+      "task_family": "cron_async_completion"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "delegation_claim_bad_004",
+        "delegation_claim_bad_008",
+        "delegation_claim_good_001",
+        "delegation_claim_good_002",
+        "delegation_claim_good_003",
+        "delegation_claim_good_005",
+        "delegation_claim_good_006",
+        "delegation_claim_good_007",
+        "delegation_claim_good_009",
+        "delegation_claim_good_010"
+      ],
+      "scenario_ids": [
+        "delegation_claim_bad_004",
+        "delegation_claim_bad_008",
+        "delegation_claim_good_001",
+        "delegation_claim_good_002",
+        "delegation_claim_good_003",
+        "delegation_claim_good_005",
+        "delegation_claim_good_006",
+        "delegation_claim_good_007",
+        "delegation_claim_good_009",
+        "delegation_claim_good_010"
+      ],
+      "split": "validation",
+      "task_family": "delegation_claim"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "file_read_write_bad_004",
+        "file_read_write_bad_008",
+        "file_read_write_good_001",
+        "file_read_write_good_002",
+        "file_read_write_good_003",
+        "file_read_write_good_005",
+        "file_read_write_good_006",
+        "file_read_write_good_007",
+        "file_read_write_good_009",
+        "file_read_write_good_010"
+      ],
+      "scenario_ids": [
+        "file_read_write_bad_004",
+        "file_read_write_bad_008",
+        "file_read_write_good_001",
+        "file_read_write_good_002",
+        "file_read_write_good_003",
+        "file_read_write_good_005",
+        "file_read_write_good_006",
+        "file_read_write_good_007",
+        "file_read_write_good_009",
+        "file_read_write_good_010"
+      ],
+      "split": "train",
+      "task_family": "file_read_write"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "git_repo_inspection_bad_004",
+        "git_repo_inspection_bad_008",
+        "git_repo_inspection_good_001",
+        "git_repo_inspection_good_002",
+        "git_repo_inspection_good_003",
+        "git_repo_inspection_good_005",
+        "git_repo_inspection_good_006",
+        "git_repo_inspection_good_007",
+        "git_repo_inspection_good_009",
+        "git_repo_inspection_good_010"
+      ],
+      "scenario_ids": [
+        "git_repo_inspection_bad_004",
+        "git_repo_inspection_bad_008",
+        "git_repo_inspection_good_001",
+        "git_repo_inspection_good_002",
+        "git_repo_inspection_good_003",
+        "git_repo_inspection_good_005",
+        "git_repo_inspection_good_006",
+        "git_repo_inspection_good_007",
+        "git_repo_inspection_good_009",
+        "git_repo_inspection_good_010"
+      ],
+      "split": "train",
+      "task_family": "git_repo_inspection"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "local_research_bad_004",
+        "local_research_bad_008",
+        "local_research_good_001",
+        "local_research_good_002",
+        "local_research_good_003",
+        "local_research_good_005",
+        "local_research_good_006",
+        "local_research_good_007",
+        "local_research_good_009",
+        "local_research_good_010"
+      ],
+      "scenario_ids": [
+        "local_research_bad_004",
+        "local_research_bad_008",
+        "local_research_good_001",
+        "local_research_good_002",
+        "local_research_good_003",
+        "local_research_good_005",
+        "local_research_good_006",
+        "local_research_good_007",
+        "local_research_good_009",
+        "local_research_good_010"
+      ],
+      "split": "test",
+      "task_family": "local_research"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "prompt_injection_resistance_bad_004",
+        "prompt_injection_resistance_bad_008",
+        "prompt_injection_resistance_good_001",
+        "prompt_injection_resistance_good_002",
+        "prompt_injection_resistance_good_003",
+        "prompt_injection_resistance_good_005",
+        "prompt_injection_resistance_good_006",
+        "prompt_injection_resistance_good_007",
+        "prompt_injection_resistance_good_009",
+        "prompt_injection_resistance_good_010"
+      ],
+      "scenario_ids": [
+        "prompt_injection_resistance_bad_004",
+        "prompt_injection_resistance_bad_008",
+        "prompt_injection_resistance_good_001",
+        "prompt_injection_resistance_good_002",
+        "prompt_injection_resistance_good_003",
+        "prompt_injection_resistance_good_005",
+        "prompt_injection_resistance_good_006",
+        "prompt_injection_resistance_good_007",
+        "prompt_injection_resistance_good_009",
+        "prompt_injection_resistance_good_010"
+      ],
+      "split": "train",
+      "task_family": "prompt_injection_resistance"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "terminal_command_bad_004",
+        "terminal_command_bad_008",
+        "terminal_command_good_001",
+        "terminal_command_good_002",
+        "terminal_command_good_003",
+        "terminal_command_good_005",
+        "terminal_command_good_006",
+        "terminal_command_good_007",
+        "terminal_command_good_009",
+        "terminal_command_good_010"
+      ],
+      "scenario_ids": [
+        "terminal_command_bad_004",
+        "terminal_command_bad_008",
+        "terminal_command_good_001",
+        "terminal_command_good_002",
+        "terminal_command_good_003",
+        "terminal_command_good_005",
+        "terminal_command_good_006",
+        "terminal_command_good_007",
+        "terminal_command_good_009",
+        "terminal_command_good_010"
+      ],
+      "split": "train",
+      "task_family": "terminal_command"
+    },
+    {
+      "episode_count": 10,
+      "episode_ids": [
+        "unsupported_claim_bad_004",
+        "unsupported_claim_bad_008",
+        "unsupported_claim_good_001",
+        "unsupported_claim_good_002",
+        "unsupported_claim_good_003",
+        "unsupported_claim_good_005",
+        "unsupported_claim_good_006",
+        "unsupported_claim_good_007",
+        "unsupported_claim_good_009",
+        "unsupported_claim_good_010"
+      ],
+      "scenario_ids": [
+        "unsupported_claim_bad_004",
+        "unsupported_claim_bad_008",
+        "unsupported_claim_good_001",
+        "unsupported_claim_good_002",
+        "unsupported_claim_good_003",
+        "unsupported_claim_good_005",
+        "unsupported_claim_good_006",
+        "unsupported_claim_good_007",
+        "unsupported_claim_good_009",
+        "unsupported_claim_good_010"
+      ],
+      "split": "train",
+      "task_family": "unsupported_claim"
+    }
+  ],
+  "leakage_checks": {
+    "cross_split_task_families": [],
+    "family_exclusive": true
+  },
+  "notes": [
+    "Splits are assigned by task_family, not individual episode, to reduce train/eval leakage.",
+    "Small datasets may have empty validation or test splits; use dataset_metrics.quality_flags before training."
+  ],
+  "ratios": {
+    "test": 0.1,
+    "train": 0.8,
+    "validation": 0.1
+  },
+  "schema_version": "hfr.rl.dataset_splits.v1",
+  "seed": "hfr.dataset_split.v1",
+  "split_counts": {
+    "test": {
+      "artifacts": {
+        "dpo": 16,
+        "episodes": 10,
+        "failure_modes": 4,
+        "preferences": 16,
+        "reward_model": 10,
+        "rewards": 10,
+        "sft": 8,
+        "step_rewards": 6
+      },
+      "episode_count": 10,
+      "task_family_count": 1
+    },
+    "train": {
+      "artifacts": {
+        "dpo": 128,
+        "episodes": 80,
+        "failure_modes": 34,
+        "preferences": 128,
+        "reward_model": 80,
+        "rewards": 80,
+        "sft": 64,
+        "step_rewards": 50
+      },
+      "episode_count": 80,
+      "task_family_count": 8
+    },
+    "validation": {
+      "artifacts": {
+        "dpo": 16,
+        "episodes": 10,
+        "failure_modes": 4,
+        "preferences": 16,
+        "reward_model": 10,
+        "rewards": 10,
+        "sft": 8,
+        "step_rewards": 6
+      },
+      "episode_count": 10,
+      "task_family_count": 1
+    }
+  },
+  "split_names": [
+    "train",
+    "validation",
+    "test"
+  ],
+  "strategy": "task_family_hash",
+  "summary": {
+    "episode_count": 100,
+    "family_exclusive": true,
+    "task_family_count": 10,
+    "test_episode_count": 10,
+    "train_episode_count": 80,
+    "validation_episode_count": 10
+  }
+}
