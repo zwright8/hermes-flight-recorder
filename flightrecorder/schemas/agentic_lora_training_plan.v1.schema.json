@@ -1,0 +1,166 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run or launch-gating plan emitted by scripts/train_agentic_lora.py before heavy ML imports.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "compute_assumptions": {
+      "type": "object"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "data_files": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "experiment_dir": {
+      "type": "string"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "hyperparameters": {
+      "type": "object"
+    },
+    "input_manifests": {
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "trace_sft",
+        "fr_sft",
+        "fr_action_sft",
+        "fr_dpo",
+        "fr_sft_dpo",
+        "fr_reward_model",
+        "fr_step_rewards"
+      ]
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "prepared_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "raw_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "launch_allowed",
+        "block_launch"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_training_plan.v1"
+    },
+    "smoke": {
+      "type": "object"
+    },
+    "trainer_backends": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "mode",
+    "model",
+    "experiment_dir",
+    "output_dir",
+    "dry_run",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_manifests",
+    "data_files",
+    "raw_counts",
+    "prepared_counts",
+    "hyperparameters",
+    "compute_assumptions",
+    "trainer_backends"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Training Plan",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    }
+  }
+}

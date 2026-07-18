@@ -17,7 +17,11 @@ SCHEMA_VERSION = "hfr.serving_demo_run.v1"
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", action="append", default=[], metavar="NAME=PATH", help="Arm name and evaluation_summary.json or suite_summary.json path")
+    parser.add_argument("--baseline", type=Path, help="Shortcut for --arm baseline=PATH")
+    parser.add_argument("--trace-only", type=Path, help="Shortcut for --arm trace_only=PATH")
+    parser.add_argument("--flightrecorder", type=Path, help="Shortcut for --arm flightrecorder=PATH")
     parser.add_argument("--candidate-arm", default="")
+    parser.add_argument("--endpoint-suite", type=Path, help="Optional serving_endpoint_suite.json readiness artifact")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     return parser.parse_args(argv)
@@ -25,11 +29,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    arms = [_load_arm(name, path) for name, path in _arm_specs(args.arm)]
+    arms = [_load_arm(name, path) for name, path in _arm_specs(args)]
     if len(arms) < 2:
         raise SystemExit("At least two arms are required")
-    candidate_name = args.candidate_arm or ("flightrecorder" if any(arm["name"] == "flightrecorder" for arm in arms) else arms[-1]["name"])
-    demo = build_demo(arms, candidate_name=candidate_name)
+    candidate_name = _candidate_name(args.candidate_arm, [arm["name"] for arm in arms])
+    endpoint_suite = _load_endpoint_suite(args.endpoint_suite) if args.endpoint_suite else None
+    demo = build_demo(arms, candidate_name=candidate_name, endpoint_suite=endpoint_suite)
     _relativize_demo_paths(demo, args.report.parent)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
@@ -39,14 +44,19 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def build_demo(arms: list[dict[str, Any]], *, candidate_name: str) -> dict[str, Any]:
+def build_demo(
+    arms: list[dict[str, Any]],
+    *,
+    candidate_name: str,
+    endpoint_suite: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     scenario_sets = {arm["name"]: arm["scenario_ids"] for arm in arms}
     same_scenarios = len({tuple(ids) for ids in scenario_sets.values()}) == 1
     scenarios = _scenario_rows(arms)
     candidate = next(arm for arm in arms if arm["name"] == candidate_name)
     references = [arm for arm in arms if arm["name"] != candidate_name]
     comparisons = _comparisons(candidate, references, scenarios, same_scenarios=same_scenarios)
-    return {
+    demo = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _utc_now(),
         "candidate_arm": candidate_name,
@@ -57,6 +67,10 @@ def build_demo(arms: list[dict[str, Any]], *, candidate_name: str) -> dict[str, 
         "claims": _claims(candidate, references, scenarios, same_scenarios=same_scenarios),
         "scenarios": scenarios,
     }
+    if endpoint_suite is not None:
+        endpoint_suite["demo_alignment"] = _endpoint_alignment(arms, endpoint_suite)
+        demo["endpoint_suite"] = endpoint_suite
+    return demo
 
 
 def render_report(demo: dict[str, Any]) -> str:
@@ -95,6 +109,43 @@ def render_report(demo: dict[str, Any]) -> str:
             for outcome in comparison.get("scenario_outcomes", []):
                 lines.append(
                     f"| {outcome.get('scenario_id')} | {comparison.get('reference_arm')} | {outcome.get('candidate_passed')} | {outcome.get('reference_passed')} | {outcome.get('candidate_score')} | {outcome.get('reference_score')} | {outcome.get('outcome')} |"
+                )
+    endpoint_suite = demo.get("endpoint_suite")
+    if isinstance(endpoint_suite, dict):
+        lines.extend(
+            [
+                "",
+                "## Serving Endpoint Readiness",
+                "",
+                f"- Suite passed: {endpoint_suite.get('passed')}",
+                f"- Demo aligned: {(endpoint_suite.get('demo_alignment') or {}).get('passed')}",
+                f"- Failed checks: {', '.join(endpoint_suite.get('failed_checks') or []) or 'none'}",
+                f"- Suite artifact: {_md_link('serving_endpoint_suite', endpoint_suite.get('path'))}",
+                "",
+                "| Arm | Ready | Served Model | Tool Calls | Structured Outputs | Profile | Lifecycle |",
+                "| --- | ---: | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for arm in endpoint_suite.get("arms") or []:
+            lines.append(
+                "| {arm} | {ready} | `{model}` | {tools} | {structured} | {profile} | {lifecycle} |".format(
+                    arm=arm.get("arm") or "",
+                    ready=arm.get("ready_for_eval"),
+                    model=arm.get("served_model_id") or "",
+                    tools=arm.get("tool_calls"),
+                    structured=arm.get("structured_outputs"),
+                    profile=_md_link("profile", arm.get("profile_path")),
+                    lifecycle=_md_link("lifecycle", arm.get("lifecycle_path")),
+                )
+            )
+        alignment = endpoint_suite.get("demo_alignment") or {}
+        if alignment.get("checks"):
+            lines.extend(["", "### Demo Alignment", ""])
+            for check in alignment["checks"]:
+                status = "pass" if check.get("passed") else "fail"
+                lines.append(
+                    f"- `{status}` `{check.get('arm')}`: eval `{check.get('eval_model')}` "
+                    f"vs endpoint `{check.get('served_model_id')}`"
                 )
     lines.extend(["", "## Evidence-Backed Claims", ""])
     if not demo["claims"]:
@@ -283,14 +334,92 @@ def _resolve_artifact_ref(anchor_file: Path, value: str) -> str:
     return str(path.resolve())
 
 
-def _arm_specs(specs: list[str]) -> list[tuple[str, Path]]:
-    parsed = []
-    for spec in specs:
+def _load_endpoint_suite(path: Path) -> dict[str, Any]:
+    source = path.expanduser().resolve()
+    data = _load_json(source)
+    arms = []
+    for arm in data.get("arms") or []:
+        identity = arm.get("model_identity") if isinstance(arm.get("model_identity"), dict) else {}
+        capabilities = arm.get("capabilities") if isinstance(arm.get("capabilities"), dict) else {}
+        lifecycle = arm.get("lifecycle") if isinstance(arm.get("lifecycle"), dict) else {}
+        arms.append(
+            {
+                "arm": arm.get("arm"),
+                "ready_for_eval": arm.get("ready_for_eval"),
+                "failed_checks": arm.get("failed_checks") or [],
+                "profile_path": arm.get("profile_path"),
+                "served_model_id": identity.get("served_model_id"),
+                "requested_model": identity.get("requested_model"),
+                "tool_calls": capabilities.get("tool_calls"),
+                "structured_outputs": capabilities.get("structured_outputs"),
+                "lifecycle_path": lifecycle.get("path") if lifecycle.get("present") else "",
+            }
+        )
+    return {
+        "path": str(source),
+        "schema_version": data.get("schema_version"),
+        "passed": data.get("passed"),
+        "failed_checks": data.get("failed_checks") or [],
+        "requirements": data.get("requirements") or {},
+        "arms": arms,
+    }
+
+
+def _endpoint_alignment(arms: list[dict[str, Any]], endpoint_suite: dict[str, Any]) -> dict[str, Any]:
+    endpoint_by_arm = {str(arm.get("arm")): arm for arm in endpoint_suite.get("arms") or []}
+    checks = []
+    for arm in arms:
+        endpoint = endpoint_by_arm.get(arm["name"])
+        if not endpoint:
+            checks.append(
+                {
+                    "arm": arm["name"],
+                    "passed": False,
+                    "reason": "missing_endpoint_arm",
+                    "eval_model": arm.get("model"),
+                    "served_model_id": "",
+                }
+            )
+            continue
+        model_matches = endpoint.get("served_model_id") == arm.get("model")
+        checks.append(
+            {
+                "arm": arm["name"],
+                "passed": bool(endpoint.get("ready_for_eval") and model_matches),
+                "reason": "matched" if model_matches else "model_mismatch",
+                "eval_model": arm.get("model"),
+                "served_model_id": endpoint.get("served_model_id"),
+            }
+        )
+    failed = [f"{check['arm']}:{check['reason']}" for check in checks if not check["passed"]]
+    return {"passed": not failed, "failed_checks": failed, "checks": checks}
+
+
+def _arm_specs(args: argparse.Namespace) -> list[tuple[str, Path]]:
+    parsed: list[tuple[str, Path]] = []
+    for name, path in (
+        ("baseline", args.baseline),
+        ("trace_only", args.trace_only),
+        ("flightrecorder", args.flightrecorder),
+    ):
+        if path:
+            parsed.append((name, path))
+    for spec in args.arm:
         if "=" not in spec:
             raise SystemExit(f"--arm must use NAME=PATH: {spec}")
         name, value = spec.split("=", 1)
-        parsed.append((name, Path(value)))
+        parsed.append((name.strip(), Path(value)))
     return parsed
+
+
+def _candidate_name(configured: str, arm_names: list[str]) -> str:
+    if configured:
+        if configured not in arm_names:
+            raise SystemExit(f"Candidate arm {configured!r} is not in arms: {arm_names}")
+        return configured
+    if "flightrecorder" in arm_names:
+        return "flightrecorder"
+    return arm_names[-1]
 
 
 def _md_link(label: str, path: str | None) -> str:
@@ -316,6 +445,14 @@ def _relativize_demo_paths(demo: dict[str, Any], base_dir: Path) -> None:
             for key in evidence_keys:
                 if run.get(key):
                     run[key] = _relative_path(str(run[key]), base)
+    endpoint_suite = demo.get("endpoint_suite")
+    if isinstance(endpoint_suite, dict):
+        if endpoint_suite.get("path"):
+            endpoint_suite["path"] = _relative_path(str(endpoint_suite["path"]), base)
+        for arm in endpoint_suite.get("arms") or []:
+            for key in ("profile_path", "lifecycle_path"):
+                if arm.get(key):
+                    arm[key] = _relative_path(str(arm[key]), base)
 
 
 def _relative_path(value: str, base_dir: Path) -> str:

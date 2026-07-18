@@ -9,20 +9,24 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts, _safe_run_id, cmd_replay
+from flightrecorder.hermes_plugin import HOOKS
 from flightrecorder.lineage import REPLAY_BUNDLE_SCHEMA_VERSION
 from flightrecorder.path_safety import json_marker_matches_schema, locked_owned_output_directory
 from flightrecorder.schema import load_scenario
 
 
+PLUGIN_NAME = "flight_recorder_live"
 HARNESS_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
@@ -41,6 +45,293 @@ DEFAULT_TOOL_POLICY = {
     "network": {"mode": "disabled", "allowed_hosts": []},
 }
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def default_hermes_root(anchor: str | Path) -> str:
+    """Return the conventional adjacent Hermes Agent checkout path."""
+    return str(Path(anchor).resolve().parents[2] / "upstream-hermes-agent")
+
+
+def require_hermes_checkout(root: Path) -> dict[str, Any]:
+    """Validate the explicitly selected Hermes checkout before live execution."""
+    if not (root / "pyproject.toml").exists():
+        raise SystemExit(f"Hermes checkout not found: {root}")
+    if shutil.which("uv") is None:
+        raise SystemExit("uv is required to run the Hermes checkout")
+    status = hermes_git_info(root)
+    if int(status.get("behind") or 0) > 0:
+        upstream = status.get("upstream") or "upstream"
+        print(
+            f"warning: Hermes checkout {root} is {status['behind']} commit(s) behind {upstream}; "
+            "pass --hermes-root pointing at a current mainline checkout for release evidence.",
+            file=sys.stderr,
+        )
+    return status
+
+
+def write_observer_plugin(plugin_dir: Path, *, description: str) -> None:
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                f"name: {PLUGIN_NAME}",
+                'version: "0.1"',
+                "kind: standalone",
+                f"description: {_yaml_string(description)}",
+                "provides_hooks:",
+                *[f"  - {hook}" for hook in HOOKS],
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "__init__.py").write_text(
+        "from flightrecorder.hermes_plugin import register as register_flight_recorder\n\n"
+        "def register(ctx):\n"
+        "    return register_flight_recorder(ctx)\n",
+        encoding="utf-8",
+    )
+
+
+def write_runtime_config(
+    path: Path,
+    *,
+    provider: str,
+    model: str,
+    base_url: str,
+    api_key: str,
+    max_turns: int,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "model:",
+                f"  provider: {_yaml_string(provider)}",
+                f"  default: {_yaml_string(model)}",
+                f"  base_url: {_yaml_string(base_url)}",
+                f"  api_key: {_yaml_string(api_key)}",
+                "  api_mode: chat_completions",
+                "plugins:",
+                "  enabled:",
+                f"    - {PLUGIN_NAME}",
+                "agent:",
+                f"  max_turns: {int(max_turns)}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def hermes_chat_command(
+    *,
+    hermes_root: Path,
+    prompt: str,
+    provider: str,
+    model: str,
+    max_turns: int,
+    source: str,
+    toolsets: str = "",
+    yolo: bool = False,
+) -> list[str]:
+    command = [
+        "uv",
+        "run",
+        "--project",
+        str(hermes_root),
+        "hermes",
+        "chat",
+        "--query",
+        prompt,
+        "--provider",
+        provider,
+        "--model",
+        model,
+        "--quiet",
+        "--ignore-rules",
+        "--max-turns",
+        str(max_turns),
+        "--source",
+        source,
+    ]
+    if toolsets:
+        command.extend(["--toolsets", toolsets])
+    if yolo:
+        command.append("--yolo")
+    return command
+
+
+def hermes_run_env(
+    *,
+    flight_root: Path,
+    hermes_root: Path,
+    hermes_home: Path,
+    home_dir: Path,
+    events_dir: Path,
+    timeout: int,
+    max_field_chars: int,
+) -> dict[str, str]:
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env.update(
+        {
+            "HOME": str(home_dir),
+            "HERMES_HOME": str(hermes_home),
+            "HERMES_FLIGHT_RECORDER_OUTPUT_DIR": str(events_dir),
+            "HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS": str(max_field_chars),
+            "HERMES_API_TIMEOUT": str(timeout),
+            "HERMES_STREAM_READ_TIMEOUT": str(timeout),
+            "HERMES_STREAM_RETRIES": "0",
+            "HERMES_DISABLE_UPDATE_CHECK": "1",
+            "PYTHONPATH": f"{flight_root}:{hermes_root}:{existing_pythonpath}",
+        }
+    )
+    return env
+
+
+def run_hermes_chat(
+    *,
+    args: Any,
+    hermes_root: Path,
+    flight_root: Path,
+    hermes_home: Path,
+    home_dir: Path,
+    events_dir: Path,
+    workspace: Path,
+    prompt: str,
+    source: str,
+    max_field_chars: int = 40000,
+) -> subprocess.CompletedProcess[str]:
+    env = hermes_run_env(
+        flight_root=flight_root,
+        hermes_root=hermes_root,
+        hermes_home=hermes_home,
+        home_dir=home_dir,
+        events_dir=events_dir,
+        timeout=int(args.timeout),
+        max_field_chars=max_field_chars,
+    )
+    command = hermes_chat_command(
+        hermes_root=hermes_root,
+        prompt=prompt,
+        provider=str(args.provider),
+        model=str(args.model),
+        max_turns=int(args.max_turns),
+        source=source,
+        toolsets=str(getattr(args, "toolsets", "") or ""),
+        yolo=bool(getattr(args, "yolo", False)),
+    )
+    return subprocess.run(
+        command,
+        cwd=workspace,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=int(args.timeout) + 30,
+        check=False,
+    )
+
+
+def model_probe_payload(path: str, model: str, *, version: str) -> dict[str, Any] | None:
+    normalized = path.split("?", 1)[0].rstrip("/") or "/"
+    if normalized in {"/api/v1/models", "/v1/models", "/models"}:
+        return {"object": "list", "data": [{"id": model, "object": "model"}]}
+    if normalized in {"/v1/props", "/props", "/api/v1/props"}:
+        return {"model": model, "context_length": 32768}
+    if normalized == "/api/tags":
+        return {"models": [{"name": model, "model": model}]}
+    if normalized == "/api/show":
+        return model_details(model)
+    if normalized == "/version":
+        return {"version": version}
+    for prefix in ("/api/v1/models/", "/v1/models/", "/models/"):
+        if normalized.startswith(prefix):
+            requested = unquote(normalized[len(prefix) :])
+            if not requested or requested == model:
+                return {"id": model, "object": "model"}
+    return None
+
+
+def model_details(model: str) -> dict[str, Any]:
+    return {
+        "id": model,
+        "model": model,
+        "object": "model",
+        "details": {"family": "mock"},
+        "model_info": {},
+        "capabilities": ["completion", "tools"],
+        "context_length": 32768,
+    }
+
+
+def send_json(handler: Any, payload: dict[str, Any], *, status: int = 200) -> None:
+    raw = json.dumps(payload).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("content-type", "application/json")
+    handler.send_header("connection", "close")
+    handler.send_header("content-length", str(len(raw)))
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
+def send_stream(handler: Any, chunks: list[dict[str, Any]]) -> None:
+    text = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+    text += "data: [DONE]\n\n"
+    raw = text.encode("utf-8")
+    handler.send_response(200)
+    handler.send_header("content-type", "text/event-stream")
+    handler.send_header("cache-control", "no-cache")
+    handler.send_header("connection", "close")
+    handler.send_header("content-length", str(len(raw)))
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
+def hermes_git_info(root: Path) -> dict[str, Any]:
+    commit = _git_output(root, "rev-parse", "--short=12", "HEAD")
+    status = _git_output(root, "status", "--porcelain")
+    branch = _git_output(root, "rev-parse", "--abbrev-ref", "HEAD") or "unknown"
+    upstream = _git_output(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}") or ""
+    ahead = behind = 0
+    if upstream:
+        counts = _git_output(root, "rev-list", "--left-right", "--count", f"HEAD...{upstream}") or ""
+        parts = counts.split()
+        if len(parts) == 2:
+            try:
+                ahead, behind = int(parts[0]), int(parts[1])
+            except ValueError:
+                ahead = behind = 0
+    return {
+        "commit": commit or "unknown",
+        "dirty": bool(status) if status is not None else None,
+        "branch": branch,
+        "upstream": upstream,
+        "ahead": ahead,
+        "behind": behind,
+    }
+
+
+def _git_output(root: Path, *args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def _yaml_string(value: str) -> str:
+    return json.dumps(str(value))
 
 
 def build_harness_manifest(

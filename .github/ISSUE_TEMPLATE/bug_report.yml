@@ -1,0 +1,66 @@
+name: Bug report
+description: Report reproducible incorrect behavior in Hermes Flight Recorder.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Hermes Flight Recorder. Do not include credentials, production traces, unredacted evidence, or other sensitive data. Report security issues privately as described in SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest safe scenario, fixture, or command sequence that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Inspect ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Package version or Git commit SHA where the issue occurs.
+      placeholder: 0.2.0 or abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: python
+    attributes:
+      label: Python version
+      options:
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - Other supported version
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Include relevant error output or artifact names after removing secrets, personal data, and production trace content.
+      render: shell
+  - type: textarea
+    id: checks
+    attributes:
+      label: Verification attempted
+      description: List focused tests or checks you ran and their results.
+      placeholder: .venv/bin/python -m unittest tests.test_validation
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sensitive-data check
+      options:
+        - label: I removed credentials, raw production traces, and other sensitive data from this report.
+          required: true

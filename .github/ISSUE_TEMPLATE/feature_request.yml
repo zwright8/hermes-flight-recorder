@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a focused capability or developer-experience improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the evidence or evaluation problem first. Please do not include credentials, production traces, or sensitive artifacts.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is difficult or impossible today, and who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable result and acceptance criteria, without prescribing an implementation if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Example evidence or contract
+      description: Provide a sanitized scenario, artifact shape, CLI example, or verifier contract that illustrates the request.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or related commands have you tried?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This request concerns evidence, evaluation, observability, validation, or developer experience rather than using Flight Recorder as a runtime sandbox.
+          required: true
+        - label: I removed credentials, raw production traces, and other sensitive data.
+          required: true

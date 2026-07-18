@@ -52,14 +52,61 @@ _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _BEARER_RE = re.compile(r"(?i)\bbearer\s+[^\s,;]+")
 
 
+ENGINE_PROFILES: dict[str, dict[str, Any]] = {
+    "transformers": {
+        "engine": "transformers",
+        "status": "mvp",
+        "openai_compatible": True,
+        "local_script": "scripts/serve_transformers_openai.py",
+        "adapter_strategy": "PEFT adapter loaded into the local Transformers process",
+        "required_checks": ["health", "models", "model_metadata", "chat_completion"],
+        "launch_command_template": (
+            ".venv/bin/python scripts/serve_transformers_openai.py "
+            "--model {model} --adapter {adapter} --host 127.0.0.1 --port {port}"
+        ),
+    },
+    "vllm": {
+        "engine": "vllm",
+        "status": "profile_ready",
+        "openai_compatible": True,
+        "adapter_strategy": "LoRA adapter served through the vLLM OpenAI server",
+        "required_checks": ["health", "models", "model_metadata", "chat_completion"],
+        "launch_command_template": (
+            "vllm serve {model} --host 127.0.0.1 --port {port} "
+            "--enable-lora --lora-modules candidate={adapter}"
+        ),
+    },
+    "sglang": {
+        "engine": "sglang",
+        "status": "profile_ready",
+        "openai_compatible": True,
+        "adapter_strategy": "LoRA adapter served through an SGLang OpenAI-compatible endpoint",
+        "required_checks": ["health", "models", "model_metadata", "chat_completion"],
+        "launch_command_template": (
+            "python -m sglang.launch_server --model-path {model} --host 127.0.0.1 "
+            "--port {port} --lora-paths {adapter}"
+        ),
+    },
+    "openai_compatible": {
+        "engine": "openai_compatible",
+        "status": "external_endpoint",
+        "openai_compatible": True,
+        "adapter_strategy": "Adapter identity must be exposed by endpoint metadata or profile inputs",
+        "required_checks": ["health", "models", "model_metadata", "chat_completion"],
+        "launch_command_template": "",
+    },
+}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", help="OpenAI-compatible base URL, e.g. http://127.0.0.1:8000/v1")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--provider", default="custom")
     parser.add_argument("--arm", default="candidate")
-    parser.add_argument("--engine", choices=["openai_compatible", "sglang", "transformers", "vllm"], default="transformers")
+    parser.add_argument("--engine", choices=sorted(ENGINE_PROFILES), default="transformers")
     parser.add_argument("--adapter", default="", help="Optional adapter path or id")
+    parser.add_argument("--profile-id", default="", help="Optional stable serving profile id")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=15.0)
     parser.add_argument("--api-key-env", default="HERMES_EVAL_API_KEY")
@@ -93,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             arm=args.arm,
             engine=args.engine,
             adapter=args.adapter,
+            profile_id=args.profile_id,
             api_key=api_key,
             timeout=float(args.timeout),
             out_dir=out_dir,
@@ -138,6 +186,7 @@ def check_endpoint(
     require_streaming: bool,
     require_tool_call: bool,
     require_structured_output: bool,
+    profile_id: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     generated_at = _utc_now()
     checks: list[dict[str, Any]] = []
@@ -184,7 +233,7 @@ def check_endpoint(
     compatibility = {
         "schema_version": SCHEMA_COMPATIBILITY,
         "generated_at": generated_at,
-        "profile_id": _profile_id(arm, engine, model, adapter),
+        "profile_id": str(profile_id).strip() or _profile_id(arm, engine, model, adapter),
         "model": model,
         "served_model_id": served_model_id,
         "engine": engine,

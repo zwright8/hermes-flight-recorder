@@ -1,0 +1,206 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_backend_recipes.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free external trainer recipe bundle emitted from a registry-backed agentic LoRA training plan.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "extension_points": {
+      "type": "object"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "properties": {
+        "flight_recorder_executed_command": {
+          "const": false
+        },
+        "runner_must_require_recommendation": {
+          "const": "ready_for_external_recipe_runner"
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "flight_recorder_executed_command",
+        "runner_owns_execution",
+        "runner_must_require_recommendation"
+      ],
+      "type": "object"
+    },
+    "input_manifests": {
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "trace_sft",
+        "fr_sft",
+        "fr_action_sft",
+        "fr_dpo",
+        "fr_sft_dpo",
+        "fr_reward_model",
+        "fr_step_rewards"
+      ]
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recipe_dir": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "recipes": {
+      "items": {
+        "$ref": "#/$defs/recipe"
+      },
+      "type": "array"
+    },
+    "recommendation": {
+      "enum": [
+        "ready_for_external_recipe_runner",
+        "block_external_recipe_runner"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_backend_recipes.v1"
+    },
+    "training_plan": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "mode",
+    "model",
+    "training_plan",
+    "recipe_dir",
+    "output_dir",
+    "input_manifests",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "recipes",
+    "handoff_contract",
+    "extension_points"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Backend Recipes",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "recipe": {
+      "additionalProperties": true,
+      "properties": {
+        "backend": {
+          "enum": [
+            "axolotl",
+            "llama_factory",
+            "unsloth",
+            "reward_process_rl_extensions"
+          ]
+        },
+        "command_template": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "flight_recorder_executed_command": {
+          "const": false
+        },
+        "format": {
+          "const": "json"
+        },
+        "mode_supported": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "backend",
+        "path",
+        "format",
+        "mode_supported",
+        "runner_owns_execution",
+        "flight_recorder_executed_command",
+        "command_template"
+      ],
+      "type": "object"
+    }
+  }
+}

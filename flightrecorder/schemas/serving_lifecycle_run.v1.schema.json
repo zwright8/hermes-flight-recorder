@@ -1,0 +1,261 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Managed serving process lifecycle artifact emitted by run_managed_serving_eval.py.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "type": "object"
+    },
+    "cleanup": {
+      "$ref": "#/$defs/cleanup"
+    },
+    "completed_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "eval": {
+      "$ref": "#/$defs/eval"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "preflight": {
+      "$ref": "#/$defs/preflight"
+    },
+    "schema_version": {
+      "const": "hfr.serving_lifecycle_run.v1"
+    },
+    "server": {
+      "$ref": "#/$defs/server"
+    },
+    "started_at": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "started_at",
+    "completed_at",
+    "passed",
+    "server",
+    "preflight",
+    "eval",
+    "cleanup",
+    "artifacts"
+  ],
+  "title": "Hermes Flight Recorder Serving Lifecycle Run",
+  "type": "object",
+  "$defs": {
+    "attempt": {
+      "additionalProperties": true,
+      "properties": {
+        "at": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "failed_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "ready"
+      ],
+      "type": "object"
+    },
+    "cleanup": {
+      "additionalProperties": true,
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "exit_code_after_cleanup": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "exit_code_before_cleanup": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "killed": {
+          "type": "boolean"
+        },
+        "terminated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "attempted",
+        "terminated",
+        "killed"
+      ],
+      "type": "object"
+    },
+    "eval": {
+      "additionalProperties": true,
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_text": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped"
+          ]
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    },
+    "preflight": {
+      "additionalProperties": true,
+      "properties": {
+        "attempt_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/attempt"
+          },
+          "type": "array"
+        },
+        "compatibility_report": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failed_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "serving_check": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serving_profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "passed",
+        "readiness",
+        "attempt_count",
+        "attempts",
+        "failed_checks"
+      ],
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": true,
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "command_text": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "cwd": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "exit_code_after_cleanup": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pid": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "command_text",
+        "cwd",
+        "pid",
+        "stdout",
+        "stderr"
+      ],
+      "type": "object"
+    }
+  }
+}

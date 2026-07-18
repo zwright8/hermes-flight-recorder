@@ -1,0 +1,98 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_smoke_fixture.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Registered tiny fixture manifest emitted by scripts/train_agentic_lora.py for no-download dry-run smoke checks.",
+  "properties": {
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "dataset_manifest": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "experiment_dir": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "fixture_dir": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model_manifest": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "recommended_commands": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "row_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "properties": {
+        "fr_action_sft": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fr_dpo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fr_reward_model": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fr_sft": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fr_step_rewards": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trace_sft": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "trace_sft",
+        "fr_sft",
+        "fr_action_sft",
+        "fr_dpo",
+        "fr_reward_model",
+        "fr_step_rewards"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.agentic_lora_smoke_fixture.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "fixture_dir",
+    "model_manifest",
+    "dataset_manifest",
+    "experiment_dir",
+    "row_counts",
+    "recommended_commands",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic LoRA Smoke Fixture",
+  "type": "object"
+}

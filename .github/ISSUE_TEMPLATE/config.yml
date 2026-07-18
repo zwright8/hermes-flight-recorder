@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/zwright8/hermes-flight-recorder/security
+    about: Report vulnerabilities and sensitive-data exposure privately; do not open a public issue.
+  - name: Usage and setup guidance
+    url: https://github.com/zwright8/hermes-flight-recorder#readme
+    about: Review the README, examples, and deployment guide before opening an issue.

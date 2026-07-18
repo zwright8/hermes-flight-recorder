@@ -26,6 +26,10 @@
       },
       "type": "array"
     },
+    "endpoint_suite": {
+      "description": "Optional serving endpoint readiness summary linked to the demo arms.",
+      "type": "object"
+    },
     "generated_at": {
       "minLength": 1,
       "type": "string"
