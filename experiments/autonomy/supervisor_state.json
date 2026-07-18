@@ -2744,10 +2744,10 @@
   "latest_report": {
     "type": "daily_email",
     "status": "sent",
+    "reported_at": "2026-07-18T08:03:10Z",
     "destination": "zacwright27@gmail.com",
-    "subject": "Hermes fine-tune infra daily update - 2026-07-17",
-    "reported_at": "2026-07-17T08:03:00Z",
-    "gmail_message_id": "19f6f196bc8bf007",
+    "subject": "Hermes fine-tune infra daily update - 2026-07-18",
+    "gmail_message_id": "19f744018c6262df",
     "summary": "Sent daily report; no new autonomy journal entries, commits, verification, or implementation artifacts recorded in the previous 24 hours."
   },
   "latest_verification": [
@@ -2905,5 +2905,5 @@
     "training": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-17T08:03:00Z"
+  "updated_at": "2026-07-18T08:03:10Z"
 }
