@@ -14,7 +14,6 @@ models:
 
 # Hermes Flight Recorder Agent Demo
 
-Interactive CPU demonstration of the statistically evaluated Qwen3-0.6B LoRA
-adapter trained from Hermes Flight Recorder trajectories. The Space exposes a
-Gradio API as well as the web interface.
-
+Interactive ZeroGPU demonstration of the statistically evaluated Qwen3-0.6B
+LoRA adapter trained from Hermes Flight Recorder trajectories. The Space
+exposes a Gradio API as well as the web interface.

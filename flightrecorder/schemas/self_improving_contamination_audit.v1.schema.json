@@ -1,0 +1,51 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_contamination_audit.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exact-identity and prompt-template contamination audit across training, development, and held-out splits.",
+  "properties": {
+    "audit_sha256": { "$ref": "#/$defs/sha256" },
+    "checks": { "$ref": "#/$defs/checks" },
+    "development_prompt_template_sha256": { "$ref": "#/$defs/hashes" },
+    "heldout_prompt_template_sha256": { "$ref": "#/$defs/hashes" },
+    "overlap": { "$ref": "#/$defs/overlap" },
+    "passed": { "type": "boolean" },
+    "schema_version": { "const": "hfr.self_improving_contamination_audit.v1" },
+    "train_prompt_template_sha256": { "$ref": "#/$defs/hashes" }
+  },
+  "required": [
+    "schema_version", "passed", "checks", "overlap", "train_prompt_template_sha256",
+    "development_prompt_template_sha256", "heldout_prompt_template_sha256", "audit_sha256"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Dataset Contamination Audit",
+  "type": "object",
+  "$defs": {
+    "checks": {
+      "additionalProperties": false,
+      "properties": {
+        "development_prompt_templates_excluded_from_training": { "type": "boolean" },
+        "heldout_prompt_templates_excluded_from_training": { "type": "boolean" },
+        "prompt_hashes_disjoint": { "type": "boolean" },
+        "record_keys_disjoint": { "type": "boolean" },
+        "task_ids_disjoint": { "type": "boolean" }
+      },
+      "required": [
+        "task_ids_disjoint", "record_keys_disjoint", "prompt_hashes_disjoint",
+        "development_prompt_templates_excluded_from_training", "heldout_prompt_templates_excluded_from_training"
+      ],
+      "type": "object"
+    },
+    "hashes": { "items": { "$ref": "#/$defs/sha256" }, "type": "array", "uniqueItems": true },
+    "overlap": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt_sha256": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "record_keys": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "task_ids": { "items": { "type": "string" }, "type": "array", "uniqueItems": true }
+      },
+      "required": ["task_ids", "record_keys", "prompt_sha256"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

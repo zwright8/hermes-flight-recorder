@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from flightrecorder.schema_registry import check_schema_contract
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -119,6 +121,23 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
         self.assertEqual(report["safety"]["adapter_critical_violations"], 0)
         self.assertEqual(training["data_validation"]["heldout_sha256"], frozen["artifact"]["sha256"])
         self.assertTrue(all(training["data_validation"]["checks"].values()))
+
+    def test_committed_artifacts_match_registered_schema_contracts(self) -> None:
+        case_study = ROOT / "examples" / "case_studies" / "self_improving_agent_proof"
+        artifact_paths = [
+            case_study / "data" / "dataset_manifest.json",
+            case_study / "data" / "frozen_heldout_manifest.json",
+            case_study / "data" / "contamination_audit.json",
+            case_study / "evidence" / "training_result.json",
+            case_study / "evidence" / "baseline_results.json",
+            case_study / "evidence" / "adapter_results.json",
+            case_study / "evaluation.json",
+        ]
+        for path in artifact_paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                result = check_schema_contract(payload, artifact_path=path)
+                self.assertTrue(result["passed"], result["errors"])
 
 
 if __name__ == "__main__":

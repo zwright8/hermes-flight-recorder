@@ -14,9 +14,17 @@ import argparse
 import hashlib
 import json
 import random
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from flightrecorder.schema_registry import check_schema_contract  # noqa: E402
 
 
 SCHEMA_VERSION = "hfr.self_improving_agent_dataset.v1"
@@ -97,6 +105,9 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_json(path: Path, value: Any) -> None:
+    result = check_schema_contract(value, artifact_path=path)
+    if not result["passed"]:
+        raise ValueError(f"schema validation failed for {path}: {'; '.join(result['errors'])}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

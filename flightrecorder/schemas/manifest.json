@@ -1320,6 +1320,54 @@
       "filename": "intervention_route.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/intervention_route.v1.schema.json",
       "name": "intervention_route"
+    },
+    {
+      "artifact": "self_improving_agent_dataset",
+      "artifact_schema_version": "hfr.self_improving_agent_dataset.v1",
+      "description": "Content-addressed train, development, and frozen held-out corpus manifest for a self-improving agent proof.",
+      "filename": "self_improving_agent_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_dataset.v1.schema.json",
+      "name": "self_improving_agent_dataset"
+    },
+    {
+      "artifact": "frozen_heldout_manifest",
+      "artifact_schema_version": "hfr.frozen_heldout_manifest.v1",
+      "description": "Immutable content binding that keeps final held-out tasks outside training and model selection.",
+      "filename": "frozen_heldout_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/frozen_heldout_manifest.v1.schema.json",
+      "name": "frozen_heldout_manifest"
+    },
+    {
+      "artifact": "self_improving_contamination_audit",
+      "artifact_schema_version": "hfr.self_improving_contamination_audit.v1",
+      "description": "Exact-identity and prompt-template contamination audit across training, development, and held-out splits.",
+      "filename": "self_improving_contamination_audit.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_contamination_audit.v1.schema.json",
+      "name": "self_improving_contamination_audit"
+    },
+    {
+      "artifact": "self_improving_agent_training_result",
+      "artifact_schema_version": "hfr.self_improving_agent_training_result.v1",
+      "description": "Reproducible LoRA training receipt bound to validated self-improving-agent corpus hashes.",
+      "filename": "self_improving_agent_training_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_training_result.v1.schema.json",
+      "name": "self_improving_agent_training_result"
+    },
+    {
+      "artifact": "self_improving_agent_eval_results",
+      "artifact_schema_version": "hfr.self_improving_agent_eval_results.v1",
+      "description": "Identity-bound repeated inference observations for one baseline or adapter evaluation arm.",
+      "filename": "self_improving_agent_eval_results.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_eval_results.v1.schema.json",
+      "name": "self_improving_agent_eval_results"
+    },
+    {
+      "artifact": "self_improving_agent_statistical_report",
+      "artifact_schema_version": "hfr.self_improving_agent_statistical_report.v1",
+      "description": "Task-clustered repeated baseline-versus-adapter promotion report with safety non-regression gates.",
+      "filename": "self_improving_agent_statistical_report.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_statistical_report.v1.schema.json",
+      "name": "self_improving_agent_statistical_report"
     }
   ]
 }

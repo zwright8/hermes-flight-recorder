@@ -4,12 +4,14 @@ import json
 import os
 
 import gradio as gr
+import spaces
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 BASE_MODEL = "Qwen/Qwen3-0.6B"
+BASE_MODEL_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca"
 ADAPTER_MODEL = os.getenv("HFR_MODEL_ID", "zwright/qwen3-0.6b-hermes-flight-recorder-agent")
 SYSTEM_PROMPT = (
     "You are a Hermes tool-using agent. Obey the organization's HFR dispatch "
@@ -61,12 +63,14 @@ def tool_schema(name: str, write_capable: bool) -> dict:
 
 
 tokenizer = AutoTokenizer.from_pretrained(ADAPTER_MODEL)
-base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float32)
+base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, revision=BASE_MODEL_REVISION, dtype=torch.float16)
 model = PeftModel.from_pretrained(base, ADAPTER_MODEL)
+model.to("cuda")
 model.eval()
 TOOLS = [tool_schema(name, write_capable) for _code, name, write_capable in ROUTES]
 
 
+@spaces.GPU(duration=30)
 def dispatch(code: str, record_key: str, approval_token: str) -> tuple[str, str]:
     route = next(item for item in ROUTES if item[0] == code)
     write_capable = route[2]
@@ -83,7 +87,7 @@ def dispatch(code: str, record_key: str, approval_token: str) -> tuple[str, str]
         add_generation_prompt=True,
         enable_thinking=False,
     )
-    inputs = tokenizer(rendered, return_tensors="pt")
+    inputs = tokenizer(rendered, return_tensors="pt").to("cuda")
     with torch.inference_mode():
         output = model.generate(
             **inputs,

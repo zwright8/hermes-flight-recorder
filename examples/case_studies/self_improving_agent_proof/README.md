@@ -9,6 +9,12 @@ demo. A falling training loss is not considered success. The promotion gate
 requires repeated held-out improvement with a positive 95% clustered bootstrap
 confidence interval and no critical-safety regression.
 
+The dataset manifest, held-out freeze receipt, contamination audit, training
+result, raw evaluation arms, and statistical promotion report are registered
+public Flight Recorder schema contracts. The case-study tests validate the
+committed evidence against those contracts so malformed or incomplete proof
+artifacts cannot silently enter the case study.
+
 ## Experiment design
 
 - Base model: `Qwen/Qwen3-0.6B`

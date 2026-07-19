@@ -1,0 +1,143 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_statistical_report.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Task-clustered repeated baseline-versus-adapter promotion report with safety non-regression gates.",
+  "properties": {
+    "adapter_artifact": { "$ref": "#/$defs/artifact" },
+    "baseline_artifact": { "$ref": "#/$defs/artifact" },
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "effects": { "$ref": "#/$defs/effects" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "heldout_sha256": { "$ref": "#/$defs/sha256" },
+    "methodology": { "$ref": "#/$defs/methodology" },
+    "observation_count_per_arm": { "minimum": 1, "type": "integer" },
+    "passed": { "type": "boolean" },
+    "promotion_ready": { "type": "boolean" },
+    "recommendation": { "enum": ["publish_candidate", "block_and_repair"], "type": "string" },
+    "repeat_count": { "minimum": 3, "type": "integer" },
+    "safety": { "$ref": "#/$defs/safety" },
+    "schema_version": { "const": "hfr.self_improving_agent_statistical_report.v1" },
+    "task_count": { "minimum": 1, "type": "integer" },
+    "task_family_pass_rates": { "$ref": "#/$defs/family_rates" }
+  },
+  "required": [
+    "schema_version", "passed", "promotion_ready", "recommendation", "task_count", "repeat_count",
+    "observation_count_per_arm", "heldout_sha256", "methodology", "baseline_artifact", "adapter_artifact",
+    "effects", "safety", "task_family_pass_rates", "checks", "failed_check_count", "blocking_reasons"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Agent Statistical Report",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["path", "sha256"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "check_id": { "minLength": 1, "type": "string" },
+        "expected": {},
+        "passed": { "type": "boolean" }
+      },
+      "required": ["check_id", "passed", "actual", "expected"],
+      "type": "object"
+    },
+    "effect": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": { "minimum": 100, "type": "integer" },
+        "bootstrap_seed": { "type": "integer" },
+        "candidate_mean": { "type": "number" },
+        "cluster_count": { "minimum": 1, "type": "integer" },
+        "confidence_interval": { "$ref": "#/$defs/interval" },
+        "confidence_level": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" },
+        "effective_sample_count": { "minimum": 1, "type": "integer" },
+        "mean_difference": { "type": "number" },
+        "pair_count": { "minimum": 1, "type": "integer" },
+        "paired_standardized_effect": { "type": ["number", "null"] },
+        "pairs_per_cluster": { "$ref": "#/$defs/pairs_per_cluster" },
+        "reference_mean": { "type": "number" },
+        "resampling_unit": { "const": "scenario_pool_cluster" }
+      },
+      "required": [
+        "bootstrap_samples", "bootstrap_seed", "candidate_mean", "cluster_count", "confidence_interval",
+        "confidence_level", "effective_sample_count", "mean_difference", "pair_count", "paired_standardized_effect",
+        "pairs_per_cluster", "reference_mean", "resampling_unit"
+      ],
+      "type": "object"
+    },
+    "effects": {
+      "additionalProperties": false,
+      "properties": {
+        "action_only": { "$ref": "#/$defs/effect" },
+        "overall": { "$ref": "#/$defs/effect" }
+      },
+      "required": ["overall", "action_only"],
+      "type": "object"
+    },
+    "family_rate_map": {
+      "additionalProperties": { "minimum": -1, "maximum": 1, "type": "number" },
+      "type": "object"
+    },
+    "family_rates": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": { "$ref": "#/$defs/family_rate_map" },
+        "baseline": { "$ref": "#/$defs/family_rate_map" },
+        "delta": { "$ref": "#/$defs/family_rate_map" }
+      },
+      "required": ["baseline", "adapter", "delta"],
+      "type": "object"
+    },
+    "interval": {
+      "additionalProperties": false,
+      "properties": {
+        "lower": { "type": "number" },
+        "upper": { "type": "number" }
+      },
+      "required": ["lower", "upper"],
+      "type": "object"
+    },
+    "methodology": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": { "minimum": 100, "type": "integer" },
+        "confidence_level": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" },
+        "minimum_effect": { "minimum": 0, "type": "number" },
+        "pairing": { "minLength": 1, "type": "string" },
+        "resampling_unit": { "minLength": 1, "type": "string" }
+      },
+      "required": ["bootstrap_samples", "confidence_level", "minimum_effect", "pairing", "resampling_unit"],
+      "type": "object"
+    },
+    "pairs_per_cluster": {
+      "additionalProperties": false,
+      "properties": {
+        "max": { "minimum": 1, "type": "integer" },
+        "min": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["min", "max"],
+      "type": "object"
+    },
+    "safety": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_critical_violations": { "minimum": 0, "type": "integer" },
+        "adapter_pass_rate": { "minimum": 0, "maximum": 1, "type": "number" },
+        "baseline_critical_violations": { "minimum": 0, "type": "integer" },
+        "baseline_pass_rate": { "minimum": 0, "maximum": 1, "type": "number" }
+      },
+      "required": ["baseline_critical_violations", "adapter_critical_violations", "baseline_pass_rate", "adapter_pass_rate"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

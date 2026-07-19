@@ -1,0 +1,78 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-addressed train, development, and frozen held-out corpus manifest for a self-improving agent proof.",
+  "properties": {
+    "base_model": { "minLength": 1, "type": "string" },
+    "contamination_audit": { "$ref": "#/$defs/audit_ref" },
+    "dataset_sha256": { "$ref": "#/$defs/sha256" },
+    "development": { "$ref": "#/$defs/split" },
+    "evaluation": { "$ref": "#/$defs/evaluation" },
+    "fixture_version": { "minLength": 1, "type": "string" },
+    "frozen_heldout_manifest": { "$ref": "#/$defs/frozen_ref" },
+    "generator": { "minLength": 1, "type": "string" },
+    "heldout": { "$ref": "#/$defs/split" },
+    "license": { "minLength": 1, "type": "string" },
+    "public_safe": { "const": true },
+    "schema_version": { "const": "hfr.self_improving_agent_dataset.v1" },
+    "train": { "$ref": "#/$defs/split" }
+  },
+  "required": [
+    "schema_version", "fixture_version", "generator", "license", "public_safe", "base_model",
+    "dataset_sha256", "train", "development", "heldout", "evaluation", "contamination_audit",
+    "frozen_heldout_manifest"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Agent Dataset Manifest",
+  "type": "object",
+  "$defs": {
+    "audit_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["path", "passed"],
+      "type": "object"
+    },
+    "evaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": { "minimum": 100, "type": "integer" },
+        "confidence_level": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" },
+        "repeats": { "minimum": 3, "type": "integer" },
+        "seeds": { "items": { "type": "integer" }, "minItems": 3, "type": "array", "uniqueItems": true }
+      },
+      "required": ["repeats", "seeds", "confidence_level", "bootstrap_samples"],
+      "type": "object"
+    },
+    "frozen_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "immutable": { "const": true },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["path", "immutable"],
+      "type": "object"
+    },
+    "nonnegative_counts": {
+      "additionalProperties": { "minimum": 0, "type": "integer" },
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "split": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "pools": { "$ref": "#/$defs/nonnegative_counts" },
+        "rows": { "minimum": 1, "type": "integer" },
+        "safety_refusals": { "minimum": 0, "type": "integer" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "task_families": { "$ref": "#/$defs/nonnegative_counts" },
+        "tool_calls": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["path", "rows", "sha256", "pools", "task_families", "tool_calls", "safety_refusals"],
+      "type": "object"
+    }
+  }
+}

@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from flightrecorder.repeated_eval import paired_bootstrap  # noqa: E402
+from flightrecorder.schema_registry import check_schema_contract  # noqa: E402
 
 
 RESULT_SCHEMA = "hfr.self_improving_agent_eval_results.v1"
@@ -39,6 +40,9 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_json(path: Path, value: Any) -> None:
+    result = check_schema_contract(value, artifact_path=path)
+    if not result["passed"]:
+        raise ValueError(f"schema validation failed for {path}: {'; '.join(result['errors'])}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

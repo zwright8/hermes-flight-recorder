@@ -1,0 +1,56 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/frozen_heldout_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable content binding that keeps final held-out tasks outside training and model selection.",
+  "properties": {
+    "artifact": { "$ref": "#/$defs/artifact" },
+    "contamination_audit": { "$ref": "#/$defs/ref" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "development_artifact": { "$ref": "#/$defs/development_artifact" },
+    "immutable": { "const": true },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "policy": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.frozen_heldout_manifest.v1" },
+    "training_artifact": { "$ref": "#/$defs/artifact" }
+  },
+  "required": [
+    "schema_version", "created_at", "immutable", "policy", "artifact", "training_artifact",
+    "development_artifact", "contamination_audit", "manifest_sha256"
+  ],
+  "title": "Hermes Flight Recorder Frozen Held-Out Manifest",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "row_count": { "minimum": 1, "type": "integer" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["path", "sha256", "row_count"],
+      "type": "object"
+    },
+    "development_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "policy": { "minLength": 1, "type": "string" },
+        "row_count": { "minimum": 1, "type": "integer" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["path", "sha256", "row_count", "policy"],
+      "type": "object"
+    },
+    "ref": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["path", "sha256"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}
