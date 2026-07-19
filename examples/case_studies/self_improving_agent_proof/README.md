@@ -15,6 +15,11 @@ public Flight Recorder schema contracts. The case-study tests validate the
 committed evidence against those contracts so malformed or incomplete proof
 artifacts cannot silently enter the case study.
 
+The JSONL records use the dedicated `hfr.self_improving_agent_episode.v1`
+contract. They do not impersonate production `export-rl` action-SFT rows, and
+their explicit split roles keep training, development, and final evaluation
+semantics auditable.
+
 ## Experiment design
 
 - Base model: `Qwen/Qwen3-0.6B`
@@ -44,10 +49,10 @@ python3 scripts/build_self_improving_agent_proof.py \
 
 The command is deterministic. The committed manifest binds:
 
-- training SHA-256: `31c5674497f33c44e28b84da7d25962f93e874a821cdc1e3481b13d5526a6917`
-- development SHA-256: `bbef24a057c2135857cdabb4462a033ce01fe4a05b1b60b450b587d2b6d8c57c`
-- held-out SHA-256: `5500c67defa9c7ef7db2626f887712900795057bf5a64f24d2e1db91cb57b55b`
-- dataset identity: `74bad2f15f29df0e9048b0ef081cd5ffbab523979e5a760167532d78d23642bf`
+- training SHA-256: `9cc907b0ce04d5f4b21f905357ed7f277fc640c70a8f31c90f76a187a14b2df5`
+- development SHA-256: `d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d`
+- held-out SHA-256: `efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771`
+- dataset identity: `e2af62c0a6668b3c7152579ac6c654052dd07ced6b0d0bda6da8dc387284419b`
 
 `frozen_heldout_manifest.json` states that held-out prompts, outputs, and task
 IDs must never enter training or hyperparameter selection. Candidate repair and
@@ -63,8 +68,9 @@ Trackio unless tracking is explicitly disabled for a local smoke test.
 ```bash
 uv run scripts/train_self_improving_agent_proof.py \
   --data-dir examples/case_studies/self_improving_agent_proof/data \
-  --output-dir runs/self_improving_agent_proof/adapter-v2 \
+  --output-dir runs/self_improving_agent_proof/adapter-v3 \
   --model Qwen/Qwen3-0.6B \
+  --model-revision c1899de289a04d12100db370d81485cdf75e47ca \
   --max-steps 100 \
   --batch-size 1 \
   --gradient-accumulation-steps 8 \
@@ -80,13 +86,15 @@ uv run scripts/train_self_improving_agent_proof.py \
 python3 scripts/evaluate_self_improving_agent_proof.py run \
   --heldout examples/case_studies/self_improving_agent_proof/data/heldout_tasks.jsonl \
   --model Qwen/Qwen3-0.6B \
+  --model-revision c1899de289a04d12100db370d81485cdf75e47ca \
   --arm baseline \
   --out runs/self_improving_agent_proof/baseline.json
 
 python3 scripts/evaluate_self_improving_agent_proof.py run \
   --heldout examples/case_studies/self_improving_agent_proof/data/heldout_tasks.jsonl \
   --model Qwen/Qwen3-0.6B \
-  --adapter runs/self_improving_agent_proof/adapter-v2 \
+  --model-revision c1899de289a04d12100db370d81485cdf75e47ca \
+  --adapter runs/self_improving_agent_proof/adapter-v3 \
   --arm adapter \
   --out runs/self_improving_agent_proof/adapter.json
 
@@ -102,17 +110,17 @@ frozen-hash, or per-family non-regression gates fail.
 
 ## Verified result
 
-Candidate v2 passed the untouched final gate:
+Candidate v3 passed the untouched final gate:
 
 | Metric | Qwen3-0.6B baseline | Flight Recorder LoRA |
 | --- | ---: | ---: |
-| Overall exact task pass rate | 17.11% | 94.44% |
-| Action-only exact tool-call rate | 10.00% | 93.06% |
+| Overall exact task pass rate | 17.11% | 96.22% |
+| Action-only exact tool-call rate | 10.00% | 95.28% |
 | Critical-safety pass rate | 45.56% | 100.00% |
 | Critical-safety violations | 31 | 0 |
 
-The paired overall improvement was **+77.33 percentage points**, with a 95%
-task-clustered bootstrap confidence interval of **[+70.67, +83.56]** across
+The paired overall improvement was **+79.11 percentage points**, with a 95%
+task-clustered bootstrap confidence interval of **[+72.67, +85.33]** across
 150 held-out tasks and three repeated seeds per arm. All eleven task families
 were non-regressing. See [EVALUATION.md](EVALUATION.md), the replayable
 [`evaluation.json`](evaluation.json), and the raw per-arm observations under
@@ -127,3 +135,27 @@ were non-regressing. See [EVALUATION.md](EVALUATION.md), the replayable
 GitHub is the reproducibility and decision-record home. Hugging Face Hub is the
 right distribution home for immutable dataset and model revisions and for the
 deployed demonstration.
+
+The reviewed upload set intentionally excludes optimizer checkpoints,
+`training_args.bin`, and the trainer-generated generic README:
+
+```bash
+hf upload zwright/hermes-flight-recorder-self-improving-agent-trajectories \
+  examples/case_studies/self_improving_agent_proof/data . --repo-type dataset
+hf upload zwright/hermes-flight-recorder-self-improving-agent-trajectories \
+  examples/case_studies/self_improving_agent_proof/DATASET_CARD.md README.md --repo-type dataset
+
+hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
+  runs/self_improving_agent_proof/adapter-v3 . \
+  --exclude 'checkpoint-*' --exclude 'checkpoint-*/**' \
+  --exclude README.md --exclude training_args.bin --exclude training_result.json
+hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
+  examples/case_studies/self_improving_agent_proof/MODEL_CARD.md README.md
+hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
+  examples/case_studies/self_improving_agent_proof/evidence/training_result.json training_result.json
+hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
+  examples/case_studies/self_improving_agent_proof/evaluation.json evaluation.json
+
+hf upload zwright/hermes-flight-recorder-agent-demo \
+  examples/case_studies/self_improving_agent_proof/space . --repo-type space
+```

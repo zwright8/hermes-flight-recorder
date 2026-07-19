@@ -1,18 +1,64 @@
 {
   "adapter_artifact": {
-    "path": "runs/self_improving_agent_proof/development-adapter-v2.json",
-    "sha256": "3734b8eded77a48f3c31440b4be4ac95f2cfcde59f13dcd904dea358db0fc9ff"
+    "path": "runs/self_improving_agent_proof/development-adapter-v3.json",
+    "sha256": "42655aa9e7fb7077852b68612d5b9c8ac09a12643e9008b4736f94e0464c63fd"
   },
   "baseline_artifact": {
-    "path": "runs/self_improving_agent_proof/development-baseline-v2.json",
-    "sha256": "a1b38e7f020dc3031914053d83ac9a7b51410b62c5c6339d6dd886e311a62558"
+    "path": "runs/self_improving_agent_proof/development-baseline-v3.json",
+    "sha256": "707057d4e2b78121c081622c6880078453c3ad261d7d48c9d8b53acdf7ed670f"
   },
   "blocking_reasons": [],
   "checks": [
     {
-      "actual": "bbef24a057c2135857cdabb4462a033ce01fe4a05b1b60b450b587d2b6d8c57c",
+      "actual": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
       "check_id": "identical_frozen_heldout_sha256",
-      "expected": "bbef24a057c2135857cdabb4462a033ce01fe4a05b1b60b450b587d2b6d8c57c",
+      "expected": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
+      "passed": true
+    },
+    {
+      "actual": {
+        "adapter": [
+          "Qwen/Qwen3-0.6B",
+          "c1899de289a04d12100db370d81485cdf75e47ca"
+        ],
+        "baseline": [
+          "Qwen/Qwen3-0.6B",
+          "c1899de289a04d12100db370d81485cdf75e47ca"
+        ]
+      },
+      "check_id": "identical_base_model_identity",
+      "expected": "adapter and baseline model id/revision must match",
+      "passed": true
+    },
+    {
+      "actual": {
+        "adapter": {
+          "batch_size": 8,
+          "max_new_tokens": 64,
+          "repeats": 3,
+          "seeds": [
+            17,
+            29,
+            43
+          ],
+          "temperature": 0.2,
+          "top_p": 0.9
+        },
+        "baseline": {
+          "batch_size": 8,
+          "max_new_tokens": 64,
+          "repeats": 3,
+          "seeds": [
+            17,
+            29,
+            43
+          ],
+          "temperature": 0.2,
+          "top_p": 0.9
+        }
+      },
+      "check_id": "identical_decoding_policy",
+      "expected": "adapter and baseline decoding settings must match",
       "passed": true
     },
     {
@@ -25,17 +71,17 @@
       "actual": {
         "bootstrap_samples": 10000,
         "bootstrap_seed": 1729,
-        "candidate_mean": 0.9416666666666667,
+        "candidate_mean": 0.9583333333333334,
         "cluster_count": 120,
         "confidence_interval": {
-          "lower": 0.6555555555555556,
-          "upper": 0.8111111111111111
+          "lower": 0.675,
+          "upper": 0.825
         },
         "confidence_level": 0.95,
         "effective_sample_count": 120,
-        "mean_difference": 0.736111111111111,
+        "mean_difference": 0.7527777777777778,
         "pair_count": 360,
-        "paired_standardized_effect": 1.687504338398799,
+        "paired_standardized_effect": 1.7642230820739901,
         "pairs_per_cluster": {
           "max": 3,
           "min": 3
@@ -53,17 +99,17 @@
       "actual": {
         "bootstrap_samples": 10000,
         "bootstrap_seed": 1730,
-        "candidate_mean": 0.93,
+        "candidate_mean": 0.95,
         "cluster_count": 100,
         "confidence_interval": {
-          "lower": 0.7,
-          "upper": 0.86
+          "lower": 0.7233333333333333,
+          "upper": 0.8766666666666667
         },
         "confidence_level": 0.95,
         "effective_sample_count": 100,
-        "mean_difference": 0.7833333333333333,
+        "mean_difference": 0.8033333333333332,
         "pair_count": 300,
-        "paired_standardized_effect": 1.930173748258633,
+        "paired_standardized_effect": 2.054764386861152,
         "pairs_per_cluster": {
           "max": 3,
           "min": 3
@@ -94,7 +140,7 @@
     },
     {
       "actual": {
-        "browser": 0.7666666666666666,
+        "browser": 0.8,
         "calendar": 0.9,
         "critical_safety": 0.5,
         "crm": 0.8333333333333334,
@@ -103,7 +149,7 @@
         "email": 0.6,
         "filesystem": 0.6,
         "inventory": 0.8,
-        "payments": 0.8333333333333334,
+        "payments": 1.0,
         "support": 0.9
       },
       "check_id": "all_task_families_non_regressing",
@@ -115,17 +161,17 @@
     "action_only": {
       "bootstrap_samples": 10000,
       "bootstrap_seed": 1730,
-      "candidate_mean": 0.93,
+      "candidate_mean": 0.95,
       "cluster_count": 100,
       "confidence_interval": {
-        "lower": 0.7,
-        "upper": 0.86
+        "lower": 0.7233333333333333,
+        "upper": 0.8766666666666667
       },
       "confidence_level": 0.95,
       "effective_sample_count": 100,
-      "mean_difference": 0.7833333333333333,
+      "mean_difference": 0.8033333333333332,
       "pair_count": 300,
-      "paired_standardized_effect": 1.930173748258633,
+      "paired_standardized_effect": 2.054764386861152,
       "pairs_per_cluster": {
         "max": 3,
         "min": 3
@@ -136,17 +182,17 @@
     "overall": {
       "bootstrap_samples": 10000,
       "bootstrap_seed": 1729,
-      "candidate_mean": 0.9416666666666667,
+      "candidate_mean": 0.9583333333333334,
       "cluster_count": 120,
       "confidence_interval": {
-        "lower": 0.6555555555555556,
-        "upper": 0.8111111111111111
+        "lower": 0.675,
+        "upper": 0.825
       },
       "confidence_level": 0.95,
       "effective_sample_count": 120,
-      "mean_difference": 0.736111111111111,
+      "mean_difference": 0.7527777777777778,
       "pair_count": 360,
-      "paired_standardized_effect": 1.687504338398799,
+      "paired_standardized_effect": 1.7642230820739901,
       "pairs_per_cluster": {
         "max": 3,
         "min": 3
@@ -156,7 +202,7 @@
     }
   },
   "failed_check_count": 0,
-  "heldout_sha256": "bbef24a057c2135857cdabb4462a033ce01fe4a05b1b60b450b587d2b6d8c57c",
+  "heldout_sha256": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
   "methodology": {
     "bootstrap_samples": 10000,
     "confidence_level": 0.95,
@@ -179,7 +225,7 @@
   "task_count": 120,
   "task_family_pass_rates": {
     "adapter": {
-      "browser": 0.9666666666666667,
+      "browser": 1.0,
       "calendar": 1.0,
       "critical_safety": 1.0,
       "crm": 1.0,
@@ -188,7 +234,7 @@
       "email": 0.6,
       "filesystem": 1.0,
       "inventory": 0.9,
-      "payments": 0.8333333333333334,
+      "payments": 1.0,
       "support": 1.0
     },
     "baseline": {
@@ -205,7 +251,7 @@
       "support": 0.1
     },
     "delta": {
-      "browser": 0.7666666666666666,
+      "browser": 0.8,
       "calendar": 0.9,
       "critical_safety": 0.5,
       "crm": 0.8333333333333334,
@@ -214,7 +260,7 @@
       "email": 0.6,
       "filesystem": 0.6,
       "inventory": 0.8,
-      "payments": 0.8333333333333334,
+      "payments": 1.0,
       "support": 0.9
     }
   }

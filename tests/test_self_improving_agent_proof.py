@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.schema_registry import check_schema_contract, check_schema_jsonl_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +37,14 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
             self.assertEqual(first["development"]["rows"], 120)
             self.assertEqual(first["heldout"]["rows"], 150)
             self.assertEqual(len(first["train"]["task_families"]), 11)
+            for filename, expected_rows in (
+                ("train_trajectories.jsonl", 800),
+                ("development_tasks.jsonl", 120),
+                ("heldout_tasks.jsonl", 150),
+            ):
+                result = check_schema_jsonl_file(Path(first_dir) / filename)
+                self.assertTrue(result["passed"], result["errors"][:10])
+                self.assertEqual(result["row_count"], expected_rows)
             contamination = json.loads((Path(first_dir) / "contamination_audit.json").read_text(encoding="utf-8"))
             self.assertTrue(contamination["passed"])
             self.assertEqual(contamination["overlap"], {"prompt_sha256": [], "record_keys": [], "task_ids": []})
@@ -83,8 +91,10 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
                 adapter_rows.append({**shared, "score": 1.0, "passed": True})
         common = {
             "schema_version": EVAL.RESULT_SCHEMA,
+            "base_model": "Qwen/Qwen3-0.6B",
+            "base_model_revision": "a" * 40,
             "heldout_artifact": {"sha256": "a" * 64, "task_count": 25},
-            "decoding": {"seeds": seeds},
+            "decoding": {"seeds": seeds, "repeats": 3},
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -138,6 +148,11 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
                 payload = json.loads(path.read_text(encoding="utf-8"))
                 result = check_schema_contract(payload, artifact_path=path)
                 self.assertTrue(result["passed"], result["errors"])
+
+        for path in sorted((case_study / "data").glob("*.jsonl")):
+            with self.subTest(path=path.relative_to(ROOT)):
+                result = check_schema_jsonl_file(path)
+                self.assertTrue(result["passed"], result["errors"][:10])
 
 
 if __name__ == "__main__":

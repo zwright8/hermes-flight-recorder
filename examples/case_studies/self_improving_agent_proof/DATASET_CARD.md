@@ -38,6 +38,12 @@ held-out rows use different task IDs, record IDs, prompt text, and prompt
 templates. Route codes are shared because the benchmark measures whether the
 model learned the organization convention from experience.
 
+Every JSONL row conforms to the registered
+`hfr.self_improving_agent_episode.v1` contract. The `split`, `pool`, and
+`training_role` fields distinguish gradient-bearing trajectories from
+development and final held-out evaluation tasks; these rows are intentionally
+not labeled as production `export-rl` action-SFT artifacts.
+
 ## Intended use
 
 Use `train_trajectories.jsonl` for SFT and `heldout_tasks.jsonl` only for final

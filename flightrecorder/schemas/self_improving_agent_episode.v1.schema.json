@@ -1,0 +1,93 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_episode.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public-safe synthetic agent episode used in the self-improving proof corpus, with an explicit train, development, or held-out role.",
+  "properties": {
+    "dispatch_code": { "pattern": "^HFR-[A-Z][0-9]$", "type": "string" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "episode_id": { "minLength": 1, "type": "string" },
+    "expected": { "$ref": "#/$defs/expected" },
+    "governance": { "type": "object" },
+    "human_label": { "enum": ["accept", "reject"], "type": "string" },
+    "messages": { "items": { "$ref": "#/$defs/message" }, "minItems": 3, "type": "array" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "pool": { "enum": ["training", "rolling", "frozen", "adversarial"], "type": "string" },
+    "prompt": { "minLength": 1, "type": "string" },
+    "quality_score": { "minimum": 0, "maximum": 1, "type": "number" },
+    "response": { "minLength": 1, "type": "string" },
+    "review_item_id": { "minLength": 1, "type": "string" },
+    "review_item_sha256": { "$ref": "#/$defs/sha256" },
+    "reviewer_confidence": { "enum": ["low", "medium", "high"], "type": "string" },
+    "sample_id": { "minLength": 1, "type": "string" },
+    "scenario_contract": { "$ref": "#/$defs/scenario_contract" },
+    "scenario_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.self_improving_agent_episode.v1" },
+    "source_id": { "minLength": 1, "type": "string" },
+    "split": { "enum": ["train", "development", "heldout"], "type": "string" },
+    "task_family": { "minLength": 1, "type": "string" },
+    "task_id": { "minLength": 1, "type": "string" },
+    "tool_schema_provenance": { "const": "recorded_exact" },
+    "tools": { "items": { "type": "object" }, "minItems": 1, "type": "array" },
+    "training_role": {
+      "enum": ["action_sft", "development_evaluation", "heldout_evaluation"],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version", "episode_id", "sample_id", "scenario_id", "task_id", "task_family", "split", "pool",
+    "dispatch_code", "prompt", "response", "messages", "tools", "expected", "human_label", "quality_score",
+    "reviewer_confidence", "review_item_id", "review_item_sha256", "tool_schema_provenance", "training_role",
+    "source_id", "environment", "policy", "scenario_contract", "governance"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Agent Episode",
+  "type": "object",
+  "$defs": {
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "fixture": { "const": "self-improving-agent-proof-v1" }
+      },
+      "required": ["fixture"],
+      "type": "object"
+    },
+    "expected": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": { "type": "object" },
+        "kind": { "enum": ["tool_call", "refusal"], "type": "string" },
+        "text": { "minLength": 1, "type": "string" },
+        "tool_name": { "minLength": 1, "type": "string" }
+      },
+      "required": ["kind"],
+      "type": "object"
+    },
+    "message": {
+      "additionalProperties": true,
+      "properties": {
+        "content": { "type": "string" },
+        "role": { "enum": ["system", "developer", "user", "assistant", "tool"], "type": "string" }
+      },
+      "required": ["role", "content"],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "version": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "version"],
+      "type": "object"
+    },
+    "scenario_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

@@ -192,6 +192,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "serving_profile",
             "serving_runtime_preflight",
             "self_improving_agent_dataset",
+            "self_improving_agent_episode",
             "self_improving_agent_eval_results",
             "self_improving_agent_statistical_report",
             "self_improving_agent_training_result",

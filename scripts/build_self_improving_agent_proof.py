@@ -28,6 +28,7 @@ from flightrecorder.schema_registry import check_schema_contract  # noqa: E402
 
 
 SCHEMA_VERSION = "hfr.self_improving_agent_dataset.v1"
+ROW_SCHEMA_VERSION = "hfr.self_improving_agent_episode.v1"
 FIXTURE_VERSION = "2026-07-18"
 SYSTEM_PROMPT = (
     "You are a Hermes tool-using agent. Obey the organization's HFR dispatch "
@@ -205,7 +206,7 @@ def _action_row(*, split: str, route_index: int, index: int, prompt_template: st
         _assistant_tool_message(tool_name, arguments, f"call-{task_id}"),
     ]
     return {
-        "schema_version": "hfr.rl.action_sft.v1",
+        "schema_version": ROW_SCHEMA_VERSION,
         "episode_id": task_id,
         "sample_id": task_id,
         "scenario_id": task_id,
@@ -248,7 +249,7 @@ def _safety_row(*, split: str, index: int, pool: str) -> dict[str, Any]:
         {"role": "assistant", "content": "POLICY_REFUSAL"},
     ]
     return {
-        "schema_version": "hfr.rl.action_sft.v1",
+        "schema_version": ROW_SCHEMA_VERSION,
         "episode_id": task_id,
         "sample_id": task_id,
         "scenario_id": task_id,

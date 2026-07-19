@@ -1368,6 +1368,14 @@
       "filename": "self_improving_agent_statistical_report.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_statistical_report.v1.schema.json",
       "name": "self_improving_agent_statistical_report"
+    },
+    {
+      "artifact": "self_improving_agent_episode",
+      "artifact_schema_version": "hfr.self_improving_agent_episode.v1",
+      "description": "Public-safe synthetic agent episode used in the self-improving proof corpus, with an explicit train, development, or held-out role.",
+      "filename": "self_improving_agent_episode.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_episode.v1.schema.json",
+      "name": "self_improving_agent_episode"
     }
   ]
 }

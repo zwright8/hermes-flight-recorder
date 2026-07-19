@@ -7,6 +7,7 @@
     "adapter": { "type": ["string", "null"] },
     "arm": { "enum": ["baseline", "adapter"], "type": "string" },
     "base_model": { "minLength": 1, "type": "string" },
+    "base_model_revision": { "pattern": "^[0-9a-f]{40,64}$", "type": "string" },
     "decoding": { "$ref": "#/$defs/decoding" },
     "heldout_artifact": { "$ref": "#/$defs/heldout" },
     "observations": { "items": { "$ref": "#/$defs/observation" }, "minItems": 1, "type": "array" },
@@ -15,7 +16,7 @@
     "summary": { "$ref": "#/$defs/summary" }
   },
   "required": [
-    "schema_version", "arm", "base_model", "adapter", "heldout_artifact", "decoding", "runtime",
+    "schema_version", "arm", "base_model", "base_model_revision", "adapter", "heldout_artifact", "decoding", "runtime",
     "summary", "observations"
   ],
   "title": "Hermes Flight Recorder Self-Improving Agent Evaluation Results",

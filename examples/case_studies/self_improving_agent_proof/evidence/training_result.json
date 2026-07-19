@@ -1,21 +1,21 @@
 {
   "adapter_artifacts": {
-    "directory": "runs/self_improving_agent_proof/adapter-v2",
+    "directory": "runs/self_improving_agent_proof/adapter-v3",
     "file_count": 29,
     "files": [
       {
         "path": "README.md",
-        "sha256": "7ea86774c593d0ac323ce324aa894c5cf60d6ac6d20aae7e959f718c927059d5",
+        "sha256": "6f47d189143d3f8ec98bb1d23964fa8f8c03680e82d3b2b3a18add4d77da305e",
         "size_bytes": 1432
       },
       {
         "path": "adapter_config.json",
-        "sha256": "8ae2c4837f36e1dcf10298364a585132d77faa9d39cb0293b1c26df0aa341f97",
+        "sha256": "c7c3e0ec5baa0a80bd22f7b9c4a50572a2e05f58848541705b51bcb4487db473",
         "size_bytes": 1094
       },
       {
         "path": "adapter_model.safetensors",
-        "sha256": "90097459dd4ac441d231507c8a0c55ca7edd03ea0120a1c5f250275af3256b16",
+        "sha256": "099714d7c5db5988ec9819a7d71d572bfe6c72eb4931963dfe7ed6e9274bcfb4",
         "size_bytes": 40422168
       },
       {
@@ -30,12 +30,12 @@
       },
       {
         "path": "checkpoint-100/adapter_config.json",
-        "sha256": "8ae2c4837f36e1dcf10298364a585132d77faa9d39cb0293b1c26df0aa341f97",
+        "sha256": "c7c3e0ec5baa0a80bd22f7b9c4a50572a2e05f58848541705b51bcb4487db473",
         "size_bytes": 1094
       },
       {
         "path": "checkpoint-100/adapter_model.safetensors",
-        "sha256": "90097459dd4ac441d231507c8a0c55ca7edd03ea0120a1c5f250275af3256b16",
+        "sha256": "099714d7c5db5988ec9819a7d71d572bfe6c72eb4931963dfe7ed6e9274bcfb4",
         "size_bytes": 40422168
       },
       {
@@ -45,7 +45,7 @@
       },
       {
         "path": "checkpoint-100/optimizer.pt",
-        "sha256": "1fbf5209c10a5af36a8399e18d9898c6cf6f9aa81e15b463cf3d028a84231f14",
+        "sha256": "1b5e68a619a4f791928eea7e092fca0ea285d27c5201c14962cb7ea146857606",
         "size_bytes": 81059067
       },
       {
@@ -70,12 +70,12 @@
       },
       {
         "path": "checkpoint-100/trainer_state.json",
-        "sha256": "e3b144009ef8541e8229d1fb697531bbb4582306f4c7e9b648b994c7788434eb",
-        "size_bytes": 27907
+        "sha256": "62d5da5125ccd838a5a909e75fc6aef5140aa58642efac645774c965fb0878d0",
+        "size_bytes": 27911
       },
       {
         "path": "checkpoint-100/training_args.bin",
-        "sha256": "391574bbe7a6ff1987f60c01e3c73636c5cec1c2b9e4e692ca5509be2d992195",
+        "sha256": "996f363c340e6ff6ab4f971a3064a877b7bba4837e6f8604429d015d60298896",
         "size_bytes": 5841
       },
       {
@@ -85,12 +85,12 @@
       },
       {
         "path": "checkpoint-50/adapter_config.json",
-        "sha256": "8ae2c4837f36e1dcf10298364a585132d77faa9d39cb0293b1c26df0aa341f97",
+        "sha256": "c7c3e0ec5baa0a80bd22f7b9c4a50572a2e05f58848541705b51bcb4487db473",
         "size_bytes": 1094
       },
       {
         "path": "checkpoint-50/adapter_model.safetensors",
-        "sha256": "3b9a1aa3e250d2cd6b1f44ee2848b901b308dd17ef9261a2b79c9e97396f0918",
+        "sha256": "41d3a8463bb125b3f74228b95ca8f16577e4111dd228def2a2dcc81a74f6ba68",
         "size_bytes": 40422168
       },
       {
@@ -100,7 +100,7 @@
       },
       {
         "path": "checkpoint-50/optimizer.pt",
-        "sha256": "7c5f5df25ba19c602e42b291ef2241e0358172424a4f04752b013f949ba74066",
+        "sha256": "f2e505efe01176bc6dc674ecacfad2cff5cc468d75cdc02279ad0f2f11dbd5a4",
         "size_bytes": 81059067
       },
       {
@@ -125,12 +125,12 @@
       },
       {
         "path": "checkpoint-50/trainer_state.json",
-        "sha256": "ef5ea9440ae77953d4534812d68a6214d82082899b0e33910a813ecbab888a77",
-        "size_bytes": 14366
+        "sha256": "dfed00cda1b0301c045363c546852357ee44b57055772d87b5416183f3698add",
+        "size_bytes": 14391
       },
       {
         "path": "checkpoint-50/training_args.bin",
-        "sha256": "391574bbe7a6ff1987f60c01e3c73636c5cec1c2b9e4e692ca5509be2d992195",
+        "sha256": "996f363c340e6ff6ab4f971a3064a877b7bba4837e6f8604429d015d60298896",
         "size_bytes": 5841
       },
       {
@@ -145,7 +145,7 @@
       },
       {
         "path": "training_args.bin",
-        "sha256": "391574bbe7a6ff1987f60c01e3c73636c5cec1c2b9e4e692ca5509be2d992195",
+        "sha256": "996f363c340e6ff6ab4f971a3064a877b7bba4837e6f8604429d015d60298896",
         "size_bytes": 5841
       }
     ]
@@ -153,7 +153,7 @@
   "base_model": "Qwen/Qwen3-0.6B",
   "base_model_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
   "chat_template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
-  "created_at": "2026-07-18T23:18:38.356224+00:00",
+  "created_at": "2026-07-19T00:48:27.567190+00:00",
   "data_validation": {
     "checks": {
       "contamination_passed": true,
@@ -164,11 +164,11 @@
       "non_training_artifacts_are_distinct": true,
       "train_sha256": true
     },
-    "dataset_sha256": "74bad2f15f29df0e9048b0ef081cd5ffbab523979e5a760167532d78d23642bf",
-    "development_sha256": "bbef24a057c2135857cdabb4462a033ce01fe4a05b1b60b450b587d2b6d8c57c",
-    "heldout_sha256": "5500c67defa9c7ef7db2626f887712900795057bf5a64f24d2e1db91cb57b55b",
+    "dataset_sha256": "e2af62c0a6668b3c7152579ac6c654052dd07ced6b0d0bda6da8dc387284419b",
+    "development_sha256": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
+    "heldout_sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771",
     "train_row_count": 800,
-    "train_sha256": "31c5674497f33c44e28b84da7d25962f93e874a821cdc1e3481b13d5526a6917"
+    "train_sha256": "9cc907b0ce04d5f4b21f905357ed7f277fc640c70a8f31c90f76a187a14b2df5"
   },
   "hub": null,
   "hyperparameters": {
@@ -196,17 +196,17 @@
   "metrics": {
     "epoch": 1.0,
     "total_flos": 1304836177920000.0,
-    "train_loss": 0.019155515799648127,
-    "train_runtime": 457.9203,
-    "train_samples_per_second": 1.747,
-    "train_steps_per_second": 0.218
+    "train_loss": 0.019158712883654515,
+    "train_runtime": 450.3548,
+    "train_samples_per_second": 1.776,
+    "train_steps_per_second": 0.222
   },
   "schema_version": "hfr.self_improving_agent_training_result.v1",
   "status": "succeeded",
   "tracking": {
     "enabled": true,
     "project": "hermes-flightrecorder-self-improving-proof",
-    "run_name": "qwen3-0.6b-hfr-self-improving-proof-v2",
+    "run_name": "qwen3-0.6b-hfr-self-improving-proof-v3",
     "space_id": null
   },
   "training_row_count": 800

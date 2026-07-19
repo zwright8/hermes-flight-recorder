@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # /// script
 # dependencies = [
-#   "peft",
-#   "torch",
-#   "transformers",
+#   "peft==0.19.1",
+#   "torch==2.12.1",
+#   "transformers==5.12.1",
 # ]
 # ///
 """Run and compare repeated held-out evaluations for the agent proof."""
@@ -126,6 +126,7 @@ def run_evaluation(
     *,
     heldout_path: Path,
     model_id: str,
+    model_revision: str,
     adapter_id: str,
     arm: str,
     out: Path,
@@ -149,11 +150,11 @@ def run_evaluation(
         raise ValueError("repeated evaluation requires at least three seeds")
 
     device, dtype = _device_and_dtype(torch)
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=model_revision)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
+    model = AutoModelForCausalLM.from_pretrained(model_id, revision=model_revision, dtype=dtype)
     if adapter_id:
         model = PeftModel.from_pretrained(model, adapter_id)
     model.to(device)
@@ -200,6 +201,7 @@ def run_evaluation(
         "schema_version": RESULT_SCHEMA,
         "arm": arm,
         "base_model": model_id,
+        "base_model_revision": model_revision,
         "adapter": adapter_id or None,
         "heldout_artifact": {
             "path": str(heldout_path),
@@ -304,6 +306,19 @@ def compare_results(
     safety_violations = sum(row["critical_safety_violation"] for row in adapter_safety)
     checks = [
         _check("identical_frozen_heldout_sha256", True, adapter["heldout_artifact"]["sha256"], baseline["heldout_artifact"]["sha256"]),
+        _check(
+            "identical_base_model_identity",
+            (adapter["base_model"], adapter["base_model_revision"])
+            == (baseline["base_model"], baseline["base_model_revision"]),
+            {"adapter": [adapter["base_model"], adapter["base_model_revision"]], "baseline": [baseline["base_model"], baseline["base_model_revision"]]},
+            "adapter and baseline model id/revision must match",
+        ),
+        _check(
+            "identical_decoding_policy",
+            adapter["decoding"] == baseline["decoding"],
+            {"adapter": adapter["decoding"], "baseline": baseline["decoding"]},
+            "adapter and baseline decoding settings must match",
+        ),
         _check("minimum_three_repeats", min(seeds_per_task.values()) >= 3, min(seeds_per_task.values()), ">=3"),
         _check(
             "overall_statistically_significant_improvement",
@@ -390,6 +405,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run = subparsers.add_parser("run", help="Generate one repeated evaluation arm")
     run.add_argument("--heldout", type=Path, required=True)
     run.add_argument("--model", default="Qwen/Qwen3-0.6B")
+    run.add_argument("--model-revision", required=True)
     run.add_argument("--adapter", default="")
     run.add_argument("--arm", choices=("baseline", "adapter"), required=True)
     run.add_argument("--out", type=Path, required=True)
@@ -415,6 +431,7 @@ def main(argv: list[str] | None = None) -> int:
         result = run_evaluation(
             heldout_path=args.heldout,
             model_id=args.model,
+            model_revision=args.model_revision,
             adapter_id=args.adapter,
             arm=args.arm,
             out=args.out,
