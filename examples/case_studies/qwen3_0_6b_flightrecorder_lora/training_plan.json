@@ -1,0 +1,63 @@
+{
+  "case_study": "qwen3-0.6b-flightrecorder-lora",
+  "dataset": {
+    "action_sft_train_rows": 1,
+    "dataset_gate": {
+      "checks_passed": 50,
+      "checks_total": 50,
+      "passed": true
+    },
+    "dataset_version": "hfrds-a801878214397fed",
+    "episode_counts": {
+      "failed": 5,
+      "passed": 2,
+      "total": 7
+    },
+    "held_out_families": {
+      "test": [
+        "subagent_claim"
+      ],
+      "validation": [
+        "prompt_injection"
+      ]
+    },
+    "quality_flags": [],
+    "source_commit": "76e144e38526d88fb35cd755a3cac400cc81bdf8",
+    "source_fingerprints_verified": true,
+    "split_contract": "family_exclusive",
+    "train_families": [
+      "budget_runaway",
+      "cron_async_delegation",
+      "email_reply_completion"
+    ]
+  },
+  "external_execution": {
+    "hugging_face_jobs_attempt": "rejected before compute with HTTP 402 insufficient prepaid credit",
+    "hub_repository_created": false,
+    "managed_compute_started": false
+  },
+  "persistence": {
+    "adapter_in_git": false,
+    "github": "redacted data, manifests, metrics, commands, and model card",
+    "model_artifact": "Hugging Face Hub recommended"
+  },
+  "trainer_launch_gate": {
+    "checks_passed": 29,
+    "checks_total": 29,
+    "passed": true
+  },
+  "training": {
+    "assistant_only_loss": false,
+    "base_model": "Qwen/Qwen3-0.6B",
+    "batch_size": 1,
+    "device": "mps",
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 0.0005,
+    "lora_alpha": 16,
+    "lora_dropout": 0.0,
+    "lora_rank": 8,
+    "max_length": 512,
+    "max_steps": 20,
+    "mode": "fr_action_sft"
+  }
+}

@@ -167,6 +167,19 @@ flightrecorder schemas --check runs/evidence_bundle.json
 
 ## One-Command Data Handoff
 
+For the full native tool-trajectory → TRL/PEFT LoRA → Hugging Face Jobs path,
+see [Agentic LoRA Training on Hugging Face](docs/agentic-training-huggingface.md).
+For a small, completed Qwen3-0.6B run with a redacted trajectory, training
+curve, evaluation receipt, and Hub-ready model card, see the
+[Flight Recorder LoRA case study](examples/case_studies/qwen3_0_6b_flightrecorder_lora/README.md).
+For the larger production proof—800 trajectories, a frozen 150-task final set,
+three repeated baseline-versus-adapter evaluations, statistical and safety
+gates, immutable Hub artifacts, and a live ZeroGPU demo—see the
+[self-improving agent proof](examples/case_studies/self_improving_agent_proof/README.md).
+For the governed collect → review/credit → curate → route → durable-controller
+path, use the public-safe
+[self-improving loop case study](examples/self_improving_loop/README.md).
+
 Goal 3 data handoff bundles the common path from scenarios to trainer-facing
 evidence. It runs the suite, exports training data, validates artifacts, gates
 the export, builds an evidence bundle, and writes trainer preflight artifacts.

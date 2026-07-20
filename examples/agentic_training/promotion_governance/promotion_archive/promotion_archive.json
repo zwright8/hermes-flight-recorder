@@ -1,5 +1,5 @@
 {
-  "archive_path": "examples/agentic_training/promotion_governance/promotion_archive",
+  "archive_path": "<redacted:hfr-promotion-archive.9XitqP>",
   "artifacts": [
     {
       "exists": true,
@@ -42,7 +42,7 @@
       "path": "artifacts/decision_gate_001.json",
       "role": "decision_gate",
       "schema_version": "hfr.decision_gate.v1",
-      "sha256": "9ce3e98da1339fee1705c021de146a79b78413f4dcff6f0b4563081051c170c2",
+      "sha256": "ca6406ac02321479655c20d9a821c54dd4a167bcc636a02f12a01b5c4890dd79",
       "size_bytes": 2371
     },
     {
@@ -64,7 +64,7 @@
       "path": "artifacts/source_artifact_001.json",
       "role": "source_artifact",
       "schema_version": "hfr.promotion_decision.v1",
-      "sha256": "ed7806370c83694bd29ae4df3cee692dea920401d50ca26c9aa6817a69473e39",
+      "sha256": "c1b0a39ac43472c9d66abf2132b650fe00366f95c48917b1c9ec511bace0c13f",
       "size_bytes": 51947
     },
     {
@@ -75,7 +75,7 @@
       "path": "artifacts/promotion_release_record_000.json",
       "role": "promotion_release_record",
       "schema_version": "hfr.promotion_release_record.v1",
-      "sha256": "6529fd293e14108a64e0496e9d2695f96e992ee07d0adcc5531cb8f138e3e671",
+      "sha256": "6f4cedec0f9f0d08a1ad102b638d85be62858fdfc1f21d2da7d741ce11e49e11",
       "size_bytes": 19544
     }
   ],

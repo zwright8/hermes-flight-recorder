@@ -1,0 +1,24 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_contamination_report.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exact and near-duplicate contamination report across splits and protected corpora.",
+  "properties": {
+    "schema_version": {"const": "hfr.dataset_contamination_report.v1"},
+    "passed": {"type": "boolean"},
+    "similarity_threshold": {"exclusiveMinimum": 0, "maximum": 1, "type": "number"},
+    "row_count": {"minimum": 0, "type": "integer"},
+    "cluster_count": {"minimum": 0, "type": "integer"},
+    "duplicate_cluster_count": {"minimum": 0, "type": "integer"},
+    "cross_split_cluster_count": {"minimum": 0, "type": "integer"},
+    "protected_match_count": {"minimum": 0, "type": "integer"},
+    "clusters": {"items": {"type": "object"}, "type": "array"},
+    "cross_split_clusters": {"items": {"type": "object"}, "type": "array"},
+    "protected_matches": {"items": {"type": "object"}, "type": "array"},
+    "report_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "blocking_reasons": {"items": {"type": "string"}, "type": "array"}
+  },
+  "required": ["schema_version", "passed", "similarity_threshold", "row_count", "cluster_count", "duplicate_cluster_count", "cross_split_cluster_count", "protected_match_count", "clusters", "cross_split_clusters", "protected_matches", "report_fingerprint", "blocking_reasons"],
+  "title": "Hermes Flight Recorder Dataset Contamination Report",
+  "type": "object"
+}

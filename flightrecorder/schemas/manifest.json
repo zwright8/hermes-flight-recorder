@@ -18,6 +18,14 @@
       "name": "trace"
     },
     {
+      "artifact": "trajectory_v2",
+      "artifact_schema_version": "hfr.trajectory.v2",
+      "description": "Lossless observable trajectory with exact runtime identities and action-training quarantine.",
+      "filename": "trajectory.v2.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trajectory.v2.schema.json",
+      "name": "trajectory_v2"
+    },
+    {
       "artifact": "scorecard",
       "artifact_schema_version": "hfr.scorecard.v1",
       "description": "Deterministic scorecard emitted as scorecard.json.",
@@ -416,6 +424,14 @@
       "filename": "rl_sft.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/rl_sft.v1.schema.json",
       "name": "rl_sft"
+    },
+    {
+      "artifact": "rl_action_sft",
+      "artifact_schema_version": "hfr.rl.action_sft.v1",
+      "description": "Native tool-trajectory supervised fine-tuning row emitted in export-rl action_sft.jsonl.",
+      "filename": "rl_action_sft.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_action_sft.v1.schema.json",
+      "name": "rl_action_sft"
     },
     {
       "artifact": "rl_dpo",
@@ -1112,6 +1128,254 @@
       "filename": "serving_runtime_preflight.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/serving_runtime_preflight.v1.schema.json",
       "name": "serving_runtime_preflight"
+    },
+    {
+      "artifact": "finetune_demo_evaluation",
+      "artifact_schema_version": "hfr.finetune_demo_evaluation.v1",
+      "description": "Bounded integration and memorization evaluation for a Flight Recorder agentic LoRA case study.",
+      "filename": "finetune_demo_evaluation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/finetune_demo_evaluation.v1.schema.json",
+      "name": "finetune_demo_evaluation"
+    },
+    {
+      "artifact": "eval_arm_identity",
+      "artifact_schema_version": "hfr.eval_arm_identity.v1",
+      "description": "Immutable model, adapter, runtime, tool, and environment identity for one held-out evaluation arm.",
+      "filename": "eval_arm_identity.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/eval_arm_identity.v1.schema.json",
+      "name": "eval_arm_identity"
+    },
+    {
+      "artifact": "agentic_eval_observation",
+      "artifact_schema_version": "hfr.agentic_eval_observation.v1",
+      "description": "One identity-bound, repeat- and seed-specific observation from an agentic held-out evaluation pool.",
+      "filename": "agentic_eval_observation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_eval_observation.v1.schema.json",
+      "name": "agentic_eval_observation"
+    },
+    {
+      "artifact": "agentic_eval_promotion_evidence",
+      "artifact_schema_version": "hfr.agentic_eval_promotion_evidence.v1",
+      "description": "Replayable three-arm held-out evaluation evidence with paired uncertainty, coverage, and non-regression gates.",
+      "filename": "agentic_eval_promotion_evidence.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_eval_promotion_evidence.v1.schema.json",
+      "name": "agentic_eval_promotion_evidence"
+    },
+    {
+      "artifact": "huggingface_reviewed_training_plan",
+      "artifact_schema_version": "hfr.huggingface_reviewed_training_plan.v1",
+      "description": "Content-addressed reviewed Hugging Face training plan that is the sole source of trainer behavior.",
+      "filename": "huggingface_reviewed_training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_reviewed_training_plan.v1.schema.json",
+      "name": "huggingface_reviewed_training_plan"
+    },
+    {
+      "artifact": "huggingface_payload_manifest",
+      "artifact_schema_version": "hfr.huggingface_payload_manifest.v1",
+      "description": "Immutable content manifest for the payload uploaded to a private Hugging Face dataset repository.",
+      "filename": "huggingface_payload_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_payload_manifest.v1.schema.json",
+      "name": "huggingface_payload_manifest"
+    },
+    {
+      "artifact": "huggingface_jobs_handoff",
+      "artifact_schema_version": "hfr.huggingface_jobs_handoff.v1",
+      "description": "Offline-reviewed request and evidence bundle for an immutable Hugging Face Jobs lifecycle.",
+      "filename": "huggingface_jobs_handoff.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_jobs_handoff.v1.schema.json",
+      "name": "huggingface_jobs_handoff"
+    },
+    {
+      "artifact": "huggingface_publication_receipt",
+      "artifact_schema_version": "hfr.huggingface_publication_receipt.v1",
+      "description": "Private-by-default immutable Hugging Face Hub publication receipt.",
+      "filename": "huggingface_publication_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_publication_receipt.v1.schema.json",
+      "name": "huggingface_publication_receipt"
+    },
+    {
+      "artifact": "huggingface_job_completion",
+      "artifact_schema_version": "hfr.huggingface_job_completion.v1",
+      "description": "Terminal Hugging Face Jobs outcome with durable artifacts, interruption evidence, and resume identity.",
+      "filename": "huggingface_job_completion.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_job_completion.v1.schema.json",
+      "name": "huggingface_job_completion"
+    },
+    {
+      "artifact": "huggingface_canonical_import",
+      "artifact_schema_version": "hfr.huggingface_canonical_import.v1",
+      "description": "Offline binding from an immutable Hugging Face completion revision to canonical training and cloud-completion receipts.",
+      "filename": "huggingface_canonical_import.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/huggingface_canonical_import.v1.schema.json",
+      "name": "huggingface_canonical_import"
+    },
+    {
+      "artifact": "reviewed_action_sft",
+      "artifact_schema_version": "hfr.reviewed.action_sft.v1",
+      "description": "Human-accepted native tool trajectory admitted to action supervised fine-tuning.",
+      "filename": "reviewed_action_sft.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_action_sft.v1.schema.json",
+      "name": "reviewed_action_sft"
+    },
+    {
+      "artifact": "data_governance_receipt",
+      "artifact_schema_version": "hfr.data_governance_receipt.v1",
+      "description": "Purpose-bound governance and personal-data admission receipt for training data.",
+      "filename": "data_governance_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/data_governance_receipt.v1.schema.json",
+      "name": "data_governance_receipt"
+    },
+    {
+      "artifact": "dataset_contamination_report",
+      "artifact_schema_version": "hfr.dataset_contamination_report.v1",
+      "description": "Exact and semantic duplicate contamination report across splits and protected corpora.",
+      "filename": "dataset_contamination_report.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_contamination_report.v1.schema.json",
+      "name": "dataset_contamination_report"
+    },
+    {
+      "artifact": "dataset_derivation",
+      "artifact_schema_version": "hfr.dataset_derivation.v1",
+      "description": "Content-addressed dataset lineage binding parents, recipe, governance, and supersession.",
+      "filename": "dataset_derivation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_derivation.v1.schema.json",
+      "name": "dataset_derivation"
+    },
+    {
+      "artifact": "dataset_deletion_receipt",
+      "artifact_schema_version": "hfr.dataset_deletion_receipt.v1",
+      "description": "Deletion-lineage receipt for rebuilt descendants and quarantined models.",
+      "filename": "dataset_deletion_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_deletion_receipt.v1.schema.json",
+      "name": "dataset_deletion_receipt"
+    },
+    {
+      "artifact": "model_quarantine",
+      "artifact_schema_version": "hfr.model_quarantine.v1",
+      "description": "Models quarantined because their lineage depends on deleted training records.",
+      "filename": "model_quarantine.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_quarantine.v1.schema.json",
+      "name": "model_quarantine"
+    },
+    {
+      "artifact": "reviewed_contract_preference",
+      "artifact_schema_version": "hfr.reviewed.contract_preference.v1",
+      "description": "Chosen and rejected completions sharing one complete normalized task contract.",
+      "filename": "reviewed_contract_preference.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_contract_preference.v1.schema.json",
+      "name": "reviewed_contract_preference"
+    },
+    {
+      "artifact": "action_credit",
+      "artifact_schema_version": "hfr.action_credit.v1",
+      "description": "Per-tool-action credit independent of terminal episode success.",
+      "filename": "action_credit.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/action_credit.v1.schema.json",
+      "name": "action_credit"
+    },
+    {
+      "artifact": "branch_replay_dataset",
+      "artifact_schema_version": "hfr.branch_replay_dataset.v1",
+      "description": "State-bound verified branch continuations, preferences, and human-review routing.",
+      "filename": "branch_replay_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/branch_replay_dataset.v1.schema.json",
+      "name": "branch_replay_dataset"
+    },
+    {
+      "artifact": "curated_dataset",
+      "artifact_schema_version": "hfr.curated_dataset.v1",
+      "description": "Deterministic training-row selection with exclusion reasons and mixture evidence.",
+      "filename": "curated_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/curated_dataset.v1.schema.json",
+      "name": "curated_dataset"
+    },
+    {
+      "artifact": "agentic_loop_controller_plan",
+      "artifact_schema_version": "hfr.agentic_loop_controller_plan.v1",
+      "description": "Immutable approval-bound execution plan for the complete agent improvement loop.",
+      "filename": "agentic_loop_controller_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_controller_plan.v1.schema.json",
+      "name": "agentic_loop_controller_plan"
+    },
+    {
+      "artifact": "agentic_loop_controller_state",
+      "artifact_schema_version": "hfr.agentic_loop_controller_state.v1",
+      "description": "Durable resumable state for a plan-bound agentic loop controller.",
+      "filename": "agentic_loop_controller_state.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_controller_state.v1.schema.json",
+      "name": "agentic_loop_controller_state"
+    },
+    {
+      "artifact": "agentic_loop_phase_receipt",
+      "artifact_schema_version": "hfr.agentic_loop_phase_receipt.v1",
+      "description": "Content-bound durable receipt for one idempotent controller phase attempt.",
+      "filename": "agentic_loop_phase_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_phase_receipt.v1.schema.json",
+      "name": "agentic_loop_phase_receipt"
+    },
+    {
+      "artifact": "intervention_route",
+      "artifact_schema_version": "hfr.intervention_route.v1",
+      "description": "Evidence-bound least-cost intervention decision over the complete agent stack.",
+      "filename": "intervention_route.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/intervention_route.v1.schema.json",
+      "name": "intervention_route"
+    },
+    {
+      "artifact": "self_improving_agent_dataset",
+      "artifact_schema_version": "hfr.self_improving_agent_dataset.v1",
+      "description": "Content-addressed train, development, and frozen held-out corpus manifest for a self-improving agent proof.",
+      "filename": "self_improving_agent_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_dataset.v1.schema.json",
+      "name": "self_improving_agent_dataset"
+    },
+    {
+      "artifact": "frozen_heldout_manifest",
+      "artifact_schema_version": "hfr.frozen_heldout_manifest.v1",
+      "description": "Immutable content binding that keeps final held-out tasks outside training and model selection.",
+      "filename": "frozen_heldout_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/frozen_heldout_manifest.v1.schema.json",
+      "name": "frozen_heldout_manifest"
+    },
+    {
+      "artifact": "self_improving_contamination_audit",
+      "artifact_schema_version": "hfr.self_improving_contamination_audit.v1",
+      "description": "Exact-identity and prompt-template contamination audit across training, development, and held-out splits.",
+      "filename": "self_improving_contamination_audit.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_contamination_audit.v1.schema.json",
+      "name": "self_improving_contamination_audit"
+    },
+    {
+      "artifact": "self_improving_agent_training_result",
+      "artifact_schema_version": "hfr.self_improving_agent_training_result.v1",
+      "description": "Reproducible LoRA training receipt bound to validated self-improving-agent corpus hashes.",
+      "filename": "self_improving_agent_training_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_training_result.v1.schema.json",
+      "name": "self_improving_agent_training_result"
+    },
+    {
+      "artifact": "self_improving_agent_eval_results",
+      "artifact_schema_version": "hfr.self_improving_agent_eval_results.v1",
+      "description": "Identity-bound repeated inference observations for one baseline or adapter evaluation arm.",
+      "filename": "self_improving_agent_eval_results.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_eval_results.v1.schema.json",
+      "name": "self_improving_agent_eval_results"
+    },
+    {
+      "artifact": "self_improving_agent_statistical_report",
+      "artifact_schema_version": "hfr.self_improving_agent_statistical_report.v1",
+      "description": "Task-clustered repeated baseline-versus-adapter promotion report with safety non-regression gates.",
+      "filename": "self_improving_agent_statistical_report.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_statistical_report.v1.schema.json",
+      "name": "self_improving_agent_statistical_report"
+    },
+    {
+      "artifact": "self_improving_agent_episode",
+      "artifact_schema_version": "hfr.self_improving_agent_episode.v1",
+      "description": "Public-safe synthetic agent episode used in the self-improving proof corpus, with an explicit train, development, or held-out role.",
+      "filename": "self_improving_agent_episode.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_episode.v1.schema.json",
+      "name": "self_improving_agent_episode"
     }
   ]
 }

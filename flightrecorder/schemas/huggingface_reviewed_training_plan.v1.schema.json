@@ -1,0 +1,131 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/huggingface_reviewed_training_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Reviewed, content-addressed sole source of behavior-affecting Hugging Face trainer configuration.",
+  "properties": {
+    "approved": {"const": true},
+    "created_at": {"format": "date-time", "type": "string"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "inputs": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_set_sha256": {"$ref": "#/$defs/sha256"},
+        "base_model": {"$ref": "#/$defs/hubSource"},
+        "chat_template": {
+          "additionalProperties": false,
+          "properties": {"sha256": {"$ref": "#/$defs/sha256"}},
+          "required": ["sha256"],
+          "type": "object"
+        },
+        "data_artifacts": {"items": {"$ref": "#/$defs/artifact"}, "minItems": 1, "type": "array"},
+        "dataset_manifest": {"$ref": "#/$defs/artifact"},
+        "model_manifest": {"$ref": "#/$defs/artifact"},
+        "tokenizer": {"$ref": "#/$defs/hubSource"},
+        "trainer_script": {"$ref": "#/$defs/artifact"}
+      },
+      "required": ["model_manifest", "dataset_manifest", "trainer_script", "data_artifacts", "artifact_set_sha256", "base_model", "tokenizer", "chat_template"],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint_push_strategy": {"const": "every_save"},
+        "dataset_private": {"const": true},
+        "dataset_repo": {"minLength": 1, "type": "string"},
+        "final_adapter_push": {"const": true},
+        "model_private": {"const": true},
+        "model_repo": {"minLength": 1, "type": "string"},
+        "publication_receipt_path": {"minLength": 1, "type": "string"},
+        "result_path": {"minLength": 1, "type": "string"}
+      },
+      "required": ["dataset_repo", "model_repo", "dataset_private", "model_private", "checkpoint_push_strategy", "final_adapter_push", "result_path", "publication_receipt_path"],
+      "type": "object"
+    },
+    "resume": {"$ref": "#/$defs/resume"},
+    "review": {
+      "additionalProperties": false,
+      "properties": {
+        "reviewed_at": {"format": "date-time", "type": "string"},
+        "reviewer": {"minLength": 1, "type": "string"},
+        "source_plan_passed": {"const": true},
+        "source_plan_recommendation": {"const": "launch_allowed"}
+      },
+      "required": ["reviewer", "reviewed_at", "source_plan_passed", "source_plan_recommendation"],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "container_image": {"pattern": "^\\S+@sha256:[0-9a-f]{64}$", "type": "string"},
+        "dependencies": {"items": {"pattern": "^[A-Za-z0-9_.-]+==[^=<>!~\\s]+$", "type": "string"}, "minItems": 1, "type": "array"},
+        "dependency_lock_sha256": {"$ref": "#/$defs/sha256"},
+        "hardware_flavor": {"minLength": 1, "type": "string"},
+        "python": {"const": "3.11"},
+        "timeout": {"minLength": 1, "type": "string"},
+        "trainer_script_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["python", "container_image", "hardware_flavor", "timeout", "dependencies", "dependency_lock_sha256", "trainer_script_sha256"],
+      "type": "object"
+    },
+    "schema_version": {"const": "hfr.huggingface_reviewed_training_plan.v1"},
+    "source_plan": {"$ref": "#/$defs/artifact"},
+    "trainer": {
+      "additionalProperties": false,
+      "properties": {
+        "hyperparameters": {"type": "object"},
+        "loss_scope": {"enum": ["assistant_only", "all_messages"]},
+        "mode": {"enum": ["trace_sft", "fr_sft", "fr_action_sft", "fr_dpo", "fr_sft_dpo"]},
+        "model_id": {"minLength": 1, "type": "string"},
+        "row_limit": {"minimum": 0, "type": "integer"},
+        "tracking": {"type": "object"}
+      },
+      "required": ["mode", "model_id", "loss_scope", "hyperparameters", "tracking", "row_limit"],
+      "type": "object"
+    }
+  },
+  "required": ["schema_version", "created_at", "approved", "review", "source_plan", "trainer", "inputs", "runtime", "output", "resume", "identity"],
+  "title": "Hugging Face Reviewed Training Plan",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "role": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "hubSource": {
+      "additionalProperties": false,
+      "properties": {
+        "repo_id": {"minLength": 1, "type": "string"},
+        "revision": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"}
+      },
+      "required": ["repo_id", "revision"],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {"algorithm": {"const": "sha256"}, "sha256": {"$ref": "#/$defs/sha256"}},
+      "required": ["algorithm", "sha256"],
+      "type": "object"
+    },
+    "resume": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint_manifest_sha256": {"type": "string"},
+        "checkpoint_path": {"type": "string"},
+        "enabled": {"type": "boolean"},
+        "phase": {"type": "string"},
+        "revision": {"type": "string"}
+      },
+      "required": ["enabled", "phase", "revision", "checkpoint_path", "checkpoint_manifest_sha256"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

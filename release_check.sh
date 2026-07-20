@@ -100,6 +100,7 @@ grep -F -q "improvement_ledger_gate.json" runs/index.html
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/preferences.jsonl --name rl_preference >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/failure_modes.jsonl --name rl_failure_mode >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/action_sft.jsonl --name rl_action_sft >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/dpo.jsonl --name rl_dpo >/dev/null
 "$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/reward_model.jsonl --name rl_reward_model >/dev/null
 rm -rf replay_runs
@@ -302,7 +303,7 @@ assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] ==
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
 assert scenario_quality["passed"] is True
-assert scenario_quality["metrics"]["average_contract_score"] == 90.71
+assert scenario_quality["metrics"]["average_contract_score"] == 93.57
 assert scenario_quality["metrics"]["min_contract_score"] == 65
 assert scenario_quality["metrics"]["observable_scenario_rate"] == 0.8571
 assert scenario_quality["metrics"]["weak_scenario_count"] == 0
@@ -350,7 +351,7 @@ assert len({item["routing_key"] for item in evidence_bundle["decision"]["next_ac
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 7
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 7
 assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 14
-assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 90.71
+assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 93.57
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
 assert evidence_bundle["metrics"]["run_digest_coverage"]["run_count"] == 7
@@ -721,13 +722,17 @@ test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
 test -f runs/training_export/sft.jsonl
+test -f runs/training_export/action_sft.jsonl
 test -f runs/training_export/dpo.jsonl
 test -f runs/training_export/reward_model.jsonl
 test -f runs/training_export/dataset_metrics.json
 test -f runs/training_export/dataset_splits.json
 test -f runs/training_export/splits/train/episodes.jsonl
+test -f runs/training_export/splits/train/action_sft.jsonl
 test -f runs/training_export/splits/validation/episodes.jsonl
+test -f runs/training_export/splits/validation/action_sft.jsonl
 test -f runs/training_export/splits/test/episodes.jsonl
+test -f runs/training_export/splits/test/action_sft.jsonl
 test -f runs/training_export/DATASET_CARD.md
 test -f runs/training_export/manifest.json
 "$PYTHON" - <<'PY'
@@ -799,6 +804,11 @@ sft = [
     for line in Path("runs/training_export/sft.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+action_sft = [
+    json.loads(line)
+    for line in Path("runs/training_export/action_sft.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 dpo = [
     json.loads(line)
     for line in Path("runs/training_export/dpo.jsonl").read_text(encoding="utf-8").splitlines()
@@ -818,7 +828,17 @@ episodes = [
     if line.strip()
 ]
 split_names = ("train", "validation", "test")
-split_artifacts = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
+split_artifacts = (
+    "episodes",
+    "rewards",
+    "step_rewards",
+    "preferences",
+    "failure_modes",
+    "sft",
+    "action_sft",
+    "dpo",
+    "reward_model",
+)
 split_keys = {f"{split}_{artifact}" for split in split_names for artifact in split_artifacts}
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
@@ -846,6 +866,7 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "dataset_card",
     "dataset_metrics",
     "dataset_splits",
+    "action_sft",
     "dpo",
     "episodes",
     "failure_modes",
@@ -853,6 +874,7 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "reward_model",
     "rewards",
     "sft",
+    "action_sft",
     "step_rewards",
 } | split_keys
 assert all(record["exists"] is True for record in training_manifest["artifact_fingerprints"].values())
@@ -897,6 +919,8 @@ assert {item["episode_id"] for item in reward_model} >= {
 }
 assert dataset_metrics["artifact_counts"]["episodes"] == 7
 assert dataset_metrics["pass_rate"] == 0.2857
+assert dataset_metrics["artifact_counts"]["action_sft"] == len(action_sft)
+assert {sample["schema_version"] for sample in action_sft} == {"hfr.rl.action_sft.v1"}
 assert dataset_metrics["artifact_counts"]["reward_model"] == 7
 assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 7
 assert dataset_metrics["source_fingerprint_coverage"]["unverified"] == 0
@@ -904,8 +928,8 @@ assert dataset_metrics["task_completion"]["configured_count"] == 6
 assert dataset_metrics["task_completion"]["complete_count"] == 2
 assert dataset_metrics["task_completion"]["incomplete_count"] == 4
 assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
-assert dataset_metrics["task_completion"]["required_check_count"] == 21
-assert dataset_metrics["task_completion"]["passed_check_count"] == 11
+assert dataset_metrics["task_completion"]["required_check_count"] == 23
+assert dataset_metrics["task_completion"]["passed_check_count"] == 13
 assert dataset_metrics["trace_signal"]["average_event_count"] == 6.0
 assert dataset_metrics["trace_signal"]["event_type_count"] == 6
 assert dataset_metrics["trace_signal"]["final_answer_rate"] == 1.0
@@ -949,12 +973,12 @@ assert gate["metrics"]["validation"]["passed"] is True
 assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 11
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 11
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 12
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 12
 assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
 assert gate["metrics"]["task_completion"]["incomplete_count"] == 4
-assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5238
+assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5652
 assert gate["metrics"]["trace_signal"]["average_event_count"] == 6.0
 assert gate["metrics"]["trace_signal"]["event_type_count"] == 6
 assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8571
@@ -970,7 +994,7 @@ assert gate["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"] =
 assert gate["policy"]["effective"]["max_unverified_trainer_view_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
 assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 4
-assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5238
+assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5652
 assert gate["policy"]["effective"]["min_trace_average_events"] == 6.0
 assert gate["policy"]["effective"]["min_trace_event_type_count"] == 4
 assert gate["policy"]["effective"]["min_trace_final_answer_rate"] == 1.0

@@ -1,0 +1,44 @@
+{
+  "adapter": {
+    "distribution": "Hugging Face Hub recommended; adapter not included in GitHub",
+    "sha256": "5642c36e91c69098666e19c653ea43639169adfaf1cdf226f16501b5165cc891",
+    "size_bytes": 20236472
+  },
+  "base": {
+    "completion": "<tool_call>\n{\"name\": \"gmail_send\", \"arguments\": {\"body\": \"Reply to assigned customer email thread email-123\", \"thread_id\": \"email-123\"}}\n</tool_call><|im_end|>",
+    "sequence_loss": 3.0694243907928467
+  },
+  "base_model": "Qwen/Qwen3-0.6B",
+  "claim_scope": "Integration and memorization proof only; not a held-out agent-quality claim.",
+  "dataset_source_commit": "76e144e38526d88fb35cd755a3cac400cc81bdf8",
+  "dataset_version": "hfrds-a801878214397fed",
+  "device": "mps",
+  "schema_version": "hfr.finetune_demo_evaluation.v1",
+  "sequence_loss_delta": -2.9003301560878754,
+  "sequence_loss_improved": true,
+  "sequence_loss_reduction_percent": 94.49101156515886,
+  "training": {
+    "aggregate_train_loss": 0.5874770194292068,
+    "assistant_only_loss": false,
+    "max_steps": 20,
+    "runtime_seconds": 22.7066,
+    "training_mode": "fr_action_sft"
+  },
+  "trajectory": {
+    "assistant_messages": 3,
+    "row_count": 1,
+    "task_family": "email_reply_completion",
+    "tool_calls": 2,
+    "tool_results": 2
+  },
+  "tuned": {
+    "completion": "{\"body\": \"Can you confirm the invoice number?\", \"thread_id\": \"email-123\"}<|im_end|>",
+    "sequence_loss": 0.1690942347049713
+  },
+  "versions": {
+    "peft": "0.19.1",
+    "torch": "2.12.1",
+    "transformers": "4.57.6",
+    "trl": "<1 compatibility band"
+  }
+}

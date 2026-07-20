@@ -1,0 +1,94 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_eval_results.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Identity-bound repeated inference observations for one baseline or adapter evaluation arm.",
+  "properties": {
+    "adapter": { "type": ["string", "null"] },
+    "arm": { "enum": ["baseline", "adapter"], "type": "string" },
+    "base_model": { "minLength": 1, "type": "string" },
+    "base_model_revision": { "pattern": "^[0-9a-f]{40,64}$", "type": "string" },
+    "decoding": { "$ref": "#/$defs/decoding" },
+    "heldout_artifact": { "$ref": "#/$defs/heldout" },
+    "observations": { "items": { "$ref": "#/$defs/observation" }, "minItems": 1, "type": "array" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "schema_version": { "const": "hfr.self_improving_agent_eval_results.v1" },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "required": [
+    "schema_version", "arm", "base_model", "base_model_revision", "adapter", "heldout_artifact", "decoding", "runtime",
+    "summary", "observations"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Agent Evaluation Results",
+  "type": "object",
+  "$defs": {
+    "decoding": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "minimum": 1, "type": "integer" },
+        "max_new_tokens": { "minimum": 1, "type": "integer" },
+        "repeats": { "minimum": 3, "type": "integer" },
+        "seeds": { "items": { "type": "integer" }, "minItems": 3, "type": "array", "uniqueItems": true },
+        "temperature": { "minimum": 0, "type": "number" },
+        "top_p": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" }
+      },
+      "required": ["batch_size", "max_new_tokens", "repeats", "seeds", "temperature", "top_p"],
+      "type": "object"
+    },
+    "heldout": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "task_count": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["path", "sha256", "task_count"],
+      "type": "object"
+    },
+    "observation": {
+      "additionalProperties": false,
+      "properties": {
+        "completion": { "type": "string" },
+        "critical_safety_violation": { "type": "boolean" },
+        "parsed_tool_call": { "type": ["object", "null"] },
+        "passed": { "type": "boolean" },
+        "pool": { "enum": ["frozen", "rolling", "adversarial"], "type": "string" },
+        "reason": { "minLength": 1, "type": "string" },
+        "repeat_index": { "minimum": 0, "type": "integer" },
+        "score": { "minimum": 0, "maximum": 1, "type": "number" },
+        "seed": { "type": "integer" },
+        "task_family": { "minLength": 1, "type": "string" },
+        "task_id": { "minLength": 1, "type": "string" },
+        "tool_schema_valid": { "type": "boolean" }
+      },
+      "required": [
+        "task_id", "task_family", "pool", "repeat_index", "seed", "completion", "parsed_tool_call",
+        "tool_schema_valid", "passed", "score", "critical_safety_violation", "reason"
+      ],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "device": { "minLength": 1, "type": "string" },
+        "dtype": { "minLength": 1, "type": "string" },
+        "elapsed_seconds": { "minimum": 0, "type": "number" }
+      },
+      "required": ["device", "dtype", "elapsed_seconds"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "critical_safety_violations": { "minimum": 0, "type": "integer" },
+        "observations": { "minimum": 1, "type": "integer" },
+        "pass_rate": { "minimum": 0, "maximum": 1, "type": "number" },
+        "passed": { "minimum": 0, "type": "integer" },
+        "tool_schema_valid_rate": { "minimum": 0, "maximum": 1, "type": "number" }
+      },
+      "required": ["observations", "passed", "pass_rate", "tool_schema_valid_rate", "critical_safety_violations"],
+      "type": "object"
+    }
+  }
+}

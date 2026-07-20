@@ -73,6 +73,7 @@ class ServingLifecycleTests(unittest.TestCase):
             adapter = Path(tmp) / "adapter"
             adapter.mkdir()
             (adapter / "adapter_config.json").write_text('{"r": 8}\n', encoding="utf-8")
+            (adapter / "adapter_model.safetensors").write_bytes(b"hfr-test-adapter-weights")
             with redirect_stdout(StringIO()):
                 code = manage_openai_serving.main(
                     [

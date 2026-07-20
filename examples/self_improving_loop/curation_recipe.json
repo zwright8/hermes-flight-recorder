@@ -1,0 +1,8 @@
+{
+  "seed": "self-improving-loop-case-study-v1",
+  "max_rows": 3,
+  "max_per_source": 2,
+  "minimum_quality": 0.5,
+  "allowed_roles": ["action_sft"],
+  "mixture_weights": {"action_sft": 1.0}
+}

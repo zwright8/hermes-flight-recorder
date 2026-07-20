@@ -50,7 +50,11 @@ class SchemaRegistryTests(unittest.TestCase):
         expected_names = {
             "action_ledger",
             "action_ledger_gate",
+            "action_credit",
             "agentic_loop_governance_receipt",
+            "agentic_loop_controller_plan",
+            "agentic_loop_controller_state",
+            "agentic_loop_phase_receipt",
             "agentic_loop_ledger",
             "agentic_lora_backend_recipes",
             "agentic_lora_model_registry_link_plan",
@@ -58,6 +62,8 @@ class SchemaRegistryTests(unittest.TestCase):
             "agentic_lora_training_plan",
             "agentic_lora_training_registry_event",
             "agentic_lora_training_result",
+            "agentic_eval_observation",
+            "agentic_eval_promotion_evidence",
             "agentic_rollout_plan",
             "agentic_rollout_receipt",
             "agentic_training_flow",
@@ -78,18 +84,26 @@ class SchemaRegistryTests(unittest.TestCase):
             "compare_rl_manifest",
             "compare_rl_pair",
             "coven_event",
+            "curated_dataset",
+            "data_governance_receipt",
             "dataset_curation_receipt",
+            "dataset_contamination_report",
+            "dataset_deletion_receipt",
+            "dataset_derivation",
             "dataset_registry",
             "dataset_splits",
             "decision_gate",
             "eval_suite_manifest",
             "eval_summary",
+            "eval_arm_identity",
             "evidence_bundle",
             "evidence_coverage",
             "external_eval_plan",
             "external_eval_receipt",
             "external_eval_result",
             "external_cloud_training_runner",
+            "finetune_demo_evaluation",
+            "frozen_heldout_manifest",
             "goal3_handoff",
             "harness_model_probe",
             "harness_replay_result",
@@ -97,9 +111,16 @@ class SchemaRegistryTests(unittest.TestCase):
             "harness_run_result",
             "harness_suite_result",
             "heldout_manifest",
+            "huggingface_canonical_import",
+            "huggingface_job_completion",
+            "huggingface_jobs_handoff",
+            "huggingface_payload_manifest",
+            "huggingface_publication_receipt",
+            "huggingface_reviewed_training_plan",
             "improvement_ledger",
             "improvement_ledger_gate",
             "improvement_plan",
+            "intervention_route",
             "live_coven_smoke_summary",
             "live_openclaw_smoke_summary",
             "live_smoke_summary",
@@ -112,6 +133,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "model_grader_dry_run",
             "model_grader_gate",
             "model_grader_override_receipt",
+            "model_quarantine",
             "model_registry",
             "model_registry_entry",
             "model_scout_manifest",
@@ -134,6 +156,8 @@ class SchemaRegistryTests(unittest.TestCase):
             "review_label",
             "review_manifest",
             "reviewed_dpo",
+            "reviewed_action_sft",
+            "reviewed_contract_preference",
             "reviewed_gate",
             "reviewed_label",
             "reviewed_manifest",
@@ -149,7 +173,9 @@ class SchemaRegistryTests(unittest.TestCase):
             "rl_reward",
             "rl_reward_model",
             "rl_sft",
+            "rl_action_sft",
             "rl_step_reward",
+            "branch_replay_dataset",
             "rubric_spec",
             "run_digest",
             "run_suite",
@@ -165,6 +191,12 @@ class SchemaRegistryTests(unittest.TestCase):
             "serving_lifecycle_run",
             "serving_profile",
             "serving_runtime_preflight",
+            "self_improving_agent_dataset",
+            "self_improving_agent_episode",
+            "self_improving_agent_eval_results",
+            "self_improving_agent_statistical_report",
+            "self_improving_agent_training_result",
+            "self_improving_contamination_audit",
             "state_diff",
             "state_snapshot",
             "state_validator_assertions",
@@ -176,6 +208,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "task_completion",
             "trace",
             "trace_observability",
+            "trajectory_v2",
             "trainer_archive",
             "trainer_archive_check",
             "trainer_consumer_plan",
@@ -264,6 +297,23 @@ class SchemaRegistryTests(unittest.TestCase):
             with self.subTest(schema_name=schema_name):
                 result = check_schema_jsonl_file(path, schema_name)
                 self.assertTrue(result["passed"], result["errors"])
+
+    def test_reviewed_preference_contract_fingerprint_is_required(self):
+        for schema_name, path in (
+            (
+                "reviewed_preference",
+                ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_preferences.jsonl",
+            ),
+            (
+                "reviewed_dpo",
+                ROOT / "examples" / "model_grader" / "reviewed" / "reviewed_dpo.jsonl",
+            ),
+        ):
+            with self.subTest(schema_name=schema_name):
+                row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+                row.pop("task_contract_fingerprint")
+                result = check_schema_contract(row, name_or_id=schema_name)
+                self.assertFalse(result["passed"])
 
     def test_promotion_policy_schema_accepts_demo_policy(self):
         result = check_schema_file(ROOT / "examples" / "promotion_policy.demo.json", "promotion_policy")

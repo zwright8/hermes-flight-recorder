@@ -1,0 +1,188 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_eval_observation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One identity-bound, repeat- and seed-specific observation from an agentic held-out evaluation pool.",
+  "properties": {
+    "arm": { "enum": ["baseline", "trace_only", "flightrecorder"], "type": "string" },
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+    "case_count": { "minimum": 0, "type": "integer" },
+    "cases": { "items": { "$ref": "#/$defs/case" }, "type": "array" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "decoding": { "$ref": "#/$defs/decoding" },
+    "execution_attestation": { "$ref": "#/$defs/execution_attestation" },
+    "identity": { "$ref": "#/$defs/identity_projection" },
+    "passed": { "type": "boolean" },
+    "pool": { "$ref": "#/$defs/pool" },
+    "readiness": { "enum": ["ready_for_paired_comparison", "blocked"], "type": "string" },
+    "repeat_index": { "minimum": 0, "type": "integer" },
+    "scenario_set": { "$ref": "#/$defs/scenario_set" },
+    "schema_version": { "const": "hfr.agentic_eval_observation.v1" },
+    "seed": { "type": "integer" },
+    "source_artifacts": { "$ref": "#/$defs/source_artifacts" }
+  },
+  "required": [
+    "schema_version", "created_at", "arm", "repeat_index", "seed", "decoding", "pool",
+    "identity", "scenario_set", "execution_attestation", "case_count", "cases", "source_artifacts", "passed", "readiness",
+    "blocking_reasons"
+  ],
+  "title": "Hermes Flight Recorder Agentic Eval Observation",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["id", "sha256"],
+      "type": "object"
+    },
+    "artifact_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "public_safe": { "type": "boolean" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version", "public_safe"],
+      "type": "object"
+    },
+    "case": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_usd": { "minimum": 0, "type": ["number", "null"] },
+        "critical_failures": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "latency_seconds": { "minimum": 0, "type": ["number", "null"] },
+        "passed": { "type": "boolean" },
+        "risk_tier": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scenario_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "score": { "type": "number" },
+        "task_family": { "minLength": 1, "type": "string" },
+        "tool_schema_valid": { "type": "boolean" }
+      },
+      "required": [
+        "scenario_id", "scenario_sha256", "task_family", "risk_tier", "passed", "score",
+        "critical_failures", "tool_schema_valid", "cost_usd", "latency_seconds"
+      ],
+      "type": "object"
+    },
+    "decoding": {
+      "additionalProperties": false,
+      "properties": {
+        "config_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "deterministic": { "type": "boolean" },
+        "max_tokens": { "minimum": 1, "type": "integer" },
+        "temperature": { "minimum": 0, "type": "number" },
+        "top_p": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" }
+      },
+      "required": ["temperature", "top_p", "max_tokens", "deterministic", "config_sha256"],
+      "type": "object"
+    },
+    "identity_projection": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            { "$ref": "#/$defs/revisioned_artifact" },
+            { "type": "null" }
+          ]
+        },
+        "arm": { "enum": ["baseline", "trace_only", "flightrecorder"], "type": "string" },
+        "environment": { "$ref": "#/$defs/artifact" },
+        "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "model": { "$ref": "#/$defs/revisioned_artifact" },
+        "projection_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "runtime": { "$ref": "#/$defs/revisioned_artifact" },
+        "schema_version": { "const": "hfr.eval_arm_identity.v1" },
+        "tools": { "$ref": "#/$defs/artifact" }
+      },
+      "required": [
+        "schema_version", "arm", "model", "adapter", "runtime", "tools", "environment",
+        "manifest_sha256", "projection_sha256"
+      ],
+      "type": "object"
+    },
+    "execution_attestation": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_attested": { "type": "boolean" },
+        "endpoint_base_url": { "minLength": 1, "type": "string" },
+        "matching_request_count": { "minimum": 0, "type": "integer" },
+        "observed_models": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+        "request_config_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "request_count": { "minimum": 0, "type": "integer" },
+        "serving_profile_sha256": {
+          "anyOf": [
+            { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": [
+        "request_count", "matching_request_count", "request_config_sha256", "observed_models",
+        "endpoint_base_url", "adapter_attested", "serving_profile_sha256"
+      ],
+      "type": "object"
+    },
+    "pool": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "risk_tier": { "minLength": 1, "type": "string" },
+        "type": { "enum": ["frozen", "rolling", "adversarial"], "type": "string" }
+      },
+      "required": ["type", "id", "risk_tier"],
+      "type": "object"
+    },
+    "revisioned_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "revision": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["id", "revision", "sha256"],
+      "type": "object"
+    },
+    "scenario_set": {
+      "additionalProperties": false,
+      "properties": {
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "scenario_fingerprints": {
+          "additionalProperties": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "type": "object"
+        },
+        "scenario_ids": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+        "scenario_set_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["scenario_count", "scenario_ids", "scenario_fingerprints", "scenario_set_sha256"],
+      "type": "object"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "arm_identity": { "$ref": "#/$defs/artifact_ref" },
+        "evaluation_summary": { "$ref": "#/$defs/artifact_ref" },
+        "request_attestation": {
+          "anyOf": [
+            { "$ref": "#/$defs/artifact_ref" },
+            { "type": "null" }
+          ]
+        },
+        "serving_profile": {
+          "anyOf": [
+            { "$ref": "#/$defs/artifact_ref" },
+            { "type": "null" }
+          ]
+        },
+        "suite_summary": { "$ref": "#/$defs/artifact_ref" }
+      },
+      "required": ["arm_identity", "evaluation_summary", "suite_summary", "request_attestation", "serving_profile"],
+      "type": "object"
+    }
+  }
+}

@@ -13,6 +13,7 @@
           "preferences",
           "failure_modes",
           "sft",
+          "action_sft",
           "dpo",
           "reward_model"
         ]
@@ -112,6 +113,10 @@
           "type": "integer"
         },
         "sft": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "action_sft": {
           "minimum": 0,
           "type": "integer"
         },

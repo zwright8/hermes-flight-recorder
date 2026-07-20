@@ -6,9 +6,12 @@
   "properties": {
     "accepted_evidence_refs": {"items": {}, "type": "array"},
     "corrected_score": {"maximum": 100, "minimum": 0, "type": ["integer", "null"]},
+    "environment": {"type": "object"},
     "episode_id": {"minLength": 1, "type": "string"},
     "human_label": {"$ref": "#/$defs/label"},
+    "messages": {"items": {"type": "object"}, "type": "array"},
     "notes": {"type": "string"},
+    "policy": {"type": "object"},
     "prompt": {"type": "string"},
     "rejected_evidence_refs": {"items": {}, "type": "array"},
     "response": {"type": "string"},
@@ -19,6 +22,7 @@
     "reviewer_confidence": {"$ref": "#/$defs/confidence"},
     "reward": {"maximum": 1, "minimum": 0, "type": "number"},
     "scenario_id": {"minLength": 1, "type": "string"},
+    "scenario_contract": {"type": "object"},
     "scenario_title": {"type": "string"},
     "schema_version": {"const": "hfr.reviewed.label.v1"},
     "score": {"maximum": 100, "minimum": 0, "type": "integer"},
@@ -27,7 +31,10 @@
     "source_label_file": {"minLength": 1, "type": "string"},
     "source_label_sha256": {"$ref": "#/$defs/sha256"},
     "suggested_human_label": {"oneOf": [{"$ref": "#/$defs/label"}, {"type": "null"}]},
-    "task_family": {"minLength": 1, "type": "string"}
+    "task_family": {"minLength": 1, "type": "string"},
+    "task_contract_fingerprint": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"const": ""}]},
+    "tool_schema_provenance": {"minLength": 1, "type": "string"},
+    "tools": {"items": {"type": "object"}, "type": "array"}
   },
   "required": ["schema_version", "review_item_id", "review_item_sha256", "episode_id", "scenario_id", "scenario_title", "task_family", "prompt", "response", "human_label", "suggested_human_label", "corrected_score", "score", "reward", "reviewer", "reviewer_confidence", "reviewed_at", "notes", "accepted_evidence_refs", "rejected_evidence_refs", "source_label_file", "source_label_sha256", "source_artifacts", "scorecard"],
   "title": "Hermes Flight Recorder Reviewed Label",

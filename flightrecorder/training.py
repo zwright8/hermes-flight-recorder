@@ -29,6 +29,7 @@ RL_PREFERENCE_SCHEMA_VERSION = "hfr.rl.preference.v1"
 RL_FAILURE_MODE_SCHEMA_VERSION = "hfr.rl.failure_mode.v1"
 RL_CURRICULUM_SCHEMA_VERSION = "hfr.rl.curriculum.v1"
 RL_SFT_SCHEMA_VERSION = "hfr.rl.sft.v1"
+RL_ACTION_SFT_SCHEMA_VERSION = "hfr.rl.action_sft.v1"
 RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
 RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
 RL_DATASET_METRICS_SCHEMA_VERSION = "hfr.rl.dataset_metrics.v1"
@@ -45,7 +46,17 @@ REWARD_SCALES = {"score", "binary", "signed"}
 DATASET_SPLIT_NAMES = ("train", "validation", "test")
 DATASET_SPLIT_RATIOS = {"train": 0.8, "validation": 0.1, "test": 0.1}
 DATASET_SPLIT_SEED = "hfr.dataset_split.v1"
-DATASET_SPLIT_ARTIFACTS = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
+DATASET_SPLIT_ARTIFACTS = (
+    "episodes",
+    "rewards",
+    "step_rewards",
+    "preferences",
+    "failure_modes",
+    "sft",
+    "action_sft",
+    "dpo",
+    "reward_model",
+)
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 UNREDACTED_CREDENTIAL_LITERAL_RE = re.compile(
@@ -73,6 +84,7 @@ class RunRecord:
     lineage_path: Path | None = None
     lineage: dict[str, Any] | None = None
     state_diff: dict[str, Any] | None = None
+    trajectory_v2: dict[str, Any] | None = None
 
 
 def export_rl_dataset(
@@ -107,6 +119,7 @@ def export_rl_dataset(
     failure_modes = [_failure_mode_record(record, rule, reward_scale) for record in records for rule in _failed_rules(record.scorecard)]
     curriculum = _curriculum_record(episodes, failure_modes)
     sft = _sft_records(episodes)
+    action_sft = _action_sft_records(episodes)
     dpo = _dpo_records(preferences)
     reward_model = _reward_model_records(episodes)
     rows_by_artifact = {
@@ -116,6 +129,7 @@ def export_rl_dataset(
         "preferences": preferences,
         "failure_modes": failure_modes,
         "sft": sft,
+        "action_sft": action_sft,
         "dpo": dpo,
         "reward_model": reward_model,
     }
@@ -127,8 +141,8 @@ def export_rl_dataset(
         raise TrainingExportError(
             "Training export contains unredacted secret-like values; redact traces or metadata before export."
         )
-    label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model)
-    trainer_views = _trainer_views(sft, dpo, reward_model, step_rewards, curriculum)
+    label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model, action_sft)
+    trainer_views = _trainer_views(sft, action_sft, dpo, reward_model, step_rewards, curriculum)
     dataset_metrics = _dataset_metrics(
         episodes,
         rewards,
@@ -136,6 +150,7 @@ def export_rl_dataset(
         preferences,
         failure_modes,
         sft,
+        action_sft,
         dpo,
         reward_model,
         dataset_splits,
@@ -154,6 +169,7 @@ def export_rl_dataset(
         "failure_modes": target / "failure_modes.jsonl",
         "curriculum": target / "curriculum.json",
         "sft": target / "sft.jsonl",
+        "action_sft": target / "action_sft.jsonl",
         "dpo": target / "dpo.jsonl",
         "reward_model": target / "reward_model.jsonl",
         "dataset_metrics": target / "dataset_metrics.json",
@@ -173,6 +189,7 @@ def export_rl_dataset(
     _write_jsonl(paths["failure_modes"], failure_modes)
     _write_json(paths["curriculum"], curriculum)
     _write_jsonl(paths["sft"], sft)
+    _write_jsonl(paths["action_sft"], action_sft)
     _write_jsonl(paths["dpo"], dpo)
     _write_jsonl(paths["reward_model"], reward_model)
     _write_json(paths["dataset_metrics"], dataset_metrics)
@@ -203,6 +220,7 @@ def export_rl_dataset(
         "preference_count": len(preferences),
         "failure_mode_count": len(failure_modes),
         "sft_count": len(sft),
+        "action_sft_count": len(action_sft),
         "dpo_count": len(dpo),
         "reward_model_count": len(reward_model),
         "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
@@ -220,7 +238,7 @@ def export_rl_dataset(
             "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
             "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
-            "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
+            "sft.jsonl, action_sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "trainer_views maps supported training modes to root and split artifacts so launch tooling does not infer mode support from filenames.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
             "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
@@ -404,10 +422,12 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
         score_path = run_dir / "scorecard.json"
         lineage_path = run_dir / "artifact_lineage.json"
         state_diff_path = run_dir / "state_diff.json"
+        trajectory_v2_path = run_dir / "trajectory_v2.json"
         _reject_symlinked_evidence_file(trace_path, "normalized_trace.json")
         _reject_symlinked_evidence_file(score_path, "scorecard.json")
         _reject_symlinked_evidence_file(lineage_path, "artifact_lineage.json")
         _reject_symlinked_evidence_file(state_diff_path, "state_diff.json")
+        _reject_symlinked_evidence_file(trajectory_v2_path, "trajectory_v2.json")
         if not trace_path.exists() or not score_path.exists():
             continue
         _require_evidence_file(trace_path, "normalized_trace.json")
@@ -429,6 +449,21 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
             if not isinstance(raw_state_diff, dict):
                 raise TrainingExportError(f"Run {run_dir} state_diff.json must contain a JSON object")
             state_diff = raw_state_diff
+        trajectory_v2: dict[str, Any] | None = None
+        if trajectory_v2_path.exists():
+            _require_evidence_file(trajectory_v2_path, "trajectory_v2.json")
+            raw_trajectory_v2 = _read_json(trajectory_v2_path)
+            if not isinstance(raw_trajectory_v2, dict):
+                raise TrainingExportError(f"Run {run_dir} trajectory_v2.json must contain a JSON object")
+            from .trajectory_v2 import check_trajectory_v2
+
+            trajectory_status = check_trajectory_v2(raw_trajectory_v2)
+            if trajectory_status.get("passed") is not True:
+                raise TrainingExportError(
+                    f"Run {run_dir} trajectory_v2.json is invalid: "
+                    + "; ".join(str(value) for value in trajectory_status.get("errors", []))
+                )
+            trajectory_v2 = raw_trajectory_v2
         records.append(
             RunRecord(
                 run_id=run_dir.name,
@@ -438,6 +473,7 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
                 lineage_path=lineage_path if lineage_path.exists() else None,
                 lineage=lineage,
                 state_diff=state_diff,
+                trajectory_v2=trajectory_v2,
             )
         )
 
@@ -530,6 +566,9 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     }
     if record.lineage_path is not None:
         episode["source_lineage"] = _display_path(record.lineage_path, preserve_paths)
+    if record.trajectory_v2 is not None:
+        episode["trajectory_v2"] = record.trajectory_v2
+        episode["governance"] = record.trajectory_v2.get("governance", {})
     return episode
 
 
@@ -704,11 +743,13 @@ def _preference_records(
     max_pairs_per_family: int,
 ) -> list[dict[str, Any]]:
     preferences: list[dict[str, Any]] = []
-    by_family: dict[str, list[dict[str, Any]]] = {}
+    by_family_and_prompt: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for episode in episodes:
-        by_family.setdefault(str(episode["task_family"]), []).append(episode)
+        family = str(episode["task_family"])
+        prompt_fingerprint = _canonical_sha256(str(episode.get("prompt") or ""))
+        by_family_and_prompt.setdefault((family, prompt_fingerprint), []).append(episode)
 
-    for family, family_episodes in sorted(by_family.items()):
+    for (family, _prompt_fingerprint), family_episodes in sorted(by_family_and_prompt.items()):
         pairs_for_family = 0
         ordered = sorted(
             family_episodes,
@@ -973,6 +1014,7 @@ def build_label_provenance_summary(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     positive_episode_ids = [
         str(episode.get("episode_id") or "")
@@ -985,6 +1027,18 @@ def build_label_provenance_summary(
         if isinstance(episode.get("episode_id"), str) and positive_label_eligible(episode)
     ]
     excluded = sorted(set(positive_episode_ids) - set(eligible_positive_episode_ids))
+    trainer_view_counts = {
+        "sft": len(sft),
+        "dpo": len(dpo),
+        "reward_model": len(reward_model),
+    }
+    if action_sft is not None:
+        trainer_view_counts["action_sft"] = len(action_sft)
+    positive_label_note = (
+        "SFT, action-SFT, DPO chosen rows, and positive reward-model rows exclude final-answer-only success claims."
+        if action_sft is not None
+        else "SFT, DPO chosen rows, and positive reward-model rows exclude final-answer-only success claims."
+    )
     return {
         "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
         "policy": "Positive trainer labels require scorecard pass plus configured task-completion evidence.",
@@ -992,14 +1046,10 @@ def build_label_provenance_summary(
         "eligible_positive_episode_count": len(eligible_positive_episode_ids),
         "final_answer_only_excluded_count": len(excluded),
         "final_answer_only_excluded_episode_ids": excluded,
-        "trainer_view_counts": {
-            "sft": len(sft),
-            "dpo": len(dpo),
-            "reward_model": len(reward_model),
-        },
+        "trainer_view_counts": trainer_view_counts,
         "notes": [
             "Canonical episodes remain exportable even when they are not eligible for positive training labels.",
-            "SFT, DPO chosen rows, and positive reward-model rows exclude final-answer-only success claims.",
+            positive_label_note,
         ],
     }
 
@@ -1038,6 +1088,250 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+def _action_sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode in episodes:
+        response = str(episode.get("final_answer") or "")
+        if not positive_label_eligible(episode) or not response:
+            continue
+        trajectory_v2 = episode.get("trajectory_v2") if isinstance(episode.get("trajectory_v2"), dict) else None
+        action_training = trajectory_v2.get("action_training") if isinstance(trajectory_v2, dict) else {}
+        if not isinstance(action_training, dict) or action_training.get("eligible") is not True:
+            continue
+        messages = _trajectory_v2_training_messages(trajectory_v2, response)
+        events = trajectory_v2.get("events") if isinstance(trajectory_v2.get("events"), list) else []
+        tool_calls = [
+            event
+            for event in events
+            if isinstance(event, dict) and event.get("type") == "tool_call" and str(event.get("tool_name") or "")
+        ]
+        tool_results = [event for event in events if isinstance(event, dict) and event.get("type") == "tool_result"]
+        assistant_actions = [message for message in messages if message.get("role") == "assistant"]
+        called_tool_names = {str(event.get("tool_name")) for event in tool_calls}
+        recorded_tools = [
+            tool.get("definition")
+            for tool in trajectory_v2.get("tools", [])
+            if isinstance(tool, dict)
+            and tool.get("schema_provenance") == "recorded_exact"
+            and str(tool.get("name") or "") in called_tool_names
+            and isinstance(tool.get("definition"), dict)
+        ]
+        if len(recorded_tools) != len(called_tool_names):
+            continue
+        outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+        rows.append(
+            {
+                "schema_version": RL_ACTION_SFT_SCHEMA_VERSION,
+                "sample_id": str(episode.get("episode_id") or ""),
+                "episode_id": str(episode.get("episode_id") or ""),
+                "scenario_id": str(episode.get("scenario_id") or ""),
+                "task_family": str(episode.get("task_family") or "unknown"),
+                "prompt": str(episode.get("prompt") or ""),
+                "response": response,
+                "messages": messages,
+                "tools": recorded_tools,
+                "tool_schema_provenance": "recorded_exact",
+                "trajectory_v2": trajectory_v2,
+                "trajectory_v2_sha256": _canonical_sha256(trajectory_v2),
+                "governance": trajectory_v2.get("governance", {}),
+                "action_count": len(assistant_actions),
+                "tool_call_count": len(tool_calls),
+                "tool_result_count": len(tool_results),
+                "score": _score_value(outcome.get("score")),
+                "reward": _numeric_value(outcome.get("reward")),
+                "quality_gate": "passed_scorecard_and_task_completion",
+                "task_completion_status": str(task.get("status") or "not_applicable"),
+                "task_completion_passed": bool(task.get("passed", True)),
+                "state_changed": bool((episode.get("state_diff") or {}).get("changed", False)),
+                "state_change_count": _int_value((episode.get("state_diff") or {}).get("change_count")),
+                "label_provenance": _label_provenance(episode, "action_sft_positive"),
+                "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+                "source_fingerprints": episode.get("source_fingerprints", {}),
+                "source_artifact": "episodes.jsonl",
+            }
+        )
+    return rows
+
+
+def _trajectory_v2_training_messages(trajectory: dict[str, Any], response: str) -> list[dict[str, Any]]:
+    """Project observable v2 events to native chat messages without inference."""
+
+    messages: list[dict[str, Any]] = []
+    for event in trajectory.get("events", []):
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "")
+        role = event.get("role")
+        content = str(event.get("content") or "")
+        if event_type == "tool_call":
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": [
+                        {
+                            "id": str(event.get("tool_call_id") or ""),
+                            "type": "function",
+                            "function": {
+                                "name": str(event.get("tool_name") or ""),
+                                "arguments": json.dumps(
+                                    event.get("arguments") if isinstance(event.get("arguments"), dict) else {},
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ],
+                }
+            )
+        elif event_type == "tool_result":
+            result = event.get("result")
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": result if isinstance(result, str) else json.dumps(result, sort_keys=True, ensure_ascii=False),
+                    "tool_call_id": str(event.get("tool_call_id") or ""),
+                    "name": str(event.get("tool_name") or ""),
+                }
+            )
+        elif role in {"system", "developer", "user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+    if not messages or messages[-1].get("role") != "assistant" or messages[-1].get("content") != response:
+        messages.append({"role": "assistant", "content": response})
+    return messages
+
+
+def _agentic_messages(prompt: str, response: str, events: list[Any]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    pending_call_ids: dict[str, list[str]] = {}
+    known_call_ids: set[str] = set()
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "")
+        text = str(event.get("text") or event.get("content") or "")
+        if event_type == "user_message" and text:
+            messages.append({"role": "user", "content": text})
+        elif event_type == "assistant_message" and text:
+            messages.append({"role": "assistant", "content": text})
+        elif event_type == "tool_call":
+            tool_name = str(event.get("tool_name") or "")
+            if not tool_name:
+                continue
+            call_id = str(event.get("tool_call_id") or f"call-{len(messages)}")
+            known_call_ids.add(call_id)
+            pending_call_ids.setdefault(tool_name, []).append(call_id)
+            arguments = event.get("args") if isinstance(event.get("args"), dict) else {}
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "arguments": json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+                            },
+                        }
+                    ],
+                }
+            )
+        elif event_type == "tool_result":
+            tool_name = str(event.get("tool_name") or "")
+            call_id = str(event.get("tool_call_id") or "")
+            matching_pending = pending_call_ids.get(tool_name, [])
+            if call_id not in known_call_ids and matching_pending:
+                call_id = matching_pending[0]
+            if call_id in matching_pending:
+                matching_pending.remove(call_id)
+            result = event.get("result") if "result" in event else text
+            content = result if isinstance(result, str) else json.dumps(result, sort_keys=True, ensure_ascii=False)
+            message = {"role": "tool", "content": content}
+            if call_id:
+                message["tool_call_id"] = call_id
+            if tool_name:
+                message["name"] = tool_name
+            messages.append(message)
+    if not messages or messages[0].get("role") != "user":
+        messages.insert(0, {"role": "user", "content": prompt})
+    if not any(message.get("role") == "user" for message in messages):
+        messages.insert(0, {"role": "user", "content": prompt})
+    if not messages or messages[-1].get("role") != "assistant" or messages[-1].get("content") != response:
+        messages.append({"role": "assistant", "content": response})
+    return messages
+
+
+def _inferred_tool_definitions(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    observations: dict[str, list[dict[str, Any]]] = {}
+    for event in tool_calls:
+        name = str(event.get("tool_name") or "")
+        if name:
+            observations.setdefault(name, []).append(event.get("args") if isinstance(event.get("args"), dict) else {})
+    definitions: list[dict[str, Any]] = []
+    for name in sorted(observations):
+        argument_rows = observations[name]
+        keys = sorted({key for row in argument_rows for key in row})
+        properties = {
+            key: _observed_json_schema([row[key] for row in argument_rows if key in row])
+            for key in keys
+        }
+        required = [key for key in keys if all(key in row for row in argument_rows)]
+        parameters: dict[str, Any] = {"type": "object", "properties": properties, "additionalProperties": True}
+        if required:
+            parameters["required"] = required
+        definitions.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": "Tool signature inferred from redacted arguments observed in this recorded trajectory.",
+                    "parameters": parameters,
+                },
+            }
+        )
+    return definitions
+
+
+def _observed_json_schema(values: list[Any]) -> dict[str, Any]:
+    types = sorted({_json_schema_type(value) for value in values})
+    if len(types) == 1:
+        schema: dict[str, Any] = {"type": types[0]}
+    else:
+        schema = {"type": types}
+    if types == ["object"]:
+        child_rows = [value for value in values if isinstance(value, dict)]
+        keys = sorted({key for row in child_rows for key in row})
+        schema["properties"] = {
+            key: _observed_json_schema([row[key] for row in child_rows if key in row])
+            for key in keys
+        }
+        schema["additionalProperties"] = True
+    elif types == ["array"]:
+        items = [item for value in values if isinstance(value, list) for item in value]
+        schema["items"] = _observed_json_schema(items) if items else {}
+    return schema
+
+
+def _json_schema_type(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    return "string"
+
+
 def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for preference in preferences:
@@ -1047,6 +1341,13 @@ def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
         chosen = str(chosen_view.get("final_answer") or "")
         rejected = str(rejected_view.get("final_answer") or "")
         preference_id = str(preference.get("preference_id") or "")
+        chosen_events = chosen_view.get("events") if isinstance(chosen_view.get("events"), list) else []
+        rejected_events = rejected_view.get("events") if isinstance(rejected_view.get("events"), list) else []
+        tool_calls = [
+            event
+            for event in chosen_events + rejected_events
+            if isinstance(event, dict) and event.get("type") == "tool_call" and event.get("tool_name")
+        ]
         rows.append(
             {
                 "schema_version": RL_DPO_SCHEMA_VERSION,
@@ -1056,8 +1357,10 @@ def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "prompt": prompt,
                 "chosen": chosen,
                 "rejected": rejected,
-                "chosen_messages": _messages(prompt, chosen),
-                "rejected_messages": _messages(prompt, rejected),
+                "chosen_messages": _agentic_messages(prompt, chosen, chosen_events),
+                "rejected_messages": _agentic_messages(prompt, rejected, rejected_events),
+                "tools": _inferred_tool_definitions(tool_calls),
+                "trajectory_format": "native_tool_messages",
                 "chosen_episode_id": str(preference.get("chosen_episode_id") or ""),
                 "rejected_episode_id": str(preference.get("rejected_episode_id") or ""),
                 "chosen_score": _score_value(preference.get("chosen_score")),
@@ -1446,6 +1749,7 @@ def _dataset_metrics(
     preferences: list[dict[str, Any]],
     failure_modes: list[dict[str, Any]],
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_splits: dict[str, Any],
@@ -1466,6 +1770,7 @@ def _dataset_metrics(
         "preferences": len(preferences),
         "failure_modes": len(failure_modes),
         "sft": len(sft),
+        "action_sft": len(action_sft),
         "dpo": len(dpo),
         "reward_model": len(reward_model),
     }
@@ -1484,7 +1789,9 @@ def _dataset_metrics(
         "min_reward": min(rewards_values) if rewards_values else None,
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
-        "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model),
+        "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(
+            sft, dpo, reward_model, action_sft
+        ),
         "trainer_views": trainer_views,
         "task_completion": _task_completion_metrics(episodes),
         "trace_signal": _trace_signal_metrics(episodes),
@@ -1519,6 +1826,7 @@ def _dataset_metrics(
 
 def _trainer_views(
     sft: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     step_rewards: list[dict[str, Any]],
@@ -1540,15 +1848,15 @@ def _trainer_views(
         {
             "view_id": "action_sft",
             "training_modes": ["action_sft"],
-            "artifact": "sft",
-            "artifact_path": "sft.jsonl",
+            "artifact": "action_sft",
+            "artifact_path": "action_sft.jsonl",
             "artifact_format": "jsonl",
-            "schema_version": RL_SFT_SCHEMA_VERSION,
-            "row_count": len(sft),
+            "schema_version": RL_ACTION_SFT_SCHEMA_VERSION,
+            "row_count": len(action_sft),
             "source_artifacts": ["episodes.jsonl"],
             "label_policy": "scorecard_pass_plus_configured_task_completion",
             "notes": [
-                "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
+                "Rows preserve assistant tool_calls, tool-result messages, call IDs, ordering, and inferred tool signatures."
             ],
         },
         {
@@ -1624,7 +1932,7 @@ def _trainer_views(
         "views": views,
         "notes": [
             "Trainer views are selectors over canonical export artifacts.",
-            "Alias modes such as action_sft and process_reward do not duplicate rows.",
+            "Action SFT is a dedicated native tool-trajectory view; process_reward remains an alias over step rewards.",
             "Use split_paths when training requires train/validation/test isolation.",
         ],
     }
@@ -2150,15 +2458,19 @@ def _trainer_view_source_fingerprint_coverage(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    action_sft: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     sft_verified = sum(1 for row in sft if _row_source_fingerprints_verified(row))
+    action_sft_rows = action_sft or []
+    action_sft_verified = sum(1 for row in action_sft_rows if _row_source_fingerprints_verified(row))
     dpo_verified = sum(1 for row in dpo if _dpo_source_fingerprints_verified(row))
     reward_model_verified = sum(1 for row in reward_model if _row_source_fingerprints_verified(row))
-    row_count = len(sft) + len(dpo) + len(reward_model)
-    fully_verified = sft_verified + dpo_verified + reward_model_verified
+    row_count = len(sft) + len(action_sft_rows) + len(dpo) + len(reward_model)
+    fully_verified = sft_verified + action_sft_verified + dpo_verified + reward_model_verified
     return {
         "rows": row_count,
         "sft_rows": len(sft),
+        "action_sft_rows": len(action_sft_rows),
         "dpo_rows": len(dpo),
         "reward_model_rows": len(reward_model),
         "fully_verified": fully_verified,
@@ -2696,6 +3008,7 @@ def _dataset_registry_record(
         "counts": {
             "episodes": len(episodes),
             "sft": int(manifest.get("sft_count", 0) or 0),
+            "action_sft": int(manifest.get("action_sft_count", 0) or 0),
             "dpo": int(manifest.get("dpo_count", 0) or 0),
             "reward_model": int(manifest.get("reward_model_count", 0) or 0),
         },

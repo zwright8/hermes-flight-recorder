@@ -11,6 +11,7 @@ from typing import Any
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
+from .intervention_router import cluster_from_improvement_item, route_failure_cluster
 from .repair import REPAIR_QUEUE_SCHEMA_VERSION
 from .training import RL_CURRICULUM_SCHEMA_VERSION
 
@@ -72,6 +73,10 @@ def build_improvement_plan(
     run_digests = _load_run_digests(Path(runs_dir), preserve_paths) if runs_dir is not None else {}
     raw_items = _build_raw_items(bundle, repair_queue, curriculum, run_digests, eval_summary)
     work_items = _finalize_work_items(raw_items)
+    for item in work_items:
+        item["intervention_route"] = route_failure_cluster(
+            cluster_from_improvement_item(item)
+        )
     metrics = _metrics(work_items)
     readiness = "blocked" if bundle.get("readiness") == "blocked" else "ready"
     output_path = Path(out_path)

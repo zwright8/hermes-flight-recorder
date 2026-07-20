@@ -8,6 +8,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .trajectory_v2 import (
+    TRAJECTORY_V2_SCHEMA_VERSION,
+    trajectory_v2_context_from_path,
+    trajectory_v2_from_trace,
+)
+
 TRACE_SCHEMA_VERSION = "hfr.trace.v1"
 OPENCLAW_EVENT_SCHEMA_VERSION = "hfr.openclaw.event.v1"
 COVEN_EVENT_SCHEMA_VERSION = "hfr.coven.event.v1"
@@ -83,6 +89,34 @@ def normalize_trace(path: str | Path, fmt: str = "auto") -> dict[str, Any]:
     raise AdapterError(f"Unsupported trace format: {selected}")
 
 
+def normalize_trajectory_v2(
+    path: str | Path,
+    fmt: str = "auto",
+    *,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Normalize any supported observable trace into ``hfr.trajectory.v2``."""
+
+    trace_path = Path(path)
+    try:
+        complete = json.loads(trace_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        complete = None
+    if isinstance(complete, dict) and complete.get("schema_version") == TRAJECTORY_V2_SCHEMA_VERSION:
+        return complete
+    selected = detect_format(trace_path) if fmt == "auto" else fmt
+    normalized = normalize_trace(trace_path, selected)
+    extracted = trajectory_v2_context_from_path(trace_path)
+    if context:
+        extracted.update(context)
+    return trajectory_v2_from_trace(
+        normalized,
+        source_path=trace_path,
+        source_format=selected,
+        context=extracted,
+    )
+
+
 def detect_format(path: Path) -> str:
     """Best-effort trace format detection."""
     first = _first_json(path)
@@ -142,7 +176,15 @@ def normalize_trajectory_jsonl(path: Path) -> dict[str, Any]:
             role = turn.get("from")
             value = str(turn.get("value") or "")
             if role == "human":
-                events.append(_event("user_message", current_session, text=value, order=len(events)))
+                events.append(
+                    _event(
+                        "user_message",
+                        current_session,
+                        text=value,
+                        order=len(events),
+                        **_observable_event_kwargs(turn),
+                    )
+                )
             elif role == "gpt":
                 for call in _extract_json_blocks(value, TOOL_CALL_RE):
                     events.append(
@@ -152,14 +194,24 @@ def normalize_trajectory_jsonl(path: Path) -> dict[str, Any]:
                             tool_name=str(call.get("name") or "unknown"),
                             args=call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
                             status="requested",
+                            tool_call_id=call.get("tool_call_id") or call.get("id"),
                             text="",
                             order=len(events),
+                            **_observable_event_kwargs(turn),
                         )
                     )
                 clean = _strip_assistant_markup(value).strip()
                 if clean:
                     final_answer = clean
-                    events.append(_event("assistant_message", current_session, text=clean, order=len(events)))
+                    events.append(
+                        _event(
+                            "assistant_message",
+                            current_session,
+                            text=clean,
+                            order=len(events),
+                            **_observable_event_kwargs(turn),
+                        )
+                    )
             elif role == "tool":
                 for response in _extract_json_blocks(value, TOOL_RESPONSE_RE):
                     content = response.get("content")
@@ -173,10 +225,29 @@ def normalize_trajectory_jsonl(path: Path) -> dict[str, Any]:
                             text=_stringify(content),
                             result=content,
                             order=len(events),
+                            **_observable_event_kwargs(turn),
                         )
                     )
             elif role == "system":
-                events.append(_event("system_message", current_session, text=value, order=len(events)))
+                events.append(
+                    _event(
+                        "system_message",
+                        current_session,
+                        text=value,
+                        order=len(events),
+                        **_observable_event_kwargs(turn),
+                    )
+                )
+            elif role == "developer":
+                events.append(
+                    _event(
+                        "developer_message",
+                        current_session,
+                        text=value,
+                        order=len(events),
+                        **_observable_event_kwargs(turn),
+                    )
+                )
 
     metadata: dict[str, Any] = {"completed": completed}
     if api_calls is not None:
@@ -674,6 +745,28 @@ def _event(event_type: str, session_id: str, **kwargs: Any) -> dict[str, Any]:
     }
     event.update(kwargs)
     return event
+
+
+def _observable_event_kwargs(source: dict[str, Any]) -> dict[str, Any]:
+    """Copy only observable timing/identity fields; never hidden reasoning."""
+
+    aliases = {
+        "event_id": ("event_id", "eventId"),
+        "span_id": ("span_id", "spanId"),
+        "parent_span_id": ("parent_span_id", "parentSpanId"),
+        "timestamp": ("timestamp", "created_at"),
+        "duration_ms": ("duration_ms", "latency_ms"),
+        "token_usage": ("token_usage", "usage"),
+        "cost_usd": ("cost_usd",),
+        "side_effect_status": ("side_effect_status",),
+    }
+    copied: dict[str, Any] = {}
+    for target, names in aliases.items():
+        for name in names:
+            if name in source and source[name] is not None:
+                copied[target] = source[name]
+                break
+    return copied
 
 
 def _subagent_event(event_type: str, payload: dict[str, Any], order: int) -> dict[str, Any]:

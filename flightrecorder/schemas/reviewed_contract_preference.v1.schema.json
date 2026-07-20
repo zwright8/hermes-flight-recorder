@@ -1,0 +1,28 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_contract_preference.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Chosen/rejected completions sharing one complete normalized task contract.",
+  "properties": {
+    "schema_version": {"const": "hfr.reviewed.contract_preference.v1"},
+    "preference_id": {"minLength": 1, "type": "string"},
+    "task_contract_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "task_family": {"type": "string"},
+    "prompt": {"type": "string"},
+    "tools": {"items": {"type": "object"}, "type": "array"},
+    "chosen_episode_id": {"minLength": 1, "type": "string"},
+    "rejected_episode_id": {"minLength": 1, "type": "string"},
+    "chosen": {},
+    "rejected": {},
+    "chosen_completion_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "rejected_completion_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "chosen_review_item_sha256": {"type": ["string", "null"]},
+    "rejected_review_item_sha256": {"type": ["string", "null"]},
+    "chosen_reviewer_confidence": {"type": ["string", "null"]},
+    "rejected_reviewer_confidence": {"type": ["string", "null"]},
+    "reason": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "preference_id", "task_contract_fingerprint", "task_family", "prompt", "tools", "chosen_episode_id", "rejected_episode_id", "chosen", "rejected", "chosen_completion_sha256", "rejected_completion_sha256", "reason"],
+  "title": "Hermes Flight Recorder Reviewed Contract Preference",
+  "type": "object"
+}

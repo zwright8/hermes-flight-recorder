@@ -1,0 +1,297 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trajectory.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Lossless observable agent trajectory with immutable runtime identities and action-trainability quarantine.",
+  "properties": {
+    "action_training": { "$ref": "#/$defs/actionTraining" },
+    "approvals": {
+      "items": { "$ref": "#/$defs/approval" },
+      "type": "array"
+    },
+    "chat_template": { "$ref": "#/$defs/chatTemplate" },
+    "environment": { "$ref": "#/$defs/fingerprintedIdentity" },
+    "events": {
+      "items": { "$ref": "#/$defs/event" },
+      "type": "array"
+    },
+    "final_answer": { "type": "string" },
+    "governance": { "$ref": "#/$defs/governance" },
+    "metadata": { "type": "object" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "model": { "$ref": "#/$defs/model" },
+    "policy": { "$ref": "#/$defs/fingerprintedIdentity" },
+    "root_session_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.trajectory.v2" },
+    "sessions": {
+      "items": { "$ref": "#/$defs/session" },
+      "minItems": 1,
+      "type": "array"
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "tokenizer": { "$ref": "#/$defs/tokenizer" },
+    "tools": {
+      "items": { "$ref": "#/$defs/tool" },
+      "type": "array"
+    },
+    "trajectory_id": {
+      "pattern": "^hfrtraj-[0-9a-f]{20}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "trajectory_id",
+    "root_session_id",
+    "source",
+    "model",
+    "tokenizer",
+    "chat_template",
+    "policy",
+    "environment",
+    "governance",
+    "tools",
+    "sessions",
+    "events",
+    "approvals",
+    "metrics",
+    "final_answer",
+    "metadata",
+    "action_training"
+  ],
+  "title": "Hermes Flight Recorder Trajectory v2",
+  "type": "object",
+  "$defs": {
+    "actionTraining": {
+      "additionalProperties": false,
+      "properties": {
+        "eligible": { "type": "boolean" },
+        "quarantine_reasons": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        }
+      },
+      "required": ["eligible", "quarantine_reasons"],
+      "type": "object"
+    },
+    "adapter": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "minLength": 1, "type": "string" },
+        "version": { "minLength": 1, "type": "string" }
+      },
+      "required": ["name", "version"],
+      "type": "object"
+    },
+    "approval": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_id": { "minLength": 1, "type": "string" },
+        "decided_by": { "minLength": 1, "type": "string" },
+        "decision": { "minLength": 1, "type": "string" },
+        "event_id": { "type": ["string", "null"] },
+        "request": { "type": "string" },
+        "session_id": { "minLength": 1, "type": "string" },
+        "timestamp": { "type": ["string", "null"] }
+      },
+      "required": ["approval_id", "session_id", "event_id", "request", "decision", "decided_by", "timestamp"],
+      "type": "object"
+    },
+    "chatTemplate": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "minLength": 1, "type": "string" },
+        "revision": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": ["name", "revision", "sha256"],
+      "type": "object"
+    },
+    "event": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": { "type": "object" },
+        "attributes": { "type": "object" },
+        "content": { "type": "string" },
+        "cost_usd": { "type": ["number", "null"] },
+        "duration_ms": { "type": ["number", "null"] },
+        "event_id": { "minLength": 1, "type": "string" },
+        "parent_session_id": { "type": ["string", "null"] },
+        "parent_span_id": { "type": ["string", "null"] },
+        "result": true,
+        "role": {
+          "enum": ["system", "developer", "user", "assistant", "tool", null]
+        },
+        "session_id": { "minLength": 1, "type": "string" },
+        "side_effect_status": {
+          "enum": ["none", "requested", "completed", "failed", "denied", "unknown"]
+        },
+        "source_order": { "type": "integer" },
+        "span_id": { "minLength": 1, "type": "string" },
+        "status": { "type": ["string", "null"] },
+        "timestamp": { "type": ["string", "null"] },
+        "token_usage": { "$ref": "#/$defs/tokenUsage" },
+        "tool_call_id": { "type": ["string", "null"] },
+        "tool_call_id_provenance": {
+          "enum": ["recorded", "generated", "inferred", "missing", "not_applicable"]
+        },
+        "tool_name": { "type": ["string", "null"] },
+        "type": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "event_id",
+        "span_id",
+        "parent_span_id",
+        "session_id",
+        "parent_session_id",
+        "type",
+        "role",
+        "content",
+        "timestamp",
+        "duration_ms",
+        "token_usage",
+        "cost_usd",
+        "status",
+        "side_effect_status",
+        "tool_name",
+        "tool_call_id",
+        "tool_call_id_provenance",
+        "arguments",
+        "result",
+        "source_order",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "fingerprintedIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "version": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "version", "sha256"],
+      "type": "object"
+    },
+    "governance": {
+      "additionalProperties": true,
+      "properties": {
+        "allowed_purposes": {
+          "items": { "minLength": 1, "type": "string" },
+          "minItems": 1,
+          "type": "array"
+        },
+        "consent_id": { "minLength": 1, "type": "string" },
+        "deletion_subject_ids": {
+          "items": { "minLength": 1, "type": "string" },
+          "minItems": 1,
+          "type": "array"
+        },
+        "jurisdiction": { "minLength": 1, "type": "string" },
+        "legal_basis": { "minLength": 1, "type": "string" },
+        "license": { "minLength": 1, "type": "string" },
+        "owner": { "minLength": 1, "type": "string" },
+        "provenance": { "minProperties": 1, "type": "object" },
+        "retention_expires_at": { "format": "date-time", "type": "string" },
+        "sensitivity": { "minLength": 1, "type": "string" },
+        "tenant": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "owner",
+        "tenant",
+        "legal_basis",
+        "allowed_purposes",
+        "sensitivity",
+        "jurisdiction",
+        "retention_expires_at",
+        "license",
+        "provenance",
+        "deletion_subject_ids"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_usd": { "type": ["number", "null"] },
+        "ended_at": { "type": ["string", "null"] },
+        "latency_ms": { "type": ["number", "null"] },
+        "started_at": { "type": ["string", "null"] },
+        "token_usage": { "$ref": "#/$defs/tokenUsage" }
+      },
+      "required": ["started_at", "ended_at", "latency_ms", "token_usage", "cost_usd"],
+      "type": "object"
+    },
+    "model": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "minLength": 1, "type": "string" },
+        "provider": { "minLength": 1, "type": "string" },
+        "revision": { "minLength": 1, "type": "string" }
+      },
+      "required": ["provider", "name", "revision"],
+      "type": "object"
+    },
+    "session": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "minLength": 1, "type": "string" },
+        "agent_role": { "minLength": 1, "type": "string" },
+        "parent_session_id": { "type": ["string", "null"] },
+        "session_id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["session_id", "parent_session_id", "agent_id", "agent_role"],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": { "$ref": "#/$defs/adapter" },
+        "format": { "minLength": 1, "type": "string" },
+        "payload_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["format", "payload_sha256", "size_bytes", "adapter"],
+      "type": "object"
+    },
+    "tokenUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "minimum": 0, "type": ["integer", "null"] },
+        "output_tokens": { "minimum": 0, "type": ["integer", "null"] },
+        "total_tokens": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["input_tokens", "output_tokens", "total_tokens"],
+      "type": "object"
+    },
+    "tokenizer": {
+      "additionalProperties": false,
+      "properties": {
+        "name": { "minLength": 1, "type": "string" },
+        "revision": { "minLength": 1, "type": "string" }
+      },
+      "required": ["name", "revision"],
+      "type": "object"
+    },
+    "tool": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": { "type": "object" },
+        "definition_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "name": { "minLength": 1, "type": "string" },
+        "schema_provenance": {
+          "enum": ["recorded_exact", "inferred_or_incomplete"]
+        },
+        "version": { "minLength": 1, "type": "string" }
+      },
+      "required": ["name", "version", "schema_provenance", "definition_sha256", "definition"],
+      "type": "object"
+    }
+  }
+}

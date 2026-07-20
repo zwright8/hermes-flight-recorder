@@ -157,9 +157,9 @@
     {
       "actual": {
         "flow_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
-        "flow_runtime_preflight_sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+        "flow_runtime_preflight_sha256": "d7ac9876a8fe38c4cd5fc9972b09e50f52306cc1a0b4617d0b9cdceb281ab813",
         "plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
-        "runtime_preflight_sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+        "runtime_preflight_sha256": "d7ac9876a8fe38c4cd5fc9972b09e50f52306cc1a0b4617d0b9cdceb281ab813",
         "status": "completed"
       },
       "expected": {
@@ -270,8 +270,8 @@
       "path": "agentic_training_flow.json",
       "regular_file": true,
       "schema_name": "agentic_training_flow",
-      "sha256": "db19a71e3b2143f864b7bf0c0b8807b7af3ec7fd5c8870b4027ed07604719adc",
-      "size_bytes": 13009
+      "sha256": "03b3d46781c21b5992cbeb937b6faa0e541c9ac8d29114855e0e7b16a8c3719d",
+      "size_bytes": 13002
     },
     "dataset": {
       "id": "synthetic-agentic-redacted-dataset",
@@ -300,7 +300,7 @@
       "path": "runtime_preflight/ready.json",
       "regular_file": true,
       "schema_name": "agentic_training_runtime_preflight",
-      "sha256": "7a35213e08334dc8b14b6f06bce2fc886cac58ce6bfcafe525a918acf55bfd2c",
+      "sha256": "d7ac9876a8fe38c4cd5fc9972b09e50f52306cc1a0b4617d0b9cdceb281ab813",
       "size_bytes": 8513
     }
   },

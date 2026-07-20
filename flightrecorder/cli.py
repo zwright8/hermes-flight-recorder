@@ -82,6 +82,12 @@ from .compare_gate import (
 )
 from .decision_gate import DecisionGateError, evaluate_decision_gate, reject_symlinked_decision_artifact_input
 from .dataset_curation import DatasetCurationReceiptError, build_dataset_curation_receipt, write_dataset_curation_receipt
+from .data_governance import (
+    DataGovernanceError,
+    apply_deletion_request,
+    build_contamination_report,
+    build_governance_receipt,
+)
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .governance import (
@@ -101,6 +107,21 @@ from .improvement_gate import (
 )
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
+from .intervention_router import InterventionRouterError, route_failure_cluster
+from .review_semantics import (
+    ReviewSemanticsError,
+    build_action_credit,
+    build_branch_replay_dataset,
+    build_contract_preferences,
+    curate_training_rows,
+)
+from .loop_controller import (
+    CommandControllerAdapter,
+    ControllerError,
+    InMemoryControllerAdapter,
+    build_controller_plan,
+    run_controller,
+)
 from .eval_summary import EvalSummaryError, build_eval_summary, render_eval_summary_markdown
 from .external_eval import (
     ExternalEvalPlanError,
@@ -221,6 +242,7 @@ from .state_validators import (
 )
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGateError, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
+from .trajectory_v2 import trajectory_v2_context_from_path, trajectory_v2_from_trace, write_trajectory_v2
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
 from .trainer_archive_check import TrainerArchiveCheckError, build_trainer_archive_check
 from .trainer_consumer_plan import (
@@ -257,6 +279,7 @@ TRACE_FORMAT_CHOICES = [
     "normalized_json",
 ]
 _OPTIONAL_RUN_ARTIFACTS = (
+    "trajectory_v2.json",
     "before_state_snapshot.json",
     "state_snapshot.json",
     "state_diff.json",
@@ -264,6 +287,7 @@ _OPTIONAL_RUN_ARTIFACTS = (
     "raw_trace.sensitive.json",
 )
 _OPTIONAL_RUN_ARTIFACT_RECORDS = {
+    "trajectory_v2": "trajectory_v2.json",
     "before_state_snapshot": "before_state_snapshot.json",
     "state_snapshot": "state_snapshot.json",
     "state_diff": "state_diff.json",
@@ -355,6 +379,10 @@ def main(argv: list[str] | None = None) -> int:
         ModelGraderError,
         RejectionSamplingGateError,
         DatasetCurationReceiptError,
+        DataGovernanceError,
+        InterventionRouterError,
+        ReviewSemanticsError,
+        ControllerError,
         AgenticTrainingFlowError,
         NextIterationScheduleError,
         ReplayError,
@@ -1882,6 +1910,156 @@ def cmd_cloud_training_plan(args: argparse.Namespace) -> int:
     )
     _emit_json_payload(plan, args.out)
     return 0 if plan["passed"] else 1
+
+
+def cmd_data_governance_check(args: argparse.Namespace) -> int:
+    records = _read_jsonl(Path(args.input))
+    receipt = build_governance_receipt(
+        records,
+        purpose=args.purpose,
+        now=args.now,
+        organization_entities=args.organization_entity,
+        policy=_read_json(Path(args.policy)) if args.policy else None,
+    )
+    _write_json(Path(args.out), receipt)
+    print(f"wrote {args.out}")
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_data_governance_contamination(args: argparse.Namespace) -> int:
+    rows = _read_jsonl(Path(args.input))
+    protected = _read_jsonl(Path(args.protected)) if args.protected else []
+    report = build_contamination_report(
+        rows,
+        protected_rows=protected,
+        similarity_threshold=args.similarity_threshold,
+    )
+    _write_json(Path(args.out), report)
+    print(f"wrote {args.out}")
+    return 0 if report["passed"] else 1
+
+
+def cmd_data_governance_delete(args: argparse.Namespace) -> int:
+    request = _read_json(Path(args.request))
+    receipt = apply_deletion_request(
+        deletion_subject_ids=request.get("deletion_subject_ids", []),
+        dataset_entries=request.get("dataset_entries", []),
+        model_entries=request.get("model_entries", []),
+        output_dir=args.out_dir,
+        request_id=str(request.get("request_id") or Path(args.request).stem),
+        erase_sources=request.get("erase_sources") is True,
+        created_at=request.get("created_at"),
+    )
+    print(f"wrote {Path(args.out_dir) / 'deletion_receipt.json'}")
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_intervention_route(args: argparse.Namespace) -> int:
+    route = route_failure_cluster(_read_json(Path(args.cluster)))
+    _write_json(Path(args.out), route)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_review_semantics_action_credit(args: argparse.Namespace) -> int:
+    credits = build_action_credit(_read_json(Path(args.trajectory)))
+    _write_jsonl(Path(args.out), credits)
+    print(f"wrote {args.out} rows={len(credits)}")
+    return 0
+
+
+def cmd_review_semantics_preferences(args: argparse.Namespace) -> int:
+    preferences = build_contract_preferences(_read_jsonl(Path(args.input)))
+    _write_jsonl(Path(args.out), preferences)
+    print(f"wrote {args.out} rows={len(preferences)}")
+    return 0
+
+
+def cmd_review_semantics_branch_replay(args: argparse.Namespace) -> int:
+    request = _read_json(Path(args.request))
+    result = build_branch_replay_dataset(
+        source_trajectory=request.get("source_trajectory", {}),
+        replay_point=request.get("replay_point", {}),
+        candidates=request.get("candidates", []),
+        verifier_results=request.get("verifier_results", []),
+        high_impact=request.get("high_impact") is True,
+        novel_behavior=request.get("novel_behavior") is True,
+        grader_disagreement=request.get("grader_disagreement") is True,
+        review_confidence_threshold=float(request.get("review_confidence_threshold", 0.8)),
+    )
+    _write_json(Path(args.out), result)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_review_semantics_curate(args: argparse.Namespace) -> int:
+    result = curate_training_rows(
+        _read_jsonl(Path(args.input)),
+        recipe=_read_json(Path(args.recipe)),
+    )
+    _write_json(Path(args.out), result)
+    print(f"wrote {args.out} selected={result['selected_count']} excluded={result['excluded_count']}")
+    return 0
+
+
+def cmd_agentic_loop_controller_plan(args: argparse.Namespace) -> int:
+    phase_overrides = {key: value for key, value in args.phase_config}
+    if not all(isinstance(value, dict) for value in phase_overrides.values()):
+        raise ControllerError("every --phase-config value must be a JSON object")
+    plan = build_controller_plan(
+        controller_id=args.controller_id,
+        artifact_dir=args.artifact_dir,
+        candidate_model=args.candidate_model,
+        champion_model=args.champion_model,
+        canary_percentages=args.canary_percentage,
+        budget={
+            "max_cost_usd": args.max_cost_usd,
+            "max_duration_seconds": args.max_duration_seconds,
+            "max_attempts": args.max_attempts,
+        },
+        deadline_at=args.deadline_at,
+        canary_guardrails={
+            "min_task_success_rate": args.min_task_success_rate,
+            "max_critical_failures": args.max_critical_failures,
+            "max_cost_delta": args.max_cost_delta,
+            "max_latency_delta": args.max_latency_delta,
+        },
+        max_retries=args.max_retries,
+        phase_overrides=phase_overrides,
+    )
+    _write_json(Path(args.out), plan)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_agentic_loop_execute(args: argparse.Namespace) -> int:
+    plan = _read_json(Path(args.plan))
+    approvals = dict(args.approval)
+    if args.approve_all:
+        approvals.update(
+            {
+                str(phase["id"]): str(plan.get("plan_fingerprint") or "")
+                for phase in plan.get("phases", [])
+                if isinstance(phase, dict) and phase.get("requires_approval") is True
+            }
+        )
+        approvals["rollback"] = str(plan.get("plan_fingerprint") or "")
+        approvals["post_rollback_smoke"] = str(plan.get("plan_fingerprint") or "")
+    if args.adapter == "command":
+        adapter = CommandControllerAdapter(allow_external=args.allow_external)
+    else:
+        outcomes = _read_json(Path(args.outcomes)) if args.outcomes else {}
+        adapter = InMemoryControllerAdapter(outcomes=outcomes)
+    state = run_controller(
+        plan,
+        state_path=args.state,
+        adapter=adapter,
+        approvals=approvals,
+        owner_id=args.owner_id,
+        max_steps=args.max_steps,
+    )
+    print(json.dumps({"status": state["status"], "state": args.state}, sort_keys=True))
+    return 0 if state["status"] in {"complete", "rolled_back"} else 1
 
 
 def cmd_cloud_training_launch(args: argparse.Namespace) -> int:
@@ -4087,6 +4265,103 @@ def _parser() -> argparse.ArgumentParser:
     external_eval_result.add_argument("--out", required=True, help="Write hfr.external_eval_result.v1 JSON")
     external_eval_result.set_defaults(func=cmd_external_eval_result)
 
+    data_governance = subparsers.add_parser(
+        "data-governance",
+        help="Check training authorization, contamination, and deletion lineage",
+    )
+    data_governance_subparsers = data_governance.add_subparsers(
+        dest="data_governance_command",
+        required=True,
+    )
+    data_governance_check = data_governance_subparsers.add_parser(
+        "check",
+        help="Fail closed on missing governance metadata or unredacted personal data",
+    )
+    data_governance_check.add_argument("--input", required=True, help="Governed episode/training JSONL")
+    data_governance_check.add_argument("--purpose", required=True, help="Requested allowed use, such as agent_training")
+    data_governance_check.add_argument("--policy", help="Optional governance policy JSON")
+    data_governance_check.add_argument(
+        "--organization-entity",
+        action="append",
+        default=[],
+        help="Organization-specific personal-data entity; may be repeated",
+    )
+    data_governance_check.add_argument("--now", help="Override evaluation time for deterministic tests")
+    data_governance_check.add_argument("--out", required=True, help="Write hfr.data_governance_receipt.v1 JSON")
+    data_governance_check.set_defaults(func=cmd_data_governance_check)
+
+    data_governance_contamination = data_governance_subparsers.add_parser(
+        "contamination",
+        help="Cluster exact/near duplicates and detect protected-corpus leakage",
+    )
+    data_governance_contamination.add_argument("--input", required=True, help="Split-assigned training JSONL")
+    data_governance_contamination.add_argument("--protected", help="Protected benchmark/canary JSONL")
+    data_governance_contamination.add_argument(
+        "--similarity-threshold",
+        type=_rate_arg,
+        default=0.9,
+        help="Blocking similarity threshold from 0 to 1",
+    )
+    data_governance_contamination.add_argument("--out", required=True, help="Write contamination report JSON")
+    data_governance_contamination.set_defaults(func=cmd_data_governance_contamination)
+
+    data_governance_delete = data_governance_subparsers.add_parser(
+        "delete",
+        help="Erase authorized sources, rebuild descendants, and quarantine affected models",
+    )
+    data_governance_delete.add_argument("--request", required=True, help="Deletion request JSON with subjects/datasets/models")
+    data_governance_delete.add_argument("--out-dir", required=True, help="Write rebuilt descendants and receipts here")
+    data_governance_delete.set_defaults(func=cmd_data_governance_delete)
+
+    intervention_route = subparsers.add_parser(
+        "intervention-route",
+        help="Route a failure cluster to the least-cost adequate agent intervention",
+    )
+    intervention_route.add_argument("--cluster", required=True, help="Failure cluster JSON")
+    intervention_route.add_argument("--out", required=True, help="Write hfr.intervention_route.v1 JSON")
+    intervention_route.set_defaults(func=cmd_intervention_route)
+
+    review_semantics = subparsers.add_parser(
+        "review-semantics",
+        help="Build native review, action-credit, branch-replay, and curation artifacts",
+    )
+    review_semantics_subparsers = review_semantics.add_subparsers(
+        dest="review_semantics_command",
+        required=True,
+    )
+    action_credit = review_semantics_subparsers.add_parser(
+        "action-credit",
+        help="Label each observed tool action from its matched result",
+    )
+    action_credit.add_argument("--trajectory", required=True, help="Native trajectory JSON")
+    action_credit.add_argument("--out", required=True, help="Write hfr.action_credit.v1 JSONL")
+    action_credit.set_defaults(func=cmd_review_semantics_action_credit)
+
+    contract_preferences = review_semantics_subparsers.add_parser(
+        "preferences",
+        help="Pair reviewed completions only under an identical task contract",
+    )
+    contract_preferences.add_argument("--input", required=True, help="Reviewed trajectory JSONL")
+    contract_preferences.add_argument("--out", required=True, help="Write reviewed contract preference JSONL")
+    contract_preferences.set_defaults(func=cmd_review_semantics_preferences)
+
+    branch_replay = review_semantics_subparsers.add_parser(
+        "branch-replay",
+        help="Bind state-matched replay candidates to verifier evidence and review routing",
+    )
+    branch_replay.add_argument("--request", required=True, help="Branch replay request JSON")
+    branch_replay.add_argument("--out", required=True, help="Write hfr.branch_replay_dataset.v1 JSON")
+    branch_replay.set_defaults(func=cmd_review_semantics_branch_replay)
+
+    curate = review_semantics_subparsers.add_parser(
+        "curate",
+        help="Select a deterministic, capped, weighted training mixture",
+    )
+    curate.add_argument("--input", required=True, help="Candidate training rows JSONL")
+    curate.add_argument("--recipe", required=True, help="Deterministic curation recipe JSON")
+    curate.add_argument("--out", required=True, help="Write hfr.curated_dataset.v1 JSON")
+    curate.set_defaults(func=cmd_review_semantics_curate)
+
     agentic_loop = subparsers.add_parser("agentic-loop", help="Plan closed-loop agentic training iterations")
     agentic_loop_subparsers = agentic_loop.add_subparsers(dest="agentic_loop_command", required=True)
     agentic_loop_plan = agentic_loop_subparsers.add_parser("plan", help="Write a fail-closed agentic training loop plan")
@@ -4180,6 +4455,69 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--model-grader-gate", action="append", default=[], help="model_grader_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)
+
+    agentic_loop_controller_plan = agentic_loop_subparsers.add_parser(
+        "controller-plan",
+        help="Write an opt-in resumable collect-to-canary controller plan",
+    )
+    agentic_loop_controller_plan.add_argument("--controller-id", required=True)
+    agentic_loop_controller_plan.add_argument("--artifact-dir", required=True)
+    agentic_loop_controller_plan.add_argument("--candidate-model", required=True)
+    agentic_loop_controller_plan.add_argument("--champion-model", required=True)
+    agentic_loop_controller_plan.add_argument(
+        "--canary-percentage",
+        type=int,
+        action="append",
+        default=[],
+        help="Canary traffic percentage; repeat in increasing order",
+    )
+    agentic_loop_controller_plan.add_argument("--max-cost-usd", type=float, required=True)
+    agentic_loop_controller_plan.add_argument("--max-duration-seconds", type=float, required=True)
+    agentic_loop_controller_plan.add_argument("--max-attempts", type=int, required=True)
+    agentic_loop_controller_plan.add_argument(
+        "--deadline-at",
+        required=True,
+        help="Immutable absolute UTC deadline for all controller side effects",
+    )
+    agentic_loop_controller_plan.add_argument("--max-retries", type=int, default=2)
+    agentic_loop_controller_plan.add_argument("--min-task-success-rate", type=_rate_arg, default=0.0)
+    agentic_loop_controller_plan.add_argument("--max-critical-failures", type=int, default=0)
+    agentic_loop_controller_plan.add_argument("--max-cost-delta", type=float, default=1.0)
+    agentic_loop_controller_plan.add_argument("--max-latency-delta", type=float, default=1.0)
+    agentic_loop_controller_plan.add_argument(
+        "--phase-config",
+        action="append",
+        type=_state_set_arg,
+        default=[],
+        help="Override PHASE=JSON_OBJECT, including command argv/result path",
+    )
+    agentic_loop_controller_plan.add_argument("--out", required=True)
+    agentic_loop_controller_plan.set_defaults(func=cmd_agentic_loop_controller_plan)
+
+    agentic_loop_execute = agentic_loop_subparsers.add_parser(
+        "execute",
+        help="Run or resume an immutable controller plan",
+    )
+    agentic_loop_execute.add_argument("--plan", required=True)
+    agentic_loop_execute.add_argument("--state", required=True)
+    agentic_loop_execute.add_argument("--owner-id", required=True)
+    agentic_loop_execute.add_argument("--adapter", choices=("in-memory", "command"), default="in-memory")
+    agentic_loop_execute.add_argument("--outcomes", help="In-memory phase outcomes JSON")
+    agentic_loop_execute.add_argument("--allow-external", action="store_true")
+    agentic_loop_execute.add_argument(
+        "--approval",
+        action="append",
+        type=_text_set_arg,
+        default=[],
+        help="Plan-bound PHASE=PLAN_FINGERPRINT approval; may be repeated",
+    )
+    agentic_loop_execute.add_argument(
+        "--approve-all",
+        action="store_true",
+        help="Explicitly approve every side-effect phase in this exact immutable plan",
+    )
+    agentic_loop_execute.add_argument("--max-steps", type=int)
+    agentic_loop_execute.set_defaults(func=cmd_agentic_loop_execute)
 
     agentic_loop_ledger = agentic_loop_subparsers.add_parser("ledger", help="Write a longitudinal ledger over loop plans")
     agentic_loop_ledger.add_argument("--plan", action="append", required=True, help="agentic_training_loop_plan JSON in chronological order; may be repeated")
@@ -5448,6 +5786,15 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = "".join(
+        json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n"
+        for row in rows
+    )
+    path.write_text(rendered, encoding="utf-8")
+
+
 def _rate_arg(value: str) -> float:
     try:
         parsed = float(value)
@@ -5533,6 +5880,13 @@ def _state_set_arg(value: str) -> tuple[str, Any]:
     except json.JSONDecodeError:
         parsed = raw_value
     return key, parsed
+
+
+def _text_set_arg(value: str) -> tuple[str, str]:
+    key, separator, raw_value = value.partition("=")
+    if not separator or not key.strip() or not raw_value:
+        raise argparse.ArgumentTypeError("must be KEY=VALUE")
+    return key.strip(), raw_value
 
 
 def _metadata_options(items: list[tuple[str, str]]) -> dict[str, str]:
@@ -7176,6 +7530,15 @@ def _run_scenario_artifacts_locked(
     scorecard = score_trace(scenario, raw_trace, raw_state_snapshot, raw_before_state_snapshot)
     secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
     trace = sanitize_trace(raw_trace, secret_patterns)
+    raw_trajectory_context = trajectory_v2_context_from_path(trace_path)
+    trajectory_v2 = None
+    if raw_trajectory_context:
+        trajectory_v2 = trajectory_v2_from_trace(
+            trace,
+            source_path=trace_path,
+            source_format=str(trace.get("session", {}).get("source_format") or trace_format),
+            context=_sanitize_trajectory_context(raw_trajectory_context, secret_patterns),
+        )
     before_state_snapshot = (
         sanitize_state_snapshot(raw_before_state_snapshot, secret_patterns)
         if raw_before_state_snapshot is not None
@@ -7184,6 +7547,7 @@ def _run_scenario_artifacts_locked(
     state_snapshot = sanitize_state_snapshot(raw_state_snapshot, secret_patterns) if raw_state_snapshot is not None else None
 
     normalized_path = run_dir / "normalized_trace.json"
+    trajectory_v2_path = run_dir / "trajectory_v2.json" if trajectory_v2 is not None else None
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
     before_state_snapshot_path = run_dir / "before_state_snapshot.json" if before_state_snapshot is not None else None
@@ -7205,6 +7569,8 @@ def _run_scenario_artifacts_locked(
             markdown_out=markdown_out,
         )
     _write_json(normalized_path, trace)
+    if trajectory_v2_path is not None and trajectory_v2 is not None:
+        write_trajectory_v2(trajectory_v2_path, trajectory_v2)
     if before_state_snapshot_path is not None:
         _write_json(before_state_snapshot_path, before_state_snapshot)
     if state_snapshot_path is not None:
@@ -7248,6 +7614,7 @@ def _run_scenario_artifacts_locked(
         source_state_snapshot_path=state_path,
         artifacts={
             "normalized_trace": normalized_path,
+            "trajectory_v2": trajectory_v2_path,
             "before_state_snapshot": before_state_snapshot_path,
             "state_snapshot": state_snapshot_path,
             "state_diff": state_diff_path,
@@ -7269,6 +7636,9 @@ def _run_scenario_artifacts_locked(
         preserve_paths=preserve_paths,
         artifact_paths={
             "normalized_trace": display_run_dir / "normalized_trace.json",
+            "trajectory_v2": (
+                display_run_dir / "trajectory_v2.json" if trajectory_v2_path is not None else None
+            ),
             "before_state_snapshot": (
                 display_run_dir / "before_state_snapshot.json"
                 if before_state_snapshot_path is not None
@@ -7313,6 +7683,9 @@ def _run_scenario_artifacts_locked(
         "paths": {
             "run_dir": display_run_dir,
             "normalized_trace": display_run_dir / "normalized_trace.json",
+            "trajectory_v2": (
+                display_run_dir / "trajectory_v2.json" if trajectory_v2_path is not None else None
+            ),
             "before_state_snapshot": (
                 display_run_dir / "before_state_snapshot.json"
                 if before_state_snapshot_path is not None
@@ -7330,6 +7703,24 @@ def _run_scenario_artifacts_locked(
         },
         "lineage": lineage,
     }
+
+
+def _sanitize_trajectory_context(
+    context: dict[str, Any],
+    secret_patterns: list[str],
+) -> dict[str, Any]:
+    """Redact user-bearing context without corrupting immutable identity names.
+
+    Scenario regexes such as ``token`` are intentionally broad for message
+    content, but applying them to a tokenizer ID would destroy the recorded
+    identity. Generic secret-key/assignment redaction still applies everywhere.
+    """
+
+    sanitized = sanitize_trace(context, [])
+    for field in ("messages", "approvals", "event_metadata", "metadata", "governance"):
+        if field in context:
+            sanitized[field] = sanitize_trace({field: context[field]}, secret_patterns)[field]
+    return sanitized
 
 
 def _write_run_suite_harness_handoff(

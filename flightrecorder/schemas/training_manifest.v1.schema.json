@@ -185,6 +185,10 @@
       "minimum": 0,
       "type": "integer"
     },
+    "action_sft_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
     "source_fingerprint_coverage": {
       "type": "object"
     },

@@ -310,7 +310,7 @@
         "loop_candidate_model_id": "local/mock-candidate",
         "output_artifact_count": 1,
         "output_artifact_manifest_bound": true,
-        "output_artifact_manifest_sha256": "b44545f5fbca1d5f8b2ee32137b08165f4fc024bb1ebc4add6c09e6301af091b",
+        "output_artifact_manifest_sha256": "0f30e86b2925e7cc8d597c4b1e2c72822fe9c0c30fc721aca0b5436ffc68fd5e",
         "output_artifact_set_bound": true,
         "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
         "pipeline_provider_id": "modal",
@@ -621,7 +621,7 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "4fb13ca5be45b3a6008d80aba280ed85b6b0c1b9a0bddc99e820dcd3793a4124",
+      "sha256": "8ebef2a86516c948e6d8f05409db7a6ed91dcb9dd268ade92c855f4886e5278f",
       "size_bytes": 68439,
       "training_outputs": {
         "artifact_count": 6,

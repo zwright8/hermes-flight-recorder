@@ -1,0 +1,24 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/action_credit.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Per-tool-action credit independent of terminal episode success.",
+  "properties": {
+    "schema_version": {"const": "hfr.action_credit.v1"},
+    "episode_id": {"type": "string"},
+    "message_index": {"minimum": 0, "type": "integer"},
+    "tool_call_id": {"minLength": 1, "type": "string"},
+    "tool_name": {"type": "string"},
+    "label": {"enum": ["positive", "neutral", "negative"]},
+    "reward": {"maximum": 1, "minimum": -1, "type": "number"},
+    "status": {"minLength": 1, "type": "string"},
+    "confidence": {"maximum": 1, "minimum": 0, "type": "number"},
+    "source": {"const": "deterministic_tool_result"},
+    "episode_outcome": {"type": "string"},
+    "observation": {"type": ["object", "null"]},
+    "action": {"type": "object"}
+  },
+  "required": ["schema_version", "episode_id", "message_index", "tool_call_id", "tool_name", "label", "reward", "status", "confidence", "source", "episode_outcome", "observation", "action"],
+  "title": "Hermes Flight Recorder Action Credit",
+  "type": "object"
+}

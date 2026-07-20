@@ -1,0 +1,94 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/finetune_demo_evaluation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded integration and memorization evaluation for a Flight Recorder agentic LoRA case study.",
+  "properties": {
+    "adapter": {
+      "additionalProperties": false,
+      "properties": {
+        "distribution": {"minLength": 1, "type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 1, "type": "integer"}
+      },
+      "required": ["distribution", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "base": {"$ref": "#/$defs/model_evaluation"},
+    "base_model": {"minLength": 1, "type": "string"},
+    "claim_scope": {"minLength": 1, "type": "string"},
+    "dataset_source_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "dataset_version": {"minLength": 1, "type": "string"},
+    "device": {"minLength": 1, "type": "string"},
+    "schema_version": {"const": "hfr.finetune_demo_evaluation.v1"},
+    "sequence_loss_delta": {"type": "number"},
+    "sequence_loss_improved": {"type": "boolean"},
+    "sequence_loss_reduction_percent": {"type": "number"},
+    "training": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_train_loss": {"minimum": 0, "type": "number"},
+        "assistant_only_loss": {"type": "boolean"},
+        "max_steps": {"minimum": 1, "type": "integer"},
+        "runtime_seconds": {"minimum": 0, "type": "number"},
+        "training_mode": {"minLength": 1, "type": "string"}
+      },
+      "required": [
+        "aggregate_train_loss",
+        "assistant_only_loss",
+        "max_steps",
+        "runtime_seconds",
+        "training_mode"
+      ],
+      "type": "object"
+    },
+    "trajectory": {
+      "additionalProperties": false,
+      "properties": {
+        "assistant_messages": {"minimum": 0, "type": "integer"},
+        "row_count": {"minimum": 1, "type": "integer"},
+        "task_family": {"minLength": 1, "type": "string"},
+        "tool_calls": {"minimum": 0, "type": "integer"},
+        "tool_results": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["assistant_messages", "row_count", "task_family", "tool_calls", "tool_results"],
+      "type": "object"
+    },
+    "tuned": {"$ref": "#/$defs/model_evaluation"},
+    "versions": {
+      "additionalProperties": {"minLength": 1, "type": "string"},
+      "minProperties": 1,
+      "type": "object"
+    }
+  },
+  "required": [
+    "adapter",
+    "base",
+    "base_model",
+    "claim_scope",
+    "dataset_source_commit",
+    "dataset_version",
+    "device",
+    "schema_version",
+    "sequence_loss_delta",
+    "sequence_loss_improved",
+    "sequence_loss_reduction_percent",
+    "training",
+    "trajectory",
+    "tuned",
+    "versions"
+  ],
+  "title": "Hermes Flight Recorder Fine-tune Demo Evaluation",
+  "type": "object",
+  "$defs": {
+    "model_evaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "completion": {"type": "string"},
+        "sequence_loss": {"minimum": 0, "type": "number"}
+      },
+      "required": ["completion", "sequence_loss"],
+      "type": "object"
+    }
+  }
+}

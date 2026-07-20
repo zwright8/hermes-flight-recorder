@@ -66,7 +66,7 @@
           "schema_errors": [],
           "schema_name": "review_calibration",
           "schema_passed": true,
-          "sha256": "9a40db2f8eee655d68fa973a05ad0ae22c0294dd0f1279a9c2861baa807c8809",
+          "sha256": "6c7bbe668d1718e453daf608c9a2837e95de5caee493fc48cd0365093c4dd213",
           "size_bytes": 4035,
           "source_passed": true,
           "source_recommendation": ""
@@ -89,7 +89,7 @@
           "schema_errors": [],
           "schema_name": "review_calibration",
           "schema_passed": true,
-          "sha256": "9a40db2f8eee655d68fa973a05ad0ae22c0294dd0f1279a9c2861baa807c8809",
+          "sha256": "6c7bbe668d1718e453daf608c9a2837e95de5caee493fc48cd0365093c4dd213",
           "size_bytes": 4035,
           "source_passed": true,
           "source_recommendation": ""
@@ -127,7 +127,7 @@
         "agreement_rate": 1.0
       },
       "expected": {
-        "min": 0.8
+        "min": 1.0
       },
       "id": "min_calibration_agreement_rate",
       "passed": true,
@@ -253,7 +253,7 @@
       "schema_errors": [],
       "schema_name": "review_calibration",
       "schema_passed": true,
-      "sha256": "9a40db2f8eee655d68fa973a05ad0ae22c0294dd0f1279a9c2861baa807c8809",
+      "sha256": "6c7bbe668d1718e453daf608c9a2837e95de5caee493fc48cd0365093c4dd213",
       "size_bytes": 4035,
       "source_passed": true,
       "source_recommendation": ""

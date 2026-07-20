@@ -1,0 +1,98 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_training_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Reproducible LoRA training receipt bound to validated self-improving-agent corpus hashes.",
+  "properties": {
+    "adapter_artifacts": { "$ref": "#/$defs/artifacts" },
+    "base_model": { "minLength": 1, "type": "string" },
+    "base_model_revision": { "minLength": 1, "type": "string" },
+    "chat_template_sha256": { "$ref": "#/$defs/sha256" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "data_validation": { "$ref": "#/$defs/data_validation" },
+    "hub": { "type": ["object", "null"] },
+    "hyperparameters": { "$ref": "#/$defs/hyperparameters" },
+    "libraries": { "additionalProperties": { "minLength": 1, "type": "string" }, "type": "object" },
+    "metrics": { "additionalProperties": { "type": "number" }, "type": "object" },
+    "schema_version": { "const": "hfr.self_improving_agent_training_result.v1" },
+    "status": { "enum": ["succeeded", "failed"], "type": "string" },
+    "tracking": { "$ref": "#/$defs/tracking" },
+    "training_row_count": { "minimum": 1, "type": "integer" }
+  },
+  "required": [
+    "schema_version", "created_at", "status", "base_model", "base_model_revision", "training_row_count",
+    "chat_template_sha256", "data_validation", "hyperparameters", "libraries", "metrics", "tracking",
+    "adapter_artifacts", "hub"
+  ],
+  "title": "Hermes Flight Recorder Self-Improving Agent Training Result",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": { "minLength": 1, "type": "string" },
+        "file_count": { "minimum": 1, "type": "integer" },
+        "files": { "items": { "$ref": "#/$defs/artifact" }, "type": "array" }
+      },
+      "required": ["directory", "file_count", "files"],
+      "type": "object"
+    },
+    "data_validation": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": { "additionalProperties": { "type": "boolean" }, "type": "object" },
+        "dataset_sha256": { "$ref": "#/$defs/sha256" },
+        "development_sha256": { "$ref": "#/$defs/sha256" },
+        "heldout_sha256": { "$ref": "#/$defs/sha256" },
+        "train_row_count": { "minimum": 1, "type": "integer" },
+        "train_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["checks", "dataset_sha256", "development_sha256", "heldout_sha256", "train_sha256", "train_row_count"],
+      "type": "object"
+    },
+    "hyperparameters": {
+      "additionalProperties": false,
+      "properties": {
+        "assistant_only_loss": { "type": "boolean" },
+        "batch_size": { "minimum": 1, "type": "integer" },
+        "epochs": { "exclusiveMinimum": 0, "type": "number" },
+        "gradient_accumulation_steps": { "minimum": 1, "type": "integer" },
+        "learning_rate": { "exclusiveMinimum": 0, "type": "number" },
+        "lora_alpha": { "minimum": 1, "type": "integer" },
+        "lora_dropout": { "minimum": 0, "maximum": 1, "type": "number" },
+        "lora_r": { "minimum": 1, "type": "integer" },
+        "max_length": { "minimum": 1, "type": "integer" },
+        "max_steps": { "minimum": 1, "type": "integer" },
+        "precision": { "minLength": 1, "type": "string" },
+        "seed": { "type": "integer" }
+      },
+      "required": [
+        "assistant_only_loss", "batch_size", "epochs", "gradient_accumulation_steps", "learning_rate",
+        "lora_alpha", "lora_dropout", "lora_r", "max_length", "max_steps", "precision", "seed"
+      ],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "tracking": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "project": { "minLength": 1, "type": "string" },
+        "run_name": { "minLength": 1, "type": "string" },
+        "space_id": { "type": ["string", "null"] }
+      },
+      "required": ["enabled", "project", "run_name", "space_id"],
+      "type": "object"
+    }
+  }
+}

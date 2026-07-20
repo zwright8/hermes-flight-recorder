@@ -1,0 +1,23 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_controller_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable, approval-bound execution plan for the complete agent improvement loop.",
+  "properties": {
+    "schema_version": {"const": "hfr.agentic_loop_controller_plan.v1"},
+    "controller_id": {"minLength": 1, "type": "string"},
+    "artifact_dir": {"minLength": 1, "type": "string"},
+    "candidate_model": {"minLength": 1, "type": "string"},
+    "champion_model": {"minLength": 1, "type": "string"},
+    "budget": {"required": ["max_cost_usd", "max_duration_seconds", "max_attempts"], "type": "object"},
+    "deadline_at": {"format": "date-time", "type": "string"},
+    "canary_guardrails": {"type": "object"},
+    "phases": {"items": {"required": ["id", "depends_on", "requires_approval", "external_side_effect", "max_retries", "estimated_cost_usd", "timeout_seconds"], "type": "object"}, "minItems": 1, "type": "array"},
+    "failure_phases": {"type": "object"},
+    "execution_boundary": {"type": "object"},
+    "plan_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": ["schema_version", "controller_id", "artifact_dir", "candidate_model", "champion_model", "budget", "deadline_at", "canary_guardrails", "phases", "failure_phases", "execution_boundary", "plan_fingerprint"],
+  "title": "Hermes Flight Recorder Agentic Loop Controller Plan",
+  "type": "object"
+}

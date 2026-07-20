@@ -1,0 +1,21 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/intervention_route.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Evidence-bound least-cost intervention decision over the complete agent stack.",
+  "properties": {
+    "schema_version": {"const": "hfr.intervention_route.v1"},
+    "route_id": {"pattern": "^hfrroute-[0-9a-f]{16}$", "type": "string"},
+    "routing_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "cluster": {"required": ["cluster_id", "failure_modes", "severity", "confidence", "frequency", "affected_task_families", "affected_tools", "affected_policies", "evidence_refs"], "type": "object"},
+    "selected_intervention": {"enum": ["prompt_policy", "tool_schema", "parser_runtime", "planner_routing", "memory_retrieval", "guardrail_sandbox", "dataset", "evaluation", "model_training", "human_review"]},
+    "routing_reasons": {"items": {"type": "string"}, "type": "array"},
+    "estimated_cost": {"type": "object"},
+    "estimated_risk": {"type": "object"},
+    "rejected_alternatives": {"items": {"type": "object"}, "type": "array"},
+    "work_item": {"required": ["work_item_id", "intervention", "priority", "summary", "evidence_refs", "affected_task_families", "affected_tools", "affected_policies", "acceptance_metrics", "execution_boundary"], "type": "object"}
+  },
+  "required": ["schema_version", "route_id", "routing_fingerprint", "cluster", "selected_intervention", "routing_reasons", "estimated_cost", "estimated_risk", "rejected_alternatives", "work_item"],
+  "title": "Hermes Flight Recorder Intervention Route",
+  "type": "object"
+}

@@ -83,7 +83,7 @@
       "actual": {
         "calibration_artifact_count": 1,
         "dataset_versions": [
-          "hfrds-16791825cc955df1"
+          "hfrds-a79e2951af19e2dd"
         ],
         "model_grader_calibration_artifact_count": 1,
         "model_grader_uses_supplied_calibration": true
@@ -160,7 +160,7 @@
         "readiness": "labels_calibrated_for_curated_handoff",
         "role": "model_grader_gate",
         "schema_version": "hfr.model_grader_gate.v1",
-        "sha256": "872b75335b762e61f5cfce6058d5d7d33bdefb8dd6837950f45aa8ea3ecea8b6",
+        "sha256": "210b2406643be7fda768ff94a1c5f6865fc9105a53da1795fd27e0b66294f8c2",
         "size_bytes": 8623
       }
     ],
@@ -173,7 +173,7 @@
         "readiness": "",
         "role": "review_calibration",
         "schema_version": "hfr.review_calibration.v1",
-        "sha256": "659d12f34642e2c07ddede85c2827089b1fa13af1c9a6cfde7f1d427fc404db7",
+        "sha256": "5347e12e4d0db6a1e40306f4d7951d88d7133283656072addd606949c8151adc",
         "size_bytes": 4035
       }
     ],
@@ -186,7 +186,7 @@
         "readiness": "",
         "role": "reviewed_gate",
         "schema_version": "hfr.reviewed_gate.v1",
-        "sha256": "53fd769986e277e75f0b306fa0796f3e033f45c0e1cb598a79f558161dad8e89",
+        "sha256": "3209a93b1e6d16c114855f732c78fb49d6e59df9a7ea913355d9e12230385e12",
         "size_bytes": 5600
       }
     ]

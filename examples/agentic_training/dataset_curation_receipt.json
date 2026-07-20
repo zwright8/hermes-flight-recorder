@@ -135,7 +135,7 @@
         "readiness": "ready_for_dataset_curation",
         "role": "rejection_sampling_gate",
         "schema_version": "hfr.rejection_sampling_gate.v1",
-        "sha256": "3bec25ed39934be1daf3bab42e3c0e2cd830dd9c091ac4796a4ad860e8bc6287",
+        "sha256": "020fea509372ff7f7dc40c763a723026e21cfa9d180ace910eae7e6f75234105",
         "size_bytes": 6037
       }
     ],

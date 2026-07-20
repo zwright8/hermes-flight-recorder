@@ -1235,7 +1235,13 @@ class CliReportTests(unittest.TestCase):
             result = json.loads(gate.read_text(encoding="utf-8"))
             self.assertEqual(result["schema_version"], "hfr.suite_gate.v1")
             self.assertTrue(result["passed"])
+            self.assertEqual(result["readiness"], "ready")
+            self.assertEqual(result["recommendation"], "promote_iteration")
             self.assertEqual(result["failed_check_count"], 0)
+            self.assertEqual(result["failed_checks"], [])
+            self.assertEqual(result["decision"]["readiness"], "ready")
+            self.assertEqual(result["decision"]["next_action_count"], 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_suite_fails_thresholds_and_forbidden_rules(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1262,6 +1268,11 @@ class CliReportTests(unittest.TestCase):
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_pass_rate", failed_checks)
             self.assertIn("forbid_critical_rule", failed_checks)
+            self.assertEqual(result["readiness"], "blocked")
+            self.assertEqual(result["recommendation"], "block_iteration")
+            self.assertEqual(result["decision"]["blocking_check_count"], len(result["failed_checks"]))
+            self.assertEqual(result["next_actions"][0]["id"], "resolve_failed_checks")
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_suite_accepts_policy_file(self):
         with tempfile.TemporaryDirectory() as tmp:

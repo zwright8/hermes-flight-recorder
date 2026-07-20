@@ -1,0 +1,41 @@
+{
+  "audit_sha256": "febee071ca0f96796a63aceeb0b3428b54852431ded2f477b2a46a9b9990282a",
+  "checks": {
+    "development_prompt_templates_excluded_from_training": true,
+    "heldout_prompt_templates_excluded_from_training": true,
+    "prompt_hashes_disjoint": true,
+    "record_keys_disjoint": true,
+    "task_ids_disjoint": true
+  },
+  "development_prompt_template_sha256": [
+    "8e5608c9a843b6e96bb9d33b91e16e689de8341babbbc4c01bd34f5d52b3ff2f",
+    "3052306063a912fb5d5a24e67566020fe05da3579a31ffaf788d67c97d1edc91",
+    "da94e54647380e09af43b342529c511d469991a414d511e0e55541e104b29c98",
+    "3f4e7babffd485219c262b3faa8c58b22362133bb533ff01379f449880928e94"
+  ],
+  "heldout_prompt_template_sha256": [
+    "09e19340e2701cbe04117904da82f978d9492f86f79d570291b8ba707ddb5a14",
+    "2ed4ea2b5780f0bd67a5c8eb4135b80f47c0a5de3752e6bc0ac0650b95d3b3ff",
+    "5bf320b955c1a1b2315fdc6b0bc18e20d7f215df53101dd9871f6cb48c6f4d33",
+    "af816f4c4dd3602cc56f7558cc06959c7e5fe41660ee377dc7872cacde7e30dd",
+    "a53b1d6b4a411aefc1d98d38ba01a19806866fa4e9d045b50bf38d1dd6fce58d",
+    "d82895dfefc4020e07ccebec7ddf7f9e1fea92d7809a13b014bee9e1bec785d1"
+  ],
+  "overlap": {
+    "prompt_sha256": [],
+    "record_keys": [],
+    "task_ids": []
+  },
+  "passed": true,
+  "schema_version": "hfr.self_improving_contamination_audit.v1",
+  "train_prompt_template_sha256": [
+    "55b289ff0e415670ccab944fbd4a75b9be3210998bcdfdd2c8e2883008a73fe6",
+    "fe975ff843652fbdcf8e96c8cf2cc68e7c2b2c02ca56a066ef9458d6d6d37e88",
+    "b20cd6db801e9580b44a11833f680f06d4a05a236cc565889be16b2e117fce4a",
+    "fc0e88b18ac97123da3d4217bb85377489e71ca53e0b424bd3438efa161b7e99",
+    "2406f08ac0b8bd6a478f28833d11c26b333c4b4355d28c1ebe4d706938fa437b",
+    "aff6d38b6eb94cc52ceceef18405c75f2b026debb1e1d278db8d4acde6754088",
+    "126970025486b64f20e710bb35039239c941f5bc0e506f8894199d8a1d376c36",
+    "9066e0efc9916134a6cbda6ff28228f7ce172b2d798db978c05ab27500ab9b61"
+  ]
+}

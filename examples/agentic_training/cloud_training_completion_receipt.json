@@ -33,18 +33,18 @@
   "identity": {
     "agentic_training_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
     "candidate_model_id": "local/synthetic-agentic-candidate",
-    "digest_sha256": "6cee535cc82362cd404ba323f25692d8d7d498acbafd1e7bd7795d7a687002b0",
+    "digest_sha256": "3907b4c6e627cc6138306f8ff491674b975590cae68a53f2cb11e3e9aefaf968",
     "execution_id": "synthetic-cloud-training-001",
     "launch_plan_sha256": "7b9476f9fd8d36bd2ac8a1fa30092140752c026d744c913ad2b2eff7ab980a4f",
     "launch_receipt_sha256": "30c933ebda010b75fb8afb4efe15a4546035313061a275a23d450ca08949aeb8",
-    "output_artifact_manifest_sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+    "output_artifact_manifest_sha256": "d28b9c47a8e6e95f3c357515123c5dbfd65ad5cc66aff8d6ab3255ef48551f9f",
     "output_artifact_set_sha256": "56915b1cfa436f869cf8863c22427840e8f9df916745eee715b3a668dfb8293b",
     "provider_id": "modal",
     "provider_job_id": "synthetic-modal-job-001",
     "raw_provider_result_sha256": "bb4a372af81100af8af77fb66bc9dd312a5a1e545a0fb7c34eb5c808b48d3e3c",
     "result_run_id": "synthetic-completed-001",
     "runner_id": "synthetic-external-cloud-runner",
-    "runner_metadata_sha256": "271aae3dc4a033e95724f04be90efb89290de284ef4036fc1dbc2c9c5546eece",
+    "runner_metadata_sha256": "bf7caaca8c49dac2e61a79ef1d250cb30ba61d58f5e67c7a8dae33bbfba94f3c",
     "runner_version": "1",
     "status_receipt_sha256": "1619635781b45a90c3264d55890166f30a1200922629b951e6ce791b5953681b"
   },
@@ -222,7 +222,7 @@
     "candidate_model_id": "local/synthetic-agentic-candidate",
     "created_at": "2026-07-03T00:20:00+00:00",
     "manifest_schema_version": "hfr.agentic_training_result.v1",
-    "manifest_sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+    "manifest_sha256": "d28b9c47a8e6e95f3c357515123c5dbfd65ad5cc66aff8d6ab3255ef48551f9f",
     "output_artifact_count": 1,
     "regular_artifact_count": 4,
     "run_id": "synthetic-completed-001"
@@ -285,7 +285,7 @@
       "regular_file": true,
       "replayable": true,
       "schema_version": "hfr.agentic_training_result.v1",
-      "sha256": "cc24a1aa99ada419ce37078e99b94ddb543691d176d19d899cf04fe12751ad6b",
+      "sha256": "d28b9c47a8e6e95f3c357515123c5dbfd65ad5cc66aff8d6ab3255ef48551f9f",
       "size_bytes": 11554
     },
     "raw_provider_result": {
@@ -303,7 +303,7 @@
       "regular_file": true,
       "replayable": true,
       "schema_version": "hfr.external_cloud_training_runner.v1",
-      "sha256": "271aae3dc4a033e95724f04be90efb89290de284ef4036fc1dbc2c9c5546eece",
+      "sha256": "bf7caaca8c49dac2e61a79ef1d250cb30ba61d58f5e67c7a8dae33bbfba94f3c",
       "size_bytes": 1914
     },
     "status_receipt": {

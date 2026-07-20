@@ -1,0 +1,115 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_deletion_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Deletion-lineage receipt proving direct and transitive descendants exclude affected records and dependent models are quarantined.",
+  "properties": {
+    "affected_dataset_versions": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+    "affected_lineage_absent": { "type": "boolean" },
+    "affected_lineage_survivor_count": { "minimum": 0, "type": "integer" },
+    "affected_parent_versions": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+    "created_at": { "format": "date-time", "type": "string" },
+    "dataset_count": { "minimum": 0, "type": "integer" },
+    "datasets": { "items": { "$ref": "#/$defs/dataset" }, "type": "array" },
+    "deletion_subject_fingerprints": {
+      "items": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "directly_affected_dataset_versions": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+    "lineage_closure_fingerprint": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "model_quarantine_path": { "minLength": 1, "type": "string" },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "quarantined_models": { "items": { "$ref": "#/$defs/quarantined_model" }, "type": "array" },
+    "rebuild_order": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+    "receipt_fingerprint": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "removed_row_count": { "minimum": 0, "type": "integer" },
+    "request_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.dataset_deletion_receipt.v1" },
+    "source_erasure_count": { "minimum": 0, "type": "integer" },
+    "source_erasure_errors": { "items": { "$ref": "#/$defs/erasure_error" }, "type": "array" },
+    "source_erasure_requested": { "type": "boolean" }
+  },
+  "required": [
+    "schema_version", "request_id", "created_at", "passed", "blocked_reasons",
+    "source_erasure_requested", "source_erasure_count", "source_erasure_errors",
+    "deletion_subject_fingerprints", "dataset_count", "removed_row_count", "datasets",
+    "rebuild_order", "directly_affected_dataset_versions", "affected_dataset_versions",
+    "affected_parent_versions", "lineage_closure_fingerprint", "affected_lineage_survivor_count",
+    "affected_lineage_absent", "quarantined_models", "model_quarantine_path", "notes",
+    "receipt_fingerprint"
+  ],
+  "title": "Hermes Flight Recorder Dataset Deletion Receipt",
+  "type": "object",
+  "$defs": {
+    "dataset": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_ancestor_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "affected_lineage_absent": { "type": "boolean" },
+        "affected_lineage_survivor_count": { "minimum": 0, "type": "integer" },
+        "affected_parent_version_survivors": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "ancestor_lineage_removed_row_count": { "minimum": 0, "type": "integer" },
+        "dataset_version": { "pattern": "^hfrds-[0-9a-f]{16}$", "type": "string" },
+        "direct_subject_removed_row_count": { "minimum": 0, "type": "integer" },
+        "directly_affected": { "type": "boolean" },
+        "input_row_count": { "minimum": 0, "type": "integer" },
+        "lineage_affected": { "type": "boolean" },
+        "output_path": { "minLength": 1, "type": "string" },
+        "output_row_count": { "minimum": 0, "type": "integer" },
+        "output_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "parent_dataset_version": { "minLength": 1, "type": "string" },
+        "parent_versions": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+        "removed_fingerprint_count": { "minimum": 0, "type": "integer" },
+        "removed_fingerprints_absent": { "type": "boolean" },
+        "removed_row_count": { "minimum": 0, "type": "integer" },
+        "source_erased": { "type": "boolean" },
+        "source_parent_versions": { "items": { "minLength": 1, "type": "string" }, "type": "array", "uniqueItems": true },
+        "source_path": { "minLength": 1, "type": "string" },
+        "source_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      },
+      "required": [
+        "parent_dataset_version", "dataset_version", "source_path", "source_sha256", "output_path",
+        "output_sha256", "input_row_count", "output_row_count", "removed_row_count",
+        "direct_subject_removed_row_count", "ancestor_lineage_removed_row_count",
+        "removed_fingerprint_count", "removed_fingerprints_absent", "source_parent_versions",
+        "parent_versions", "directly_affected", "lineage_affected", "affected_ancestor_versions",
+        "affected_parent_version_survivors", "affected_lineage_survivor_count",
+        "affected_lineage_absent", "source_erased"
+      ],
+      "type": "object"
+    },
+    "erasure_error": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_version": { "minLength": 1, "type": "string" },
+        "error_class": { "minLength": 1, "type": "string" }
+      },
+      "required": ["dataset_version", "error_class"],
+      "type": "object"
+    },
+    "quarantined_model": {
+      "additionalProperties": true,
+      "properties": {
+        "affected_dataset_versions": { "items": { "type": "string" }, "minItems": 1, "type": "array", "uniqueItems": true },
+        "dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "deletion_request_id": { "minLength": 1, "type": "string" },
+        "directly_affected_dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "model_id": { "minLength": 1, "type": "string" },
+        "quarantine_reason": { "const": "source_subject_deletion" },
+        "quarantine_scope": { "enum": ["direct", "transitive", "direct_and_transitive"], "type": "string" },
+        "status": { "const": "quarantined" },
+        "transitively_affected_dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true }
+      },
+      "required": [
+        "model_id", "dataset_versions", "status", "quarantine_reason", "deletion_request_id",
+        "affected_dataset_versions", "directly_affected_dataset_versions",
+        "transitively_affected_dataset_versions", "quarantine_scope"
+      ],
+      "type": "object"
+    }
+  }
+}

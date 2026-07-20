@@ -1,0 +1,42 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_quarantine.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Models quarantined because their lineage directly or transitively depends on deleted training records.",
+  "properties": {
+    "affected_dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+    "lineage_closure_fingerprint": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "model_count": { "minimum": 0, "type": "integer" },
+    "models": { "items": { "$ref": "#/$defs/model" }, "type": "array" },
+    "request_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.model_quarantine.v1" }
+  },
+  "required": [
+    "schema_version", "request_id", "affected_dataset_versions",
+    "lineage_closure_fingerprint", "model_count", "models"
+  ],
+  "title": "Hermes Flight Recorder Model Quarantine",
+  "type": "object",
+  "$defs": {
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "affected_dataset_versions": { "items": { "type": "string" }, "minItems": 1, "type": "array", "uniqueItems": true },
+        "dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "deletion_request_id": { "minLength": 1, "type": "string" },
+        "directly_affected_dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+        "model_id": { "minLength": 1, "type": "string" },
+        "quarantine_reason": { "const": "source_subject_deletion" },
+        "quarantine_scope": { "enum": ["direct", "transitive", "direct_and_transitive"], "type": "string" },
+        "status": { "const": "quarantined" },
+        "transitively_affected_dataset_versions": { "items": { "type": "string" }, "type": "array", "uniqueItems": true }
+      },
+      "required": [
+        "model_id", "dataset_versions", "status", "quarantine_reason", "deletion_request_id",
+        "affected_dataset_versions", "directly_affected_dataset_versions",
+        "transitively_affected_dataset_versions", "quarantine_scope"
+      ],
+      "type": "object"
+    }
+  }
+}

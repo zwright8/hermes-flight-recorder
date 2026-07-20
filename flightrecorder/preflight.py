@@ -49,6 +49,7 @@ _TRAINING_EXPORT_BASE_FILES = (
     "failure_modes.jsonl",
     "curriculum.json",
     "sft.jsonl",
+    "action_sft.jsonl",
     "dpo.jsonl",
     "reward_model.jsonl",
 )
@@ -64,6 +65,7 @@ _TRAINING_ROW_SCHEMA_NAMES = {
     "preferences": "rl_preference",
     "failure_modes": "rl_failure_mode",
     "sft": "rl_sft",
+    "action_sft": "rl_action_sft",
     "dpo": "rl_dpo",
     "reward_model": "rl_reward_model",
 }
@@ -79,6 +81,7 @@ _TRAINING_SCHEMA_CONTRACTS = (
     ("preferences.jsonl", "rl_preference", True),
     ("failure_modes.jsonl", "rl_failure_mode", True),
     ("sft.jsonl", "rl_sft", True),
+    ("action_sft.jsonl", "rl_action_sft", True),
     ("dpo.jsonl", "rl_dpo", True),
     ("reward_model.jsonl", "rl_reward_model", True),
 ) + tuple(
@@ -246,8 +249,13 @@ def build_trainer_preflight(
     dataset_selection: list[dict[str, Any]] = []
     if training_export_dir is not None:
         training_root = Path(training_export_dir)
-        _add_export_artifacts(artifacts, checks, "training_export", training_root, _TRAINING_EXPORT_FILES, preserve_paths, output_path)
-        _add_schema_contracts(schema_contracts, checks, "training_export", training_root, _TRAINING_SCHEMA_CONTRACTS, preserve_paths, output_path)
+        training_files = _TRAINING_EXPORT_FILES
+        training_contracts = _TRAINING_SCHEMA_CONTRACTS
+        if not (training_root / "action_sft.jsonl").exists():
+            training_files = tuple(path for path in training_files if not path.endswith("action_sft.jsonl"))
+            training_contracts = tuple(contract for contract in training_contracts if not contract[0].endswith("action_sft.jsonl"))
+        _add_export_artifacts(artifacts, checks, "training_export", training_root, training_files, preserve_paths, output_path)
+        _add_schema_contracts(schema_contracts, checks, "training_export", training_root, training_contracts, preserve_paths, output_path)
         _add_dataset_selection(
             dataset_selection,
             checks,

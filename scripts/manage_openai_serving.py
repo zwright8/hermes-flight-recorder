@@ -62,6 +62,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--arm", default="candidate")
     parser.add_argument("--engine", choices=["mock", "openai_compatible", "sglang", "transformers", "vllm"], default="")
     parser.add_argument("--adapter", default="", help="Optional adapter path or id.")
+    parser.add_argument("--adapter-id", default="", help="Expected immutable adapter repository/id.")
+    parser.add_argument("--adapter-revision", default="", help="Expected immutable adapter revision.")
+    parser.add_argument(
+        "--adapter-sha256",
+        default="",
+        help="Expected adapter weights SHA-256; remote endpoints must expose it in model metadata.",
+    )
     parser.add_argument(
         "--adapter-load-strategy",
         choices=["auto", "none", "mock_suffix", "engine_args", "merged"],
@@ -157,6 +164,9 @@ def main(argv: list[str] | None = None) -> int:
                     arm=args.arm,
                     engine=engine if engine != "mock" else "openai_compatible",
                     adapter=args.adapter,
+                    adapter_id=args.adapter_id,
+                    adapter_revision=args.adapter_revision,
+                    adapter_sha256=args.adapter_sha256,
                     api_key=api_key,
                     timeout=float(args.check_timeout),
                     out_dir=preflight_dir,

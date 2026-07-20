@@ -305,6 +305,7 @@ class RejectionSamplingGateTests(unittest.TestCase):
             second = root / "second"
             shutil.copytree(example, first)
             shutil.copytree(example, second)
+            self.regenerate_review_fixture(first)
 
             completed_labels = second / "review" / "completed_labels.jsonl"
             rows = [json.loads(line) for line in completed_labels.read_text(encoding="utf-8").splitlines() if line]
@@ -534,17 +535,112 @@ class RejectionSamplingGateTests(unittest.TestCase):
 
     def write_json(self, path: Path, schema_version: str) -> Path:
         example_dir = ROOT / "examples" / "agentic_training" / "model_grader"
-        for directory_name in ("review", "reviewed"):
-            shutil.copytree(example_dir / directory_name, path.parent / directory_name, dirs_exist_ok=True)
-        for filename in ("dry_run.json", "rubric.json"):
-            shutil.copyfile(example_dir / filename, path.parent / filename)
+        if not (path.parent / "reviewed" / "reviewed_action_sft.jsonl").is_file():
+            shutil.copytree(example_dir / "review", path.parent / "review", dirs_exist_ok=True)
+            for filename in ("dry_run.json", "rubric.json"):
+                shutil.copyfile(example_dir / filename, path.parent / filename)
+            self.regenerate_review_fixture(path.parent)
         sources = {
-            "hfr.model_grader_gate.v1": example_dir / "passing_gate.json",
-            "hfr.review_calibration.v1": example_dir / "review_calibration.json",
-            "hfr.reviewed_gate.v1": example_dir / "reviewed_gate.json",
+            "hfr.model_grader_gate.v1": path.parent / "passing_gate.json",
+            "hfr.review_calibration.v1": path.parent / "review_calibration.json",
+            "hfr.reviewed_gate.v1": path.parent / "reviewed_gate.json",
         }
-        shutil.copyfile(sources[schema_version], path)
+        source = sources[schema_version]
+        if source != path:
+            shutil.copyfile(source, path)
         return path
+
+    def regenerate_review_fixture(self, root: Path) -> None:
+        reviewed = root / "reviewed"
+        if reviewed.exists():
+            shutil.rmtree(reviewed)
+        self.assertEqual(
+            run_cli(
+                [
+                    "apply-review",
+                    "--review-export",
+                    str(root / "review"),
+                    "--labels",
+                    str(root / "review" / "completed_labels.jsonl"),
+                    "--out",
+                    str(reviewed),
+                ]
+            ),
+            0,
+        )
+        self.assertEqual(
+            run_cli(
+                [
+                    "review-calibration",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--min-comparable-labels",
+                    "2",
+                    "--min-agreement-rate",
+                    "1.0",
+                    "--max-disagreements",
+                    "0",
+                    "--out",
+                    str(root / "review_calibration.json"),
+                ]
+            ),
+            0,
+        )
+        self.assertEqual(
+            run_cli(
+                [
+                    "gate-reviewed",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--min-reviewed-labels",
+                    "2",
+                    "--min-accepted",
+                    "1",
+                    "--min-rejected",
+                    "1",
+                    "--min-sft",
+                    "1",
+                    "--min-reward-model",
+                    "2",
+                    "--min-preferences",
+                    "1",
+                    "--min-dpo",
+                    "1",
+                    "--min-medium-or-high-confidence-labels",
+                    "2",
+                    "--max-needs-review",
+                    "0",
+                    "--max-low-confidence-labels",
+                    "0",
+                    "--max-unknown-confidence-labels",
+                    "0",
+                    "--out",
+                    str(root / "reviewed_gate.json"),
+                ]
+            ),
+            0,
+        )
+        self.assertEqual(
+            run_cli(
+                [
+                    "model-grader",
+                    "gate",
+                    "--dry-run",
+                    str(root / "dry_run.json"),
+                    "--rubric",
+                    str(root / "rubric.json"),
+                    "--review-calibration",
+                    str(root / "review_calibration.json"),
+                    "--min-calibration-agreement-rate",
+                    "1.0",
+                    "--max-disagreements",
+                    "0",
+                    "--out",
+                    str(root / "passing_gate.json"),
+                ]
+            ),
+            0,
+        )
 
 
 if __name__ == "__main__":

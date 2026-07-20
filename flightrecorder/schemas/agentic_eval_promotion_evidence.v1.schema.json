@@ -1,0 +1,173 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_eval_promotion_evidence.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Replayable three-arm held-out evaluation evidence with paired uncertainty, coverage, and non-regression gates.",
+  "properties": {
+    "arms": { "$ref": "#/$defs/arms" },
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "effects": { "additionalProperties": { "$ref": "#/$defs/effect" }, "type": "object" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "non_regression": { "type": "object" },
+    "paired_observation_count": { "minimum": 0, "type": "integer" },
+    "pairing": { "$ref": "#/$defs/pairing" },
+    "passed": { "type": "boolean" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "pool_coverage": { "type": "object" },
+    "promotion_ready": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_governance", "blocked"], "type": "string" },
+    "recommendation": { "enum": ["send_to_governance", "block_promotion_and_repair"], "type": "string" },
+    "schema_version": { "const": "hfr.agentic_eval_promotion_evidence.v1" },
+    "source_artifacts": { "$ref": "#/$defs/sources" }
+  },
+  "required": [
+    "schema_version", "created_at", "passed", "promotion_ready", "readiness", "recommendation",
+    "policy", "arms", "source_artifacts", "paired_observation_count", "pairing", "pool_coverage",
+    "effects", "non_regression", "check_count", "failed_check_count", "checks", "blocking_reasons"
+  ],
+  "title": "Hermes Flight Recorder Agentic Eval Promotion Evidence",
+  "type": "object",
+  "$defs": {
+    "arm_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "identity": { "type": ["object", "null"] },
+        "observation_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["observation_count", "identity"],
+      "type": "object"
+    },
+    "arms": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": { "$ref": "#/$defs/arm_summary" },
+        "flightrecorder": { "$ref": "#/$defs/arm_summary" },
+        "trace_only": { "$ref": "#/$defs/arm_summary" }
+      },
+      "required": ["baseline", "trace_only", "flightrecorder"],
+      "type": "object"
+    },
+    "artifact_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "public_safe": { "type": "boolean" },
+        "schema_version": { "const": "hfr.agentic_eval_observation.v1" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version", "public_safe"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "expected": {},
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "semantics": {
+          "enum": ["identity", "integrity", "coverage", "comparability", "improvement", "non_regression"],
+          "type": "string"
+        }
+      },
+      "required": ["id", "passed", "semantics", "actual", "expected"],
+      "type": "object"
+    },
+    "effect": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": { "minimum": 100, "type": "integer" },
+        "bootstrap_seed": { "type": "integer" },
+        "candidate_mean": { "type": "number" },
+        "cluster_count": { "minimum": 1, "type": "integer" },
+        "confidence_interval": { "$ref": "#/$defs/interval" },
+        "confidence_level": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" },
+        "effective_sample_count": { "minimum": 1, "type": "integer" },
+        "mean_difference": { "type": "number" },
+        "pair_count": { "minimum": 1, "type": "integer" },
+        "paired_standardized_effect": { "type": ["number", "null"] },
+        "pairs_per_cluster": {
+          "additionalProperties": false,
+          "properties": {
+            "max": { "minimum": 1, "type": "integer" },
+            "min": { "minimum": 1, "type": "integer" }
+          },
+          "required": ["min", "max"],
+          "type": "object"
+        },
+        "resampling_unit": { "const": "scenario_pool_cluster" },
+        "reference_mean": { "type": "number" }
+      },
+      "required": [
+        "pair_count", "cluster_count", "effective_sample_count", "resampling_unit", "pairs_per_cluster",
+        "candidate_mean", "reference_mean", "mean_difference", "paired_standardized_effect",
+        "confidence_level", "confidence_interval", "bootstrap_samples", "bootstrap_seed"
+      ],
+      "type": "object"
+    },
+    "interval": {
+      "additionalProperties": false,
+      "properties": {
+        "lower": { "type": "number" },
+        "upper": { "type": "number" }
+      },
+      "required": ["lower", "upper"],
+      "type": "object"
+    },
+    "pairing": {
+      "additionalProperties": false,
+      "properties": {
+        "errors": { "items": { "type": "string" }, "type": "array" },
+        "key_fields": { "items": { "type": "string" }, "type": "array" },
+        "pair_counts": { "type": "object" },
+        "passed": { "type": "boolean" }
+      },
+      "required": ["passed", "key_fields", "pair_counts", "errors"],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": { "minimum": 100, "type": "integer" },
+        "bootstrap_seed": { "type": "integer" },
+        "confidence_level": { "exclusiveMinimum": 0, "maximum": 1, "type": "number" },
+        "cost_absolute_tolerance_usd": { "minimum": 0, "type": "number" },
+        "family_non_regression_tolerance": { "minimum": 0, "type": "number" },
+        "latency_absolute_tolerance_seconds": { "minimum": 0, "type": "number" },
+        "max_cost_increase_ratio": { "minimum": 0, "type": "number" },
+        "max_latency_increase_ratio": { "minimum": 0, "type": "number" },
+        "minimum_effect": { "minimum": 0, "type": "number" },
+        "minimum_repeats": { "minimum": 3, "type": "integer" },
+        "primary_metric": { "enum": ["pass_rate", "score"], "type": "string" },
+        "required_pools": {
+          "items": { "enum": ["frozen", "rolling", "adversarial"], "type": "string" },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "risk_non_regression_tolerance": { "minimum": 0, "type": "number" }
+      },
+      "required": [
+        "primary_metric", "minimum_effect", "confidence_level", "bootstrap_samples", "bootstrap_seed",
+        "minimum_repeats", "required_pools", "max_cost_increase_ratio", "max_latency_increase_ratio",
+        "cost_absolute_tolerance_usd", "latency_absolute_tolerance_seconds",
+        "family_non_regression_tolerance", "risk_non_regression_tolerance"
+      ],
+      "type": "object"
+    },
+    "sources": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": { "items": { "$ref": "#/$defs/artifact_ref" }, "type": "array" },
+        "flightrecorder": { "items": { "$ref": "#/$defs/artifact_ref" }, "type": "array" },
+        "trace_only": { "items": { "$ref": "#/$defs/artifact_ref" }, "type": "array" }
+      },
+      "required": ["baseline", "trace_only", "flightrecorder"],
+      "type": "object"
+    }
+  }
+}

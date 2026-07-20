@@ -15,6 +15,7 @@ from flightrecorder.validation import validate_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVING_SCRIPT = ROOT / "scripts" / "check_openai_serving.py"
+TRANSFORMERS_SERVING_SCRIPT = ROOT / "scripts" / "serve_transformers_openai.py"
 DEMO_SCRIPT = ROOT / "scripts" / "build_serving_demo_report.py"
 
 
@@ -28,6 +29,25 @@ def _load_script(path: Path, name: str):
 
 
 class ServingDemoTests(unittest.TestCase):
+    def test_transformers_prompt_renderer_passes_tools_to_chat_template(self):
+        serving = _load_script(TRANSFORMERS_SERVING_SCRIPT, "serve_transformers_openai_prompt_test")
+
+        class Tokenizer:
+            def __init__(self):
+                self.kwargs = {}
+
+            def apply_chat_template(self, messages, **kwargs):
+                self.kwargs = kwargs
+                return "rendered"
+
+        tokenizer = Tokenizer()
+        tools = [{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object"}}}]
+
+        prompt = serving._render_chat_prompt(tokenizer, [{"role": "user", "content": "read"}], tools)
+
+        self.assertEqual(prompt, "rendered")
+        self.assertEqual(tokenizer.kwargs["tools"], tools)
+
     def test_committed_demo_artifacts_honor_registered_schema_claims(self):
         catalog = _read_json(ROOT / "flightrecorder" / "schemas" / "manifest.json")
         registered_versions = {item["artifact_schema_version"] for item in catalog["schemas"]}
@@ -88,6 +108,13 @@ class ServingDemoTests(unittest.TestCase):
             self.assertEqual(profile["artifacts"]["serving_profile"], "serving_profile.json")
             self.assertEqual(profile["model_identity"]["served_model_id"], "hfr-mock-model+adapter")
             self.assertTrue(profile["model_identity"]["adapter"]["local"])
+            self.assertTrue(profile["model_identity"]["adapter"]["immutable"])
+            self.assertRegex(profile["model_identity"]["adapter"]["sha256"], r"^[0-9a-f]{64}$")
+            self.assertTrue(profile["model_identity"]["adapter"]["revision"].startswith("local-"))
+            self.assertEqual(
+                profile["model_identity"]["adapter"]["observation_source"],
+                "local_artifact_sha256",
+            )
             self.assertEqual(profile["capabilities"]["streaming"], "supported")
             self.assertEqual(profile["capabilities"]["tool_calls"], "supported")
             self.assertEqual(profile["capabilities"]["structured_outputs"], "supported")
@@ -105,6 +132,92 @@ class ServingDemoTests(unittest.TestCase):
                 [target["type"] for target in validation["targets"]],
                 ["serving_profile", "serving_compatibility_report", "serving_endpoint_check"],
             )
+
+    def test_remote_adapter_identity_must_be_observed_from_endpoint_metadata(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_remote_identity")
+        model = "Qwen/Qwen3-4B-Instruct-2507"
+        adapter_id = "example/agent-adapter"
+        revision = "adapter-revision-42"
+        adapter_sha256 = "a" * 64
+        served_model = f"{model}+{adapter_id}"
+        health = {"ok": True, "status_code": 200, "url": "http://endpoint/health", "json": {"ok": True}}
+        models = {
+            "ok": True,
+            "status_code": 200,
+            "url": "http://endpoint/v1/models",
+            "json": {"data": [{"id": served_model}]},
+        }
+        chat = {
+            "ok": True,
+            "status_code": 200,
+            "url": "http://endpoint/v1/chat/completions",
+            "json": {"model": served_model, "choices": [{"message": {"content": "ok"}}]},
+        }
+        capability = {"status": "supported", "response_ok": True, "error": None}
+        streaming = {**capability, "event_count": 1, "done_seen": True, "text": "ok"}
+        tools = {**capability, "tool_call_count": 1, "tool_calls": [{}]}
+        structured = {**capability, "json_parse_passed": True, "parsed": {}, "text": "{}"}
+
+        def run_check(root: Path, metadata_payload: dict) -> tuple[dict, dict]:
+            metadata = {
+                "ok": True,
+                "status_code": 200,
+                "url": "http://endpoint/v1/models/model",
+                "json": metadata_payload,
+            }
+            with (
+                mock.patch.object(check_openai_serving, "_get_first_json", side_effect=[health, metadata]),
+                mock.patch.object(check_openai_serving, "_request_json", side_effect=[models, chat]),
+                mock.patch.object(check_openai_serving, "_tool_call_check", return_value=tools),
+                mock.patch.object(check_openai_serving, "_structured_output_check", return_value=structured),
+                mock.patch.object(check_openai_serving, "_streaming_check", return_value=streaming),
+            ):
+                profile, _compatibility, report = check_openai_serving.check_endpoint(
+                    base_url="http://endpoint/v1",
+                    model=model,
+                    provider="custom",
+                    arm="flightrecorder",
+                    engine="openai_compatible",
+                    adapter=adapter_id,
+                    adapter_id=adapter_id,
+                    adapter_revision=revision,
+                    adapter_sha256=adapter_sha256,
+                    api_key="",
+                    timeout=1.0,
+                    out_dir=root,
+                    require_streaming=True,
+                    require_tool_call=True,
+                    require_structured_output=True,
+                )
+            return profile, report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            observed_profile, observed_report = run_check(
+                root,
+                {
+                    "id": served_model,
+                    "adapter": {
+                        "id": adapter_id,
+                        "revision": revision,
+                        "sha256": adapter_sha256,
+                    },
+                },
+            )
+            self.assertTrue(observed_report["passed"], observed_report)
+            self.assertEqual(
+                observed_profile["model_identity"]["adapter"]["observation_source"],
+                "endpoint_model_metadata",
+            )
+
+            declared_profile, declared_report = run_check(root, {"id": served_model})
+            self.assertFalse(declared_report["passed"])
+            self.assertEqual(
+                declared_profile["model_identity"]["adapter"]["observation_source"],
+                "unobserved",
+            )
+            self.assertIn("adapter_identity_observed", declared_report["failed_checks"])
+            self.assertIn("adapter_identity_matches_expected", declared_report["failed_checks"])
 
     def test_partial_sse_stream_without_done_marker_is_not_supported(self):
         check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_partial_sse")
