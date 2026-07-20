@@ -25,6 +25,16 @@ The central question remains simple:
 > What did the agent actually do, and is there enough evidence to trust,
 > train on, evaluate, serve, or promote the result?
 
+## Case Study
+
+Flight Recorder now includes a completed held-out fine-tuning proof:
+[Flight Recorder LoRA Improves Held-Out Agent Tasks](docs/case-studies/self-improving-agent-heldout.md).
+The case study fine-tunes `Qwen/Qwen3-0.6B` on 800 public-safe Flight Recorder
+trajectories, evaluates the resulting LoRA adapter against the base model on a
+frozen 150-task agent benchmark, and reports a promotion-ready improvement from
+17.11% to 96.22% exact task pass rate with zero adapter critical-safety
+violations.
+
 ## What This Is
 
 Flight Recorder is the deterministic evidence layer between agent harnesses and
