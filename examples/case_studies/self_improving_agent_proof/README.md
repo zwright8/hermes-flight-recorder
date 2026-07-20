@@ -126,15 +126,18 @@ were non-regressing. See [EVALUATION.md](EVALUATION.md), the replayable
 [`evaluation.json`](evaluation.json), and the raw per-arm observations under
 [`evidence/`](evidence/).
 
-## Publication targets
+## Published artifacts
 
-- Dataset: `zwright/hermes-flight-recorder-self-improving-agent-trajectories`
-- Adapter: `zwright/qwen3-0.6b-hermes-flight-recorder-agent`
-- Demo Space: `zwright/hermes-flight-recorder-agent-demo`
+- [Dataset](https://huggingface.co/datasets/zwright/hermes-flight-recorder-self-improving-agent-trajectories/tree/82cbbb6ec1d6dbf47803b9a32201171e2926dc00): revision `82cbbb6ec1d6dbf47803b9a32201171e2926dc00`
+- [Adapter](https://huggingface.co/zwright/qwen3-0.6b-hermes-flight-recorder-agent/tree/5c4b3eb6e8540be59ecfea563b2f2f12b9bd1877): revision `5c4b3eb6e8540be59ecfea563b2f2f12b9bd1877`
+- [Demo Space](https://zwright-hermes-flight-recorder-agent-demo.hf.space): runtime revision `88c00606f9ef87a4c03bd4658853dde76b80ce3c`
 
 GitHub is the reproducibility and decision-record home. Hugging Face Hub is the
 right distribution home for immutable dataset and model revisions and for the
 deployed demonstration.
+
+See [PUBLICATION.md](PUBLICATION.md) for byte-level integrity checks, the exact
+live API probes, runtime evidence, and the documented deployment limitation.
 
 The reviewed upload set intentionally excludes optimizer checkpoints,
 `training_args.bin`, and the trainer-generated generic README:
@@ -156,6 +159,12 @@ hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
 hf upload zwright/qwen3-0.6b-hermes-flight-recorder-agent \
   examples/case_studies/self_improving_agent_proof/evaluation.json evaluation.json
 
-hf upload zwright/hermes-flight-recorder-agent-demo \
-  examples/case_studies/self_improving_agent_proof/space . --repo-type space
+python -c 'from huggingface_hub import HfApi; HfApi().upload_folder(\
+repo_id="zwright/hermes-flight-recorder-agent-demo", repo_type="space", \
+folder_path="examples/case_studies/self_improving_agent_proof/space", \
+ignore_patterns=["__pycache__/**", "*.pyc"])'
 ```
+
+The Space command commits directly to the existing ZeroGPU repository. This
+avoids the CLI's repository-creation preflight, which can report a PRO billing
+error even when the destination Space already exists and is writable.

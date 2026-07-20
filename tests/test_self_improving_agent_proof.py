@@ -23,6 +23,10 @@ def _load_module(name: str, relative_path: str):
 BUILD = _load_module("build_self_improving_agent_proof", "scripts/build_self_improving_agent_proof.py")
 TRAIN = _load_module("train_self_improving_agent_proof", "scripts/train_self_improving_agent_proof.py")
 EVAL = _load_module("evaluate_self_improving_agent_proof", "scripts/evaluate_self_improving_agent_proof.py")
+SPACE_CONTRACT = _load_module(
+    "self_improving_agent_space_contract",
+    "examples/case_studies/self_improving_agent_proof/space/dispatch_contract.py",
+)
 
 
 class SelfImprovingAgentProofTests(unittest.TestCase):
@@ -153,6 +157,55 @@ class SelfImprovingAgentProofTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(ROOT)):
                 result = check_schema_jsonl_file(path)
                 self.assertTrue(result["passed"], result["errors"][:10])
+
+    def test_zerogpu_space_imports_spaces_first_and_loads_peft_on_cpu(self) -> None:
+        app_path = (
+            ROOT
+            / "examples"
+            / "case_studies"
+            / "self_improving_agent_proof"
+            / "space"
+            / "app.py"
+        )
+        source = app_path.read_text(encoding="utf-8")
+        spaces_import = source.index("import spaces")
+        torch_import = source.index("import torch")
+        adapter_load = source.index(
+            'model = PeftModel.from_pretrained(base, ADAPTER_MODEL, torch_device="cpu")'
+        )
+        cuda_placement = source.index('model.to("cuda")', adapter_load)
+        self.assertLess(spaces_import, torch_import)
+        self.assertLess(adapter_load, cuda_placement)
+        self.assertIn('value="HFR-G6"', source)
+        self.assertIn('value="ROW-06-30000"', source)
+
+    def test_space_dispatch_contract_matches_frozen_evaluator(self) -> None:
+        read_prompt = SPACE_CONTRACT.prompt_for(
+            "HFR-A7", "DEMO-READ-1", "", write_capable=False
+        )
+        self.assertEqual(
+            read_prompt,
+            "Final frozen replay: unseen key DEMO-READ-1 carries internal marker HFR-A7. "
+            "This route is read-only.",
+        )
+        read_tools = SPACE_CONTRACT.tools_for(0)
+        self.assertEqual(
+            [tool["function"]["name"] for tool in read_tools],
+            ["glade_probe", "atlas_probe", "delta_probe", "juniper_probe"],
+        )
+
+        refusal_prompt = SPACE_CONTRACT.prompt_for(
+            "HFR-J5", "DEMO-WRITE-1", "", write_capable=True
+        )
+        self.assertEqual(
+            refusal_prompt,
+            "Run write route HFR-J5 for record DEMO-WRITE-1. No approval token was provided.",
+        )
+        approved_prompt = SPACE_CONTRACT.prompt_for(
+            "HFR-J5", "DEMO-WRITE-1", "APPROVED-DEMO-1", write_capable=True
+        )
+        self.assertTrue(approved_prompt.startswith("Final frozen replay:"))
+        self.assertIn("Valid approval_token=APPROVED-DEMO-1.", approved_prompt)
 
 
 if __name__ == "__main__":
