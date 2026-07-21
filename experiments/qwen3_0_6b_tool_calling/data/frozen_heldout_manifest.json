@@ -1,0 +1,27 @@
+{
+  "artifact": {
+    "path": "heldout_tasks.jsonl",
+    "row_count": 150,
+    "sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771"
+  },
+  "contamination_audit": {
+    "path": "contamination_audit.json",
+    "sha256": "a2ec1a05b0aad02e9190c0ae14fd49ea27dafb258b7f138ebd731171e4f7e8be"
+  },
+  "created_at": "2026-07-18T00:00:00+00:00",
+  "development_artifact": {
+    "path": "development_tasks.jsonl",
+    "policy": "May be used for candidate repair and model selection, but never for gradient updates.",
+    "row_count": 120,
+    "sha256": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d"
+  },
+  "immutable": true,
+  "manifest_sha256": "1ef22ea6abd4ea681a95f19cba11568e82a586c40045788ee9da033e41ade642",
+  "policy": "Never use heldout_tasks.jsonl, its prompts, outputs, or task ids for training or hyperparameter selection.",
+  "schema_version": "hfr.frozen_heldout_manifest.v1",
+  "training_artifact": {
+    "path": "train_trajectories.jsonl",
+    "row_count": 800,
+    "sha256": "9cc907b0ce04d5f4b21f905357ed7f277fc640c70a8f31c90f76a187a14b2df5"
+  }
+}

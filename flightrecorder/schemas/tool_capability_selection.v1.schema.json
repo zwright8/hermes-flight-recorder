@@ -1,0 +1,82 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tool_capability_selection.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Governed deterministic decision describing exactly which tool definitions may be exposed for a trusted task contract.",
+  "properties": {
+    "schema_version": {"const": "hfr.tool_capability_selection.v1"},
+    "router_version": {"type": "string"},
+    "task_contract_id": {"type": "string"},
+    "task_contract": {"type": "object"},
+    "task_contract_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "tool_catalog_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "policy": {"type": "object"},
+    "policy_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "environment": {"type": "object"},
+    "required_capabilities": {"items": {"type": "string"}, "type": "array"},
+    "optional_capabilities": {"items": {"type": "string"}, "type": "array"},
+    "evaluated_tools": {"items": {"$ref": "#/$defs/evaluatedTool"}, "type": "array"},
+    "selected_tools": {"items": {"$ref": "#/$defs/selectedTool"}, "type": "array"},
+    "selected_tool_set_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "selected_requires_external_write_authorization": {"type": "boolean"},
+    "passed": {"type": "boolean"},
+    "blocking_reasons": {"items": {"type": "string"}, "type": "array"},
+    "decision_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "router_version",
+    "task_contract_id",
+    "task_contract",
+    "task_contract_fingerprint",
+    "tool_catalog_fingerprint",
+    "policy",
+    "policy_fingerprint",
+    "environment",
+    "required_capabilities",
+    "optional_capabilities",
+    "evaluated_tools",
+    "selected_tools",
+    "selected_tool_set_fingerprint",
+    "selected_requires_external_write_authorization",
+    "passed",
+    "blocking_reasons",
+    "decision_fingerprint"
+  ],
+  "$defs": {
+    "selectedTool": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "definition_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "capabilities": {"items": {"type": "string"}, "type": "array"},
+        "risk_class": {"type": "string"},
+        "write_capable": {"type": "boolean"},
+        "requires_write_authorization": {"type": "boolean"},
+        "parameters_schema": {"type": "object"}
+      },
+      "required": ["name", "version", "definition_sha256", "capabilities", "risk_class", "write_capable", "requires_write_authorization", "parameters_schema"],
+      "type": "object"
+    },
+    "evaluatedTool": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "definition_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "capabilities": {"items": {"type": "string"}, "type": "array"},
+        "risk_class": {"type": "string"},
+        "write_capable": {"type": "boolean"},
+        "requires_write_authorization": {"type": "boolean"},
+        "parameters_schema": {"type": "object"},
+        "eligible": {"type": "boolean"},
+        "reason_codes": {"items": {"type": "string"}, "type": "array"}
+      },
+      "required": ["name", "version", "definition_sha256", "capabilities", "risk_class", "write_capable", "requires_write_authorization", "parameters_schema", "eligible", "reason_codes"],
+      "type": "object"
+    }
+  },
+  "title": "Hermes Flight Recorder Tool Capability Selection",
+  "type": "object"
+}

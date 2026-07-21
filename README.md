@@ -79,6 +79,7 @@ and handoff receipts that make those systems auditable.
 | Cloud training | Record provider capabilities, constraints, dry-run launch/status receipts, and import-only completion evidence from external runners. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch`, `cloud-training import-completion` |
 | Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, governance-action, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `agentic-loop governance`, `next-iteration-schedule`, `validate --agentic-loop-governance-receipt` |
 | Eval | Require identical held-out scenarios, adapter contracts, imported per-case execution evidence, and separation between raw movement and governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `external-eval-result`, `compare-suite` |
+| Runtime routing | Select eligible tools and exactly one independently promoted atomic adapter from trusted task contracts; enforce content-bound write approval before dispatch. | `runtime-router tool-capabilities`, `runtime-router adapter`, `validate --tool-capability-selection`, `validate --adapter-route-decision` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
 
@@ -186,6 +187,14 @@ For the larger production proof—800 trajectories, a frozen 150-task final set,
 three repeated baseline-versus-adapter evaluations, statistical and safety
 gates, immutable Hub artifacts, and a live ZeroGPU demo—see the
 [self-improving agent proof](examples/case_studies/self_improving_agent_proof/README.md).
+For a synthetic offline demonstration of rapid, baseline-first LoRA recipe
+experimentation with development-only selection, immutable trial receipts,
+fixed budgets, and a separate repeated held-out promotion boundary, see the
+[governed autoresearch-style LoRA optimizer](examples/case_studies/autoresearch_lora_optimizer/README.md).
+For the implemented generalist-plus-specialists architecture, realistic
+360-trajectory corpus, deterministic task-contract router, and external
+pre-dispatch write boundary, see the
+[runtime adapter router case study](examples/case_studies/runtime_adapter_router/README.md).
 For the governed collect → review/credit → curate → route → durable-controller
 path, use the public-safe
 [self-improving loop case study](examples/self_improving_loop/README.md).
@@ -960,6 +969,10 @@ Trainer handoff stages with failed checks are blockers, not readiness evidence.
   adapter manifest, and dry-run plan flow.
 - `docs/agentic-finetune-training-layer.md`: agentic training plans, runtime
   preflight, and result receipts.
+- `docs/local-agentic-training.md`: fixed-time, offline local LoRA training from
+  governed task-family artifacts, including native tool-call action-SFT on MPS.
+- `docs/runtime-adapter-routing.md`: deterministic tool and atomic-adapter
+  routing, independent promotion bindings, fallback, and write authorization.
 - `docs/agentic-finetune-eval-layer.md`: held-out eval, external adapter, and
   governance-claim boundaries.
 - `docs/serving-demo.md`: serving preflight, managed lifecycle, and replayable

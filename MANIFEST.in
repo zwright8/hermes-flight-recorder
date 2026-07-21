@@ -4,6 +4,8 @@ include HERMES_CONTRIBUTION.md
 include DEPLOYMENT.md
 include SECURITY.md
 include TRAINING_PIPELINE.md
+include docs/local-agentic-training.md
+include docs/runtime-adapter-routing.md
 include scenario.schema.json
 include demo.sh
 include release_check.sh
@@ -20,6 +22,12 @@ include scripts/build_serving_demo_report.py
 include scripts/plan_agentic_training.py
 include scripts/preflight_agentic_training_runtime.py
 include scripts/archive_agentic_training_result.py
+include scripts/run_lora_recipe_autoresearch_demo.py
+include scripts/validate_lora_recipe_autoresearch_demo.py
+include scripts/validate_local_agentic_training.py
+include scripts/build_runtime_adapter_training_corpus.py
+include scripts/evaluate_runtime_adapter_candidates.py
+include scripts/validate_runtime_adapter_router.py
 recursive-include flightrecorder/schemas *.json
 recursive-include scenarios *.json
 recursive-include fixtures *.jsonl *.json

@@ -4,11 +4,23 @@ Flight Recorder can now export completed run directories into training-ready
 JSONL artifacts. This is a bridge from deterministic eval evidence to future
 SFT, preference-tuning, reward-modeling, or RL loops.
 
-It is not a weight-updating trainer or live provider runner. It can build
-deterministic mock rollout receipts and delegated trainer flows, but it does not
-launch paid rollouts, update model weights, or guarantee that a reward function
-is impossible to game. It gives external runners a clean, deterministic control
-plane grounded in observed traces.
+The core package and CLI are not weight-updating trainers or live provider
+runners. They build deterministic mock rollout receipts and delegated trainer
+flows without launching paid rollouts or claiming a reward function is
+impossible to game. The optional `scripts/train_agentic_lora.py` reference
+runner can update a local LoRA adapter only after an explicit launch; its
+fixed-time, task-scoped, offline mode is documented in
+[`docs/local-agentic-training.md`](docs/local-agentic-training.md). Heavy ML
+dependencies remain outside the core package.
+
+For runtime specialization, use one broadly trained generalist and at most the
+browser, database, and code/terminal specialists described in
+[`docs/runtime-adapter-routing.md`](docs/runtime-adapter-routing.md). Flight
+Recorder routes from trusted task contracts, activates one atomic adapter per
+model call, and requires independent training, sealed evaluation, safety, and
+promotion evidence for every adapter revision. Merged or stacked adapters are
+new candidates, not a shortcut around promotion. Write-capable tool calls are
+authorized outside the model immediately before dispatch.
 
 Public artifact schemas are bundled with the package for downstream systems
 that need stable contracts before wiring Flight Recorder into review or

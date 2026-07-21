@@ -1,0 +1,83 @@
+{
+  "candidate_id": "qwen3_0_6b_runtime_adapter_router_corpus",
+  "compatibility": {
+    "chat_template": {
+      "notes": "Native tool-call examples bind the expected chat-template hash.",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      "source": "case_study_contract",
+      "status": "pinned_hash",
+      "verified": true
+    },
+    "context_length": 40960,
+    "memory": {
+      "notes": "Memory fit is checked by downstream local-training preflight, not this builder.",
+      "source": "case_study_contract",
+      "status": "not_evaluated",
+      "verified": false
+    },
+    "quantization": {
+      "notes": "No quantized model is claimed by the corpus builder.",
+      "source": "case_study_contract",
+      "status": "not_evaluated",
+      "verified": false
+    },
+    "serving": {
+      "notes": "The case study records local/offline training inputs and does not start a serving endpoint.",
+      "source": "case_study_contract",
+      "status": "local_offline_only",
+      "supported": true,
+      "verified": true
+    },
+    "structured_outputs": {
+      "notes": "Structured output serving is outside this corpus builder.",
+      "source": "case_study_contract",
+      "status": "not_required_for_training_corpus",
+      "supported": false,
+      "verified": false
+    },
+    "tokenizer": {
+      "notes": "The tokenizer identity is pinned to the cached Qwen3-0.6B revision.",
+      "repo_id": "Qwen/Qwen3-0.6B",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "source": "case_study_contract",
+      "status": "pinned_revision",
+      "verified": true
+    },
+    "tool_calls": {
+      "notes": "The corpus records native tool_calls, call IDs, exact tool schemas, and tool results.",
+      "source": "case_study_contract",
+      "status": "native_json_tool_calls",
+      "supported": true,
+      "verified": true
+    }
+  },
+  "license": {
+    "accepted_terms": true,
+    "license_id": "apache-2.0",
+    "notes": [
+      "The upstream model card declares Apache-2.0; local training remains offline and cache-bound."
+    ],
+    "review_status": "approved",
+    "reviewed_at": "2026-07-21T00:00:00Z",
+    "reviewer": "runtime-adapter-router-case-study",
+    "source_url": "https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/LICENSE",
+    "status": "approved",
+    "terms_url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+    "training_allowed": true
+  },
+  "model_id": "Qwen/Qwen3-0.6B",
+  "offline_training": {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "push_to_hub": false,
+    "remote_tracking": false
+  },
+  "schema_version": "hfr.model_candidate.v1",
+  "source": {
+    "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+    "type": "huggingface_model",
+    "url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+    "weight_download_allowed": false
+  }
+}

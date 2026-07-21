@@ -1162,6 +1162,38 @@
       "name": "agentic_eval_promotion_evidence"
     },
     {
+      "artifact": "lora_recipe_search_plan",
+      "artifact_schema_version": "hfr.lora_recipe_search_plan.v1",
+      "description": "Immutable development-only guardrails for bounded autonomous LoRA recipe search.",
+      "filename": "lora_recipe_search_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_search_plan.v1.schema.json",
+      "name": "lora_recipe_search_plan"
+    },
+    {
+      "artifact": "lora_recipe_trial",
+      "artifact_schema_version": "hfr.lora_recipe_trial.v1",
+      "description": "Immutable receipt for one baseline, kept, discarded, crashed, or blocked LoRA recipe trial.",
+      "filename": "lora_recipe_trial.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_trial.v1.schema.json",
+      "name": "lora_recipe_trial"
+    },
+    {
+      "artifact": "lora_recipe_search_result",
+      "artifact_schema_version": "hfr.lora_recipe_search_result.v1",
+      "description": "Replayable campaign ledger and development-selected LoRA recipe champion.",
+      "filename": "lora_recipe_search_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_search_result.v1.schema.json",
+      "name": "lora_recipe_search_result"
+    },
+    {
+      "artifact": "lora_recipe_promotion_handoff",
+      "artifact_schema_version": "hfr.lora_recipe_promotion_handoff.v1",
+      "description": "Fail-closed bridge from a development-selected LoRA recipe to replayable held-out promotion evidence.",
+      "filename": "lora_recipe_promotion_handoff.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_promotion_handoff.v1.schema.json",
+      "name": "lora_recipe_promotion_handoff"
+    },
+    {
       "artifact": "huggingface_reviewed_training_plan",
       "artifact_schema_version": "hfr.huggingface_reviewed_training_plan.v1",
       "description": "Content-addressed reviewed Hugging Face training plan that is the sole source of trainer behavior.",
@@ -1320,6 +1352,30 @@
       "filename": "intervention_route.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/intervention_route.v1.schema.json",
       "name": "intervention_route"
+    },
+    {
+      "artifact": "tool_capability_selection",
+      "artifact_schema_version": "hfr.tool_capability_selection.v1",
+      "description": "Deterministic task-contract decision recording every eligible and rejected runtime tool capability.",
+      "filename": "tool_capability_selection.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tool_capability_selection.v1.schema.json",
+      "name": "tool_capability_selection"
+    },
+    {
+      "artifact": "adapter_route_decision",
+      "artifact_schema_version": "hfr.adapter_route_decision.v1",
+      "description": "Exact-one-adapter runtime route bound to immutable model identity and independent promotion evidence.",
+      "filename": "adapter_route_decision.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/adapter_route_decision.v1.schema.json",
+      "name": "adapter_route_decision"
+    },
+    {
+      "artifact": "runtime_adapter_candidate_evaluation",
+      "artifact_schema_version": "hfr.runtime_adapter_candidate_evaluation.v1",
+      "description": "Sealed independent evaluation report for runtime adapter candidates with fail-closed promotion eligibility.",
+      "filename": "runtime_adapter_candidate_evaluation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/runtime_adapter_candidate_evaluation.v1.schema.json",
+      "name": "runtime_adapter_candidate_evaluation"
     },
     {
       "artifact": "self_improving_agent_dataset",

@@ -49,6 +49,9 @@
     "input_manifests": {
       "type": "object"
     },
+    "local_training": {
+      "$ref": "#/$defs/local_training"
+    },
     "mode": {
       "enum": [
         "trace_sft",
@@ -102,6 +105,9 @@
     "smoke": {
       "type": "object"
     },
+    "task_scope": {
+      "$ref": "#/$defs/task_scope"
+    },
     "trainer_backends": {
       "type": "object"
     }
@@ -126,12 +132,143 @@
     "raw_counts",
     "prepared_counts",
     "hyperparameters",
+    "local_training",
+    "task_scope",
     "compute_assumptions",
     "trainer_backends"
   ],
   "title": "Hermes Flight Recorder Agentic LoRA Training Plan",
   "type": "object",
   "$defs": {
+    "local_training": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_targets": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "design_reference": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "device_order": {
+          "items": {
+            "enum": [
+              "cuda",
+              "mps",
+              "cpu"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "execution_requested": {
+          "type": "boolean"
+        },
+        "fixed_training_time_budget_seconds": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "hub_push_allowed": {
+          "type": "boolean"
+        },
+        "local_files_only": {
+          "type": "boolean"
+        },
+        "model_path": {
+          "type": "string"
+        },
+        "network_allowed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "remote_tracking_allowed": {
+          "type": "boolean"
+        },
+        "requested_device": {
+          "enum": [
+            "auto",
+            "mps",
+            "cuda",
+            "cpu"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "execution_requested",
+        "local_files_only",
+        "network_allowed",
+        "hub_push_allowed",
+        "remote_tracking_allowed",
+        "requested_device",
+        "device_order",
+        "fixed_training_time_budget_seconds",
+        "model_path",
+        "adapter_targets",
+        "design_reference"
+      ],
+      "type": "object"
+    },
+    "task_scope": {
+      "additionalProperties": true,
+      "properties": {
+        "available_task_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "filter_applied": {
+          "type": "boolean"
+        },
+        "full_raw_counts": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "requested_task_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "selected_raw_counts": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "selected_task_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requested_task_families",
+        "available_task_families",
+        "selected_task_families",
+        "filter_applied",
+        "full_raw_counts",
+        "selected_raw_counts"
+      ],
+      "type": "object"
+    },
     "check": {
       "additionalProperties": true,
       "properties": {

@@ -1,6 +1,26 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_lora_training_result.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "final_adapter_artifacts",
+          "runtime_observation"
+        ]
+      }
+    }
+  ],
   "additionalProperties": true,
   "description": "Result archive emitted by scripts/train_agentic_lora.py after success, classified failure, or blocked launch.",
   "properties": {
@@ -27,7 +47,7 @@
       ]
     },
     "final_adapter_artifacts": {
-      "type": "object"
+      "$ref": "#/$defs/adapter_artifacts"
     },
     "hub_persistence": {
       "type": "object"
@@ -52,6 +72,9 @@
     },
     "output_dir": {
       "type": "string"
+    },
+    "runtime_observation": {
+      "$ref": "#/$defs/runtime_observation"
     },
     "schema_version": {
       "const": "hfr.agentic_lora_training_result.v1"
@@ -90,5 +113,124 @@
     "failure"
   ],
   "title": "Hermes Flight Recorder Agentic LoRA Training Result",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "adapter_artifacts": {
+      "additionalProperties": true,
+      "properties": {
+        "directory": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "file_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "files": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "size_bytes",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "directory",
+        "file_count",
+        "files"
+      ],
+      "type": "object"
+    },
+    "runtime_observation": {
+      "additionalProperties": true,
+      "properties": {
+        "accelerator_memory_mb": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "device": {
+          "enum": [
+            "cuda",
+            "mps",
+            "cpu"
+          ]
+        },
+        "dtype": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "fixed_training_time_budget_seconds": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "local_files_only": {
+          "type": "boolean"
+        },
+        "local_training": {
+          "type": "boolean"
+        },
+        "network_allowed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "peak_process_memory_mb": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "stopped_by_time_budget": {
+          "type": "boolean"
+        },
+        "task_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trainer_active_seconds": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "device",
+        "dtype",
+        "local_training",
+        "local_files_only",
+        "network_allowed",
+        "fixed_training_time_budget_seconds",
+        "trainer_active_seconds",
+        "stopped_by_time_budget",
+        "peak_process_memory_mb",
+        "accelerator_memory_mb",
+        "task_families"
+      ],
+      "type": "object"
+    }
+  }
 }

@@ -1,0 +1,213 @@
+{
+  "adapter_artifacts": {
+    "directory": "experiments/qwen3_0_6b_tool_calling/adapter",
+    "file_count": 29,
+    "files": [
+      {
+        "path": "README.md",
+        "sha256": "71d37fe5264c5476f2e4ec86f18842831e2208e3f4a32f287f37d133c09fce2d",
+        "size_bytes": 1426
+      },
+      {
+        "path": "adapter_config.json",
+        "sha256": "e522678cd21a3f5208b2a05f6d4656a058ef1c228280737827fdbfc20cc8fb33",
+        "size_bytes": 1094
+      },
+      {
+        "path": "adapter_model.safetensors",
+        "sha256": "f331abe3b6a92d879957e27a94038df2b2b7449e2f307bbcc28534a0d4342267",
+        "size_bytes": 40422168
+      },
+      {
+        "path": "chat_template.jinja",
+        "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "size_bytes": 4168
+      },
+      {
+        "path": "checkpoint-100/README.md",
+        "sha256": "1a4fa59c2054df8d96039c64094c691c6c59aaf1c3cfdd0c8a29bd5be7a5e6f7",
+        "size_bytes": 5196
+      },
+      {
+        "path": "checkpoint-100/adapter_config.json",
+        "sha256": "e522678cd21a3f5208b2a05f6d4656a058ef1c228280737827fdbfc20cc8fb33",
+        "size_bytes": 1094
+      },
+      {
+        "path": "checkpoint-100/adapter_model.safetensors",
+        "sha256": "f331abe3b6a92d879957e27a94038df2b2b7449e2f307bbcc28534a0d4342267",
+        "size_bytes": 40422168
+      },
+      {
+        "path": "checkpoint-100/chat_template.jinja",
+        "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "size_bytes": 4168
+      },
+      {
+        "path": "checkpoint-100/optimizer.pt",
+        "sha256": "4cc7b341e64fd63abe24a57a1bf4878c5161c89526ff3227e4b5ac1d48a38cce",
+        "size_bytes": 81059067
+      },
+      {
+        "path": "checkpoint-100/rng_state.pth",
+        "sha256": "2cddf27219365242ec1046a3532a63a24c3f350c77f100e4f973369db2cc849d",
+        "size_bytes": 14455
+      },
+      {
+        "path": "checkpoint-100/scheduler.pt",
+        "sha256": "42aaff1ccafa995a49fd396d827e12929b4e33ac7278360e0f120ab636456993",
+        "size_bytes": 1465
+      },
+      {
+        "path": "checkpoint-100/tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "checkpoint-100/tokenizer_config.json",
+        "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952",
+        "size_bytes": 693
+      },
+      {
+        "path": "checkpoint-100/trainer_state.json",
+        "sha256": "d1e504567e5a99b51762e863a5ddb1c5d4a07d7f22072927dc312bf49e08922d",
+        "size_bytes": 27904
+      },
+      {
+        "path": "checkpoint-100/training_args.bin",
+        "sha256": "9fa7a8f23a1dd9a560614e1dbacd07eea822829bef9c3d956c00c9ec517cc63c",
+        "size_bytes": 5841
+      },
+      {
+        "path": "checkpoint-50/README.md",
+        "sha256": "1a4fa59c2054df8d96039c64094c691c6c59aaf1c3cfdd0c8a29bd5be7a5e6f7",
+        "size_bytes": 5196
+      },
+      {
+        "path": "checkpoint-50/adapter_config.json",
+        "sha256": "e522678cd21a3f5208b2a05f6d4656a058ef1c228280737827fdbfc20cc8fb33",
+        "size_bytes": 1094
+      },
+      {
+        "path": "checkpoint-50/adapter_model.safetensors",
+        "sha256": "7aee732500eaf9e32c6f350182936e4a198c1e82d1b3e698ecadfb8758e9abbb",
+        "size_bytes": 40422168
+      },
+      {
+        "path": "checkpoint-50/chat_template.jinja",
+        "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "size_bytes": 4168
+      },
+      {
+        "path": "checkpoint-50/optimizer.pt",
+        "sha256": "3ac0fd1d662a358a43d46e704a5c374026285eb4dbd5290fa608943c36a30014",
+        "size_bytes": 81059067
+      },
+      {
+        "path": "checkpoint-50/rng_state.pth",
+        "sha256": "2cddf27219365242ec1046a3532a63a24c3f350c77f100e4f973369db2cc849d",
+        "size_bytes": 14455
+      },
+      {
+        "path": "checkpoint-50/scheduler.pt",
+        "sha256": "b8da1195b11f5faf507d31ba3cd596737d61188afa870acd51b9efab642c07e9",
+        "size_bytes": 1465
+      },
+      {
+        "path": "checkpoint-50/tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "checkpoint-50/tokenizer_config.json",
+        "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952",
+        "size_bytes": 693
+      },
+      {
+        "path": "checkpoint-50/trainer_state.json",
+        "sha256": "6c784c81e9140722b09076c6a88a61fc38d0ac344676732378ac3572aab27ca4",
+        "size_bytes": 14375
+      },
+      {
+        "path": "checkpoint-50/training_args.bin",
+        "sha256": "9fa7a8f23a1dd9a560614e1dbacd07eea822829bef9c3d956c00c9ec517cc63c",
+        "size_bytes": 5841
+      },
+      {
+        "path": "tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "tokenizer_config.json",
+        "sha256": "c4f4c62b741ab2940841480f9942f378d7d3878d47c2babb862af7381c59b952",
+        "size_bytes": 693
+      },
+      {
+        "path": "training_args.bin",
+        "sha256": "9fa7a8f23a1dd9a560614e1dbacd07eea822829bef9c3d956c00c9ec517cc63c",
+        "size_bytes": 5841
+      }
+    ]
+  },
+  "base_model": "Qwen/Qwen3-0.6B",
+  "base_model_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+  "chat_template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+  "created_at": "2026-07-21T13:59:56.316855+00:00",
+  "data_validation": {
+    "checks": {
+      "contamination_passed": true,
+      "dataset_public_safe": true,
+      "development_sha256": true,
+      "heldout_immutable": true,
+      "heldout_sha256": true,
+      "non_training_artifacts_are_distinct": true,
+      "train_sha256": true
+    },
+    "dataset_sha256": "e2af62c0a6668b3c7152579ac6c654052dd07ced6b0d0bda6da8dc387284419b",
+    "development_sha256": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
+    "heldout_sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771",
+    "train_row_count": 800,
+    "train_sha256": "9cc907b0ce04d5f4b21f905357ed7f277fc640c70a8f31c90f76a187a14b2df5"
+  },
+  "hub": null,
+  "hyperparameters": {
+    "assistant_only_loss": true,
+    "batch_size": 1,
+    "epochs": 2.0,
+    "gradient_accumulation_steps": 8,
+    "learning_rate": 0.0002,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "lora_r": 16,
+    "max_length": 640,
+    "max_steps": 100,
+    "precision": "mps-float16",
+    "seed": 42
+  },
+  "libraries": {
+    "datasets": "5.0.0",
+    "peft": "0.19.1",
+    "torch": "2.12.1",
+    "trackio": "0.28.0",
+    "transformers": "5.12.1",
+    "trl": "1.7.0"
+  },
+  "metrics": {
+    "epoch": 1.0,
+    "total_flos": 1304836177920000.0,
+    "train_loss": 0.019635146418731892,
+    "train_runtime": 521.1097,
+    "train_samples_per_second": 1.535,
+    "train_steps_per_second": 0.192
+  },
+  "schema_version": "hfr.self_improving_agent_training_result.v1",
+  "status": "succeeded",
+  "tracking": {
+    "enabled": false,
+    "project": "hermes-flightrecorder-self-improving-proof",
+    "run_name": "qwen3-0.6b-hfr-tool-calling-reproduction",
+    "space_id": null
+  },
+  "training_row_count": 800
+}

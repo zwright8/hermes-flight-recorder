@@ -1,0 +1,165 @@
+{
+  "artifact_fingerprints": {
+    "action_credit": {
+      "exists": true,
+      "path": "../controls/action_credit.jsonl",
+      "sha256": "0552c3e9b79607332304acfaeb12f3952335471602c90cbf6ecfb241e667655c",
+      "size_bytes": 177376
+    },
+    "action_sft": {
+      "exists": true,
+      "path": "../data/generalist/flightrecorder_action_sft.jsonl",
+      "sha256": "32c644970a77644d6254647cc2da0dc986052573754f011337f83c3e09a1209f",
+      "size_bytes": 3177461
+    },
+    "branch_replay": {
+      "exists": true,
+      "path": "../controls/branch_replay.json",
+      "sha256": "3f5cb356822551fb294fef06fc289dd3eee47d345ae77f8c2f605dece50651f2",
+      "size_bytes": 1466
+    },
+    "contamination_report": {
+      "exists": true,
+      "path": "../controls/contamination_report.json",
+      "sha256": "7d4444d82721a3099c4927f3b94570f23fc3fb80ee245657c96024c810583bf5",
+      "size_bytes": 58334
+    },
+    "curated_dataset": {
+      "exists": true,
+      "path": "../controls/curated_dataset.json",
+      "sha256": "00f60abd78ba3915a27fc4f0fa1d6ea0a03b855005bdb813f34b2783d5876416",
+      "size_bytes": 5027571
+    },
+    "flightrecorder_action_sft": {
+      "exists": true,
+      "path": "../data/generalist/flightrecorder_action_sft.jsonl",
+      "sha256": "32c644970a77644d6254647cc2da0dc986052573754f011337f83c3e09a1209f",
+      "size_bytes": 3177461
+    },
+    "fr_action_sft": {
+      "exists": true,
+      "path": "../data/generalist/flightrecorder_action_sft.jsonl",
+      "sha256": "32c644970a77644d6254647cc2da0dc986052573754f011337f83c3e09a1209f",
+      "size_bytes": 3177461
+    },
+    "governance_receipt": {
+      "exists": true,
+      "path": "../controls/governance_receipt.json",
+      "sha256": "807d19f198ca5e0c4e066f58f6f983200fa8fd8250b38fa41dfe557188454033",
+      "size_bytes": 67636
+    },
+    "reviewed_preferences": {
+      "exists": true,
+      "path": "../controls/reviewed_preferences.jsonl",
+      "sha256": "0f4878afe3514a2dfdd5bfaa40dbabc64332b994bb3ca05f7a9365bc7347fae1",
+      "size_bytes": 1057
+    },
+    "rl_action_sft": {
+      "exists": true,
+      "path": "../data/rl_action_sft.jsonl",
+      "sha256": "8f0bf80d6c1ff4122b320d7c721e564d744b7e373700387fb844473dd78ed7b9",
+      "size_bytes": 2908757
+    }
+  },
+  "data_files": {
+    "action_credit": "../controls/action_credit.jsonl",
+    "action_sft": "../data/generalist/flightrecorder_action_sft.jsonl",
+    "branch_replay": "../controls/branch_replay.json",
+    "contamination_report": "../controls/contamination_report.json",
+    "curated_dataset": "../controls/curated_dataset.json",
+    "flightrecorder_action_sft": "../data/generalist/flightrecorder_action_sft.jsonl",
+    "fr_action_sft": "../data/generalist/flightrecorder_action_sft.jsonl",
+    "governance_receipt": "../controls/governance_receipt.json",
+    "reviewed_preferences": "../controls/reviewed_preferences.jsonl",
+    "rl_action_sft": "../data/rl_action_sft.jsonl"
+  },
+  "dataset_id": "hfr-runtime-adapter-router-generalist",
+  "dataset_splits": {
+    "counts": {
+      "train": 288
+    },
+    "family_exclusive": true,
+    "family_exclusivity_key": "task_family",
+    "prompt_hash_disjoint": true,
+    "prompt_template_family_disjoint": true,
+    "record_key_disjoint": true,
+    "task_family_values_are_split_exclusive": true,
+    "task_id_disjoint": true,
+    "trainer_manifest_contains_train_rows_only": true
+  },
+  "dataset_version": "hfr-runtime-adapter-router-generalist.v1",
+  "gates": {
+    "contamination": {
+      "passed": true
+    },
+    "governance": {
+      "passed": true
+    },
+    "human_rejection_preferences": {
+      "passed": true
+    },
+    "human_reviewed_curation": {
+      "passed": true
+    },
+    "per_action_credit": {
+      "passed": true
+    },
+    "training_gate": {
+      "passed": true
+    },
+    "verified_branch_replay": {
+      "passed": true
+    }
+  },
+  "quality_flags": [],
+  "redaction_status": "redacted",
+  "schema_version": "hfr.dataset_registry_entry.v1",
+  "source_fingerprint_coverage": {
+    "fully_verified": 288,
+    "unverified": 0
+  },
+  "task_family_counts": [
+    {
+      "count": 32,
+      "value": "runtime_adapter_router_browser_train"
+    },
+    {
+      "count": 32,
+      "value": "runtime_adapter_router_code_terminal_train"
+    },
+    {
+      "count": 64,
+      "value": "runtime_adapter_router_database_train"
+    },
+    {
+      "count": 64,
+      "value": "runtime_adapter_router_generalist_train"
+    },
+    {
+      "count": 96,
+      "value": "runtime_adapter_router_shared_safety_train"
+    }
+  ],
+  "task_scope_counts": [
+    {
+      "count": 32,
+      "value": "browser"
+    },
+    {
+      "count": 32,
+      "value": "code_terminal"
+    },
+    {
+      "count": 64,
+      "value": "database"
+    },
+    {
+      "count": 64,
+      "value": "generalist"
+    },
+    {
+      "count": 96,
+      "value": "shared"
+    }
+  ]
+}
