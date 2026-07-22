@@ -13,8 +13,9 @@
 Hermes Flight Recorder is an evidence and governance stack for agentic
 fine-tuning work. It turns tool-using agent runs into deterministic artifacts:
 normalized traces, scorecards, evidence bundles, dataset exports, model
-registry entries, training handoff plans, closed-loop iteration contracts,
-serving preflights, held-out eval summaries, and promotion decisions.
+registry entries, training handoff plans and results, governed LoRA recipe
+searches, closed-loop iteration contracts, serving preflights, held-out eval
+summaries, publication bundles, and promotion decisions.
 
 The project started as accountability infrastructure for Hermes Agent traces.
 It has expanded into a public, schema-driven control plane for building and
@@ -25,15 +26,24 @@ The central question remains simple:
 > What did the agent actually do, and is there enough evidence to trust,
 > train on, evaluate, serve, or promote the result?
 
-## Case Study
+## Verified Training Results
 
-Flight Recorder now includes a completed held-out fine-tuning proof:
-[Flight Recorder LoRA Improves Held-Out Agent Tasks](docs/case-studies/self-improving-agent-heldout.md).
-The case study fine-tunes `Qwen/Qwen3-0.6B` on 800 public-safe Flight Recorder
-trajectories, evaluates the resulting LoRA adapter against the base model on a
-frozen 150-task agent benchmark, and reports a promotion-ready improvement from
-17.11% to 96.22% exact task pass rate with zero adapter critical-safety
-violations.
+The repository includes two completed, public, evidence-bound LoRA results.
+GitHub holds the replayable manifests, evaluations, decisions, and checksums;
+Hugging Face holds the reviewed datasets and loadable adapters. These model
+repositories contain PEFT adapters tied to pinned base-model revisions, not
+merged full-model checkpoints.
+
+| Demonstration | Governed experiment | Held-out result | Public artifacts |
+| --- | --- | --- | --- |
+| Qwen3-0.6B multi-family agent LoRA | 800 public-safe trajectories; 150 frozen tasks; 11 task families; three seeds per arm | Exact task pass rate rose from 17.11% to 96.22%; critical-safety pass rate rose from 45.56% to 100% | [Evidence](docs/case-studies/self-improving-agent-heldout.md) · [adapter](https://huggingface.co/zwright/qwen3-0.6b-hermes-flight-recorder-agent/tree/5c4b3eb6e8540be59ecfea563b2f2f12b9bd1877) · [dataset](https://huggingface.co/datasets/zwright/hermes-flight-recorder-self-improving-agent-trajectories/tree/82cbbb6ec1d6dbf47803b9a32201171e2926dc00) · [live demo](https://zwright-hermes-flight-recorder-agent-demo.hf.space) |
+| Qwen3-4B browser-tool LoRA | 71 reviewed source trajectories expanded to 355 supervised rows; four development and nine sealed browser tasks | Base: 0/4 development and 0/9 sealed. Adapter: 4/4 and 9/9 with zero critical failures | [Paired evidence](examples/case_studies/runtime_adapter_router/results/qwen3_4b_browser_lora_v9/README.md) · [adapter](https://huggingface.co/zwright/qwen3-4b-hermes-flight-recorder-browser-lora/tree/599b7343c7b3b6c7d9d65b403e76f7f017628cfa) · [dataset](https://huggingface.co/datasets/zwright/hermes-flight-recorder-browser-tool-calling-trajectories/tree/0030982a7d3181563e41afb3d0e740652cb705b3) |
+
+The 4B base arm was run post-hoc against the same frozen tasks and evaluator,
+so it demonstrates measured scoped improvement but is not a preregistered
+two-arm experiment. Its literal tool-argument metric also remains 0/9 because
+the adapter adds one narrowly allowed trailing search refinement. The result
+supports routing one read-only browser specialist, not general deployment.
 
 ## What This Is
 
@@ -47,8 +57,14 @@ model-improvement loops. It helps teams:
 - block weak, unsafe, malformed, or low-signal evidence,
 - export redacted training datasets with lineage and split metadata,
 - register model candidates, adapters, serving probes, and training plans,
-- plan SFT, action SFT, and DPO handoffs without launching heavyweight
-  training, while keeping reward/process-reward and future RL paths gated,
+- plan SFT, action SFT, and DPO handoffs while keeping reward/process-reward
+  and future RL paths gated,
+- run explicitly authorized, fixed-budget local LoRA training on registered
+  task families through the optional trainer,
+- optimize bounded LoRA recipes on development evidence while keeping sealed
+  evaluation one-shot and separate from candidate selection,
+- export checksum-bound public evidence capsules with paired base/adapter
+  reports, training curves, model and dataset cards, and sanitized configs,
 - verify OpenAI-compatible serving endpoints before eval or demo handoff,
 - compare held-out baseline/candidate runs without overstating raw movement,
 - gate promotion with model cards, dataset cards, rollback targets, release
@@ -56,14 +72,17 @@ model-improvement loops. It helps teams:
 
 ## What This Is Not
 
-Flight Recorder is not a sandbox, prompt-injection prevention layer, model
-trainer, model host, or license-review substitute.
+Flight Recorder is not a sandbox, prompt-injection prevention layer, general
+model-training framework, model host, or license-review substitute.
 
 Real containment still belongs at the OS, process, network, and tool-permission
-layers. Real training still belongs to external trainer stacks. Real serving
-still belongs to a model server such as vLLM, SGLang, a hosted provider, or a
-dedicated local runtime. Flight Recorder records the contracts, gates, hashes,
-and handoff receipts that make those systems auditable.
+layers. The dependency-free core plans and governs training; the optional
+`scripts/train_agentic_lora.py` integration can execute a bounded local
+TRL/PEFT LoRA run only after explicit opt-in. Larger training remains delegated
+to external trainer stacks. Real serving still belongs to a model server such
+as vLLM, SGLang, a hosted provider, or a dedicated local runtime. Flight
+Recorder records the contracts, gates, hashes, and handoff receipts that make
+those systems auditable.
 
 ## Architecture At A Glance
 
@@ -75,7 +94,7 @@ and handoff receipts that make those systems auditable.
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs after rejection-sampling and curation admission. Rejection-sampling and curation refs must replay from their artifact directory or they are redacted and blocked. | `rejection-sampling-gate`, `dataset-curation-receipt`, `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Review/grading | Bind rubrics, mock model-grader dry runs, disagreement queues, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader disagreement-queue`, `model-grader override-receipt`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
-| Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
+| Training | Produce side-effect-free plans and preflights; optionally execute fixed-budget local TRL/PEFT LoRA runs; archive content-addressed results; govern development-only recipe search and one-shot sealed evaluation. | `scripts/plan_agentic_training.py`, `train_agentic_lora.py`, `run_runtime_adapter_autoresearch.py`, `evaluate_runtime_adapter_candidates.py`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, dry-run launch/status receipts, and import-only completion evidence from external runners. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch`, `cloud-training import-completion` |
 | Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, governance-action, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `agentic-loop governance`, `next-iteration-schedule`, `validate --agentic-loop-governance-receipt` |
 | Eval | Require identical held-out scenarios, adapter contracts, imported per-case execution evidence, and separation between raw movement and governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `external-eval-result`, `compare-suite` |
@@ -176,33 +195,50 @@ flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --check runs/evidence_bundle.json
 ```
 
-## One-Command Data Handoff
+## Training Workflow At A Glance
 
-For the full native tool-trajectory → TRL/PEFT LoRA → Hugging Face Jobs path,
-see [Agentic LoRA Training on Hugging Face](docs/agentic-training-huggingface.md).
-For a small, completed Qwen3-0.6B run with a redacted trajectory, training
-curve, evaluation receipt, and Hub-ready model card, see the
-[Flight Recorder LoRA case study](examples/case_studies/qwen3_0_6b_flightrecorder_lora/README.md).
-For the larger production proof—800 trajectories, a frozen 150-task final set,
-three repeated baseline-versus-adapter evaluations, statistical and safety
-gates, immutable Hub artifacts, and a live ZeroGPU demo—see the
-[self-improving agent proof](examples/case_studies/self_improving_agent_proof/README.md).
-For a synthetic offline demonstration of rapid, baseline-first LoRA recipe
-experimentation with development-only selection, immutable trial receipts,
-fixed budgets, and a separate repeated held-out promotion boundary, see the
-[governed autoresearch-style LoRA optimizer](examples/case_studies/autoresearch_lora_optimizer/README.md).
-For the implemented generalist-plus-specialists architecture, realistic
-360-trajectory corpus, deterministic task-contract router, and external
-pre-dispatch write boundary, see the
-[runtime adapter router case study](examples/case_studies/runtime_adapter_router/README.md).
-For the governed collect → review/credit → curate → route → durable-controller
-path, use the public-safe
-[self-improving loop case study](examples/self_improving_loop/README.md).
+Flight Recorder separates evidence generation, weight updates, evaluation, and
+promotion so an autonomous experiment can move quickly without letting a
+training process grade or promote itself.
 
-Goal 3 data handoff bundles the common path from scenarios to trainer-facing
-evidence. It runs the suite, exports training data, validates artifacts, gates
-the export, builds an evidence bundle, and writes trainer preflight artifacts.
-The trainer command is recorded for review; it is not executed.
+```mermaid
+flowchart LR
+    A["Agent runs and tool traces"] --> B["Score, validate, and review"]
+    B --> C["Curate and register train/dev/sealed data"]
+    C --> D["Plan and preflight a pinned recipe"]
+    D --> E["External trainer or explicit local LoRA"]
+    E --> F["Archive adapter, metrics, and fingerprints"]
+    F --> G["Independent base/adapter held-out evaluation"]
+    G --> H["Promotion, runtime routing, and publication"]
+```
+
+| Boundary | Main entry points | Durable artifacts |
+| --- | --- | --- |
+| Capture and score | `run`, `run-suite`, harness adapters, `validate` | normalized traces, scorecards, task completion, run digests, state evidence, lineage |
+| Review and curate | `goal3-handoff`, `export-rl`, `export-review`, model-grader and action-credit gates | reviewed SFT/action-SFT/DPO rows, contamination and curation receipts, split and dataset manifests |
+| Plan and preflight | `training-plan dry-run`, `plan_agentic_training.py`, `train_agentic_lora.py --dry-run` or `--preflight-only` | pinned model/dataset identities, recipe, dependency checks, budgets, side-effect posture, trainer commands |
+| Train and archive | an external trainer, Hugging Face Jobs handoff, or explicit `train_agentic_lora.py --local-training --execute-local-training` | PEFT adapter, training curve and metrics, file hashes, runtime/memory accounting, training-result receipt |
+| Search recipes | `run_runtime_adapter_autoresearch.py` | immutable campaign, bounded trial proposals, keep/discard decisions, development reports, champion identity, one-shot sealed receipt |
+| Evaluate and publish | `evaluate_runtime_adapter_candidates.py`, `export_runtime_adapter_publication.py` | matched task-level base/adapter reports, promotion eligibility, cards, sanitized configs, CSV summaries, `SHA256SUMS` |
+| Promote and route | promotion commands and `runtime-router` | release and rollback records, registry alias receipts, exact-one-adapter route decisions, content-bound write authorization |
+
+The quickest artifact-only demonstration remains `./demo.sh`; it exercises the
+evidence and trainer-handoff path without downloading a model or changing
+weights. The synthetic
+[autoresearch-style optimizer](examples/case_studies/autoresearch_lora_optimizer/README.md)
+demonstrates bounded propose/evaluate/keep-or-discard behavior without GPU work.
+The [local training guide](docs/local-agentic-training.md) covers a real,
+offline, fixed-time LoRA run for a user-selected `task_family`, including Apple
+MPS. The [Hugging Face guide](docs/agentic-training-huggingface.md) covers the
+native tool-trajectory → TRL/PEFT LoRA → Jobs/Hub handoff.
+
+For a new task such as tool calling, first represent success, safety, tool
+schemas, arguments, results, and call order as Flight Recorder scenarios and
+reviewed trajectories. `goal3-handoff` then packages the common path from those
+scenarios to trainer-facing evidence. It runs the suite, exports and validates
+training data, gates the export, builds an evidence bundle, and writes trainer
+preflight artifacts. The trainer command is recorded for review; this command
+does not execute it.
 
 ```bash
 flightrecorder goal3-handoff \
@@ -217,6 +253,29 @@ Use this when a downstream trainer needs one directory containing the validated
 evidence chain instead of a pile of manually assembled files. `--force` only
 replaces a schema-valid existing Goal 3 handoff at a filesystem-safe target; it
 will not recursively delete an arbitrary non-handoff directory.
+
+From that handoff, choose one execution lane:
+
+- **Local LoRA:** dry-run and preflight the exact registered model, dataset,
+  task-family selector, LoRA recipe, device, and time budget; then add both
+  `--local-training` and `--execute-local-training` to authorize weight updates.
+- **Delegated training:** generate backend recipes or a Hugging Face Jobs/cloud
+  handoff. Flight Recorder records the command and imports completion evidence;
+  the external runner owns compute, credentials, uploads, and downloads.
+- **Autoresearch campaign:** run bounded development-only recipe trials, resume
+  from immutable state, finalize the selected adapter against sealed data once,
+  validate the campaign, and export the paired public evidence capsule.
+
+The optional trainer executes `trace_sft`, `fr_sft`, `fr_action_sft`, `fr_dpo`,
+and staged `fr_sft_dpo`. It emits governed plans for `fr_reward_model` and
+`fr_step_rewards`, but those two modes remain plan-only instead of silently
+claiming an implemented optimizer path.
+
+Detailed, replayable examples are the
+[self-improving 0.6B proof](examples/case_studies/self_improving_agent_proof/README.md),
+the [runtime adapter router and 4B browser specialist](examples/case_studies/runtime_adapter_router/README.md),
+the [small LoRA mechanics run](examples/case_studies/qwen3_0_6b_flightrecorder_lora/README.md),
+and the [collect → review/credit → curate → route loop](examples/self_improving_loop/README.md).
 
 ## Harness Runs And Replay
 
@@ -320,7 +379,11 @@ silently losing another worker's change.
 
 ## Agentic Training Handoff
 
-Flight Recorder plans and archives training work; it does not mutate weights.
+The default Flight Recorder flow plans and archives training work without
+mutating weights. The optional local trainer is a separate, explicit execution
+lane: a real run requires registered inputs plus both `--local-training` and
+`--execute-local-training`, and produces the same content-addressed result
+evidence consumed below.
 
 ```bash
 python3.11 scripts/plan_agentic_training.py \
@@ -890,6 +953,20 @@ Suite and handoff commands add:
 - trainer preflight, launch-check, archive-check, consumer-plan, delegated
   flow, wrapper dry-run, and agentic training result receipts.
 
+Optional LoRA training and recipe-search runs add:
+
+- registered model, tokenizer, chat-template, dataset, split, and task-family
+  identities,
+- dry-run plans, dependency preflights, backend recipes, fixed time/cost
+  budgets, supervision-visibility counts, and trainer commands,
+- PEFT adapter fingerprints, per-file hashes, runtime/memory metrics, training
+  curves, and completed/failed/blocked training-result receipts,
+- immutable autoresearch campaign and trial records, development-only
+  candidate reports, champion identity, and one-shot sealed-final receipt,
+- paired base/adapter evaluation reports, task-level and aggregate CSVs,
+  campaign validation, model/dataset cards, sanitized adapter config, and
+  `SHA256SUMS` for public release.
+
 Registry and governance commands add:
 
 - model candidates, compatibility reports, adapter manifests, serving probes,
@@ -969,6 +1046,9 @@ Trainer handoff stages with failed checks are blockers, not readiness evidence.
   adapter manifest, and dry-run plan flow.
 - `docs/agentic-finetune-training-layer.md`: agentic training plans, runtime
   preflight, and result receipts.
+- `docs/agentic-training-huggingface.md`: native action trajectories through
+  TRL/PEFT training, Hugging Face Jobs handoff, result import, and Hub
+  publication.
 - `docs/local-agentic-training.md`: fixed-time, offline local LoRA training from
   governed task-family artifacts, including native tool-call action-SFT on MPS.
 - `docs/runtime-adapter-routing.md`: deterministic tool and atomic-adapter
