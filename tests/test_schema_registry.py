@@ -210,6 +210,8 @@ class SchemaRegistryTests(unittest.TestCase):
             "suite_gate",
             "suite_trend",
             "supervisor_state",
+            "tau3_capture",
+            "tau3_training_bundle",
             "task_completion",
             "trace",
             "trace_observability",

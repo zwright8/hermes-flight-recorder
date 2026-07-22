@@ -1440,6 +1440,22 @@
       "filename": "self_improving_agent_episode.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/self_improving_agent_episode.v1.schema.json",
       "name": "self_improving_agent_episode"
+    },
+    {
+      "artifact": "tau3_capture",
+      "artifact_schema_version": "hfr.tau3_capture.v1",
+      "description": "Canonical observable Tau text-mode episode envelope for governed training evidence.",
+      "filename": "tau3_capture.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_capture.v1.schema.json",
+      "name": "tau3_capture"
+    },
+    {
+      "artifact": "tau3_training_bundle",
+      "artifact_schema_version": "hfr.tau3_training_bundle.v1",
+      "description": "Content-addressed root manifest for a local-only Tau-3 airline/retail/telecom QLoRA training-readiness bundle.",
+      "filename": "tau3_training_bundle.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_training_bundle.v1.schema.json",
+      "name": "tau3_training_bundle"
     }
   ]
 }

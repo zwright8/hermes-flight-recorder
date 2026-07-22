@@ -232,6 +232,27 @@ offline, fixed-time LoRA run for a user-selected `task_family`, including Apple
 MPS. The [Hugging Face guide](docs/agentic-training-huggingface.md) covers the
 native tool-trajectory → TRL/PEFT LoRA → Jobs/Hub handoff.
 
+For the publishable 7–9B cross-domain study, the
+[Tau-3 training-readiness workflow](docs/tau3-training-readiness.md) adds a
+stricter local-only contract over airline, retail, and telecom. It captures
+conversations, tool results, state deltas, executable outcomes, safety labels,
+and reviewer dispositions; creates balanced admission/rejection,
+contamination, redaction, license, SFT, action-SFT, and DPO artifacts; and
+stops at a hash-checked MLX-LM QLoRA launch handoff. Its deterministic rehearsal
+is always marked not training-ready, while production validation requires real
+pinned local Tau and 7–9B model assets.
+
+```bash
+.venv/bin/python scripts/build_tau3_training_artifacts.py \
+  --mode rehearsal \
+  --out runs/tau3_core_training_rehearsal
+
+.venv/bin/python scripts/validate_tau3_training_artifacts.py \
+  --bundle runs/tau3_core_training_rehearsal \
+  --strict \
+  --allow-rehearsal
+```
+
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and
 reviewed trajectories. `goal3-handoff` then packages the common path from those

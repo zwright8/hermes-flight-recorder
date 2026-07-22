@@ -1,0 +1,64 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_training_bundle.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "size",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "bundle_mode": {
+      "enum": [
+        "production",
+        "rehearsal"
+      ],
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "ready_for_training": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_training_bundle.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "bundle_mode",
+    "ready_for_training",
+    "artifacts"
+  ],
+  "title": "Tau-3 Training Readiness Bundle",
+  "type": "object"
+}
