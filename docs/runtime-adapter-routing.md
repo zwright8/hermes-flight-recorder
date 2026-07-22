@@ -281,6 +281,13 @@ and 0/9 sealed because every search query added only the documented trailing
 `headline` refinement; URL, identifier, recency, extraction mode, call order,
 and final answers matched the governed tasks.
 
+A matched post-hoc control then evaluated the unmodified pinned 4B base on the
+same immutable task IDs and evaluator configuration. The base passed 0/4
+development and 0/9 sealed browser tasks, compared with the adapter's 4/4 and
+9/9. This establishes a paired scoped improvement after weights and recipe were
+frozen, but the control was not part of the original one-shot sealed receipt;
+the public report keeps that limitation explicit.
+
 The content identities are:
 
 - adapter directory SHA-256:
@@ -290,8 +297,15 @@ The content identities are:
 - sealed report SHA-256:
   `6e1c9a9d889059f840bc8a6ab0d32e8482613c0aa26b77e8ef4a9609d435216c`.
 
-The raw observations, model weights, and campaign directory remain ignored
-local artifacts because they are potentially sensitive and large. This result
-qualifies one read-only browser specialist; it does not establish database,
-code/terminal, cross-domain, or write-capable quality, and it does not deploy
-or promote a runtime registry alias automatically.
+The public-safe evidence capsule is committed at
+`examples/case_studies/runtime_adapter_router/results/qwen3_4b_browser_lora_v9/`.
+The final loadable adapter is published at
+`https://huggingface.co/zwright/qwen3-4b-hermes-flight-recorder-browser-lora`,
+and its exact public-synthetic corpus is at
+`https://huggingface.co/datasets/zwright/hermes-flight-recorder-browser-tool-calling-trajectories`.
+Raw observations, absolute-path launch records, intermediate checkpoints,
+optimizer state, RNG state, and duplicate tokenizer files remain ignored local
+artifacts. This result qualifies one read-only browser specialist; it does not
+establish database, code/terminal, cross-domain, safety-case, or write-capable
+quality, and it does not deploy or promote a runtime registry alias
+automatically.

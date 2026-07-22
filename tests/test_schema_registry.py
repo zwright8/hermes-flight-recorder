@@ -221,6 +221,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "trainer_preflight",
             "trainer_wrapper_dry_run",
             "tool_capability_selection",
+            "runtime_adapter_autoresearch_validation",
             "runtime_adapter_candidate_evaluation",
             "training_gate",
             "training_manifest",
@@ -292,6 +293,18 @@ class SchemaRegistryTests(unittest.TestCase):
             ROOT / "examples" / "agentic_training" / "evidence_handoff" / "prompt_injection_good" / "artifact_lineage.json"
         )
         self.assertTrue(lineage["passed"], lineage["errors"])
+
+        campaign_validation = check_schema_file(
+            ROOT
+            / "examples"
+            / "case_studies"
+            / "runtime_adapter_router"
+            / "results"
+            / "qwen3_4b_browser_lora_v9"
+            / "campaign_validation.json",
+            "runtime_adapter_autoresearch_validation",
+        )
+        self.assertTrue(campaign_validation["passed"], campaign_validation["errors"])
 
         jsonl_contracts = {
             "review_item": ROOT / "examples" / "model_grader" / "review" / "review_items.jsonl",

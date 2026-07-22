@@ -1,0 +1,9 @@
+split,metric,base_passed,base_total,base_rate,adapter_passed,adapter_total,adapter_rate,absolute_delta
+development,overall_task_success,0,4,0.0,4,4,1.0,1.0
+development,functional_tool_calls,0,4,0.0,4,4,1.0,1.0
+development,exact_tool_calls,0,4,0.0,0,4,0.0,0.0
+development,exact_final_answer,0,4,0.0,4,4,1.0,1.0
+sealed_final,overall_task_success,0,9,0.0,9,9,1.0,1.0
+sealed_final,functional_tool_calls,0,9,0.0,9,9,1.0,1.0
+sealed_final,exact_tool_calls,0,9,0.0,0,9,0.0,0.0
+sealed_final,exact_final_answer,0,9,0.0,9,9,1.0,1.0

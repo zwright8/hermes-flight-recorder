@@ -54,3 +54,11 @@ adapter weights and preserves the fail-closed result: all five evaluated arms
 (base, generalist, browser, database, and code/terminal) failed the strict gate,
 so zero candidates are eligible for promotion. Its fingerprint binds the
 held-out identity, candidate identities, metrics, and per-task scores.
+
+The later governed Qwen3-4B browser campaign produced a promotion-eligible
+specialist and a matched post-hoc base comparison. Its public-safe training,
+evaluation, validation, and checksum evidence is committed under
+`results/qwen3_4b_browser_lora_v9/`; the README there preserves the scoped
+claim and the post-hoc-control limitation. The final adapter and exact
+public-synthetic corpus are linked from that evidence capsule and published on
+Hugging Face; raw observations and intermediate trainer state remain local.

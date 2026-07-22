@@ -1,0 +1,227 @@
+{
+  "created_at": "2026-07-22T06:59:11.608205+00:00",
+  "dpo_train_result": null,
+  "failure": null,
+  "final_adapter_artifacts": {
+    "directory": "runs/runtime_adapter_autoresearch_20260721/governed-browser-specialist-v9/attempts/trial-000-baseline/training/fr_action_sft_adapter",
+    "file_count": 29,
+    "files": [
+      {
+        "path": "README.md",
+        "sha256": "8660e0441039647fb8e0dcc5413458b2d7548c22a8fff4718632e13fdca51e45",
+        "size_bytes": 1664
+      },
+      {
+        "path": "adapter_config.json",
+        "sha256": "c6e6160d186ee8bbf294fbc1b3e15380d7a61cf84905574dc147af6191594ebb",
+        "size_bytes": 1210
+      },
+      {
+        "path": "adapter_model.safetensors",
+        "sha256": "aeeb93af9a0b35a7c685942c320ae2465fd06edc73b9ee85d416918208a2e5e6",
+        "size_bytes": 132187888
+      },
+      {
+        "path": "chat_template.jinja",
+        "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326",
+        "size_bytes": 2630
+      },
+      {
+        "path": "checkpoint-100/README.md",
+        "sha256": "3ee0ee55323366c8739706404b511fd082ac5de00ce09eddf5b9fcf665f93fc0",
+        "size_bytes": 5428
+      },
+      {
+        "path": "checkpoint-100/adapter_config.json",
+        "sha256": "c6e6160d186ee8bbf294fbc1b3e15380d7a61cf84905574dc147af6191594ebb",
+        "size_bytes": 1210
+      },
+      {
+        "path": "checkpoint-100/adapter_model.safetensors",
+        "sha256": "7b49fc5846d4b420b11502e71d8370dcba5dfff913e0bc26222570465418317a",
+        "size_bytes": 132187888
+      },
+      {
+        "path": "checkpoint-100/chat_template.jinja",
+        "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326",
+        "size_bytes": 2630
+      },
+      {
+        "path": "checkpoint-100/optimizer.pt",
+        "sha256": "93cb072ed74fc4ca78ae1f4a9c79765bcb282c746c8c4781c1a9c6fce6fb4332",
+        "size_bytes": 264652107
+      },
+      {
+        "path": "checkpoint-100/rng_state.pth",
+        "sha256": "e3a77d4a8b98ce027a4d6a3b9fb5d7c904e27ec1efd5c0468c24fa26bb738316",
+        "size_bytes": 14455
+      },
+      {
+        "path": "checkpoint-100/scheduler.pt",
+        "sha256": "b37364248b9703ca177eb342a737b816e4755e1c3c8e181a85323d78f137a122",
+        "size_bytes": 1465
+      },
+      {
+        "path": "checkpoint-100/tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "checkpoint-100/tokenizer_config.json",
+        "sha256": "3d1614cb194c7710b666fb6ba7b4a8fecff340889ff8db4bf6592ca249fa299f",
+        "size_bytes": 693
+      },
+      {
+        "path": "checkpoint-100/trainer_state.json",
+        "sha256": "6d885084977a7254db72a7f00d7575635efe27587f8cac7ce14c69920944a1b6",
+        "size_bytes": 29625
+      },
+      {
+        "path": "checkpoint-100/training_args.bin",
+        "sha256": "24a055d864d8bf3ea8fed98f56c5f46c5af33561997e240fed0caeffdcc93d74",
+        "size_bytes": 5905
+      },
+      {
+        "path": "checkpoint-160/README.md",
+        "sha256": "3ee0ee55323366c8739706404b511fd082ac5de00ce09eddf5b9fcf665f93fc0",
+        "size_bytes": 5428
+      },
+      {
+        "path": "checkpoint-160/adapter_config.json",
+        "sha256": "c6e6160d186ee8bbf294fbc1b3e15380d7a61cf84905574dc147af6191594ebb",
+        "size_bytes": 1210
+      },
+      {
+        "path": "checkpoint-160/adapter_model.safetensors",
+        "sha256": "aeeb93af9a0b35a7c685942c320ae2465fd06edc73b9ee85d416918208a2e5e6",
+        "size_bytes": 132187888
+      },
+      {
+        "path": "checkpoint-160/chat_template.jinja",
+        "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326",
+        "size_bytes": 2630
+      },
+      {
+        "path": "checkpoint-160/optimizer.pt",
+        "sha256": "4cc03fb3e184ac1db11075d3ed109be5849d2bcd10dbef79e95387386b2ee64a",
+        "size_bytes": 264652107
+      },
+      {
+        "path": "checkpoint-160/rng_state.pth",
+        "sha256": "e3a77d4a8b98ce027a4d6a3b9fb5d7c904e27ec1efd5c0468c24fa26bb738316",
+        "size_bytes": 14455
+      },
+      {
+        "path": "checkpoint-160/scheduler.pt",
+        "sha256": "fd0d72a318132645c84c0c91a39d0fc5cb26accace18e8fb777860416f9c16a3",
+        "size_bytes": 1465
+      },
+      {
+        "path": "checkpoint-160/tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "checkpoint-160/tokenizer_config.json",
+        "sha256": "3d1614cb194c7710b666fb6ba7b4a8fecff340889ff8db4bf6592ca249fa299f",
+        "size_bytes": 693
+      },
+      {
+        "path": "checkpoint-160/trainer_state.json",
+        "sha256": "46ca19ca109f044e2f4da5805a388b3256a8c2e937e54e913d40f091809c3c71",
+        "size_bytes": 46762
+      },
+      {
+        "path": "checkpoint-160/training_args.bin",
+        "sha256": "24a055d864d8bf3ea8fed98f56c5f46c5af33561997e240fed0caeffdcc93d74",
+        "size_bytes": 5905
+      },
+      {
+        "path": "tokenizer.json",
+        "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+        "size_bytes": 11422650
+      },
+      {
+        "path": "tokenizer_config.json",
+        "sha256": "3d1614cb194c7710b666fb6ba7b4a8fecff340889ff8db4bf6592ca249fa299f",
+        "size_bytes": 693
+      },
+      {
+        "path": "training_args.bin",
+        "sha256": "24a055d864d8bf3ea8fed98f56c5f46c5af33561997e240fed0caeffdcc93d74",
+        "size_bytes": 5905
+      }
+    ]
+  },
+  "final_adapter_dir": "runs/runtime_adapter_autoresearch_20260721/governed-browser-specialist-v9/attempts/trial-000-baseline/training/fr_action_sft_adapter",
+  "input_manifests": {
+    "dataset": {
+      "dataset_identity": "hfr-runtime-adapter-router-browser.v1",
+      "path": "runs/runtime_adapter_corpus_expanded_800_seed29/registry/browser_dataset_version.json",
+      "provided": true,
+      "redaction_status": "redacted",
+      "schema_version": "hfr.dataset_registry_entry.v1",
+      "source_path": "runs/runtime_adapter_corpus_expanded_800_seed29/registry/browser_dataset_version.json",
+      "source_schema_version": "hfr.dataset_registry_entry.v1"
+    },
+    "model": {
+      "license_status": "approved",
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "path": "examples/case_studies/runtime_adapter_router/registry/model_candidate_qwen3_4b_instruct_2507.json",
+      "provided": true,
+      "schema_version": "hfr.model_candidate.v1"
+    }
+  },
+  "mode": "fr_action_sft",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "output_dir": "runs/runtime_adapter_autoresearch_20260721/governed-browser-specialist-v9/attempts/trial-000-baseline/training",
+  "resume": {
+    "checkpoint": "",
+    "phase": "",
+    "resumed": false
+  },
+  "runtime_observation": {
+    "accelerator_memory_mb": {
+      "current_allocated_mb": 7814.421,
+      "driver_allocated_mb": 14987.938
+    },
+    "device": "mps",
+    "dtype": "torch.float16",
+    "fixed_training_time_budget_seconds": 5400.0,
+    "local_files_only": true,
+    "local_training": true,
+    "network_allowed": false,
+    "peak_process_memory_mb": 15338.812,
+    "stopped_by_time_budget": false,
+    "task_families": [
+      "runtime_adapter_router_browser_train"
+    ],
+    "trainer_active_seconds": 1783.580137
+  },
+  "schema_version": "hfr.agentic_lora_training_result.v1",
+  "sft_supervision_coverage": {
+    "fully_visible_row_count": 355,
+    "max_length": 1024,
+    "max_total_supervised_tokens": 117,
+    "max_visible_supervised_tokens": 117,
+    "min_total_supervised_tokens": 95,
+    "min_visible_supervised_tokens": 95,
+    "partial_visible_row_count": 0,
+    "partial_visible_row_indices": [],
+    "passed": true,
+    "row_count": 355,
+    "truncated_row_count": 0,
+    "zero_visible_row_count": 0,
+    "zero_visible_row_indices": []
+  },
+  "sft_train_result": {
+    "epoch": 1.8,
+    "total_flos": 9106502567086080.0,
+    "train_loss": 0.045974851919186224,
+    "train_runtime": 1783.5861,
+    "train_samples_per_second": 0.359,
+    "train_steps_per_second": 0.09
+  },
+  "status": "succeeded",
+  "training_plan": "runs/runtime_adapter_autoresearch_20260721/governed-browser-specialist-v9/attempts/trial-000-baseline/training/fr_action_sft_plan.json"
+}
