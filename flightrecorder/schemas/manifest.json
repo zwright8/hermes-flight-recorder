@@ -1450,6 +1450,14 @@
       "name": "tau3_capture"
     },
     {
+      "artifact": "tau3_model_identity",
+      "artifact_schema_version": "hfr.tau3_model_identity.v1",
+      "description": "Content-addressed identity for every file in a local model tree used by the Tau-3 study.",
+      "filename": "tau3_model_identity.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_model_identity.v1.schema.json",
+      "name": "tau3_model_identity"
+    },
+    {
       "artifact": "tau3_training_bundle",
       "artifact_schema_version": "hfr.tau3_training_bundle.v1",
       "description": "Content-addressed root manifest for a local-only Tau-3 airline/retail/telecom QLoRA training-readiness bundle.",

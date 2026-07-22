@@ -13,8 +13,10 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +32,7 @@ from flightrecorder.preflight import (  # noqa: E402
     build_trainer_launch_check,
     build_trainer_preflight,
 )
+from flightrecorder.path_safety import path_has_symlink_component  # noqa: E402
 from flightrecorder.tau3_capture import (  # noqa: E402
     TAU3_CAPTURE_SCHEMA_VERSION,
     admission_record,
@@ -37,6 +40,7 @@ from flightrecorder.tau3_capture import (  # noqa: E402
     capture_to_hfr,
     validate_tau3_capture,
 )
+from flightrecorder.tau3_model_identity import validate_tau3_model_identity  # noqa: E402
 from flightrecorder.tau3_training_artifacts import (  # noqa: E402
     REQUIRED_ARTIFACTS,
     build_bundle_manifest,
@@ -847,6 +851,31 @@ def _write_evidence_bundle(
 
 def _production_source_checks(config: dict[str, Any]) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
+    rendered_config = json.dumps(config, sort_keys=True)
+    checks.append({
+        "id": "no_unresolved_template_placeholders",
+        "passed": "REPLACE_WITH_" not in rendered_config,
+        "expected": True,
+        "actual": "REPLACE_WITH_" not in rendered_config,
+    })
+    mlx_plan = config.get("mlx_qlora_plan") if isinstance(config.get("mlx_qlora_plan"), dict) else {}
+    checks.append({
+        "id": "mlx_qlora_plan_approved",
+        "passed": mlx_plan.get("passed") is True,
+        "expected": True,
+        "actual": mlx_plan.get("passed") is True,
+    })
+    candidate_contract = (
+        config.get("candidate_selection_contract")
+        if isinstance(config.get("candidate_selection_contract"), dict)
+        else {}
+    )
+    checks.append({
+        "id": "candidate_selection_contract_approved",
+        "passed": candidate_contract.get("passed") is True,
+        "expected": True,
+        "actual": candidate_contract.get("passed") is True,
+    })
     tau = config.get("tau_revision") if isinstance(config.get("tau_revision"), dict) else {}
     tau_path_value = str(tau.get("local_path") or "")
     tau_path = Path(tau_path_value) if tau_path_value else Path("__missing_tau_checkout__")
@@ -921,11 +950,28 @@ def _production_source_checks(config: dict[str, Any]) -> list[dict[str, Any]]:
         "actual": importlib.util.find_spec("mlx_lm") is not None,
     })
     contamination = config.get("contamination_attestation") if isinstance(config.get("contamination_attestation"), dict) else {}
+    contamination_checks = contamination.get("checks") if isinstance(contamination.get("checks"), dict) else {}
+    required_contamination_checks = (
+        "exact_duplicate",
+        "near_duplicate",
+        "task_template_overlap",
+        "tool_sequence_overlap",
+        "state_transition_overlap",
+    )
+    pending_contamination_checks = [
+        name for name in required_contamination_checks if contamination_checks.get(name) != "passed"
+    ]
     checks.append({
         "id": "contamination_attestation_passed",
-        "passed": contamination.get("passed") is True and contamination.get("unresolved_leakage") is False,
-        "expected": True,
-        "actual": contamination.get("passed") is True and contamination.get("unresolved_leakage") is False,
+        "passed": contamination.get("passed") is True
+        and contamination.get("unresolved_leakage") is False
+        and not pending_contamination_checks,
+        "expected": {"passed": True, "unresolved_leakage": False, "all_subchecks": "passed"},
+        "actual": {
+            "passed": contamination.get("passed") is True,
+            "unresolved_leakage": contamination.get("unresolved_leakage"),
+            "pending_subchecks": pending_contamination_checks,
+        },
     })
     redaction = config.get("redaction_attestation") if isinstance(config.get("redaction_attestation"), dict) else {}
     checks.append({
@@ -955,17 +1001,50 @@ def _local_model_identity_matches(model: dict[str, Any], model_path: Path, revis
     identity_path_value = str(model.get("local_identity_path") or "")
     identity_path = Path(identity_path_value) if identity_path_value else Path("__missing_model_identity__")
     expected_identity_hash = str(model.get("local_identity_sha256") or "")
-    if not identity_path.is_file() or not expected_identity_hash or _sha256(identity_path) != expected_identity_hash:
+    if (
+        not identity_path.is_file()
+        or path_has_symlink_component(identity_path, include_leaf=True)
+        or not expected_identity_hash
+    ):
         return False
     try:
-        identity = json.loads(identity_path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        identity_bytes = _read_stable_regular_file(identity_path)
+        if hashlib.sha256(identity_bytes).hexdigest() != expected_identity_hash:
+            return False
+        identity = json.loads(identity_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    return (
-        isinstance(identity, dict)
-        and identity.get("revision") == revision
-        and identity.get("model_id") == model.get("name")
+    return not validate_tau3_model_identity(
+        identity,
+        model_path,
+        expected_model_id=str(model.get("name") or ""),
+        expected_revision=revision,
     )
+
+
+def _read_stable_regular_file(path: Path) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise OSError("identity path is not a regular file")
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+        stable_fields = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise OSError("identity file changed while it was being read")
+        if (current.st_dev, current.st_ino) != (after.st_dev, after.st_ino):
+            raise OSError("identity path changed while it was being read")
+        data = b"".join(chunks)
+        if len(data) != after.st_size:
+            raise OSError("identity file size changed while it was being read")
+        return data
+    finally:
+        os.close(descriptor)
 
 
 def _rehearsal_config(created_at: str) -> dict[str, Any]:

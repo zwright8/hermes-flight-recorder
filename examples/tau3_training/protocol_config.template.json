@@ -1,0 +1,259 @@
+{
+  "protocol_manifest": {
+    "title": "Tau-3 7-9B cross-domain local QLoRA study",
+    "domains": ["airline", "retail", "telecom"],
+    "primary_metric": "macro_pass_1",
+    "secondary_metrics": [
+      "per_domain_pass_1",
+      "invalid_tool_call_rate",
+      "invalid_argument_rate",
+      "policy_violation_rate",
+      "harmful_state_mutation_rate",
+      "tool_error_recovery_rate",
+      "turns_tokens_wall_time_peak_memory"
+    ],
+    "paired_confidence_procedure": "domain_stratified_paired_bootstrap_95pct",
+    "claim_scope": "best frozen eligible 7-9B open model under the fixed harness",
+    "promotion_predicates": [
+      "beat_frozen_strongest_comparator",
+      "paired_ci_excludes_zero",
+      "beat_unmodified_base",
+      "safety_non_inferior",
+      "each_domain_non_inferior",
+      "all_artifact_and_budget_gates_pass"
+    ]
+  },
+  "tau_revision": {
+    "schema_version": "hfr.tau3_revision.v1",
+    "repository": "https://github.com/sierra-research/tau2-bench",
+    "local_path": "local/tau3/repository",
+    "revision": "REPLACE_WITH_IMMUTABLE_TAU_GIT_COMMIT",
+    "local_git": true,
+    "task_schema_version": "REPLACE_WITH_PINNED_TASK_SCHEMA_VERSION",
+    "split_hashes": {
+      "train": "REPLACE_WITH_TRAIN_SHA256",
+      "development": "REPLACE_WITH_DEVELOPMENT_SHA256",
+      "sealed": "REPLACE_WITH_SEALED_SHA256"
+    }
+  },
+  "split_manifest": {
+    "schema_version": "hfr.tau3_split_manifest.v1",
+    "domains": ["airline", "retail", "telecom"],
+    "strategy": "task_family_before_generation",
+    "splits": {
+      "train": {
+        "local_path": "local/tau3/splits/train.json",
+        "sha256": "REPLACE_WITH_TRAIN_SHA256",
+        "sealed": false
+      },
+      "development": {
+        "local_path": "local/tau3/splits/development.json",
+        "sha256": "REPLACE_WITH_DEVELOPMENT_SHA256",
+        "sealed": false
+      },
+      "sealed": {
+        "local_path": "local/tau3/splits/sealed.json",
+        "sha256": "REPLACE_WITH_SEALED_SHA256",
+        "sealed": true
+      }
+    }
+  },
+  "harness_contract": {
+    "schema_version": "hfr.tau3_harness_contract.v1",
+    "fixed": true,
+    "domains": ["airline", "retail", "telecom"],
+    "mode": "text_half_duplex",
+    "system_prompt_sha256": "REPLACE_WITH_SYSTEM_PROMPT_SHA256",
+    "tools_sha256": "REPLACE_WITH_ORDERED_TOOL_SCHEMA_SHA256",
+    "tool_order": "frozen",
+    "context_window": 8192,
+    "decoding": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_output_tokens": 1024,
+      "seeds": [101, 202, 303, 404]
+    },
+    "turn_limit": 30,
+    "retry_policy": "none",
+    "stop_conditions": ["tau_terminal", "turn_limit", "invalid_state"],
+    "no_test_time_search": true,
+    "test_time_search": false
+  },
+  "model_freeze": {
+    "schema_version": "hfr.tau3_model_freeze.v1",
+    "base_model": {
+      "name": "REPLACE_WITH_7_TO_9B_BASE_MODEL_ID",
+      "revision": "REPLACE_WITH_IMMUTABLE_BASE_REVISION",
+      "parameters_billion": 8.0,
+      "architecture": "dense transformer",
+      "license": "REPLACE_WITH_BASE_LICENSE",
+      "quantization": "mlx-4bit",
+      "tokenizer": "REPLACE_WITH_TOKENIZER_ID_AND_REVISION",
+      "chat_template": "REPLACE_WITH_CHAT_TEMPLATE_ID_OR_SHA256",
+      "model_card_url": "REPLACE_WITH_ORIGINAL_MODEL_CARD_URL",
+      "local_path": "local/tau3/models/base",
+      "local_identity_path": "local/tau3/identities/base.json",
+      "local_identity_sha256": "REPLACE_WITH_BASE_IDENTITY_SHA256"
+    },
+    "comparators": [
+      {
+        "name": "REPLACE_WITH_FIRST_7_TO_9B_COMPARATOR_ID",
+        "revision": "REPLACE_WITH_IMMUTABLE_COMPARATOR_1_REVISION",
+        "parameters_billion": 8.0,
+        "architecture": "dense transformer",
+        "license": "REPLACE_WITH_COMPARATOR_1_LICENSE",
+        "quantization": "mlx-4bit",
+        "tokenizer": "REPLACE_WITH_COMPARATOR_1_TOKENIZER",
+        "chat_template": "REPLACE_WITH_COMPARATOR_1_CHAT_TEMPLATE",
+        "model_card_url": "REPLACE_WITH_COMPARATOR_1_MODEL_CARD_URL",
+        "local_path": "local/tau3/models/comparator-1",
+        "local_identity_path": "local/tau3/identities/comparator-1.json",
+        "local_identity_sha256": "REPLACE_WITH_COMPARATOR_1_IDENTITY_SHA256"
+      },
+      {
+        "name": "REPLACE_WITH_SECOND_7_TO_9B_COMPARATOR_ID",
+        "revision": "REPLACE_WITH_IMMUTABLE_COMPARATOR_2_REVISION",
+        "parameters_billion": 8.0,
+        "architecture": "dense transformer",
+        "license": "REPLACE_WITH_COMPARATOR_2_LICENSE",
+        "quantization": "mlx-4bit",
+        "tokenizer": "REPLACE_WITH_COMPARATOR_2_TOKENIZER",
+        "chat_template": "REPLACE_WITH_COMPARATOR_2_CHAT_TEMPLATE",
+        "model_card_url": "REPLACE_WITH_COMPARATOR_2_MODEL_CARD_URL",
+        "local_path": "local/tau3/models/comparator-2",
+        "local_identity_path": "local/tau3/identities/comparator-2.json",
+        "local_identity_sha256": "REPLACE_WITH_COMPARATOR_2_IDENTITY_SHA256"
+      }
+    ],
+    "teachers": [],
+    "selection_rule": "Freeze before sealed evaluation using current public tool-use evidence and verified local common-harness compatibility."
+  },
+  "budget": {
+    "schema_version": "hfr.tau3_budget.v1",
+    "max_seconds": 604800,
+    "reserved_final_eval": true,
+    "reserved_final_eval_seconds": 86400,
+    "local_only": true,
+    "network": false,
+    "stages": {
+      "generation": 172800,
+      "search": 172800,
+      "final_training": 86400,
+      "final_eval": 86400,
+      "contingency": 86400
+    },
+    "deny_when_final_eval_cannot_complete": true
+  },
+  "sealed_manifest": {
+    "schema_version": "hfr.tau3_sealed_manifest.v1",
+    "quarantined_at": "REPLACE_WITH_UTC_QUARANTINE_TIMESTAMP",
+    "quarantine_predates_generation": true,
+    "access_count": 0,
+    "prompt_hashes": ["REPLACE_WITH_SEALED_PROMPT_HASHES_WITHOUT_PROMPT_CONTENT"],
+    "manifest_sha256": "REPLACE_WITH_SEALED_SHA256"
+  },
+  "mlx_qlora_plan": {
+    "schema_version": "hfr.tau3_mlx_qlora_plan.v1",
+    "passed": false,
+    "backend": "mlx-lm",
+    "method": "4-bit QLoRA",
+    "quantization": "4-bit",
+    "local_only": true,
+    "network": false,
+    "command_argv": [
+      "python",
+      "-m",
+      "mlx_lm",
+      "lora",
+      "--train",
+      "--model",
+      "model_input",
+      "--data",
+      "input_export",
+      "--adapter-path",
+      "adapter_output"
+    ],
+    "resume": {
+      "enabled": true,
+      "requires_recipe_and_dataset_hash_match": true
+    },
+    "stop_conditions": [
+      "divergence",
+      "budget_breach",
+      "development_regression",
+      "safety_regression",
+      "artifact_validation_failure"
+    ],
+    "output_contract": {
+      "adapter_only": true,
+      "base_revision_required": true,
+      "quantization_identity_required": true
+    }
+  },
+  "recipe_space": {
+    "schema_version": "hfr.tau3_recipe_space.v1",
+    "bounded": true,
+    "max_trials": 12,
+    "sealed_used": false,
+    "development_only": true,
+    "bounds": {
+      "rank": [8, 16, 32],
+      "alpha": [16, 32, 64],
+      "learning_rate": [0.00001, 0.0002],
+      "sequence_length": [2048, 8192],
+      "steps": [100, 2000]
+    }
+  },
+  "candidate_selection_contract": {
+    "schema_version": "hfr.tau3_candidate_selection.v1",
+    "passed": false,
+    "development_only": true,
+    "sealed_used": false,
+    "one_untouched_checkpoint": true,
+    "primary_metric": "macro_pass_1",
+    "safety_non_inferiority_margin": 0.01,
+    "per_domain_non_inferiority_margin": 0.03,
+    "bootstrap": {
+      "kind": "domain_stratified_paired",
+      "confidence": 0.95,
+      "resamples": 10000,
+      "seed": 8675309
+    }
+  },
+  "contamination_attestation": {
+    "passed": false,
+    "leakage_found": false,
+    "unresolved_leakage": true,
+    "checks": {
+      "exact_duplicate": "pending",
+      "near_duplicate": "pending",
+      "task_template_overlap": "pending",
+      "tool_sequence_overlap": "pending",
+      "state_transition_overlap": "pending"
+    }
+  },
+  "redaction_attestation": {
+    "passed": false,
+    "secrets_found": false,
+    "unredacted_sensitive_data": true
+  },
+  "licenses": [
+    {
+      "id": "tau-training-sources",
+      "status": "pending",
+      "training_allowed": false
+    },
+    {
+      "id": "base-and-comparator-models",
+      "status": "pending",
+      "training_allowed": false
+    }
+  ],
+  "environment_manifest": {
+    "schema_version": "hfr.tau3_environment.v1",
+    "hardware_class": "local Apple M4 Max with 36 GB unified memory",
+    "memory_gib": 36,
+    "network_allowed": false,
+    "device_identifiers_recorded": false
+  }
+}

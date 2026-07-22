@@ -124,9 +124,29 @@ Every capture row binds the observed behavior to immutable source evidence:
 
 For each production model entry, `local_path` points to the populated local
 weights directory, while `local_identity_path` points to a JSON file such as
-`{"model_id":"org/model","revision":"<immutable revision>"}` and
-`local_identity_sha256` seals that file. These machine-local fields are checked
-before the public bundle is written and are removed from durable artifacts.
+`{"model_id":"org/model","revision":"<immutable revision>","files":[...]}`
+and `local_identity_sha256` seals that file. The identity must replay every
+regular file in the model tree, including configuration, tokenizer, and weight
+files; symlinks, omitted files, stale records, or changed hashes fail closed.
+These machine-local fields are checked before the public bundle is written and
+are removed from durable artifacts.
+
+The checked-in [production input template](../examples/tau3_training/protocol_config.template.json)
+contains every required field but deliberately fails while any
+`REPLACE_WITH_...` value or pending attestation remains. Build model identities
+and run the source-only preflight before creating a bundle:
+
+```bash
+.venv/bin/python scripts/build_tau3_model_identity.py \
+  --model-path local/tau3/models/base \
+  --model-id '<frozen model id>' \
+  --revision '<immutable revision>' \
+  --out local/tau3/identities/base.json
+
+.venv/bin/python scripts/check_tau3_training_sources.py \
+  --config local/tau3/protocol.json \
+  --out local/tau3/source_preflight.json
+```
 
 `flightrecorder.tau3_capture` converts this envelope into normalized traces,
 task-completion evidence, scorecards, state diffs, and eligible trajectory-v2

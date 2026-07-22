@@ -240,7 +240,10 @@ and reviewer dispositions; creates balanced admission/rejection,
 contamination, redaction, license, SFT, action-SFT, and DPO artifacts; and
 stops at a hash-checked MLX-LM QLoRA launch handoff. Its deterministic rehearsal
 is always marked not training-ready, while production validation requires real
-pinned local Tau and 7–9B model assets.
+pinned local Tau and 7–9B model assets. A fail-closed
+[production-input template](examples/tau3_training/protocol_config.template.json),
+complete model-tree identity builder, and read-only source preflight make those
+local inputs auditable before bundle generation.
 
 ```bash
 .venv/bin/python scripts/build_tau3_training_artifacts.py \

@@ -454,6 +454,7 @@ def _validate_training(ctx: _Context) -> None:
     evidence = _payload(ctx, "evidence_bundle")
     candidate = _payload(ctx, "candidate_selection_contract")
 
+    ctx.add("mlx_qlora_plan_approved", _passed(mlx), _summary(mlx), "passed")
     ctx.add("mlx_qlora_4bit_lora", _is_4bit(_pick(mlx, "quantization", "quantization_bits", "bits")) and _lora(_pick(mlx, "method", "adapter_type", "training_method")), _pick(mlx, "method", "adapter_type", "training_method", "quantization", "quantization_bits"), "4-bit QLoRA/LoRA")
     ctx.add("recipe_search_bounded", _truthy(recipe, "bounded", "bounded_search") or _number(_pick(recipe, "max_trials", "candidate_count")) is not None, _summary(recipe), "bounded recipe search")
     ctx.add("recipe_search_development_only", _truthy(recipe, "development_only") and not _truthy(recipe, "sealed_used"), _summary(recipe), "development only, sealed unused")
@@ -465,6 +466,7 @@ def _validate_training(ctx: _Context) -> None:
         _summary(candidate),
         "development-only selection and one untouched checkpoint",
     )
+    ctx.add("candidate_selection_contract_approved", _passed(candidate), _summary(candidate), "passed")
     ctx.add(
         "candidate_metrics_margins_bootstrap_frozen",
         bool(_pick(candidate, "primary_metric"))

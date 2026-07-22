@@ -211,6 +211,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "suite_trend",
             "supervisor_state",
             "tau3_capture",
+            "tau3_model_identity",
             "tau3_training_bundle",
             "task_completion",
             "trace",

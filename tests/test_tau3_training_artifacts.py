@@ -194,6 +194,7 @@ def _base_bundle(root: Path, *, mode: str = "production", ready: bool = True) ->
         "training/dataset_manifest.json": {"schema_version": "hfr.tau3.dataset_manifest.v1", "local_only": True},
         "training/mlx_qlora_plan.json": {
             "schema_version": "hfr.tau3.mlx_qlora_plan.v1",
+            "passed": True,
             "method": "QLoRA LoRA adapter",
             "quantization": "4-bit",
             "local_only": True,
@@ -222,6 +223,7 @@ def _base_bundle(root: Path, *, mode: str = "production", ready: bool = True) ->
         },
         "training/candidate_selection_contract.json": {
             "schema_version": "hfr.tau3.candidate_selection_contract.v1",
+            "passed": True,
             "no_test_time_search": True,
             "development_only": True,
             "sealed_used": False,
@@ -601,6 +603,26 @@ class Tau3TrainingArtifactValidatorTests(unittest.TestCase):
             result = validate_tau3_training_bundle(bundle, strict=True)
             self.assertFalse(result["passed"])
             self.assertIn("budget_max_seven_days", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_rejects_unapproved_qlora_or_candidate_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = _base_bundle(Path(tmp))
+            _mutate_json(
+                bundle / "training/mlx_qlora_plan.json",
+                lambda payload: payload.__setitem__("passed", False),
+            )
+            _mutate_json(
+                bundle / "training/candidate_selection_contract.json",
+                lambda payload: payload.__setitem__("passed", False),
+            )
+            _rewrite_manifest(bundle)
+
+            result = validate_tau3_training_bundle(bundle, strict=True)
+
+            failed = {check["id"] for check in result["checks"] if not check["passed"]}
+            self.assertFalse(result["passed"])
+            self.assertIn("mlx_qlora_plan_approved", failed)
+            self.assertIn("candidate_selection_contract_approved", failed)
 
     def test_rejects_full_training_or_launch_started(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
