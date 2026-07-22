@@ -1,0 +1,375 @@
+{
+  "all_splits_audit_data": {
+    "path": "examples/case_studies/runtime_adapter_router/data/all_splits_action_sft.jsonl",
+    "sha256": "e0c18b7b64ad3b716569312d65c306826f59042f12eff6d54eef579fd42de384",
+    "size_bytes": 3989168
+  },
+  "behavior_counts": {
+    "browser_positive": 40,
+    "clarification_no_tool_call": 40,
+    "code_positive": 40,
+    "cross_domain": 40,
+    "database_positive": 40,
+    "external_write_approval": 40,
+    "failure_recovery": 80,
+    "handler_not_called": 40,
+    "multi_call": 240,
+    "refusal_no_tool_call": 40,
+    "write_authorized": 40,
+    "write_denial": 40
+  },
+  "candidate_manifests": {
+    "browser": {
+      "path": "examples/case_studies/runtime_adapter_router/registry/browser_dataset_version.json",
+      "sha256": "303737da5a3b6bd5b625a6a09c59802c16f7b9f4fb66b0dac4ba4ef3ad8e03ea",
+      "size_bytes": 4382
+    },
+    "code_terminal": {
+      "path": "examples/case_studies/runtime_adapter_router/registry/code_terminal_dataset_version.json",
+      "sha256": "c8b3e301953641e1dba04aa18f22c5d90a5e73b29f002a75ce5fb3e74db28017",
+      "size_bytes": 4442
+    },
+    "database": {
+      "path": "examples/case_studies/runtime_adapter_router/registry/database_dataset_version.json",
+      "sha256": "324d2cdc89edb20785dde13b533a945afe2fa943a4ce6718b4cb9abb06c9de21",
+      "size_bytes": 4392
+    },
+    "generalist": {
+      "path": "examples/case_studies/runtime_adapter_router/registry/generalist_dataset_version.json",
+      "sha256": "33e45a3e6d12f7d4da9296c410af8a78870b937938eb9d7426aab13786f23b38",
+      "size_bytes": 4855
+    }
+  },
+  "case_study": "runtime-adapter-router",
+  "controls": {
+    "action_credit": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/action_credit.jsonl",
+      "sha256": "0552c3e9b79607332304acfaeb12f3952335471602c90cbf6ecfb241e667655c",
+      "size_bytes": 177376
+    },
+    "branch_replay": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/branch_replay.json",
+      "sha256": "3f5cb356822551fb294fef06fc289dd3eee47d345ae77f8c2f605dece50651f2",
+      "size_bytes": 1466
+    },
+    "contamination_report": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/contamination_report.json",
+      "sha256": "7d4444d82721a3099c4927f3b94570f23fc3fb80ee245657c96024c810583bf5",
+      "size_bytes": 58334
+    },
+    "curated_dataset": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/curated_dataset.json",
+      "sha256": "00f60abd78ba3915a27fc4f0fa1d6ea0a03b855005bdb813f34b2783d5876416",
+      "size_bytes": 5027571
+    },
+    "governance_receipt": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/governance_receipt.json",
+      "sha256": "807d19f198ca5e0c4e066f58f6f983200fa8fd8250b38fa41dfe557188454033",
+      "size_bytes": 67636
+    },
+    "reviewed_preferences": {
+      "path": "examples/case_studies/runtime_adapter_router/controls/reviewed_preferences.jsonl",
+      "sha256": "0f4878afe3514a2dfdd5bfaa40dbabc64332b994bb3ca05f7a9365bc7347fae1",
+      "size_bytes": 1057
+    }
+  },
+  "corpus_fingerprint": "767a1f9fb42304a09f1873c0f6c562a990f51577b7117ebadb5d4d2a936b4620",
+  "data": {
+    "path": "examples/case_studies/runtime_adapter_router/data/flightrecorder_action_sft.jsonl",
+    "sha256": "32c644970a77644d6254647cc2da0dc986052573754f011337f83c3e09a1209f",
+    "size_bytes": 3177461
+  },
+  "dataset_manifest": {
+    "path": "examples/case_studies/runtime_adapter_router/registry/dataset_version.json",
+    "sha256": "ce312548a53497e80103d498d44ad0175d5ed2f67f85c89b6060f36999701547",
+    "size_bytes": 4781
+  },
+  "default_count_range": {
+    "max": 800,
+    "min": 300
+  },
+  "model_manifest": {
+    "path": "examples/case_studies/runtime_adapter_router/registry/model_candidate.json",
+    "sha256": "f089c3d735adeb0da8f093a9ad9f62cadb7d36c018d4fab61891d8e009fae980",
+    "size_bytes": 2910
+  },
+  "public_safety": {
+    "contains_secrets": false,
+    "network_required": false,
+    "synthetic_only": true,
+    "writes_external_state": false
+  },
+  "rl_action_sft_data": {
+    "path": "examples/case_studies/runtime_adapter_router/data/rl_action_sft.jsonl",
+    "sha256": "8f0bf80d6c1ff4122b320d7c721e564d744b7e373700387fb844473dd78ed7b9",
+    "size_bytes": 2908757
+  },
+  "row_count": 360,
+  "schema_version": "hfr.runtime_adapter_router_corpus_manifest.v1",
+  "seed": 17,
+  "split_counts": {
+    "development": 36,
+    "sealed_final": 36,
+    "train": 288
+  },
+  "split_disjointness": {
+    "checks": {
+      "prompt_hashes": true,
+      "prompt_template_families": true,
+      "record_keys": true,
+      "task_ids": true
+    },
+    "passed": true
+  },
+  "task_family_counts": {
+    "runtime_adapter_router_browser_development": 4,
+    "runtime_adapter_router_browser_sealed_final": 4,
+    "runtime_adapter_router_browser_train": 32,
+    "runtime_adapter_router_code_terminal_development": 4,
+    "runtime_adapter_router_code_terminal_sealed_final": 4,
+    "runtime_adapter_router_code_terminal_train": 32,
+    "runtime_adapter_router_database_development": 8,
+    "runtime_adapter_router_database_sealed_final": 8,
+    "runtime_adapter_router_database_train": 64,
+    "runtime_adapter_router_generalist_development": 8,
+    "runtime_adapter_router_generalist_sealed_final": 8,
+    "runtime_adapter_router_generalist_train": 64,
+    "runtime_adapter_router_shared_safety_development": 12,
+    "runtime_adapter_router_shared_safety_sealed_final": 12,
+    "runtime_adapter_router_shared_safety_train": 96
+  },
+  "task_scope_counts": {
+    "browser": 40,
+    "code_terminal": 40,
+    "database": 80,
+    "generalist": 80,
+    "shared": 120
+  },
+  "tool_definitions": [
+    {
+      "capability": "browser",
+      "definition_sha256": "c6f9ad1f92fa34ccf9ab8838df50f8d866b25622d442e4542e458cda473edcf4",
+      "function": {
+        "description": "Synthetic public-safe browser tool for runtime adapter router evidence.",
+        "name": "browser.search",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "recency_days": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "query",
+            "recency_days"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "read",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": false
+    },
+    {
+      "capability": "browser",
+      "definition_sha256": "a55b7bd8e2a528d4a15e90f699089bbc1ceea0dcf4b4d6243919782c851d6c0b",
+      "function": {
+        "description": "Synthetic public-safe browser tool for runtime adapter router evidence.",
+        "name": "browser.open",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "extract": {
+              "enum": [
+                "title",
+                "table",
+                "summary"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "extract"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "read",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": false
+    },
+    {
+      "capability": "database",
+      "definition_sha256": "de2712a62996c0c1190dc2303af31084b5bdbe37a040f59feb13a2874123b14b",
+      "function": {
+        "description": "Synthetic public-safe database tool for runtime adapter router evidence.",
+        "name": "database.query",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "parameters": {
+              "type": "object"
+            },
+            "read_only": {
+              "const": true
+            },
+            "statement": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "statement",
+            "parameters",
+            "read_only"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "read",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": false
+    },
+    {
+      "capability": "database",
+      "definition_sha256": "a3153fb9ca003ae94d0a7843b972c3115e20c4e806b33a15552123e0ee4eae6e",
+      "function": {
+        "description": "Synthetic public-safe database tool for runtime adapter router evidence.",
+        "name": "database.write",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "approval_id": {
+              "type": "string"
+            },
+            "parameters": {
+              "type": "object"
+            },
+            "statement": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "statement",
+            "parameters",
+            "approval_id"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "write",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": true
+    },
+    {
+      "capability": "code_terminal",
+      "definition_sha256": "e755ebdd4c0599c1e64c8834a6a0f6679b6ff1c081ae2ddfaa5469bfd70d5c74",
+      "function": {
+        "description": "Synthetic public-safe code_terminal tool for runtime adapter router evidence.",
+        "name": "code_terminal.run",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "cmd": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "timeout_ms": {
+              "minimum": 1000,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "cmd",
+            "cwd",
+            "timeout_ms"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "read",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": false
+    },
+    {
+      "capability": "code_terminal",
+      "definition_sha256": "941e0305b463e53b694de865ed080f00030a7d0b176bcb1471a1fc88c75bd4b9",
+      "function": {
+        "description": "Synthetic public-safe code_terminal tool for runtime adapter router evidence.",
+        "name": "code_terminal.patch",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "approval_id": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "unified_diff": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "unified_diff",
+            "approval_id"
+          ],
+          "type": "object"
+        }
+      },
+      "risk": "write",
+      "type": "function",
+      "version": "2026-07-01.immutable",
+      "write_capable": true
+    }
+  ],
+  "trainer_compatibility": {
+    "mode": "fr_action_sft",
+    "task_families": [
+      "runtime_adapter_router_browser_development",
+      "runtime_adapter_router_browser_sealed_final",
+      "runtime_adapter_router_browser_train",
+      "runtime_adapter_router_code_terminal_development",
+      "runtime_adapter_router_code_terminal_sealed_final",
+      "runtime_adapter_router_code_terminal_train",
+      "runtime_adapter_router_database_development",
+      "runtime_adapter_router_database_sealed_final",
+      "runtime_adapter_router_database_train",
+      "runtime_adapter_router_generalist_development",
+      "runtime_adapter_router_generalist_sealed_final",
+      "runtime_adapter_router_generalist_train",
+      "runtime_adapter_router_shared_safety_development",
+      "runtime_adapter_router_shared_safety_sealed_final",
+      "runtime_adapter_router_shared_safety_train"
+    ],
+    "task_family_filtering": true
+  },
+  "training_boundary": {
+    "heldout_excluded_from_candidate_manifests": true,
+    "heldout_excluded_from_controls": true,
+    "heldout_excluded_from_recipe_selection": true,
+    "heldout_splits": [
+      "development",
+      "sealed_final"
+    ],
+    "trainer_facing_paths": [
+      "data/flightrecorder_action_sft.jsonl",
+      "data/rl_action_sft.jsonl"
+    ],
+    "trainer_facing_split": "train"
+  }
+}

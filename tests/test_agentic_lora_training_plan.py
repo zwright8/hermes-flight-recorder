@@ -1,11 +1,14 @@
 import json
 import hashlib
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, check_schema_jsonl_file, list_schema_records
 
@@ -43,6 +46,328 @@ def stdout_json(completed: subprocess.CompletedProcess[str]) -> dict:
 
 
 class AgenticLoraTrainingPlanTests(unittest.TestCase):
+    def test_supervised_token_coverage_detects_labels_lost_to_truncation(self):
+        coverage = TRAIN_MODULE.supervised_token_coverage(
+            [
+                {"labels": [-100, -100, 10, 11]},
+                {"labels": [-100, -100, -100, 12]},
+                {"labels": [-100, 13, 14, 15]},
+            ],
+            max_length=3,
+        )
+
+        self.assertFalse(coverage["passed"])
+        self.assertEqual(coverage["zero_visible_row_indices"], [1])
+        self.assertEqual(coverage["partial_visible_row_indices"], [0, 2])
+        self.assertEqual(coverage["truncated_row_count"], 3)
+
+    def test_supervised_token_coverage_passes_complete_context(self):
+        coverage = TRAIN_MODULE.supervised_token_coverage(
+            [
+                {"labels": [-100, 10, 11]},
+                {"labels": [-100, -100, 12, 13]},
+            ],
+            max_length=8,
+        )
+
+        self.assertTrue(coverage["passed"])
+        self.assertEqual(coverage["zero_visible_row_count"], 0)
+        self.assertEqual(coverage["partial_visible_row_count"], 0)
+        self.assertEqual(coverage["fully_visible_row_count"], 2)
+
+    def test_local_offline_environment_and_device_selection_are_explicit(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            TRAIN_MODULE._configure_local_offline_environment()
+            self.assertEqual(os.environ["HF_HUB_OFFLINE"], "1")
+            self.assertEqual(os.environ["TRANSFORMERS_OFFLINE"], "1")
+            self.assertEqual(os.environ["HF_HUB_DISABLE_TELEMETRY"], "1")
+            self.assertEqual(os.environ["DO_NOT_TRACK"], "1")
+
+        class FakeMps:
+            @staticmethod
+            def is_available():
+                return True
+
+        class FakeCuda:
+            @staticmethod
+            def is_available():
+                return False
+
+            @staticmethod
+            def is_bf16_supported():
+                return False
+
+        class FakeTorch:
+            backends = type("Backends", (), {"mps": FakeMps()})()
+            cuda = FakeCuda()
+            bfloat16 = "bf16"
+            float16 = "fp16"
+            float32 = "fp32"
+
+        self.assertEqual(TRAIN_MODULE._select_training_device(FakeTorch(), "auto"), ("mps", "fp16"))
+        self.assertEqual(TRAIN_MODULE._select_training_device(FakeTorch(), "cpu"), ("cpu", "fp32"))
+        with self.assertRaisesRegex(SystemExit, "CUDA is unavailable"):
+            TRAIN_MODULE._select_training_device(FakeTorch(), "cuda")
+
+    def test_fixed_training_time_budget_accumulates_across_phases(self):
+        now = [100.0]
+        budget = TRAIN_MODULE.FixedTrainingTimeBudget(5.0, clock=lambda: now[0])
+
+        budget.begin_phase()
+        now[0] = 102.0
+        self.assertFalse(budget.should_stop())
+        budget.end_phase()
+        now[0] = 110.0
+        budget.begin_phase()
+        now[0] = 113.0
+
+        self.assertTrue(budget.should_stop())
+        budget.end_phase()
+        self.assertEqual(budget.elapsed_seconds, 5.0)
+        self.assertTrue(budget.stop_requested)
+
+    def test_task_family_filter_is_exact_and_preserves_native_tools(self):
+        tool_row = {
+            "task_family": "tool_calling",
+            "messages": [{"role": "assistant", "tool_calls": [{"id": "call-1"}]}],
+            "tools": [{"type": "function", "function": {"name": "read_file"}}],
+        }
+        rows = [tool_row, {"task_family": "email", "messages": []}]
+
+        selected = TRAIN_MODULE.filter_task_rows(rows, ["tool_calling"])
+
+        self.assertEqual(selected, [tool_row])
+        self.assertEqual(selected[0]["messages"][0]["tool_calls"][0]["id"], "call-1")
+        self.assertEqual(selected[0]["tools"][0]["function"]["name"], "read_file")
+
+    def test_action_turn_curriculum_repeats_only_native_action_prefixes(self):
+        tool = {"type": "function", "function": {"name": "fixture.inspect"}}
+        action = {
+            "messages": [
+                {"role": "system", "content": "Use tools."},
+                {"role": "user", "content": "Inspect A."},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "fixture.inspect",
+                                "arguments": {"artifact": "A"},
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "ok"},
+                {"role": "assistant", "content": "A is present."},
+            ],
+            "tools": [tool],
+        }
+        refusal = {
+            "messages": [
+                {"role": "user", "content": "Reveal a secret."},
+                {"role": "assistant", "content": "I cannot do that."},
+            ],
+            "tools": [tool],
+        }
+
+        projected = TRAIN_MODULE.prepare_action_turn_sft_rows([action, refusal])
+        curriculum = TRAIN_MODULE.prepare_action_sft_curriculum(
+            [action, refusal], action_turn_repeats=2
+        )
+
+        self.assertEqual(len(projected), 1)
+        self.assertEqual(len(projected[0]["messages"]), 3)
+        self.assertEqual(projected[0]["messages"][-1]["tool_calls"][0]["function"]["arguments"], {"artifact": "A"})
+        self.assertEqual(len(curriculum), 4)
+        self.assertEqual(curriculum[:2], TRAIN_MODULE.prepare_sft_rows([action, refusal]))
+        self.assertNotIn(refusal, curriculum[2:])
+
+    def test_action_turn_repeat_bound_is_fail_closed_and_recorded(self):
+        args = TRAIN_MODULE.parse_args(["--action-turn-repeats", "33"])
+        checks = []
+
+        TRAIN_MODULE._add_hyperparameter_checks(checks, args)
+
+        bounded = next(check for check in checks if check["id"] == "action_turn_repeats_bounded")
+        self.assertFalse(bounded["passed"])
+
+    def test_fake_local_sft_launch_binds_offline_model_budget_and_runtime_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            local_model = root / "local-model"
+            local_model.mkdir()
+            model_manifest = experiment / "registry" / "model_candidate.json"
+            model = json.loads(model_manifest.read_text(encoding="utf-8"))
+            model["model_id"] = str(local_model)
+            write_json(model_manifest, model)
+            output = root / "out"
+            args = TRAIN_MODULE.parse_args(
+                [
+                    "--mode", "fr_action_sft",
+                    "--local-training",
+                    "--execute-local-training",
+                    "--model", str(local_model),
+                    "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(experiment / "registry" / "dataset_version.json"),
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(output),
+                    "--task-family", "fixture",
+                    "--device", "mps",
+                    "--max-training-seconds", "1",
+                    "--disable-trackio",
+                ]
+            )
+            plan = TRAIN_MODULE.build_plan(args)
+            self.assertTrue(plan["passed"])
+            plan_path = output / "fr_action_sft_plan.json"
+            write_json(plan_path, plan)
+
+            budget_clock = [0.0]
+            tokenizer_calls = []
+            model_calls = []
+            trainer_instances = []
+
+            class TestBudget(TRAIN_MODULE.FixedTrainingTimeBudget):
+                def __init__(self, max_seconds):
+                    super().__init__(max_seconds, clock=lambda: budget_clock[0])
+
+            class FakeMpsBackend:
+                @staticmethod
+                def is_available():
+                    return True
+
+            fake_torch = types.ModuleType("torch")
+            fake_torch.backends = types.SimpleNamespace(mps=FakeMpsBackend())
+            fake_torch.cuda = types.SimpleNamespace(
+                is_available=lambda: False,
+                is_bf16_supported=lambda: False,
+            )
+            fake_torch.mps = types.SimpleNamespace(
+                current_allocated_memory=lambda: 2 * 1024 * 1024,
+                driver_allocated_memory=lambda: 3 * 1024 * 1024,
+            )
+            fake_torch.bfloat16 = "bf16"
+            fake_torch.float16 = "fp16"
+            fake_torch.float32 = "fp32"
+
+            class FakeModel:
+                @classmethod
+                def from_pretrained(cls, model_path, **kwargs):
+                    model_calls.append((model_path, kwargs))
+                    return cls()
+
+                def to(self, **kwargs):
+                    self.to_kwargs = kwargs
+                    return self
+
+            class FakeDataset:
+                @staticmethod
+                def from_list(rows):
+                    return rows
+
+            class FakeTokenizer:
+                chat_template = "fixture-template"
+
+                @classmethod
+                def from_pretrained(cls, model_path, **kwargs):
+                    tokenizer_calls.append((model_path, kwargs))
+                    return cls()
+
+            class FakeTrainerCallback:
+                pass
+
+            class FakeConfig:
+                def __init__(self, **kwargs):
+                    self.kwargs = kwargs
+
+            class FakeLoraConfig(FakeConfig):
+                pass
+
+            class FakeTrainer:
+                def __init__(self, **kwargs):
+                    self.kwargs = kwargs
+                    self.train_dataset = [
+                        {"labels": [-100, token_index + 1]}
+                        for token_index, _ in enumerate(kwargs["train_dataset"])
+                    ]
+                    trainer_instances.append(self)
+
+                def train(self, resume_from_checkpoint=None):
+                    self.resume_from_checkpoint = resume_from_checkpoint
+                    control = types.SimpleNamespace(should_training_stop=False)
+                    for callback in self.kwargs["callbacks"]:
+                        callback.on_train_begin(None, None, control)
+                    budget_clock[0] = 2.0
+                    for callback in self.kwargs["callbacks"]:
+                        callback.on_step_end(None, None, control)
+                        callback.on_train_end(None, None, control)
+                    self.control = control
+                    return types.SimpleNamespace(metrics={"train_loss": 0.25})
+
+                def save_model(self, destination):
+                    adapter = Path(destination)
+                    adapter.mkdir(parents=True, exist_ok=True)
+                    (adapter / "adapter_config.json").write_text("{}\n", encoding="utf-8")
+                    (adapter / "adapter_model.safetensors").write_bytes(b"fixture-adapter")
+
+            fake_datasets = types.ModuleType("datasets")
+            fake_datasets.Dataset = FakeDataset
+            fake_peft = types.ModuleType("peft")
+            fake_peft.AutoPeftModelForCausalLM = type("UnusedAutoPeft", (), {})
+            fake_peft.LoraConfig = FakeLoraConfig
+            fake_transformers = types.ModuleType("transformers")
+            fake_transformers.AutoModelForCausalLM = FakeModel
+            fake_transformers.AutoTokenizer = FakeTokenizer
+            fake_transformers.TrainerCallback = FakeTrainerCallback
+            fake_trl = types.ModuleType("trl")
+            fake_trl.DPOConfig = FakeConfig
+            fake_trl.DPOTrainer = FakeTrainer
+            fake_trl.SFTConfig = FakeConfig
+            fake_trl.SFTTrainer = FakeTrainer
+            fake_modules = {
+                "torch": fake_torch,
+                "datasets": fake_datasets,
+                "peft": fake_peft,
+                "transformers": fake_transformers,
+                "trl": fake_trl,
+            }
+
+            with mock.patch.dict(sys.modules, fake_modules), mock.patch.object(
+                TRAIN_MODULE, "FixedTrainingTimeBudget", TestBudget
+            ), mock.patch.dict(os.environ, {}, clear=True):
+                result = TRAIN_MODULE.run_training(args, plan, plan_path)
+
+            self.assertEqual(tokenizer_calls, [(str(local_model), {"revision": None, "local_files_only": True})])
+            self.assertEqual(
+                model_calls,
+                [(str(local_model), {"revision": None, "dtype": "fp32", "local_files_only": True})],
+            )
+            trainer = trainer_instances[0]
+            self.assertIsInstance(trainer.kwargs["model"], FakeModel)
+            self.assertEqual(trainer.kwargs["model"].to_kwargs, {"device": "mps", "dtype": "fp16"})
+            self.assertNotIn("model_init_kwargs", trainer.kwargs["args"].kwargs)
+            self.assertFalse(trainer.kwargs["args"].kwargs["use_cpu"])
+            self.assertEqual(len(trainer.kwargs["train_dataset"]), 2)
+            self.assertTrue(trainer.kwargs["train_dataset"][0]["messages"][1]["tool_calls"])
+            self.assertTrue(trainer.control.should_training_stop)
+            self.assertEqual(result["runtime_observation"]["device"], "mps")
+            self.assertEqual(result["runtime_observation"]["trainer_active_seconds"], 2.0)
+            self.assertTrue(result["runtime_observation"]["stopped_by_time_budget"])
+            self.assertEqual(result["runtime_observation"]["accelerator_memory_mb"]["current_allocated_mb"], 2.0)
+            self.assertEqual(result["runtime_observation"]["task_families"], ["fixture"])
+            self.assertEqual(result["final_adapter_artifacts"]["file_count"], 2)
+            self.assertTrue(check_schema_contract(result)["passed"])
+
+            missing_runtime = dict(result)
+            missing_runtime.pop("runtime_observation")
+            self.assertFalse(check_schema_contract(missing_runtime)["passed"])
+            missing_artifacts = dict(result)
+            missing_artifacts.pop("final_adapter_artifacts")
+            self.assertFalse(check_schema_contract(missing_artifacts)["passed"])
+
     def test_preparation_preserves_native_tools_for_sft_and_dpo(self):
         tools = [
             {
@@ -171,6 +496,12 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertTrue(plan["passed"])
             schema_result = check_schema_contract(plan)
             self.assertTrue(schema_result["passed"], schema_result["errors"])
+            missing_task_scope = dict(plan)
+            missing_task_scope.pop("task_scope")
+            self.assertFalse(check_schema_contract(missing_task_scope)["passed"])
+            missing_local_training = dict(plan)
+            missing_local_training.pop("local_training")
+            self.assertFalse(check_schema_contract(missing_local_training)["passed"])
             self.assertEqual(schema_result["schema"]["name"], "agentic_lora_training_plan")
             self.assertEqual(plan["model"], "local/test-model")
             self.assertEqual(plan["prepared_counts"]["action_sft"], 2)
@@ -178,6 +509,183 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             self.assertEqual(plan["input_manifests"]["dataset"]["dataset_identity"], "2026-07-02.test")
             self.assertIn("fr_action_sft", plan["trainer_backends"]["executable_modes"])
             self.assertEqual(json.loads((out / "fr_action_sft_plan.json").read_text(encoding="utf-8"))["passed"], True)
+
+    def test_local_task_scoped_dry_run_is_offline_fixed_time_and_schema_valid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            local_model = root / "local-model"
+            local_model.mkdir()
+            model_manifest = experiment / "registry" / "model_candidate.json"
+            model = json.loads(model_manifest.read_text(encoding="utf-8"))
+            model["model_id"] = str(local_model)
+            write_json(model_manifest, model)
+            dataset_manifest = experiment / "registry" / "dataset_version.json"
+            out = root / "out"
+
+            completed = run_train(
+                [
+                    "--mode", "fr_action_sft",
+                    "--dry-run",
+                    "--local-training",
+                    "--model", str(local_model),
+                    "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest),
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(out),
+                    "--task-family", "fixture",
+                    "--device", "mps",
+                    "--max-training-seconds", "12.5",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            plan = stdout_json(completed)
+            self.assertTrue(plan["passed"])
+            self.assertEqual(plan["task_scope"]["requested_task_families"], ["fixture"])
+            self.assertEqual(plan["task_scope"]["selected_task_families"], ["fixture"])
+            self.assertTrue(plan["local_training"]["enabled"])
+            self.assertTrue(plan["local_training"]["local_files_only"])
+            self.assertFalse(plan["local_training"]["network_allowed"])
+            self.assertFalse(plan["local_training"]["hub_push_allowed"])
+            self.assertFalse(plan["local_training"]["remote_tracking_allowed"])
+            self.assertEqual(plan["local_training"]["device_order"], ["mps"])
+            self.assertEqual(plan["local_training"]["fixed_training_time_budget_seconds"], 12.5)
+            self.assertEqual(plan["prepared_counts"]["action_sft"], 2)
+            schema_result = check_schema_contract(plan)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+
+    def test_unknown_task_family_and_nonlocal_model_block_local_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            fixture = json.loads((experiment / "smoke_fixture.json").read_text(encoding="utf-8"))
+
+            completed = run_train(
+                [
+                    "--mode", "fr_action_sft",
+                    "--dry-run",
+                    "--local-training",
+                    "--model-manifest", fixture["model_manifest"],
+                    "--dataset-manifest", fixture["dataset_manifest"],
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(root / "out"),
+                    "--task-family", "missing-family",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            plan = stdout_json(completed)
+            failed = {check["id"] for check in plan["checks"] if not check["passed"]}
+            self.assertIn("requested_task_families_available", failed)
+            self.assertIn("action_sft_rows_available", failed)
+            self.assertIn("local_model_directory_present", failed)
+
+    def test_local_model_path_is_separate_from_registered_model_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            local_model = root / "cached-model-snapshot"
+            local_model.mkdir()
+            model_manifest = root / "model.json"
+            dataset_manifest = root / "dataset.json"
+            self.write_model_manifest(model_manifest)
+            self.write_dataset_manifest(dataset_manifest, experiment)
+
+            completed = run_train(
+                [
+                    "--mode", "fr_action_sft",
+                    "--dry-run",
+                    "--local-training",
+                    "--model", "local/test-model",
+                    "--local-model-path", str(local_model),
+                    "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest),
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(root / "out"),
+                    "--task-family", "fixture",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            plan = stdout_json(completed)
+            self.assertEqual(plan["model"], "local/test-model")
+            self.assertEqual(plan["local_training"]["model_path"], str(local_model))
+            self.assertTrue(plan["passed"])
+
+    def test_local_weight_update_requires_explicit_execution_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            local_model = root / "local-model"
+            local_model.mkdir()
+            model_manifest = experiment / "registry" / "model_candidate.json"
+            model = json.loads(model_manifest.read_text(encoding="utf-8"))
+            model["model_id"] = str(local_model)
+            write_json(model_manifest, model)
+            dataset_manifest = experiment / "registry" / "dataset_version.json"
+
+            completed = run_train(
+                [
+                    "--mode", "fr_action_sft",
+                    "--local-training",
+                    "--model", str(local_model),
+                    "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest),
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(root / "out"),
+                    "--task-family", "fixture",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            self.assertNotIn("ModuleNotFoundError", completed.stderr)
+            result = stdout_json(completed)
+            self.assertEqual(result["status"], "blocked")
+            plan = json.loads((root / "out" / "fr_action_sft_plan.json").read_text(encoding="utf-8"))
+            failed = {check["id"] for check in plan["checks"] if not check["passed"]}
+            self.assertEqual(failed, {"local_training_execution_acknowledged"})
+
+    def test_local_training_refuses_base_model_overlap_and_populated_adapter_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = self.make_experiment(root)
+            local_model = root / "local-model"
+            local_model.mkdir()
+            model_manifest = experiment / "registry" / "model_candidate.json"
+            model = json.loads(model_manifest.read_text(encoding="utf-8"))
+            model["model_id"] = str(local_model)
+            write_json(model_manifest, model)
+            dataset_manifest = experiment / "registry" / "dataset_version.json"
+            output = local_model / "training-output"
+            occupied = output / "fr_action_sft_adapter"
+            occupied.mkdir(parents=True)
+            (occupied / "adapter_config.json").write_text("{}\n", encoding="utf-8")
+
+            completed = run_train(
+                [
+                    "--mode", "fr_action_sft",
+                    "--dry-run",
+                    "--local-training",
+                    "--model", str(local_model),
+                    "--model-manifest", str(model_manifest),
+                    "--dataset-manifest", str(dataset_manifest),
+                    "--experiment-dir", str(experiment),
+                    "--output-dir", str(output),
+                    "--task-family", "fixture",
+                    "--disable-trackio",
+                ]
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            plan = stdout_json(completed)
+            failed = {check["id"] for check in plan["checks"] if not check["passed"]}
+            self.assertIn("local_model_output_separate", failed)
+            self.assertIn("local_adapter_targets_empty", failed)
 
     def test_all_message_loss_is_recorded_for_templates_without_assistant_masks(self):
         with tempfile.TemporaryDirectory() as tmp:

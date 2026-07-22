@@ -1,0 +1,83 @@
+{
+  "candidate_id": "qwen3_4b_instruct_2507_runtime_adapter_router",
+  "compatibility": {
+    "chat_template": {
+      "notes": "The cached tokenizer template was fingerprinted before the governed local campaign.",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326",
+      "source": "local_cache_preflight",
+      "status": "pinned_hash",
+      "verified": true
+    },
+    "context_length": 262144,
+    "memory": {
+      "notes": "The unmodified 4B model completed the 36-row development-suite preflight on Apple MPS.",
+      "source": "local_runtime_preflight",
+      "status": "local_mps_verified",
+      "verified": true
+    },
+    "quantization": {
+      "notes": "The governed campaign uses the cached unquantized model and LoRA adapters.",
+      "source": "case_study_contract",
+      "status": "not_used",
+      "verified": true
+    },
+    "serving": {
+      "notes": "The campaign is local and offline and does not start a serving endpoint.",
+      "source": "case_study_contract",
+      "status": "local_offline_only",
+      "supported": true,
+      "verified": true
+    },
+    "structured_outputs": {
+      "notes": "Native JSON tool calls are evaluated directly; separate structured-output serving is not required.",
+      "source": "case_study_contract",
+      "status": "not_required_for_training_corpus",
+      "supported": false,
+      "verified": false
+    },
+    "tokenizer": {
+      "notes": "The tokenizer identity is pinned to the complete local Qwen3-4B-Instruct-2507 snapshot.",
+      "repo_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "source": "local_cache_preflight",
+      "status": "pinned_revision",
+      "verified": true
+    },
+    "tool_calls": {
+      "notes": "A local zero-shot preflight produced native JSON tool-call blocks with the reviewed schemas.",
+      "source": "local_runtime_preflight",
+      "status": "native_json_tool_calls",
+      "supported": true,
+      "verified": true
+    }
+  },
+  "license": {
+    "accepted_terms": true,
+    "license_id": "apache-2.0",
+    "notes": [
+      "The model was already present in the local cache; this campaign prohibits network downloads and publication."
+    ],
+    "review_status": "approved",
+    "reviewed_at": "2026-07-21T00:00:00Z",
+    "reviewer": "runtime-adapter-router-case-study",
+    "source_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE",
+    "status": "approved",
+    "terms_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+    "training_allowed": true
+  },
+  "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+  "offline_training": {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "push_to_hub": false,
+    "remote_tracking": false
+  },
+  "schema_version": "hfr.model_candidate.v1",
+  "source": {
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "type": "huggingface_model",
+    "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+    "weight_download_allowed": false
+  }
+}

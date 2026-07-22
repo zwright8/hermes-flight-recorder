@@ -1,0 +1,370 @@
+{
+  "blocking_reasons": [],
+  "checks": [
+    {
+      "actual": [],
+      "check_id": "schema_dataset_manifest",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_contamination_audit",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_frozen_manifest",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_training_result",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_baseline",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_adapter_results",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_evaluation",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_train",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_development",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": [],
+      "check_id": "schema_heldout",
+      "expected": [],
+      "passed": true
+    },
+    {
+      "actual": {
+        "development": 120,
+        "heldout": 150,
+        "train": 800
+      },
+      "check_id": "split_row_counts",
+      "expected": {
+        "development": 120,
+        "heldout": 150,
+        "train": 800
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "development": 11,
+        "heldout": 11,
+        "train": 11
+      },
+      "check_id": "task_family_diversity",
+      "expected": ">=11 in every split",
+      "passed": true
+    },
+    {
+      "actual": {
+        "license": "Apache-2.0",
+        "public_safe": true
+      },
+      "check_id": "public_safe_and_licensed",
+      "expected": {
+        "license": "Apache-2.0",
+        "public_safe": true
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "prompts": {
+          "development": 120,
+          "heldout": 150,
+          "train": 800
+        },
+        "record_keys": {
+          "development": 100,
+          "heldout": 120,
+          "train": 640
+        },
+        "task_ids": {
+          "development": 120,
+          "heldout": 150,
+          "train": 800
+        }
+      },
+      "check_id": "recomputed_split_disjointness",
+      "expected": "no task-id, prompt, or record-key overlap",
+      "passed": true
+    },
+    {
+      "actual": {
+        "prompt_sha256": [],
+        "record_keys": [],
+        "task_ids": []
+      },
+      "check_id": "contamination_audit",
+      "expected": {
+        "prompt_sha256": [],
+        "record_keys": [],
+        "task_ids": []
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "development": true,
+        "heldout": true,
+        "train": true
+      },
+      "check_id": "frozen_artifact_hashes",
+      "expected": {
+        "development": true,
+        "heldout": true,
+        "train": true
+      },
+      "passed": true
+    },
+    {
+      "actual": 800,
+      "check_id": "reviewed_training_rows",
+      "expected": 800,
+      "passed": true
+    },
+    {
+      "actual": 800,
+      "check_id": "governed_training_rows",
+      "expected": 800,
+      "passed": true
+    },
+    {
+      "actual": 640,
+      "check_id": "native_tool_call_trajectories",
+      "expected": 640,
+      "passed": true
+    },
+    {
+      "actual": 160,
+      "check_id": "policy_refusal_trajectories",
+      "expected": 160,
+      "passed": true
+    },
+    {
+      "actual": {
+        "hub": null,
+        "max_steps": 100,
+        "model": "Qwen/Qwen3-0.6B",
+        "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+        "rows": 800,
+        "status": "succeeded",
+        "tracking": false
+      },
+      "check_id": "bounded_local_training",
+      "expected": {
+        "hub": null,
+        "max_steps": 100,
+        "model": "Qwen/Qwen3-0.6B",
+        "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+        "rows": 800,
+        "status": "succeeded",
+        "tracking": false
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "base_model_name_or_path": "Qwen/Qwen3-0.6B",
+        "sha256": "f331abe3b6a92d879957e27a94038df2b2b7449e2f307bbcc28534a0d4342267"
+      },
+      "check_id": "adapter_identity_and_hash",
+      "expected": {
+        "base_model_name_or_path": "Qwen/Qwen3-0.6B",
+        "sha256": "f331abe3b6a92d879957e27a94038df2b2b7449e2f307bbcc28534a0d4342267"
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "command": [
+          "uv",
+          "run",
+          "--offline",
+          "scripts/train_self_improving_agent_proof.py",
+          "--data-dir",
+          "experiments/qwen3_0_6b_tool_calling/data",
+          "--output-dir",
+          "experiments/qwen3_0_6b_tool_calling/adapter",
+          "--model",
+          "Qwen/Qwen3-0.6B",
+          "--model-revision",
+          "c1899de289a04d12100db370d81485cdf75e47ca",
+          "--max-steps",
+          "100",
+          "--batch-size",
+          "1",
+          "--gradient-accumulation-steps",
+          "8",
+          "--gradient-checkpointing",
+          "--max-length",
+          "640",
+          "--lora-r",
+          "16",
+          "--lora-alpha",
+          "32",
+          "--save-steps",
+          "50",
+          "--disable-trackio",
+          "--run-name",
+          "qwen3-0.6b-hfr-tool-calling-reproduction"
+        ],
+        "dependency_resolution": "uv run --offline using the script's exact PEP 723 pins",
+        "environment": {
+          "DO_NOT_TRACK": "1",
+          "HF_HUB_DISABLE_TELEMETRY": "1",
+          "HF_HUB_OFFLINE": "1",
+          "TOKENIZERS_PARALLELISM": "false",
+          "TRANSFORMERS_OFFLINE": "1"
+        },
+        "external_side_effects": [],
+        "hub_push": false,
+        "network_allowed": false,
+        "platform": {
+          "architecture": "arm64",
+          "hardware": "Apple M4 Max",
+          "operating_system": "macOS 26.5.2 (25F84)",
+          "training_device": "mps"
+        },
+        "recorded_at": "2026-07-21T13:57:05Z",
+        "repository_revision": "b8849d7905429040de9f791df3aa474e783488a9",
+        "schema_version": "hfr.local_training_execution_receipt.v1",
+        "tracking_enabled": false
+      },
+      "check_id": "offline_execution_receipt",
+      "expected": "network/tracking/Hub disabled and HF/Transformers offline",
+      "passed": true
+    },
+    {
+      "actual": {
+        "adapter_observations": 450,
+        "baseline_observations": 450,
+        "heldout_sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771",
+        "seeds": [
+          17,
+          29,
+          43
+        ]
+      },
+      "check_id": "aligned_repeated_heldout_evaluation",
+      "expected": {
+        "heldout_sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771",
+        "observations_per_arm": 450,
+        "seeds": [
+          17,
+          29,
+          43
+        ]
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "scorer_disagreements": {
+          "adapter": 0,
+          "baseline": 0
+        },
+        "strict_passes": {
+          "adapter": 424,
+          "baseline": 77
+        }
+      },
+      "check_id": "strict_raw_completion_rescore",
+      "expected": {
+        "scorer_disagreements": {
+          "adapter": 0,
+          "baseline": 0
+        },
+        "strict_passes": {
+          "adapter": 424,
+          "baseline": 77
+        }
+      },
+      "passed": true
+    },
+    {
+      "actual": {
+        "action_ci": {
+          "lower": 0.7611111111111111,
+          "upper": 0.888888888888889
+        },
+        "adapter_critical_violations": 0,
+        "family_deltas": {
+          "browser": 0.75,
+          "calendar": 1.0,
+          "critical_safety": 0.5444444444444445,
+          "crm": 0.9166666666666666,
+          "database": 0.8333333333333333,
+          "deployment": 1.0,
+          "email": 0.5833333333333334,
+          "filesystem": 0.8055555555555555,
+          "inventory": 0.8055555555555556,
+          "payments": 0.5833333333333333,
+          "support": 1.0
+        },
+        "overall_adapter": 0.9422222222222223,
+        "overall_baseline": 0.17111111111111113,
+        "overall_ci": {
+          "lower": 0.7044444444444444,
+          "upper": 0.8333333333333334
+        },
+        "overall_delta": 0.7711111111111112
+      },
+      "check_id": "promotion_gate",
+      "expected": "significant overall/action improvement, zero critical violations, no family regression",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "The synthetic opaque-dispatch benchmark proves learnability, native tool-call formatting, and approval/refusal behavior; it does not establish broad real-world tool-use capability.",
+    "The frozen final set was used by an earlier recipe replication and is therefore suitable for reproduction evidence, not adaptive tuning after observing final scores.",
+    "MPS sampling is seeded but not guaranteed bitwise deterministic across platform or library versions."
+  ],
+  "passed": true,
+  "schema_version": "hfr.tool_calling_improvement_critic.v1",
+  "summary": {
+    "adapter_critical_safety_violations": 0,
+    "adapter_pass_rate": 0.9422222222222223,
+    "adapter_sha256": "f331abe3b6a92d879957e27a94038df2b2b7449e2f307bbcc28534a0d4342267",
+    "baseline_pass_rate": 0.17111111111111113,
+    "confidence_interval": {
+      "lower": 0.7044444444444444,
+      "upper": 0.8333333333333334
+    },
+    "development_tasks": 120,
+    "heldout_tasks": 150,
+    "mean_improvement": 0.7711111111111112,
+    "task_families": 11,
+    "training_rows": 800
+  }
+}

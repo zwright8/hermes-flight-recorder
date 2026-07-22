@@ -1,0 +1,141 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_trial.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable receipt for one baseline, kept, discarded, crashed, or blocked LoRA recipe trial.",
+  "properties": {
+    "campaign_id": { "minLength": 1, "type": "string" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "decision": { "$ref": "#/$defs/decision" },
+    "development_suite": { "$ref": "#/$defs/development_suite" },
+    "evaluation": { "$ref": "#/$defs/evaluation" },
+    "execution_boundary": { "$ref": "#/$defs/execution_boundary" },
+    "parent_trial_id": { "type": ["string", "null"] },
+    "proposal": { "$ref": "#/$defs/proposal" },
+    "recipe": { "$ref": "#/$defs/recipe" },
+    "recipe_sha256": { "$ref": "#/$defs/sha256" },
+    "schema_version": { "const": "hfr.lora_recipe_trial.v1" },
+    "source_plan": { "$ref": "#/$defs/source_plan" },
+    "status": { "enum": ["completed", "blocked", "crashed", "budget_violation"], "type": "string" },
+    "trial_id": { "minLength": 1, "type": "string" },
+    "trial_index": { "minimum": 0, "type": "integer" }
+  },
+  "required": [
+    "schema_version", "created_at", "campaign_id", "trial_index", "trial_id", "parent_trial_id",
+    "source_plan", "development_suite", "proposal", "recipe", "recipe_sha256", "status",
+    "evaluation", "decision", "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder LoRA Recipe Trial",
+  "type": "object",
+  "$defs": {
+    "decision": {
+      "additionalProperties": false,
+      "properties": {
+        "incumbent_trial_id_after": { "type": ["string", "null"] },
+        "incumbent_trial_id_before": { "type": ["string", "null"] },
+        "metric_delta": { "type": ["number", "null"] },
+        "outcome": { "enum": ["baseline", "keep", "discard", "blocked"], "type": "string" },
+        "reason": { "minLength": 1, "type": "string" }
+      },
+      "required": ["outcome", "reason", "metric_delta", "incumbent_trial_id_before", "incumbent_trial_id_after"],
+      "type": "object"
+    },
+    "development_suite": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_role": { "const": "development" },
+        "heldout": { "const": false },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.eval_suite_manifest.v1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version", "evaluation_role", "heldout"],
+      "type": "object"
+    },
+    "evaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_identity_sha256": { "pattern": "^([0-9a-f]{64})?$", "type": "string" },
+        "cost_usd": { "minimum": 0, "type": "number" },
+        "critical_failures": { "minimum": 0, "type": "integer" },
+        "diagnostics": { "items": { "type": "string" }, "type": "array" },
+        "duration_seconds": { "minimum": 0, "type": "number" },
+        "execution_mode": { "enum": ["simulation", "imported_external_result", "not_run"], "type": "string" },
+        "external_side_effects_observed": { "type": "boolean" },
+        "model_weights_updated_externally": { "type": "boolean" },
+        "primary_metric": { "type": ["number", "null"] },
+        "primary_metric_name": { "type": "string" },
+        "status": { "enum": ["completed", "crashed", "not_run"], "type": "string" }
+      },
+      "required": [
+        "status", "primary_metric_name", "primary_metric", "critical_failures", "cost_usd",
+        "duration_seconds", "candidate_identity_sha256", "diagnostics", "execution_mode",
+        "external_side_effects_observed", "model_weights_updated_externally"
+      ],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "development_only": { "const": true },
+        "heldout_accessed": { "const": false },
+        "promotion_applied": { "const": false }
+      },
+      "required": ["development_only", "heldout_accessed", "promotion_applied"],
+      "type": "object"
+    },
+    "proposal": {
+      "additionalProperties": false,
+      "properties": {
+        "estimated_cost_usd": { "minimum": 0, "type": "number" },
+        "estimated_duration_seconds": { "minimum": 0, "type": "number" },
+        "hypothesis": { "type": "string" },
+        "mutations": { "type": "object" },
+        "proposal_id": { "minLength": 1, "type": "string" },
+        "validation_errors": { "items": { "type": "string" }, "type": "array" }
+      },
+      "required": [
+        "proposal_id", "hypothesis", "mutations", "estimated_cost_usd",
+        "estimated_duration_seconds", "validation_errors"
+      ],
+      "type": "object"
+    },
+    "recipe": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "maximum": 128, "minimum": 1, "type": "integer" },
+        "data_seed": { "minimum": 0, "type": "integer" },
+        "dpo_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" },
+        "gradient_accumulation_steps": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "action_turn_repeats": { "maximum": 32, "minimum": 0, "type": "integer" },
+        "lora_alpha": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "lora_dropout": { "minimum": 0, "type": "number" },
+        "lora_r": { "enum": [4, 8, 16, 32, 64, 128], "type": "integer" },
+        "max_length": { "maximum": 32768, "minimum": 128, "type": "integer" },
+        "max_steps": { "maximum": 100000, "minimum": 1, "type": "integer" },
+        "mode": { "enum": ["trace_sft", "fr_sft", "fr_action_sft", "fr_dpo", "fr_sft_dpo"], "type": "string" },
+        "seed": { "minimum": 0, "type": "integer" },
+        "sft_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" }
+      },
+      "required": [
+        "mode", "sft_learning_rate", "dpo_learning_rate", "batch_size",
+        "gradient_accumulation_steps", "max_steps", "max_length", "lora_r",
+        "lora_alpha", "lora_dropout", "seed", "data_seed"
+      ],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "source_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.lora_recipe_search_plan.v1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version"],
+      "type": "object"
+    }
+  }
+}

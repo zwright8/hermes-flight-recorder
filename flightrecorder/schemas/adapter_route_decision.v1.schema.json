@@ -1,0 +1,164 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/adapter_route_decision.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Governed deterministic exact-one-adapter route decision bound to task, tool capability selection, immutable runtime identities, and independent promotion evidence.",
+  "properties": {
+    "schema_version": {"const": "hfr.adapter_route_decision.v1"},
+    "router_version": {"type": "string"},
+    "task_contract_id": {"type": "string"},
+    "task_contract": {"type": "object"},
+    "task_contract_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "capability_selection_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "capability_selection_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "capability_selection_ref": {"$ref": "#/$defs/artifactRef"},
+    "routing_policy": {"type": "object"},
+    "routing_policy_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "runtime_environment": {"type": "object"},
+    "route_kind": {"enum": ["specialist", "generalist"], "type": "string"},
+    "evaluated_candidates": {"items": {"$ref": "#/$defs/evaluatedCandidate"}, "type": "array"},
+    "selected_candidate": {"anyOf": [{"$ref": "#/$defs/evaluatedCandidate"}, {"type": "null"}]},
+    "fallback_reasons": {"items": {"type": "string"}, "type": "array"},
+    "blocking_reasons": {"items": {"type": "string"}, "type": "array"},
+    "exact_one_adapter": {"type": "boolean"},
+    "external_write_safety_boundary": {"const": "pre_dispatch_authorization_required_for_write_capable_tools"},
+    "confidence": {"enum": ["contract_match", "blocked"], "type": "string"},
+    "passed": {"type": "boolean"},
+    "route_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "router_version",
+    "task_contract_id",
+    "task_contract",
+    "task_contract_fingerprint",
+    "capability_selection_fingerprint",
+    "capability_selection_sha256",
+    "capability_selection_ref",
+    "routing_policy",
+    "routing_policy_fingerprint",
+    "runtime_environment",
+    "route_kind",
+    "evaluated_candidates",
+    "selected_candidate",
+    "fallback_reasons",
+    "blocking_reasons",
+    "exact_one_adapter",
+    "external_write_safety_boundary",
+    "confidence",
+    "passed",
+    "route_fingerprint"
+  ],
+  "$defs": {
+    "evaluatedCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "candidate_kind": {"enum": ["specialist", "generalist", "composition", ""], "type": "string"},
+        "adapter_id": {"type": "string"},
+        "active_adapter_ids": {"items": {"type": "string"}, "type": "array"},
+        "adapter_revision": {"type": "string"},
+        "adapter_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "base_model_id": {"type": "string"},
+        "base_revision": {"type": "string"},
+        "tokenizer_revision": {"type": "string"},
+        "chat_template_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "domains": {"items": {"type": "string"}, "type": "array"},
+        "capabilities": {"items": {"type": "string"}, "type": "array"},
+        "registry_entry_id": {"type": "string"},
+        "promotion_evidence": {"$ref": "#/$defs/promotionEvidence"},
+        "promotion_binding": {"$ref": "#/$defs/promotionBinding"},
+        "composition_members": {"items": {"type": "string"}, "type": "array"},
+        "eligible": {"type": "boolean"},
+        "reason_codes": {"items": {"type": "string"}, "type": "array"}
+      },
+      "required": [
+        "candidate_id",
+        "candidate_kind",
+        "adapter_id",
+        "active_adapter_ids",
+        "adapter_revision",
+        "adapter_sha256",
+        "base_model_id",
+        "base_revision",
+        "tokenizer_revision",
+        "chat_template_sha256",
+        "domains",
+        "capabilities",
+        "registry_entry_id",
+        "promotion_evidence",
+        "promotion_binding",
+        "composition_members",
+        "eligible",
+        "reason_codes"
+      ],
+      "type": "object"
+    },
+    "promotionEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_ref": {"$ref": "#/$defs/artifactRef"},
+        "decision_summary": {"$ref": "#/$defs/promotionDecisionSummary"},
+        "decision_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+      },
+      "required": ["artifact_ref", "decision_summary", "decision_sha256"],
+      "type": "object"
+    },
+    "artifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "promotionDecisionSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "hfr.promotion_decision.v1"},
+        "passed": {"type": "boolean"},
+        "recommendation": {"type": "string"},
+        "alias_update_authorized": {"type": "boolean"},
+        "models_candidate_id": {"type": "string"}
+      },
+      "required": ["schema_version", "passed", "recommendation", "alias_update_authorized", "models_candidate_id"],
+      "type": "object"
+    },
+    "promotionBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "independent_evidence": {"type": "boolean"},
+        "candidate_id": {"type": "string"},
+        "registry_entry_id": {"type": "string"},
+        "adapter_id": {"type": "string"},
+        "adapter_revision": {"type": "string"},
+        "adapter_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "base_model_id": {"type": "string"},
+        "base_revision": {"type": "string"},
+        "tokenizer_revision": {"type": "string"},
+        "chat_template_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "training_result_ref": {"$ref": "#/$defs/artifactRef"},
+        "evaluation_result_ref": {"$ref": "#/$defs/artifactRef"}
+      },
+      "required": [
+        "independent_evidence",
+        "candidate_id",
+        "registry_entry_id",
+        "adapter_id",
+        "adapter_revision",
+        "adapter_sha256",
+        "base_model_id",
+        "base_revision",
+        "tokenizer_revision",
+        "chat_template_sha256",
+        "training_result_ref",
+        "evaluation_result_ref"
+      ],
+      "type": "object"
+    }
+  },
+  "title": "Hermes Flight Recorder Adapter Route Decision",
+  "type": "object"
+}

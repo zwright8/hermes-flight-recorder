@@ -1,0 +1,91 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_promotion_handoff.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Fail-closed bridge from a development-selected LoRA recipe to replayable held-out promotion evidence.",
+  "properties": {
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+    "candidate_binding": { "$ref": "#/$defs/candidate_binding" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "execution_boundary": { "$ref": "#/$defs/execution_boundary" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_governance_review", "blocked"], "type": "string" },
+    "recommendation": { "enum": ["send_to_governance", "repair_search_or_evaluation"], "type": "string" },
+    "schema_version": { "const": "hfr.lora_recipe_promotion_handoff.v1" },
+    "source_artifacts": { "$ref": "#/$defs/source_artifacts" }
+  },
+  "required": [
+    "schema_version", "created_at", "passed", "readiness", "recommendation", "source_artifacts",
+    "candidate_binding", "check_count", "failed_check_count", "checks", "blocking_reasons",
+    "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder LoRA Recipe Promotion Handoff",
+  "type": "object",
+  "$defs": {
+    "artifact_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "minLength": 1, "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version"],
+      "type": "object"
+    },
+    "candidate_binding": {
+      "additionalProperties": false,
+      "properties": {
+        "champion_trial_id": { "minLength": 1, "type": "string" },
+        "evaluated_adapter_sha256": { "pattern": "^([0-9a-f]{64})?$", "type": "string" },
+        "matched": { "type": "boolean" },
+        "recipe_sha256": { "pattern": "^([0-9a-f]{64})?$", "type": "string" },
+        "selected_candidate_sha256": { "pattern": "^([0-9a-f]{64})?$", "type": "string" }
+      },
+      "required": [
+        "champion_trial_id", "recipe_sha256", "selected_candidate_sha256",
+        "evaluated_adapter_sha256", "matched"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "expected": {},
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" }
+      },
+      "required": ["id", "passed", "actual", "expected"],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "heldout_evaluation_executed_after_selection": { "const": true },
+        "model_weights_updated_by_flight_recorder": { "const": false },
+        "promotion_applied": { "const": false },
+        "registry_alias_updated": { "const": false },
+        "search_executed_on_development_only": { "const": true }
+      },
+      "required": [
+        "search_executed_on_development_only", "heldout_evaluation_executed_after_selection",
+        "promotion_applied", "registry_alias_updated", "model_weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "promotion_evidence": { "$ref": "#/$defs/artifact_ref" },
+        "search_result": { "$ref": "#/$defs/artifact_ref" }
+      },
+      "required": ["search_result", "promotion_evidence"],
+      "type": "object"
+    }
+  }
+}

@@ -265,6 +265,13 @@ from .review_semantics import (
     REVIEWED_ACTION_SFT_SCHEMA_VERSION,
 )
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
+from .runtime_adapter_router import (
+    ADAPTER_ROUTE_DECISION_SCHEMA_VERSION,
+    TOOL_CAPABILITY_SELECTION_SCHEMA_VERSION,
+    canonical_sha256 as _router_canonical_sha256,
+    validate_adapter_route_decision as _validate_adapter_route_decision_semantics,
+    validate_tool_capability_selection as _validate_tool_capability_selection_semantics,
+)
 from .path_safety import (
     path_has_symlink_component as _path_has_symlink_component,
     resolve_artifact_reference_path,
@@ -427,6 +434,8 @@ def validate_artifacts(
     harness_suite_result_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
+    tool_capability_selection_paths: list[str | Path] | None = None,
+    adapter_route_decision_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
     external_eval_receipt_paths: list[str | Path] | None = None,
     external_eval_result_paths: list[str | Path] | None = None,
@@ -600,6 +609,10 @@ def validate_artifacts(
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     for eval_summary_path in eval_summary_paths or []:
         targets.append(validate_eval_summary(eval_summary_path))
+    for tool_capability_selection_path in tool_capability_selection_paths or []:
+        targets.append(validate_tool_capability_selection_artifact(tool_capability_selection_path))
+    for adapter_route_decision_path in adapter_route_decision_paths or []:
+        targets.append(validate_adapter_route_decision_artifact(adapter_route_decision_path))
     for external_eval_plan_path in external_eval_plan_paths or []:
         targets.append(validate_external_eval_plan(external_eval_plan_path))
     for external_eval_receipt_path in external_eval_receipt_paths or []:
@@ -1552,6 +1565,253 @@ def validate_eval_summary(path: str | Path) -> ValidationTarget:
     if summary is not None:
         _validate_eval_summary(summary, target, source_path=summary_path)
     return target
+
+
+def validate_tool_capability_selection_artifact(path: str | Path) -> ValidationTarget:
+    """Validate a governed tool-capability selection artifact."""
+    artifact_path = Path(path)
+    target = ValidationTarget("tool_capability_selection", str(artifact_path))
+    if _reject_symlinked_validation_path(artifact_path, target, "tool_capability_selection", "file"):
+        return target
+    artifact = _read_object(artifact_path, target, "tool_capability_selection.json")
+    if artifact is None:
+        return target
+    _validate_schema_contract_target(
+        artifact,
+        "tool_capability_selection",
+        target,
+        artifact_path,
+    )
+    if artifact.get("schema_version") != TOOL_CAPABILITY_SELECTION_SCHEMA_VERSION:
+        target.errors.append(
+            f"tool_capability_selection.schema_version must be {TOOL_CAPABILITY_SELECTION_SCHEMA_VERSION!r}."
+        )
+    for error in _validate_tool_capability_selection_semantics(artifact):
+        target.errors.append(f"tool_capability_selection semantic validation: {error}.")
+    target.details.update(
+        {
+            "passed": artifact.get("passed"),
+            "decision_fingerprint": artifact.get("decision_fingerprint"),
+            "selected_tool_count": len(artifact.get("selected_tools", [])) if isinstance(artifact.get("selected_tools"), list) else 0,
+        }
+    )
+    return target
+
+
+def validate_adapter_route_decision_artifact(path: str | Path) -> ValidationTarget:
+    """Validate a governed exact-one-adapter route decision artifact."""
+    route_path = Path(path)
+    target = ValidationTarget("adapter_route_decision", str(route_path))
+    if _reject_symlinked_validation_path(route_path, target, "adapter_route_decision", "file"):
+        return target
+    artifact = _read_object(route_path, target, "adapter_route_decision.json")
+    if artifact is None:
+        return target
+    _validate_schema_contract_target(
+        artifact,
+        "adapter_route_decision",
+        target,
+        route_path,
+    )
+    if artifact.get("schema_version") != ADAPTER_ROUTE_DECISION_SCHEMA_VERSION:
+        target.errors.append(
+            f"adapter_route_decision.schema_version must be {ADAPTER_ROUTE_DECISION_SCHEMA_VERSION!r}."
+        )
+    capability_selection = _validated_router_ref_payload(
+        artifact.get("capability_selection_ref"),
+        target,
+        route_path,
+        "adapter_route_decision.capability_selection_ref",
+    )
+    if capability_selection is not None and isinstance(artifact.get("capability_selection_ref"), dict):
+        nested = validate_tool_capability_selection_artifact(
+            route_path.parent / str(artifact["capability_selection_ref"]["path"])
+        )
+        for error in nested.errors:
+            target.errors.append(f"adapter_route_decision capability selection: {error}")
+        for warning in nested.warnings:
+            target.warnings.append(f"adapter_route_decision capability selection: {warning}")
+    verified_capability_ref = (
+        capability_selection is not None
+        and isinstance(artifact.get("capability_selection_ref"), dict)
+        and artifact["capability_selection_ref"].get("sha256") == artifact.get("capability_selection_sha256")
+    )
+    for error in _validate_adapter_route_decision_semantics(
+        artifact,
+        capability_selection=capability_selection,
+    ):
+        if error == "capability_selection_sha256_mismatch" and verified_capability_ref:
+            continue
+        target.errors.append(f"adapter_route_decision semantic validation: {error}.")
+    _validate_adapter_route_promotion_refs(artifact, target, route_path)
+    target.details.update(
+        {
+            "passed": artifact.get("passed"),
+            "route_fingerprint": artifact.get("route_fingerprint"),
+            "selected_candidate": (
+                artifact.get("selected_candidate", {}).get("candidate_id")
+                if isinstance(artifact.get("selected_candidate"), dict)
+                else None
+            ),
+        }
+    )
+    return target
+
+
+def _validate_schema_contract_target(
+    artifact: dict[str, Any],
+    schema_name: str,
+    target: ValidationTarget,
+    artifact_path: Path,
+) -> None:
+    try:
+        schema_check = check_schema_contract(
+            artifact,
+            name_or_id=schema_name,
+            artifact_path=artifact_path,
+        )
+    except (SchemaRegistryError, TypeError, ValueError) as exc:
+        target.errors.append(f"{schema_name} schema contract could not be checked: {exc}")
+        return
+    for error in schema_check.get("errors", []):
+        target.errors.append(f"{schema_name} schema: {error}")
+
+
+def _validated_router_ref_payload(
+    ref: Any,
+    target: ValidationTarget,
+    source_path: Path,
+    label: str,
+) -> dict[str, Any] | None:
+    resolved = _resolve_router_artifact_ref(ref, target, source_path, label)
+    if resolved is None:
+        return None
+    ref_path, ref_record = resolved
+    if ref_path.stat().st_size != ref_record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    current_sha256 = _sha256(ref_path)
+    if current_sha256 != ref_record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    try:
+        payload = json.loads(ref_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"{label}.path contains invalid JSON: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        target.errors.append(f"{label}.path must contain a JSON object.")
+        return None
+    return payload
+
+
+def _resolve_router_artifact_ref(
+    ref: Any,
+    target: ValidationTarget,
+    source_path: Path,
+    label: str,
+) -> tuple[Path, dict[str, Any]] | None:
+    if not isinstance(ref, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    _validate_allowed_keys(ref, {"path", "sha256", "size_bytes"}, target, label)
+    path_value = ref.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return None
+    if not _is_safe_runtime_router_ref_path(path_value):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal, Windows prefixes, tilde, or backslashes.")
+        return None
+    if not _is_sha256(ref.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    if not _is_non_negative_int(ref.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    ref_path = source_path.parent / path_value
+    if _path_has_symlink_component(ref_path, include_leaf=True):
+        target.errors.append(f"{label}.path must not contain symlink components.")
+        return None
+    if not ref_path.exists():
+        target.errors.append(f"{label}.path does not exist.")
+        return None
+    if not ref_path.is_file():
+        target.errors.append(f"{label}.path must resolve to a file.")
+        return None
+    return ref_path, ref
+
+
+def _is_safe_runtime_router_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
+
+
+def _validate_adapter_route_promotion_refs(
+    artifact: dict[str, Any],
+    target: ValidationTarget,
+    route_path: Path,
+) -> None:
+    rows = artifact.get("evaluated_candidates")
+    if not isinstance(rows, list):
+        return
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        row_label = f"adapter_route_decision.evaluated_candidates[{index}]"
+        evidence = row.get("promotion_evidence")
+        if not isinstance(evidence, dict):
+            target.errors.append(f"{row_label}.promotion_evidence must be an object.")
+            continue
+        promotion = _validated_router_ref_payload(
+            evidence.get("artifact_ref"),
+            target,
+            route_path,
+            f"{row_label}.promotion_evidence.artifact_ref",
+        )
+        if promotion is not None:
+            _validate_schema_contract_target(
+                promotion,
+                "promotion_decision",
+                target,
+                route_path.parent / str(evidence["artifact_ref"]["path"]),
+            )
+            if promotion.get("schema_version") != PROMOTION_DECISION_SCHEMA_VERSION:
+                target.errors.append(
+                    f"{row_label}.promotion_evidence.artifact_ref must reference {PROMOTION_DECISION_SCHEMA_VERSION!r}."
+                )
+            if evidence.get("decision_sha256") != _router_canonical_sha256(promotion):
+                target.errors.append(f"{row_label}.promotion_evidence.decision_sha256 does not match the referenced promotion decision.")
+            expected_summary = _router_promotion_decision_summary(promotion)
+            if evidence.get("decision_summary") != expected_summary:
+                target.errors.append(f"{row_label}.promotion_evidence.decision_summary does not match the referenced promotion decision.")
+        binding = row.get("promotion_binding")
+        if not isinstance(binding, dict):
+            target.errors.append(f"{row_label}.promotion_binding must be an object.")
+            continue
+        for field_name in ("training_result_ref", "evaluation_result_ref"):
+            _validated_router_ref_payload(
+                binding.get(field_name),
+                target,
+                route_path,
+                f"{row_label}.promotion_binding.{field_name}",
+            )
+
+
+def _router_promotion_decision_summary(promotion: dict[str, Any]) -> dict[str, Any]:
+    alias_update = promotion.get("alias_update") if isinstance(promotion.get("alias_update"), dict) else {}
+    models = promotion.get("models") if isinstance(promotion.get("models"), dict) else {}
+    candidate = models.get("candidate") if isinstance(models.get("candidate"), dict) else {}
+    return {
+        "schema_version": str(promotion.get("schema_version") or ""),
+        "passed": promotion.get("passed") is True,
+        "recommendation": str(promotion.get("recommendation") or ""),
+        "alias_update_authorized": promotion.get("alias_update_authorized") is True or alias_update.get("authorized") is True,
+        "models_candidate_id": str(candidate.get("id") or ""),
+    }
 
 
 def validate_external_eval_plan(path: str | Path) -> ValidationTarget:

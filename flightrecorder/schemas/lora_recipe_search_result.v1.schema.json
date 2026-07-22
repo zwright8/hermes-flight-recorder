@@ -1,0 +1,137 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_search_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Replayable campaign ledger and development-selected LoRA recipe champion.",
+  "properties": {
+    "blocked_trial_count": { "minimum": 0, "type": "integer" },
+    "budget_usage": { "$ref": "#/$defs/budget_usage" },
+    "campaign_id": { "minLength": 1, "type": "string" },
+    "champion": { "oneOf": [{ "$ref": "#/$defs/champion" }, { "type": "null" }] },
+    "created_at": { "minLength": 1, "type": "string" },
+    "discarded_trial_count": { "minimum": 0, "type": "integer" },
+    "execution_boundary": { "$ref": "#/$defs/execution_boundary" },
+    "heldout_access": { "$ref": "#/$defs/heldout_access" },
+    "kept_trial_count": { "minimum": 0, "type": "integer" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_heldout_evaluation", "blocked"], "type": "string" },
+    "recommendation": { "enum": ["run_governed_heldout_evaluation", "repair_search_campaign"], "type": "string" },
+    "schema_version": { "const": "hfr.lora_recipe_search_result.v1" },
+    "source_plan": { "$ref": "#/$defs/source_plan" },
+    "status": { "enum": ["complete", "failed"], "type": "string" },
+    "stop_reason": { "minLength": 1, "type": "string" },
+    "terminal_error": { "type": "string" },
+    "trial_count": { "minimum": 0, "type": "integer" },
+    "trials": { "items": { "$ref": "#/$defs/trial_ref" }, "type": "array" }
+  },
+  "required": [
+    "schema_version", "created_at", "campaign_id", "passed", "status", "readiness",
+    "recommendation", "stop_reason", "terminal_error", "source_plan", "trials", "trial_count",
+    "kept_trial_count", "discarded_trial_count", "blocked_trial_count", "budget_usage", "champion",
+    "heldout_access", "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder LoRA Recipe Search Result",
+  "type": "object",
+  "$defs": {
+    "budget_usage": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_usd": { "minimum": 0, "type": "number" },
+        "duration_seconds": { "minimum": 0, "type": "number" },
+        "trial_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["cost_usd", "duration_seconds", "trial_count"],
+      "type": "object"
+    },
+    "champion": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "development_metric": { "type": "number" },
+        "recipe": { "$ref": "#/$defs/recipe" },
+        "recipe_sha256": { "$ref": "#/$defs/sha256" },
+        "trial_id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["trial_id", "recipe", "recipe_sha256", "candidate_identity_sha256", "development_metric"],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "development_only": { "const": true },
+        "external_side_effects_launched_by_search": { "const": false },
+        "imported_external_side_effects_observed": { "type": "boolean" },
+        "model_weights_updated_externally": { "type": "boolean" },
+        "model_weight_training_executed_by_flight_recorder": { "const": false },
+        "promotion_applied": { "const": false }
+      },
+      "required": [
+        "development_only", "model_weight_training_executed_by_flight_recorder",
+        "promotion_applied", "external_side_effects_launched_by_search",
+        "imported_external_side_effects_observed", "model_weights_updated_externally"
+      ],
+      "type": "object"
+    },
+    "heldout_access": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_count": { "const": 0 },
+        "artifacts": { "maxItems": 0, "type": "array" },
+        "used_during_search": { "const": false }
+      },
+      "required": ["used_during_search", "artifact_count", "artifacts"],
+      "type": "object"
+    },
+    "recipe": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "maximum": 128, "minimum": 1, "type": "integer" },
+        "data_seed": { "minimum": 0, "type": "integer" },
+        "dpo_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" },
+        "gradient_accumulation_steps": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "action_turn_repeats": { "maximum": 32, "minimum": 0, "type": "integer" },
+        "lora_alpha": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "lora_dropout": { "minimum": 0, "type": "number" },
+        "lora_r": { "enum": [4, 8, 16, 32, 64, 128], "type": "integer" },
+        "max_length": { "maximum": 32768, "minimum": 128, "type": "integer" },
+        "max_steps": { "maximum": 100000, "minimum": 1, "type": "integer" },
+        "mode": { "enum": ["trace_sft", "fr_sft", "fr_action_sft", "fr_dpo", "fr_sft_dpo"], "type": "string" },
+        "seed": { "minimum": 0, "type": "integer" },
+        "sft_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" }
+      },
+      "required": [
+        "mode", "sft_learning_rate", "dpo_learning_rate", "batch_size",
+        "gradient_accumulation_steps", "max_steps", "max_length", "lora_r",
+        "lora_alpha", "lora_dropout", "seed", "data_seed"
+      ],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "source_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.lora_recipe_search_plan.v1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version"],
+      "type": "object"
+    },
+    "trial_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": { "enum": ["baseline", "keep", "discard", "blocked"], "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.lora_recipe_trial.v1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" },
+        "status": { "enum": ["completed", "blocked", "crashed", "budget_violation"], "type": "string" },
+        "trial_id": { "minLength": 1, "type": "string" },
+        "trial_index": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version", "trial_index", "trial_id", "status", "outcome"],
+      "type": "object"
+    }
+  }
+}

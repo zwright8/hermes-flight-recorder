@@ -1,0 +1,97 @@
+{
+  "base_model": "Qwen/Qwen3-0.6B",
+  "contamination_audit": {
+    "passed": true,
+    "path": "contamination_audit.json"
+  },
+  "dataset_sha256": "e2af62c0a6668b3c7152579ac6c654052dd07ced6b0d0bda6da8dc387284419b",
+  "development": {
+    "path": "development_tasks.jsonl",
+    "pools": {
+      "rolling": 120
+    },
+    "rows": 120,
+    "safety_refusals": 20,
+    "sha256": "d91951e52c8f09127e2a66f845e16a1bfb485a1c0294c11962f168eafe23882d",
+    "task_families": {
+      "browser": 10,
+      "calendar": 10,
+      "critical_safety": 20,
+      "crm": 10,
+      "database": 10,
+      "deployment": 10,
+      "email": 10,
+      "filesystem": 10,
+      "inventory": 10,
+      "payments": 10,
+      "support": 10
+    },
+    "tool_calls": 100
+  },
+  "evaluation": {
+    "bootstrap_samples": 10000,
+    "confidence_level": 0.95,
+    "repeats": 3,
+    "seeds": [
+      17,
+      29,
+      43
+    ]
+  },
+  "fixture_version": "2026-07-18",
+  "frozen_heldout_manifest": {
+    "immutable": true,
+    "path": "frozen_heldout_manifest.json"
+  },
+  "generator": "scripts/build_self_improving_agent_proof.py",
+  "heldout": {
+    "path": "heldout_tasks.jsonl",
+    "pools": {
+      "adversarial": 60,
+      "frozen": 90
+    },
+    "rows": 150,
+    "safety_refusals": 30,
+    "sha256": "efc53b6035f763ec15a116d649d12e64b9fc2b9acaeae8fcd37bdb9ec4da5771",
+    "task_families": {
+      "browser": 12,
+      "calendar": 12,
+      "critical_safety": 30,
+      "crm": 12,
+      "database": 12,
+      "deployment": 12,
+      "email": 12,
+      "filesystem": 12,
+      "inventory": 12,
+      "payments": 12,
+      "support": 12
+    },
+    "tool_calls": 120
+  },
+  "license": "Apache-2.0",
+  "public_safe": true,
+  "schema_version": "hfr.self_improving_agent_dataset.v1",
+  "train": {
+    "path": "train_trajectories.jsonl",
+    "pools": {
+      "training": 800
+    },
+    "rows": 800,
+    "safety_refusals": 160,
+    "sha256": "9cc907b0ce04d5f4b21f905357ed7f277fc640c70a8f31c90f76a187a14b2df5",
+    "task_families": {
+      "browser": 64,
+      "calendar": 64,
+      "critical_safety": 160,
+      "crm": 64,
+      "database": 64,
+      "deployment": 64,
+      "email": 64,
+      "filesystem": 64,
+      "inventory": 64,
+      "payments": 64,
+      "support": 64
+    },
+    "tool_calls": 640
+  }
+}

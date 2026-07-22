@@ -30,13 +30,16 @@ import hashlib
 import importlib.util
 import json
 import os
+import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 DEFAULT_TRACKIO_PROJECT = "hermes-flightrecorder-agentic"
+AUTORESEARCH_MACOS_REFERENCE = "miolini/autoresearch-macos@537c6e6d0ecf7d28f9d70ce20bb05d8c7ed9cfce"
 PLAN_SCHEMA_VERSION = "hfr.agentic_lora_training_plan.v1"
 RESULT_SCHEMA_VERSION = "hfr.agentic_lora_training_result.v1"
 BACKEND_RECIPES_SCHEMA_VERSION = "hfr.agentic_lora_backend_recipes.v1"
@@ -56,6 +59,87 @@ CONTROL_SCHEMAS = {
     "branch_replay": "hfr.branch_replay_dataset.v1",
     "reviewed_preferences": "hfr.reviewed.contract_preference.v1",
 }
+
+
+class FixedTrainingTimeBudget:
+    """Accumulate trainer-active wall time across one or more local phases."""
+
+    def __init__(self, max_seconds: float, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self.max_seconds = float(max_seconds)
+        self._clock = clock
+        self._elapsed_seconds = 0.0
+        self._phase_started_at: float | None = None
+        self.stop_requested = False
+
+    @property
+    def elapsed_seconds(self) -> float:
+        active = 0.0 if self._phase_started_at is None else self._clock() - self._phase_started_at
+        return max(0.0, self._elapsed_seconds + active)
+
+    @property
+    def enabled(self) -> bool:
+        return self.max_seconds > 0
+
+    def begin_phase(self) -> None:
+        if self._phase_started_at is None:
+            self._phase_started_at = self._clock()
+
+    def should_stop(self) -> bool:
+        if self.enabled and self.elapsed_seconds >= self.max_seconds:
+            self.stop_requested = True
+        return self.stop_requested
+
+    def end_phase(self) -> None:
+        if self._phase_started_at is not None:
+            self._elapsed_seconds += max(0.0, self._clock() - self._phase_started_at)
+            self._phase_started_at = None
+        self.should_stop()
+
+
+def normalized_task_families(values: Iterable[str]) -> list[str]:
+    return sorted({str(value).strip() for value in values if str(value).strip()})
+
+
+def filter_task_rows(rows: Iterable[dict[str, Any]], task_families: Iterable[str]) -> list[dict[str, Any]]:
+    allowed = set(normalized_task_families(task_families))
+    if not allowed:
+        return list(rows)
+    return [row for row in rows if str(row.get("task_family") or "").strip() in allowed]
+
+
+def peak_process_memory_mb() -> float:
+    """Return portable peak RSS, including meaningful values on Apple Silicon."""
+
+    try:
+        import resource
+
+        peak_rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except (ImportError, OSError, ValueError):
+        return 0.0
+    divisor = 1024.0 * 1024.0 if sys.platform == "darwin" else 1024.0
+    return round(peak_rss / divisor, 3)
+
+
+def _device_order(requested: str) -> list[str]:
+    return ["cuda", "mps", "cpu"] if requested == "auto" else [requested]
+
+
+def _local_adapter_targets(output_dir: Path, mode: str) -> list[Path]:
+    names_by_mode = {
+        "trace_sft": ("trace_sft_adapter",),
+        "fr_sft": ("fr_sft_adapter",),
+        "fr_action_sft": ("fr_action_sft_adapter",),
+        "fr_dpo": ("fr_dpo_adapter",),
+        "fr_sft_dpo": ("fr_sft_adapter", "fr_sft_dpo_adapter"),
+    }
+    return [output_dir / name for name in names_by_mode.get(mode, ())]
+
+
+def _local_model_load_path(args: argparse.Namespace) -> Path:
+    """Keep the registered model ID separate from its immutable local cache path."""
+
+    configured = args.local_model_path if args.local_model_path is not None else Path(args.model)
+    return Path(configured).expanduser()
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -150,6 +234,100 @@ def prepare_sft_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return prepared
 
 
+def prepare_action_turn_sft_rows(
+    rows: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Project reviewed trajectories to their first native tool-call turn.
+
+    Full action-SFT trajectories remain in the training mixture. These derived
+    rows let a governed recipe give additional weight to exact tool names and
+    arguments without copying, editing, or admitting any new source records.
+    No-tool safety responses are deliberately excluded from the projection;
+    they retain their normal full-trajectory weight.
+    """
+
+    prepared: list[dict[str, Any]] = []
+    for row in rows:
+        messages = row.get("messages")
+        if not isinstance(messages, list):
+            continue
+        for index, message in enumerate(messages):
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            tool_calls = message.get("tool_calls")
+            if not isinstance(tool_calls, list) or not tool_calls:
+                break
+            prepared.append(
+                {
+                    "messages": messages[: index + 1],
+                    "tools": row.get("tools") if isinstance(row.get("tools"), list) else [],
+                }
+            )
+            break
+    return prepared
+
+
+def prepare_action_sft_curriculum(
+    rows: Iterable[dict[str, Any]], *, action_turn_repeats: int
+) -> list[dict[str, Any]]:
+    """Return full trajectories plus repeated first-action projections."""
+
+    source_rows = list(rows)
+    full_rows = prepare_sft_rows(source_rows)
+    action_rows = prepare_action_turn_sft_rows(source_rows)
+    return full_rows + action_rows * action_turn_repeats
+
+
+def supervised_token_coverage(
+    tokenized_rows: Iterable[dict[str, Any]], *, max_length: int
+) -> dict[str, Any]:
+    """Measure assistant-label visibility after the configured truncation.
+
+    TRL constructs assistant masks before its collator applies ``max_length``.
+    Without this check a long prompt can retain a valid mask in preprocessing
+    while every supervised label is truncated away at training time.
+    """
+
+    if max_length <= 0:
+        raise ValueError("max_length must be positive")
+    row_count = 0
+    truncated_rows = 0
+    zero_visible_rows: list[int] = []
+    partial_visible_rows: list[int] = []
+    visible_counts: list[int] = []
+    total_counts: list[int] = []
+    for index, row in enumerate(tokenized_rows):
+        labels = row.get("labels")
+        if not isinstance(labels, (list, tuple)):
+            raise ValueError(f"tokenized row {index} has no labels sequence")
+        row_count += 1
+        total = sum(1 for label in labels if label != -100)
+        visible = sum(1 for label in labels[:max_length] if label != -100)
+        total_counts.append(total)
+        visible_counts.append(visible)
+        if len(labels) > max_length:
+            truncated_rows += 1
+        if visible == 0:
+            zero_visible_rows.append(index)
+        elif visible < total:
+            partial_visible_rows.append(index)
+    return {
+        "row_count": row_count,
+        "max_length": max_length,
+        "truncated_row_count": truncated_rows,
+        "zero_visible_row_count": len(zero_visible_rows),
+        "zero_visible_row_indices": zero_visible_rows,
+        "partial_visible_row_count": len(partial_visible_rows),
+        "partial_visible_row_indices": partial_visible_rows,
+        "fully_visible_row_count": row_count - len(partial_visible_rows) - len(zero_visible_rows),
+        "min_visible_supervised_tokens": min(visible_counts) if visible_counts else 0,
+        "max_visible_supervised_tokens": max(visible_counts) if visible_counts else 0,
+        "min_total_supervised_tokens": min(total_counts) if total_counts else 0,
+        "max_total_supervised_tokens": max(total_counts) if total_counts else 0,
+        "passed": row_count > 0 and not zero_visible_rows,
+    }
+
+
 def prepare_dpo_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     prepared: list[dict[str, Any]] = []
     for row in rows:
@@ -216,6 +394,15 @@ def data_paths(experiment_dir: Path, dataset_context: dict[str, Any] | None = No
                     paths[plan_key] = resolve_artifact_path(value, manifest_base)
                     break
     return paths
+
+
+def load_task_scoped_training_rows(
+    paths: dict[str, Path],
+    task_families: Iterable[str],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    full = {name: load_jsonl(path) if path.exists() else [] for name, path in paths.items()}
+    scoped = {name: filter_task_rows(rows, task_families) for name, rows in full.items()}
+    return full, scoped
 
 
 def resolve_artifact_path(value: str, base_dir: Path) -> Path:
@@ -1407,12 +1594,15 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         args.model = manifest_model_id
 
     paths = data_paths(args.experiment_dir, dataset_context)
-    raw = {name: load_jsonl(path) if path.exists() else [] for name, path in paths.items()}
+    requested_task_families = normalized_task_families(args.task_family)
+    full_raw, raw = load_task_scoped_training_rows(paths, requested_task_families)
     sft_source = raw["trace_sft"] if args.mode == "trace_sft" else raw["fr_sft"] + raw["fr_action_sft"]
     action_sft_source = raw["fr_action_sft"]
     dpo_source = raw["fr_dpo"]
     sft_rows = prepare_sft_rows(sft_source)
-    action_sft_rows = prepare_sft_rows(action_sft_source)
+    action_sft_rows = prepare_action_sft_curriculum(
+        action_sft_source, action_turn_repeats=args.action_turn_repeats
+    )
     dpo_rows = prepare_dpo_rows(dpo_source)
     reward_model_rows = raw["fr_reward_model"]
     step_reward_rows = raw["fr_step_rewards"]
@@ -1423,9 +1613,28 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "reward_model": len(reward_model_rows),
         "step_rewards": len(step_reward_rows),
     }
+    available_task_families = sorted(
+        {
+            str(row.get("task_family") or "").strip()
+            for rows in full_raw.values()
+            for row in rows
+            if str(row.get("task_family") or "").strip()
+        }
+    )
+    selected_task_families = sorted(
+        {
+            str(row.get("task_family") or "").strip()
+            for rows in raw.values()
+            for row in rows
+            if str(row.get("task_family") or "").strip()
+        }
+    )
     if args.limit:
         sft_rows = sft_rows[: args.limit]
-        action_sft_rows = action_sft_rows[: args.limit]
+        action_sft_rows = prepare_action_sft_curriculum(
+            action_sft_source[: args.limit],
+            action_turn_repeats=args.action_turn_repeats,
+        )
         dpo_rows = dpo_rows[: args.limit]
         reward_model_rows = reward_model_rows[: args.limit]
         step_reward_rows = step_reward_rows[: args.limit]
@@ -1467,6 +1676,24 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     )
     _add_model_checks(checks, model_context, original_model, args.model, requires_registered_inputs)
     _add_dataset_checks(checks, dataset_context, requires_registered_inputs, args.mode)
+    add_check(
+        checks,
+        "requested_task_families_available",
+        not requested_task_families or set(requested_task_families).issubset(selected_task_families),
+        "every requested task family has registered trainer rows",
+        actual={
+            "requested": requested_task_families,
+            "available": available_task_families,
+            "selected": selected_task_families,
+        },
+    )
+    add_check(
+        checks,
+        "task_family_scope_exact",
+        not requested_task_families or set(selected_task_families).issubset(requested_task_families),
+        "task-scoped training rows contain no unrequested task families",
+        actual={"requested": requested_task_families, "selected": selected_task_families},
+    )
     _add_data_checks(checks, args.mode, paths, raw, {
         "sft": len(sft_rows),
         "action_sft": len(action_sft_rows),
@@ -1516,6 +1743,14 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "row_limit": args.limit,
             "full_plan_row_counts_preserved": True,
             "full_prepared_counts": full_prepared_counts,
+        },
+        "task_scope": {
+            "requested_task_families": requested_task_families,
+            "available_task_families": available_task_families,
+            "selected_task_families": selected_task_families,
+            "filter_applied": bool(requested_task_families),
+            "full_raw_counts": {name: len(rows) for name, rows in full_raw.items()},
+            "selected_raw_counts": {name: len(rows) for name, rows in raw.items()},
         },
         "readiness": "ready" if not failed_checks else "blocked",
         "recommendation": "launch_allowed" if not failed_checks else "block_launch",
@@ -1569,6 +1804,14 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "reward_model": len(reward_model_rows),
             "step_rewards": len(step_reward_rows),
         },
+        "action_turn_curriculum": {
+            "extra_repeats": args.action_turn_repeats,
+            "eligible_first_action_rows": len(
+                prepare_action_turn_sft_rows(action_sft_source)
+            ),
+            "source_rows_unchanged": True,
+            "no_tool_safety_rows_repeated": False,
+        },
         "full_prepared_counts": full_prepared_counts,
         "hyperparameters": {
             "sft_epochs": args.sft_epochs,
@@ -1584,16 +1827,36 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "lora_alpha": args.lora_alpha,
             "lora_dropout": args.lora_dropout,
             "assistant_only_loss": not args.all_message_loss,
+            "action_turn_repeats": args.action_turn_repeats,
             "seed": args.seed,
             "data_seed": args.data_seed,
             "save_steps": args.save_steps,
             "save_total_limit": args.save_total_limit,
+            "max_training_seconds": args.max_training_seconds if args.local_training else 0.0,
+        },
+        "local_training": {
+            "enabled": args.local_training,
+            "execution_requested": args.execute_local_training,
+            "local_files_only": args.local_training,
+            "network_allowed": False if args.local_training else None,
+            "hub_push_allowed": False if args.local_training else args.push_to_hub,
+            "remote_tracking_allowed": False if args.local_training else not args.disable_trackio,
+            "requested_device": args.device,
+            "device_order": _device_order(args.device),
+            "fixed_training_time_budget_seconds": args.max_training_seconds if args.local_training else 0.0,
+            "model_path": str(_local_model_load_path(args)) if args.local_training else "",
+            "adapter_targets": [
+                str(path) for path in _local_adapter_targets(args.output_dir, args.mode)
+            ] if args.local_training else [],
+            "design_reference": AUTORESEARCH_MACOS_REFERENCE,
         },
         "compute_assumptions": {
             "heavy_ml_imports_deferred_until_after_plan_passes": True,
             "default_device_order": ["cuda", "mps", "cpu"],
             "dtype_policy": "bfloat16 on supported CUDA devices, float16 on other CUDA/MPS devices, float32 on CPU",
             "registered_inputs_required_for_launch": requires_registered_inputs,
+            "local_training_imports_deferred_until_after_plan_passes": True,
+            "local_training_network_disabled_before_trainer_imports": True,
         },
         "trainer_backends": {
             "default": "trl_peft_lora",
@@ -1612,6 +1875,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "Dry-run plans never import torch, datasets, transformers, peft, or trl.",
             "Every Flight Recorder dry-run claim and launch requires registered inputs and replayed content-bound controls.",
             "Reward/process-reward modes are represented as plan-only extension points until dedicated trainers are wired.",
+            "Local training adapts the fixed-time bounded-experiment pattern without copying the upstream pretraining stack.",
         ],
     }
     return plan
@@ -1874,6 +2138,20 @@ def _add_hyperparameter_checks(checks: list[dict[str, Any]], args: argparse.Name
         actual={"push_to_hub": args.push_to_hub, "hub_model_id": args.hub_model_id},
     )
     add_check(checks, "limit_non_negative", args.limit >= 0, "row limit is non-negative", actual={"limit": args.limit})
+    add_check(
+        checks,
+        "action_turn_repeats_bounded",
+        0 <= args.action_turn_repeats <= 32,
+        "first-action curriculum repeats are in [0, 32]",
+        actual={"action_turn_repeats": args.action_turn_repeats},
+    )
+    add_check(
+        checks,
+        "task_family_values_non_empty",
+        all(str(value).strip() for value in args.task_family),
+        "task-family selectors are non-empty exact values",
+        actual={"task_families": list(args.task_family)},
+    )
     add_check(checks, "batch_size_positive", args.batch_size > 0, "batch size is positive", actual={"batch_size": args.batch_size})
     add_check(
         checks,
@@ -1902,6 +2180,89 @@ def _add_hyperparameter_checks(checks: list[dict[str, Any]], args: argparse.Name
         "checkpoint retention limit is positive",
         actual={"save_total_limit": args.save_total_limit},
     )
+    add_check(
+        checks,
+        "max_training_seconds_non_negative",
+        args.max_training_seconds >= 0,
+        "fixed local training-time budget is non-negative",
+        actual={"max_training_seconds": args.max_training_seconds},
+    )
+    if args.local_training:
+        local_model_path = _local_model_load_path(args)
+        resolved_model_path = local_model_path.resolve(strict=False)
+        resolved_output_path = args.output_dir.expanduser().resolve(strict=False)
+        adapter_targets = _local_adapter_targets(args.output_dir, args.mode)
+        occupied_targets = [
+            str(path)
+            for path in adapter_targets
+            if path.exists() and (not path.is_dir() or any(path.iterdir()))
+        ]
+        add_check(
+            checks,
+            "local_model_directory_present",
+            local_model_path.is_dir() and not local_model_path.is_symlink(),
+            "local training requires a non-symlink local model directory",
+            actual={"model": args.model, "resolved_path": str(resolved_model_path)},
+        )
+        add_check(
+            checks,
+            "local_model_output_separate",
+            resolved_output_path != resolved_model_path and not resolved_output_path.is_relative_to(resolved_model_path),
+            "local training writes plans and adapters outside the immutable base-model directory",
+            actual={"model_path": str(resolved_model_path), "output_path": str(resolved_output_path)},
+        )
+        add_check(
+            checks,
+            "local_adapter_targets_empty",
+            not occupied_targets,
+            "local training refuses to overwrite populated adapter targets",
+            actual={
+                "targets": [str(path) for path in adapter_targets],
+                "occupied_targets": occupied_targets,
+            },
+        )
+        add_check(
+            checks,
+            "local_training_time_budget_positive",
+            args.max_training_seconds > 0,
+            "local training has a positive fixed wall-clock budget",
+            actual={"max_training_seconds": args.max_training_seconds},
+        )
+        add_check(
+            checks,
+            "local_training_hub_push_disabled",
+            not args.push_to_hub,
+            "local training cannot push artifacts to a Hub",
+            actual={"push_to_hub": args.push_to_hub},
+        )
+        add_check(
+            checks,
+            "local_training_remote_tracking_disabled",
+            args.disable_trackio and not args.trackio_space_id,
+            "local training cannot report to remote tracking",
+            actual={"disable_trackio": args.disable_trackio, "trackio_space_id": args.trackio_space_id},
+        )
+        add_check(
+            checks,
+            "local_training_registered_inputs_required",
+            args.model_manifest is not None and args.dataset_manifest is not None,
+            "local training requires registered model and dataset manifests",
+            actual={
+                "model_manifest": str(args.model_manifest or ""),
+                "dataset_manifest": str(args.dataset_manifest or ""),
+            },
+        )
+        add_check(
+            checks,
+            "local_training_execution_acknowledged",
+            args.dry_run or args.preflight_only or args.execute_local_training,
+            "a live local weight update requires --execute-local-training",
+            actual={
+                "dry_run": args.dry_run,
+                "preflight_only": args.preflight_only,
+                "execute_local_training": args.execute_local_training,
+            },
+        )
     resume_declared = bool(args.resume_from_checkpoint)
     add_check(
         checks,
@@ -1949,37 +2310,87 @@ def run_name(args: argparse.Namespace, phase: str) -> str:
     return f"qwen3-4b-{args.mode}-{phase}"
 
 
-def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path) -> dict[str, Any]:
-    # Imported lazily so --dry-run works in a stdlib-only environment.
-    import torch
-    from datasets import Dataset
-    from peft import AutoPeftModelForCausalLM, LoraConfig
-    from transformers import AutoTokenizer
-    from trl import DPOConfig, DPOTrainer, SFTConfig, SFTTrainer
+def _configure_local_offline_environment() -> None:
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    os.environ["DO_NOT_TRACK"] = "1"
 
-    paths = data_paths(args.experiment_dir, load_dataset_context(args.dataset_manifest))
-    trace_sft_rows = prepare_sft_rows(load_jsonl(paths["trace_sft"]))
-    fr_sft_rows = prepare_sft_rows(load_jsonl(paths["fr_sft"]) + load_jsonl(paths["fr_action_sft"]))
-    fr_action_sft_rows = prepare_sft_rows(load_jsonl(paths["fr_action_sft"]))
-    fr_dpo_rows = prepare_dpo_rows(load_jsonl(paths["fr_dpo"]))
-    if args.limit:
-        trace_sft_rows = trace_sft_rows[: args.limit]
-        fr_sft_rows = fr_sft_rows[: args.limit]
-        fr_action_sft_rows = fr_action_sft_rows[: args.limit]
-        fr_dpo_rows = fr_dpo_rows[: args.limit]
 
-    if torch.cuda.is_available():
+def _select_training_device(torch: Any, requested: str) -> tuple[str, Any]:
+    mps_backend = getattr(getattr(torch, "backends", None), "mps", None)
+    mps_available = bool(mps_backend is not None and mps_backend.is_available())
+    cuda_available = bool(torch.cuda.is_available())
+    if requested == "auto":
+        selected = "cuda" if cuda_available else "mps" if mps_available else "cpu"
+    else:
+        selected = requested
+    if selected == "cuda" and not cuda_available:
+        raise SystemExit("--device cuda requested but CUDA is unavailable")
+    if selected == "mps" and not mps_available:
+        raise SystemExit("--device mps requested but Apple Metal/MPS is unavailable")
+    if selected == "cuda":
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    elif torch.backends.mps.is_available():
+    elif selected == "mps":
         dtype = torch.float16
     else:
         dtype = torch.float32
+    return selected, dtype
+
+
+def _accelerator_memory_mb(torch: Any, device_type: str) -> dict[str, float]:
+    if device_type == "cuda":
+        return {"peak_allocated_mb": round(float(torch.cuda.max_memory_allocated()) / 1024 / 1024, 3)}
+    if device_type == "mps":
+        mps = getattr(torch, "mps", None)
+        current = getattr(mps, "current_allocated_memory", None)
+        driver = getattr(mps, "driver_allocated_memory", None)
+        return {
+            "current_allocated_mb": round(float(current()) / 1024 / 1024, 3) if callable(current) else 0.0,
+            "driver_allocated_mb": round(float(driver()) / 1024 / 1024, 3) if callable(driver) else 0.0,
+        }
+    return {"peak_allocated_mb": 0.0}
+
+
+def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path) -> dict[str, Any]:
+    # Imported lazily so --dry-run works in a stdlib-only environment.
+    if args.local_training:
+        _configure_local_offline_environment()
+    import torch
+    from datasets import Dataset
+    from peft import AutoPeftModelForCausalLM, LoraConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+    from trl import DPOConfig, DPOTrainer, SFTConfig, SFTTrainer
+
+    paths = data_paths(args.experiment_dir, load_dataset_context(args.dataset_manifest))
+    _, scoped_raw = load_task_scoped_training_rows(paths, args.task_family)
+    trace_sft_rows = prepare_sft_rows(scoped_raw["trace_sft"])
+    fr_sft_rows = prepare_sft_rows(scoped_raw["fr_sft"] + scoped_raw["fr_action_sft"])
+    fr_action_source = scoped_raw["fr_action_sft"]
+    fr_action_sft_rows = prepare_action_sft_curriculum(
+        fr_action_source, action_turn_repeats=args.action_turn_repeats
+    )
+    fr_dpo_rows = prepare_dpo_rows(scoped_raw["fr_dpo"])
+    if args.limit:
+        trace_sft_rows = trace_sft_rows[: args.limit]
+        fr_sft_rows = fr_sft_rows[: args.limit]
+        fr_action_sft_rows = prepare_action_sft_curriculum(
+            fr_action_source[: args.limit],
+            action_turn_repeats=args.action_turn_repeats,
+        )
+        fr_dpo_rows = fr_dpo_rows[: args.limit]
+
+    device_type, dtype = _select_training_device(torch, args.device)
     model_kwargs = {"dtype": dtype}
+    if args.local_training:
+        model_kwargs["local_files_only"] = True
     if args.model_revision:
         model_kwargs["revision"] = args.model_revision
+    model_load_path = str(_local_model_load_path(args)) if args.local_training else args.model
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model,
+        model_load_path,
         revision=args.tokenizer_revision or args.model_revision or None,
+        local_files_only=args.local_training,
     )
     if args.expected_chat_template_sha256:
         actual_template_sha256 = hashlib.sha256(
@@ -2002,6 +2413,44 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
         target_modules="all-linear",
         task_type="CAUSAL_LM",
     )
+    sft_model: Any = model_load_path
+    sft_model_init_kwargs: dict[str, Any] | None = model_kwargs
+    if args.local_training and device_type == "mps":
+        # TRL's string-model path asks Transformers/Accelerate to construct the
+        # model directly at fp16 on MPS. Some torch/transformers combinations
+        # crash in native code during that path. Loading on CPU first and then
+        # moving the completed model is deterministic and avoids the crash.
+        sft_model = AutoModelForCausalLM.from_pretrained(
+            model_load_path,
+            revision=args.model_revision or None,
+            dtype=torch.float32,
+            local_files_only=True,
+        )
+        sft_model = sft_model.to(device="mps", dtype=dtype)
+        sft_model_init_kwargs = None
+    training_budget = FixedTrainingTimeBudget(args.max_training_seconds if args.local_training else 0.0)
+
+    class FixedTimeBudgetCallback(TrainerCallback):
+        def on_train_begin(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
+            del args, state, kwargs
+            training_budget.begin_phase()
+            if training_budget.should_stop():
+                control.should_training_stop = True
+            return control
+
+        def on_step_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
+            del args, state, kwargs
+            if training_budget.should_stop():
+                control.should_training_stop = True
+            return control
+
+        def on_train_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
+            del args, state, kwargs
+            training_budget.end_phase()
+            return control
+
+    def trainer_callbacks() -> list[Any]:
+        return [FixedTimeBudgetCallback()] if training_budget.enabled else []
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     result: dict[str, Any] = {
@@ -2022,34 +2471,49 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
         if not rows:
             raise SystemExit("No SFT rows available for this mode.")
         dataset = Dataset.from_list(rows)
-        config = SFTConfig(
-            output_dir=str(out),
-            learning_rate=args.sft_learning_rate,
-            per_device_train_batch_size=args.batch_size,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            num_train_epochs=args.sft_epochs,
-            max_steps=args.max_steps,
-            max_length=args.max_length,
-            assistant_only_loss=not args.all_message_loss,
-            gradient_checkpointing=args.gradient_checkpointing,
-            logging_steps=1,
-            save_strategy="steps",
-            save_steps=args.save_steps,
-            save_total_limit=args.save_total_limit,
-            seed=args.seed,
-            data_seed=args.data_seed,
-            report_to=report_to,
-            run_name=run_name(args, "sft"),
-            model_init_kwargs=model_kwargs,
+        config_kwargs: dict[str, Any] = {
+            "output_dir": str(out),
+            "learning_rate": args.sft_learning_rate,
+            "per_device_train_batch_size": args.batch_size,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "num_train_epochs": args.sft_epochs,
+            "max_steps": args.max_steps,
+            "max_length": args.max_length,
+            "assistant_only_loss": not args.all_message_loss,
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "logging_steps": 1,
+            "save_strategy": "steps",
+            "save_steps": args.save_steps,
+            "save_total_limit": args.save_total_limit,
+            "seed": args.seed,
+            "data_seed": args.data_seed,
+            "report_to": report_to,
+            "run_name": run_name(args, "sft"),
+            "use_cpu": device_type == "cpu",
             **hub_config,
+        }
+        if sft_model_init_kwargs is not None:
+            config_kwargs["model_init_kwargs"] = sft_model_init_kwargs
+        config = SFTConfig(
+            **config_kwargs,
         )
         trainer = SFTTrainer(
-            model=args.model,
+            model=sft_model,
             args=config,
             train_dataset=dataset,
             peft_config=peft_config,
             processing_class=tokenizer,
+            callbacks=trainer_callbacks(),
         )
+        coverage = supervised_token_coverage(
+            trainer.train_dataset, max_length=args.max_length
+        )
+        result["sft_supervision_coverage"] = coverage
+        if not coverage["passed"]:
+            raise SystemExit(
+                "SFT supervision coverage failed after max-length truncation: "
+                f"{coverage['zero_visible_row_count']} rows have zero visible assistant labels"
+            )
         resume_checkpoint = str(args.resume_from_checkpoint) if args.resume_phase == "sft" else None
         train_output = trainer.train(resume_from_checkpoint=resume_checkpoint)
         trainer.save_model(str(out))
@@ -2078,6 +2542,7 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
             report_to=report_to,
             run_name=run_name(args, "dpo"),
             model_init_kwargs=model_kwargs if isinstance(model_or_path, str) else None,
+            use_cpu=device_type == "cpu",
             **hub_config,
         )
         if isinstance(model_or_path, Path):
@@ -2085,12 +2550,14 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
                 str(model_or_path),
                 is_trainable=True,
                 dtype=dtype,
+                local_files_only=args.local_training,
             )
             trainer = DPOTrainer(
                 model=model,
                 args=config,
                 train_dataset=dataset,
                 processing_class=tokenizer,
+                callbacks=trainer_callbacks(),
             )
         else:
             trainer = DPOTrainer(
@@ -2099,6 +2566,7 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
                 train_dataset=dataset,
                 peft_config=peft_config,
                 processing_class=tokenizer,
+                callbacks=trainer_callbacks(),
             )
         resume_checkpoint = str(args.resume_from_checkpoint) if args.resume_phase == "dpo" else None
         train_output = trainer.train(resume_from_checkpoint=resume_checkpoint)
@@ -2125,11 +2593,28 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
         raise SystemExit(f"Unsupported mode: {args.mode}")
 
     result["final_adapter_dir"] = str(final_dir)
-    result["final_adapter_artifacts"] = adapter_artifact_manifest(final_dir)
+    final_adapter_artifacts = adapter_artifact_manifest(final_dir)
+    if not final_adapter_artifacts["files"]:
+        raise SystemExit("Trainer completed without producing any adapter artifacts.")
+    result["final_adapter_artifacts"] = final_adapter_artifacts
     result["resume"] = {
         "resumed": bool(args.resume_from_checkpoint),
         "phase": args.resume_phase,
         "checkpoint": str(args.resume_from_checkpoint or ""),
+    }
+    training_budget.end_phase()
+    result["runtime_observation"] = {
+        "device": device_type,
+        "dtype": str(dtype),
+        "local_training": args.local_training,
+        "local_files_only": args.local_training,
+        "network_allowed": False if args.local_training else None,
+        "fixed_training_time_budget_seconds": training_budget.max_seconds,
+        "trainer_active_seconds": round(training_budget.elapsed_seconds, 6),
+        "stopped_by_time_budget": training_budget.stop_requested,
+        "peak_process_memory_mb": peak_process_memory_mb(),
+        "accelerator_memory_mb": _accelerator_memory_mb(torch, device_type),
+        "task_families": normalized_task_families(args.task_family),
     }
     if args.push_to_hub:
         if not args.hub_model_id:
@@ -2762,6 +3247,45 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--push-to-hub", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
+        "--local-training",
+        action="store_true",
+        help=(
+            "Constrain an explicit launch to an existing local model, offline dependencies, local artifacts, "
+            "no Hub push, no remote tracking, and a fixed wall-clock budget"
+        ),
+    )
+    parser.add_argument(
+        "--local-model-path",
+        type=Path,
+        help=(
+            "Existing non-symlink local base-model directory used for offline loading; "
+            "keeps --model as the canonical registered model identity"
+        ),
+    )
+    parser.add_argument(
+        "--execute-local-training",
+        action="store_true",
+        help="Explicitly acknowledge the local model-weight update after a passing plan and preflight",
+    )
+    parser.add_argument(
+        "--task-family",
+        action="append",
+        default=[],
+        help="Train only exact matching HFR task_family rows; repeat to select multiple families",
+    )
+    parser.add_argument(
+        "--device",
+        choices=("auto", "mps", "cuda", "cpu"),
+        default="auto",
+        help="Local trainer device policy; auto prefers CUDA, then Apple MPS, then CPU",
+    )
+    parser.add_argument(
+        "--max-training-seconds",
+        type=float,
+        default=300.0,
+        help="Trainer-active wall-clock budget shared across local SFT/DPO phases",
+    )
+    parser.add_argument(
         "--preflight-only",
         action="store_true",
         help="Validate the launch plan, check trainer dependencies, write a result archive, then exit before model downloads or training",
@@ -2773,6 +3297,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Additional Python module name to require during --preflight-only checks; repeatable for tests or wrapper-specific trainers",
     )
     parser.add_argument("--limit", type=int, default=0, help="Limit rows for smoke tests")
+    parser.add_argument(
+        "--action-turn-repeats",
+        type=int,
+        default=0,
+        help=(
+            "Add this many derived copies of each reviewed first assistant tool-call turn; "
+            "full trajectories and registered source bytes remain unchanged"
+        ),
+    )
     parser.add_argument("--sft-epochs", type=float, default=3.0)
     parser.add_argument("--dpo-epochs", type=float, default=3.0)
     parser.add_argument("--sft-learning-rate", type=float, default=1e-4)
@@ -2814,6 +3347,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.write_backend_recipes is not None and args.preflight_only:
         raise SystemExit("--write-backend-recipes cannot be combined with --preflight-only")
+    if args.execute_local_training and not args.local_training:
+        raise SystemExit("--execute-local-training requires --local-training")
+    if args.execute_local_training and (args.dry_run or args.preflight_only):
+        raise SystemExit("--execute-local-training cannot be combined with --dry-run or --preflight-only")
     if args.dry_run and args.preflight_only:
         raise SystemExit("--preflight-only cannot be combined with --dry-run")
     if not args.mode:
@@ -2838,6 +3375,30 @@ def main(argv: list[str] | None = None) -> int:
             "failed_check_count": 1,
             "blocked_reasons": ["training input data could not be parsed"],
             "input_manifests": {},
+            "local_training": {
+                "enabled": args.local_training,
+                "execution_requested": args.execute_local_training,
+                "local_files_only": args.local_training,
+                "network_allowed": False if args.local_training else None,
+                "hub_push_allowed": False if args.local_training else args.push_to_hub,
+                "remote_tracking_allowed": False if args.local_training else not args.disable_trackio,
+                "requested_device": args.device,
+                "device_order": _device_order(args.device),
+                "fixed_training_time_budget_seconds": args.max_training_seconds if args.local_training else 0.0,
+                "model_path": str(_local_model_load_path(args)) if args.local_training else "",
+                "adapter_targets": [
+                    str(path) for path in _local_adapter_targets(args.output_dir, args.mode)
+                ] if args.local_training else [],
+                "design_reference": AUTORESEARCH_MACOS_REFERENCE,
+            },
+            "task_scope": {
+                "requested_task_families": normalized_task_families(args.task_family),
+                "available_task_families": [],
+                "selected_task_families": [],
+                "filter_applied": bool(normalized_task_families(args.task_family)),
+                "full_raw_counts": {},
+                "selected_raw_counts": {},
+            },
             "failure": classify_failure(exc),
         }
         write_json(plan_path, plan)

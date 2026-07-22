@@ -1,0 +1,96 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/runtime_adapter_candidate_evaluation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Independently scored development or sealed-final evaluation report for base, generalist, specialist, and atomic composition adapter candidates.",
+  "properties": {
+    "schema_version": {"const": "hfr.runtime_adapter_candidate_evaluation.v1"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "base_model": {"$ref": "#/$defs/revisionIdentity"},
+    "tokenizer": {"$ref": "#/$defs/revisionIdentity"},
+    "chat_template": {"$ref": "#/$defs/chatTemplateIdentity"},
+    "heldout": {"$ref": "#/$defs/heldoutIdentity"},
+    "passed": {"type": "boolean"},
+    "candidate_count": {"minimum": 1, "type": "integer"},
+    "promotion_eligible_candidates": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array"
+    },
+    "candidate_reports": {
+      "items": {"$ref": "#/$defs/candidateReport"},
+      "minItems": 1,
+      "type": "array"
+    },
+    "evaluation_fingerprint": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "base_model",
+    "tokenizer",
+    "chat_template",
+    "heldout",
+    "passed",
+    "candidate_count",
+    "promotion_eligible_candidates",
+    "candidate_reports",
+    "evaluation_fingerprint"
+  ],
+  "type": "object",
+  "$defs": {
+    "revisionIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {"minLength": 1, "type": "string"},
+        "revision": {"minLength": 1, "type": "string"}
+      },
+      "required": ["id", "revision"],
+      "type": "object"
+    },
+    "chatTemplateIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+      },
+      "required": ["sha256"],
+      "type": "object"
+    },
+    "heldoutIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "row_count": {"minimum": 1, "type": "integer"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "split": {"enum": ["development", "sealed_final"]}
+      },
+      "required": ["row_count", "sha256", "split"],
+      "type": "object"
+    },
+    "candidateReport": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"minLength": 1, "type": "string"},
+        "status": {"minLength": 1, "type": "string"},
+        "passed": {"type": "boolean"},
+        "promotion_eligible": {"type": "boolean"},
+        "blocking_reasons": {"items": {"type": "string"}, "type": "array"},
+        "identity": {"type": "object"},
+        "heldout_subset": {"type": "object"},
+        "metrics": {"type": "object"},
+        "thresholds": {"type": "object"},
+        "scores": {"items": {"type": "object"}, "type": "array"}
+      },
+      "required": [
+        "candidate_id",
+        "status",
+        "passed",
+        "promotion_eligible",
+        "blocking_reasons",
+        "identity",
+        "metrics",
+        "thresholds",
+        "scores"
+      ],
+      "type": "object"
+    }
+  }
+}

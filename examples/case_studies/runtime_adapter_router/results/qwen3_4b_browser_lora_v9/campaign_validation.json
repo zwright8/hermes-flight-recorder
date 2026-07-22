@@ -1,0 +1,10 @@
+{
+  "campaign_dir": "runs/runtime_adapter_autoresearch_20260721/governed-browser-specialist-v9",
+  "error_count": 0,
+  "errors": [],
+  "passed": true,
+  "schema_version": "hfr.runtime_adapter_autoresearch_validation.v1",
+  "sealed_promotion_eligible": true,
+  "search_result_replayed": true,
+  "status": "passed"
+}

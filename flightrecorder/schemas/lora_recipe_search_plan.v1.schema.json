@@ -1,0 +1,119 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/lora_recipe_search_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable development-only guardrails for bounded autonomous LoRA recipe search.",
+  "properties": {
+    "base_recipe": { "$ref": "#/$defs/recipe" },
+    "base_recipe_sha256": { "$ref": "#/$defs/sha256" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "campaign_id": { "minLength": 1, "pattern": "^[A-Za-z0-9_.-]+$", "type": "string" },
+    "created_at": { "minLength": 1, "type": "string" },
+    "development_suite": { "$ref": "#/$defs/development_suite" },
+    "execution_boundary": { "$ref": "#/$defs/execution_boundary" },
+    "mutable_fields": {
+      "items": {
+        "enum": [
+          "sft_learning_rate", "dpo_learning_rate", "batch_size", "gradient_accumulation_steps",
+          "max_steps", "max_length", "action_turn_repeats", "lora_r", "lora_alpha", "lora_dropout"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "objective": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.lora_recipe_search_plan.v1" },
+    "selection_policy": { "$ref": "#/$defs/selection_policy" }
+  },
+  "required": [
+    "schema_version", "created_at", "campaign_id", "objective", "development_suite",
+    "base_recipe", "base_recipe_sha256", "mutable_fields", "selection_policy", "budget",
+    "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder LoRA Recipe Search Plan",
+  "type": "object",
+  "$defs": {
+    "budget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cost_usd": { "minimum": 0, "type": "number" },
+        "max_duration_seconds": { "exclusiveMinimum": 0, "type": "number" },
+        "max_trials": { "maximum": 10000, "minimum": 1, "type": "integer" },
+        "per_trial_cost_ceiling_usd": { "minimum": 0, "type": "number" },
+        "per_trial_duration_ceiling_seconds": { "exclusiveMinimum": 0, "type": "number" }
+      },
+      "required": [
+        "max_trials", "max_cost_usd", "max_duration_seconds",
+        "per_trial_cost_ceiling_usd", "per_trial_duration_ceiling_seconds"
+      ],
+      "type": "object"
+    },
+    "development_suite": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_role": { "const": "development" },
+        "heldout": { "const": false },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.eval_suite_manifest.v1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "minimum": 1, "type": "integer" },
+        "suite_id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["path", "sha256", "size_bytes", "schema_version", "suite_id", "evaluation_role", "heldout"],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "development_only": { "const": true },
+        "external_side_effects_launched_by_search": { "const": false },
+        "heldout_inputs_allowed": { "const": false },
+        "model_weight_training_executed_by_flight_recorder": { "const": false },
+        "promotion_allowed": { "const": false }
+      },
+      "required": [
+        "development_only", "heldout_inputs_allowed", "promotion_allowed",
+        "model_weight_training_executed_by_flight_recorder", "external_side_effects_launched_by_search"
+      ],
+      "type": "object"
+    },
+    "recipe": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "maximum": 128, "minimum": 1, "type": "integer" },
+        "data_seed": { "minimum": 0, "type": "integer" },
+        "dpo_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" },
+        "gradient_accumulation_steps": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "action_turn_repeats": { "maximum": 32, "minimum": 0, "type": "integer" },
+        "lora_alpha": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "lora_dropout": { "exclusiveMaximum": 1, "minimum": 0, "type": "number" },
+        "lora_r": { "enum": [4, 8, 16, 32, 64, 128], "type": "integer" },
+        "max_length": { "maximum": 32768, "minimum": 128, "type": "integer" },
+        "max_steps": { "maximum": 100000, "minimum": 1, "type": "integer" },
+        "mode": { "enum": ["trace_sft", "fr_sft", "fr_action_sft", "fr_dpo", "fr_sft_dpo"], "type": "string" },
+        "seed": { "minimum": 0, "type": "integer" },
+        "sft_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" }
+      },
+      "required": [
+        "mode", "sft_learning_rate", "dpo_learning_rate", "batch_size",
+        "gradient_accumulation_steps", "max_steps", "max_length", "lora_r",
+        "lora_alpha", "lora_dropout", "seed", "data_seed"
+      ],
+      "type": "object"
+    },
+    "selection_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": { "enum": ["maximize", "minimize"], "type": "string" },
+        "max_critical_failures": { "minimum": 0, "type": "integer" },
+        "minimum_delta": { "minimum": 0, "type": "number" },
+        "primary_metric": { "minLength": 1, "type": "string" }
+      },
+      "required": ["primary_metric", "direction", "minimum_delta", "max_critical_failures"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+  }
+}

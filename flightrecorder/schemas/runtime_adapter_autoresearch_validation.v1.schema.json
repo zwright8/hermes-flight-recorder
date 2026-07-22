@@ -1,0 +1,30 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/runtime_adapter_autoresearch_validation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Fail-closed replay validation receipt for a governed runtime-adapter autoresearch campaign.",
+  "properties": {
+    "schema_version": {"const": "hfr.runtime_adapter_autoresearch_validation.v1"},
+    "passed": {"type": "boolean"},
+    "status": {"enum": ["passed", "failed"]},
+    "campaign_dir": {"minLength": 1, "type": "string"},
+    "search_result_replayed": {"type": "boolean"},
+    "sealed_promotion_eligible": {"type": "boolean"},
+    "error_count": {"minimum": 0, "type": "integer"},
+    "errors": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "status",
+    "campaign_dir",
+    "search_result_replayed",
+    "sealed_promotion_eligible",
+    "error_count",
+    "errors"
+  ],
+  "type": "object"
+}

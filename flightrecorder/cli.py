@@ -212,6 +212,11 @@ from .rollout_generation import (
     write_agentic_rollout_plan,
     write_agentic_rollout_receipt,
 )
+from .runtime_adapter_router import (
+    RuntimeAdapterRouterError,
+    build_adapter_route_decision,
+    build_tool_capability_selection,
+)
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .schema_registry import (
     SchemaRegistryError,
@@ -388,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
+        RuntimeAdapterRouterError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -1368,6 +1374,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         harness_suite_result_paths=args.harness_suite_result,
         live_smoke_summary_paths=args.live_smoke_summary,
         eval_summary_paths=args.eval_summary,
+        tool_capability_selection_paths=args.tool_capability_selection,
+        adapter_route_decision_paths=args.adapter_route_decision,
         external_eval_plan_paths=args.external_eval_plan,
         external_eval_receipt_paths=args.external_eval_receipt,
         external_eval_result_paths=args.external_eval_result,
@@ -1957,6 +1965,55 @@ def cmd_data_governance_delete(args: argparse.Namespace) -> int:
 def cmd_intervention_route(args: argparse.Namespace) -> int:
     route = route_failure_cluster(_read_json(Path(args.cluster)))
     _write_json(Path(args.out), route)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_runtime_router_tool_capabilities(args: argparse.Namespace) -> int:
+    task_contract = _read_json(Path(args.task_contract))
+    catalog = _read_json(Path(args.tool_catalog))
+    policy = _read_json(Path(args.policy))
+    environment = _read_json(Path(args.environment)) if args.environment else None
+    tools = catalog.get("tools")
+    if not isinstance(tools, list):
+        raise RuntimeAdapterRouterError("tool catalog must be a JSON object with a tools array")
+    artifact = build_tool_capability_selection(
+        task_contract,
+        tools,
+        policy,
+        environment=environment,
+    )
+    _write_new_json_atomically(Path(args.out), artifact)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_runtime_router_adapter(args: argparse.Namespace) -> int:
+    task_contract = _read_json(Path(args.task_contract))
+    capability_selection_path = Path(args.capability_selection)
+    capability_selection = _read_json(capability_selection_path)
+    catalog = _read_json(Path(args.candidate_catalog))
+    routing_policy = _read_json(Path(args.routing_policy))
+    runtime_environment = _read_json(Path(args.runtime_environment))
+    candidates = catalog.get("candidates")
+    if not isinstance(candidates, list):
+        raise RuntimeAdapterRouterError("candidate catalog must be a JSON object with a candidates array")
+    output_path = Path(args.out)
+    capability_selection_ref = _artifact_ref_for_output_relative_file(
+        capability_selection_path,
+        output_path,
+        label="capability selection",
+    )
+    artifact = build_adapter_route_decision(
+        task_contract,
+        capability_selection,
+        candidates,
+        routing_policy,
+        runtime_environment=runtime_environment,
+        capability_selection_sha256=capability_selection_ref["sha256"],
+        capability_selection_ref=capability_selection_ref,
+    )
+    _write_new_json_atomically(output_path, artifact)
     print(f"wrote {args.out}")
     return 0
 
@@ -4004,6 +4061,8 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--harness-suite-result", action="append", default=[], help="Validate one harness_suite_result.json; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--eval-summary", action="append", default=[], help="Validate one hfr.eval_summary.v1 JSON file; may be repeated")
+    validate.add_argument("--tool-capability-selection", action="append", default=[], help="Validate one hfr.tool_capability_selection.v1 JSON file; may be repeated")
+    validate.add_argument("--adapter-route-decision", action="append", default=[], help="Validate one hfr.adapter_route_decision.v1 JSON file; may be repeated")
     validate.add_argument(
         "--external-eval-plan",
         action="append",
@@ -4320,6 +4379,34 @@ def _parser() -> argparse.ArgumentParser:
     intervention_route.add_argument("--cluster", required=True, help="Failure cluster JSON")
     intervention_route.add_argument("--out", required=True, help="Write hfr.intervention_route.v1 JSON")
     intervention_route.set_defaults(func=cmd_intervention_route)
+
+    runtime_router = subparsers.add_parser(
+        "runtime-router",
+        help="Build governed runtime tool-capability and adapter-route artifacts",
+    )
+    runtime_router_subparsers = runtime_router.add_subparsers(dest="runtime_router_command", required=True)
+    runtime_router_tools = runtime_router_subparsers.add_parser(
+        "tool-capabilities",
+        help="Select task-visible tools from a governed tool catalog",
+    )
+    runtime_router_tools.add_argument("--task-contract", required=True, help="Trusted task contract JSON object")
+    runtime_router_tools.add_argument("--tool-catalog", required=True, help="Tool catalog JSON object with a tools array")
+    runtime_router_tools.add_argument("--policy", required=True, help="Tool routing policy JSON")
+    runtime_router_tools.add_argument("--environment", help="Optional runtime environment JSON")
+    runtime_router_tools.add_argument("--out", required=True, help="Write hfr.tool_capability_selection.v1 JSON")
+    runtime_router_tools.set_defaults(func=cmd_runtime_router_tool_capabilities)
+
+    runtime_router_adapter = runtime_router_subparsers.add_parser(
+        "adapter",
+        help="Route exactly one promoted adapter from a governed candidate catalog",
+    )
+    runtime_router_adapter.add_argument("--task-contract", required=True, help="Trusted task contract JSON object")
+    runtime_router_adapter.add_argument("--capability-selection", required=True, help="Existing tool-capability selection JSON")
+    runtime_router_adapter.add_argument("--candidate-catalog", required=True, help="Candidate catalog JSON object with a candidates array")
+    runtime_router_adapter.add_argument("--routing-policy", required=True, help="Adapter routing policy JSON")
+    runtime_router_adapter.add_argument("--runtime-environment", required=True, help="Runtime environment JSON")
+    runtime_router_adapter.add_argument("--out", required=True, help="Write hfr.adapter_route_decision.v1 JSON")
+    runtime_router_adapter.set_defaults(func=cmd_runtime_router_adapter)
 
     review_semantics = subparsers.add_parser(
         "review-semantics",
@@ -5784,6 +5871,40 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _write_new_json_atomically(path: Path, payload: dict[str, Any]) -> None:
+    if path.exists():
+        raise AtomicJsonError(f"refusing to overwrite existing JSON target: {path}")
+    atomic_write_json_cas(path, payload, expected_sha256=None)
+
+
+def _artifact_ref_for_output_relative_file(source_path: Path, output_path: Path, *, label: str) -> dict[str, Any]:
+    if path_has_symlink_component(source_path, include_leaf=True):
+        raise RuntimeAdapterRouterError(f"{label} path must not contain symlink components")
+    if not source_path.exists() or not source_path.is_file():
+        raise RuntimeAdapterRouterError(f"{label} path must be an existing file")
+    output_dir = output_path.parent
+    relative = os.path.relpath(source_path.resolve(), output_dir.resolve())
+    if not _is_safe_runtime_router_ref(relative):
+        raise RuntimeAdapterRouterError(f"{label} path must be safely referenceable relative to route output")
+    return {
+        "path": relative,
+        "sha256": json_file_sha256(source_path),
+        "size_bytes": source_path.stat().st_size,
+    }
+
+
+def _is_safe_runtime_router_ref(value: str) -> bool:
+    path = Path(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not _is_windows_absolute(value)
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:

@@ -1,0 +1,3184 @@
+{
+  "blocking_reasons": [],
+  "cluster_count": 288,
+  "clusters": [
+    {
+      "cluster_id": "cluster-000000",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00000"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000001",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00001"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000002",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00002"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000003",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00003"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000004",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00004"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000005",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00005"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000006",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00006"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000007",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00007"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000008",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00010"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000009",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00011"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000010",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00012"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000011",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00013"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000012",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00014"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000013",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00015"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000014",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00016"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000015",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00017"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000016",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00020"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000017",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00021"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000018",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00022"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000019",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00023"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000020",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00024"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000021",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00025"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000022",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00026"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000023",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00027"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000024",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00030"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000025",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00031"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000026",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00032"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000027",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00033"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000028",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00034"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000029",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00035"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000030",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00036"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000031",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00037"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000032",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00040"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000033",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00041"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000034",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00042"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000035",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00043"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000036",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00044"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000037",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00045"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000038",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00046"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000039",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00047"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000040",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00050"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000041",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00051"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000042",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00052"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000043",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00053"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000044",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00054"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000045",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00055"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000046",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00056"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000047",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00057"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000048",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00060"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000049",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00061"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000050",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00062"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000051",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00063"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000052",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00064"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000053",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00065"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000054",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00066"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000055",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00067"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000056",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00070"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000057",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00071"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000058",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00072"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000059",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00073"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000060",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00074"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000061",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00075"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000062",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00076"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000063",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00077"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000064",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00080"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000065",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00081"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000066",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00082"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000067",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00083"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000068",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00084"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000069",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00085"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000070",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00086"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000071",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00087"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000072",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00090"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000073",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00091"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000074",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00092"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000075",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00093"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000076",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00094"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000077",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00095"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000078",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00096"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000079",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00097"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000080",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00100"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000081",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00101"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000082",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00102"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000083",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00103"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000084",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00104"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000085",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00105"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000086",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00106"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000087",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00107"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000088",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00110"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000089",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00111"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000090",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00112"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000091",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00113"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000092",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00114"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000093",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00115"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000094",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00116"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000095",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00117"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000096",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00120"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000097",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00121"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000098",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00122"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000099",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00123"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000100",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00124"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000101",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00125"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000102",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00126"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000103",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00127"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000104",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00130"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000105",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00131"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000106",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00132"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000107",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00133"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000108",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00134"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000109",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00135"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000110",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00136"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000111",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00137"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000112",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00140"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000113",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00141"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000114",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00142"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000115",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00143"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000116",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00144"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000117",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00145"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000118",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00146"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000119",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00147"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000120",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00150"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000121",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00151"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000122",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00152"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000123",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00153"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000124",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00154"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000125",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00155"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000126",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00156"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000127",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00157"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000128",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00160"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000129",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00161"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000130",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00162"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000131",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00163"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000132",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00164"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000133",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00165"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000134",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00166"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000135",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00167"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000136",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00170"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000137",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00171"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000138",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00172"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000139",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00173"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000140",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00174"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000141",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00175"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000142",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00176"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000143",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00177"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000144",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00180"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000145",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00181"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000146",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00182"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000147",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00183"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000148",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00184"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000149",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00185"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000150",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00186"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000151",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00187"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000152",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00190"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000153",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00191"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000154",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00192"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000155",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00193"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000156",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00194"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000157",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00195"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000158",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00196"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000159",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00197"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000160",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00200"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000161",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00201"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000162",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00202"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000163",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00203"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000164",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00204"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000165",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00205"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000166",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00206"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000167",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00207"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000168",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00210"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000169",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00211"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000170",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00212"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000171",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00213"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000172",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00214"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000173",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00215"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000174",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00216"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000175",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00217"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000176",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00220"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000177",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00221"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000178",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00222"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000179",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00223"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000180",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00224"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000181",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00225"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000182",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00226"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000183",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00227"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000184",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00230"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000185",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00231"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000186",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00232"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000187",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00233"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000188",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00234"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000189",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00235"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000190",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00236"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000191",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00237"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000192",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00240"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000193",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00241"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000194",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00242"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000195",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00243"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000196",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00244"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000197",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00245"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000198",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00246"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000199",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00247"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000200",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00250"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000201",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00251"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000202",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00252"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000203",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00253"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000204",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00254"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000205",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00255"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000206",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00256"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000207",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00257"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000208",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00260"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000209",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00261"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000210",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00262"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000211",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00263"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000212",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00264"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000213",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00265"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000214",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00266"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000215",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00267"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000216",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00270"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000217",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00271"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000218",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00272"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000219",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00273"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000220",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00274"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000221",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00275"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000222",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00276"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000223",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00277"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000224",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00280"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000225",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00281"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000226",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00282"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000227",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00283"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000228",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00284"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000229",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00285"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000230",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00286"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000231",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00287"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000232",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00290"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000233",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00291"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000234",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00292"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000235",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00293"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000236",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00294"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000237",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00295"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000238",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00296"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000239",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00297"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000240",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00300"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000241",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00301"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000242",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00302"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000243",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00303"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000244",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00304"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000245",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00305"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000246",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00306"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000247",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00307"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000248",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00310"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000249",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00311"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000250",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00312"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000251",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00313"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000252",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00314"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000253",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00315"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000254",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00316"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000255",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00317"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000256",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00320"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000257",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00321"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000258",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00322"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000259",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00323"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000260",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00324"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000261",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00325"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000262",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00326"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000263",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00327"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000264",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00330"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000265",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00331"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000266",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00332"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000267",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00333"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000268",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00334"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000269",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00335"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000270",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00336"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000271",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00337"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000272",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00340"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000273",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00341"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000274",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00342"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000275",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00343"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000276",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00344"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000277",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00345"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000278",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00346"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000279",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00347"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000280",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00350"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000281",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00351"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000282",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00352"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000283",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00353"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000284",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00354"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000285",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00355"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000286",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00356"
+      ],
+      "splits": [
+        "train"
+      ]
+    },
+    {
+      "cluster_id": "cluster-000287",
+      "exact_duplicate": false,
+      "row_count": 1,
+      "row_ids": [
+        "rar-train-00357"
+      ],
+      "splits": [
+        "train"
+      ]
+    }
+  ],
+  "cross_split_cluster_count": 0,
+  "cross_split_clusters": [],
+  "duplicate_cluster_count": 0,
+  "passed": true,
+  "protected_match_count": 0,
+  "protected_matches": [],
+  "report_fingerprint": "9f42d84acb903b7d60ec2ee59ad51a76314a7d608b784ea79ff5819b8e558d3c",
+  "row_count": 288,
+  "schema_version": "hfr.dataset_contamination_report.v1",
+  "similarity_threshold": 1.0
+}

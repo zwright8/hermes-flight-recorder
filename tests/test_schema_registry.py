@@ -71,6 +71,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "agentic_training_plan",
             "agentic_training_result",
             "agentic_training_runtime_preflight",
+            "adapter_route_decision",
             "cloud_training_artifact_manifest",
             "cloud_training_completion_receipt",
             "cloud_training_launch_plan",
@@ -126,6 +127,10 @@ class SchemaRegistryTests(unittest.TestCase):
             "live_smoke_summary",
             "live_verifier_smoke_summary",
             "lineage",
+            "lora_recipe_promotion_handoff",
+            "lora_recipe_search_plan",
+            "lora_recipe_search_result",
+            "lora_recipe_trial",
             "model_adapter_manifest",
             "model_candidate",
             "model_compatibility_report",
@@ -215,6 +220,9 @@ class SchemaRegistryTests(unittest.TestCase):
             "trainer_launch_check",
             "trainer_preflight",
             "trainer_wrapper_dry_run",
+            "tool_capability_selection",
+            "runtime_adapter_autoresearch_validation",
+            "runtime_adapter_candidate_evaluation",
             "training_gate",
             "training_manifest",
             "training_plan",
@@ -252,10 +260,12 @@ class SchemaRegistryTests(unittest.TestCase):
             "hfr.action_ledger_gate.policy.v1": "demo input policy",
             "hfr.compare_gate.policy.v1": "demo input policy",
             "hfr.dataset_manifest.example.v1": "example-only handoff manifest",
+            "hfr.dataset_registry_entry.v1": "case-study trainer input wrapper",
             "hfr.improvement_ledger_gate.policy.v1": "demo input policy",
             "hfr.model_candidate.example.v1": "example-only legacy model manifest",
             "hfr.promotion_ledger_gate.policy.v1": "demo input policy",
             "hfr.reviewed_gate.policy.v1": "demo input policy",
+            "hfr.runtime_adapter_router_corpus_manifest.v1": "case-study corpus build receipt",
             "hfr.suite_gate.policy.v1": "demo input policy",
             "hfr.test_gate.v1": "synthetic failed-gate fixture",
             "hfr.training_gate.policy.v1": "demo input policy",
@@ -283,6 +293,18 @@ class SchemaRegistryTests(unittest.TestCase):
             ROOT / "examples" / "agentic_training" / "evidence_handoff" / "prompt_injection_good" / "artifact_lineage.json"
         )
         self.assertTrue(lineage["passed"], lineage["errors"])
+
+        campaign_validation = check_schema_file(
+            ROOT
+            / "examples"
+            / "case_studies"
+            / "runtime_adapter_router"
+            / "results"
+            / "qwen3_4b_browser_lora_v9"
+            / "campaign_validation.json",
+            "runtime_adapter_autoresearch_validation",
+        )
+        self.assertTrue(campaign_validation["passed"], campaign_validation["errors"])
 
         jsonl_contracts = {
             "review_item": ROOT / "examples" / "model_grader" / "review" / "review_items.jsonl",

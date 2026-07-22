@@ -1,0 +1,14 @@
+split,task_id,base_passed,adapter_passed,base_tool_calls_functional,adapter_tool_calls_functional,base_tool_calls_exact,adapter_tool_calls_exact,base_final_answer_exact,adapter_final_answer_exact
+development,rar-development-00018,False,True,False,True,False,False,False,True
+development,rar-development-00108,False,True,False,True,False,False,False,True
+development,rar-development-00198,False,True,False,True,False,False,False,True
+development,rar-development-00288,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00009,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00099,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00189,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00279,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00369,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00459,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00549,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00639,False,True,False,True,False,False,False,True
+sealed_final,rar-sealed_final-00729,False,True,False,True,False,False,False,True

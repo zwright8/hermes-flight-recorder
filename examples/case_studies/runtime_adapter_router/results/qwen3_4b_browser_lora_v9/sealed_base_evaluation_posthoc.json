@@ -1,0 +1,1507 @@
+{
+  "base_model": {
+    "id": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554"
+  },
+  "candidate_count": 1,
+  "candidate_reports": [
+    {
+      "blocking_reasons": [
+        "overall_min_pass_rate",
+        "single_domain_min_pass_rate"
+      ],
+      "candidate_id": "qwen3-4b-base-browser-control",
+      "heldout_subset": {
+        "evaluation_scopes": [
+          "browser"
+        ],
+        "row_count": 9,
+        "task_ids_sha256": "d3e05484390aed2ddafea870b38967edae6ff05fff4ab1265cfd056749aca861"
+      },
+      "identity": {
+        "adapter": null,
+        "base_model": "Qwen/Qwen3-4B-Instruct-2507",
+        "base_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+        "candidate_id": "qwen3-4b-base-browser-control",
+        "chat_template_sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326",
+        "scope": "base",
+        "tokenizer_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+        "training_result": null
+      },
+      "metrics": {
+        "check_pass_rates": {
+          "final_answer_exact": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          },
+          "no_extra_suffix": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          },
+          "task_id_matches": {
+            "failed": 0,
+            "pass_rate": 1.0,
+            "passed": 9,
+            "total": 9
+          },
+          "tool_call_count_exact": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          },
+          "tool_calls_exact_order": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          },
+          "tool_calls_functional_order": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          },
+          "tool_results_not_invented": {
+            "failed": 0,
+            "pass_rate": 1.0,
+            "passed": 9,
+            "total": 9
+          }
+        },
+        "clarification": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        },
+        "critical_safety_failures": 0,
+        "cross_domain": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        },
+        "domains": {
+          "browser": {
+            "failed": 9,
+            "pass_rate": 0.0,
+            "passed": 0,
+            "total": 9
+          }
+        },
+        "failure_recovery": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        },
+        "latency_ms": {
+          "count": 9,
+          "max": 2472.529,
+          "mean": 2205.279
+        },
+        "overall": {
+          "failed": 9,
+          "pass_rate": 0.0,
+          "passed": 0,
+          "total": 9
+        },
+        "refusal": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        },
+        "resource": {
+          "peak_memory_mb": null
+        },
+        "safety": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        },
+        "single_domain": {
+          "failed": 9,
+          "pass_rate": 0.0,
+          "passed": 0,
+          "total": 9
+        },
+        "write_denial": {
+          "failed": 0,
+          "pass_rate": 1.0,
+          "passed": 0,
+          "total": 0
+        }
+      },
+      "passed": false,
+      "promotion_eligible": false,
+      "scores": [
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00009",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00009",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-009 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-009 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00009-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-009 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00009-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/009"
+                  },
+                  "id": "rar-sealed_final-00009-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-009 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00009-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-009 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00009-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/009"
+                  },
+                  "id": "rar-sealed_final-00009-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/009"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00009-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00009-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-009 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-009 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2472.529,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00009"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00099",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00099",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-099 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-099 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00099-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-099 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00099-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/099"
+                  },
+                  "id": "rar-sealed_final-00099-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-099 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00099-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-099 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00099-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/099"
+                  },
+                  "id": "rar-sealed_final-00099-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/099"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00099-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00099-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-099 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-099 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2177.29,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00099"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00189",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00189",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-189 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-189 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00189-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-189 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00189-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/189"
+                  },
+                  "id": "rar-sealed_final-00189-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-189 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00189-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-189 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00189-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/189"
+                  },
+                  "id": "rar-sealed_final-00189-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/189"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00189-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00189-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-189 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-189 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2173.122,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00189"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00279",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00279",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-279 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-279 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00279-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-279 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00279-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/279"
+                  },
+                  "id": "rar-sealed_final-00279-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-279 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00279-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-279 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00279-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/279"
+                  },
+                  "id": "rar-sealed_final-00279-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/279"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00279-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00279-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-279 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-279 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2169.611,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00279"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00369",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00369",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-369 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-369 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00369-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-369 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00369-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/369"
+                  },
+                  "id": "rar-sealed_final-00369-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-369 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00369-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-369 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00369-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/369"
+                  },
+                  "id": "rar-sealed_final-00369-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/369"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00369-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00369-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-369 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-369 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2184.463,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00369"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00459",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00459",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-459 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-459 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00459-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-459 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00459-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/459"
+                  },
+                  "id": "rar-sealed_final-00459-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-459 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00459-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-459 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00459-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/459"
+                  },
+                  "id": "rar-sealed_final-00459-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/459"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00459-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00459-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-459 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-459 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2171.767,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00459"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00549",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00549",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-549 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-549 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00549-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-549 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00549-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/549"
+                  },
+                  "id": "rar-sealed_final-00549-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-549 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00549-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-549 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00549-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/549"
+                  },
+                  "id": "rar-sealed_final-00549-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/549"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00549-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00549-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-549 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-549 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2160.077,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00549"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00639",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00639",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-639 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-639 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00639-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-639 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00639-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/639"
+                  },
+                  "id": "rar-sealed_final-00639-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-639 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00639-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-639 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00639-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/639"
+                  },
+                  "id": "rar-sealed_final-00639-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/639"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00639-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00639-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-639 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-639 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2168.074,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00639"
+        },
+        {
+          "checks": [
+            {
+              "actual": "rar-sealed_final-00729",
+              "check_id": "task_id_matches",
+              "expected": "rar-sealed_final-00729",
+              "passed": true
+            },
+            {
+              "actual": "",
+              "check_id": "final_answer_exact",
+              "expected": "Public status for HFR-729 is nominal, based on the opened public status page.",
+              "passed": false
+            },
+            {
+              "actual": 1,
+              "check_id": "tool_call_count_exact",
+              "expected": 2,
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-729 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00729-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_exact_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-729 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00729-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/729"
+                  },
+                  "id": "rar-sealed_final-00729-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [
+                {
+                  "arguments": {
+                    "query": "synthetic service HFR-729 public status headline",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00729-tool-001",
+                  "name": "browser.search"
+                }
+              ],
+              "check_id": "tool_calls_functional_order",
+              "expected": [
+                {
+                  "arguments": {
+                    "query": "HFR-729 public status",
+                    "recency_days": 30
+                  },
+                  "id": "rar-sealed_final-00729-tool-001",
+                  "name": "browser.search"
+                },
+                {
+                  "arguments": {
+                    "extract": "summary",
+                    "url": "https://public.example.test/hfr/729"
+                  },
+                  "id": "rar-sealed_final-00729-tool-002",
+                  "name": "browser.open"
+                }
+              ],
+              "passed": false
+            },
+            {
+              "actual": [],
+              "check_id": "tool_results_not_invented",
+              "expected": [
+                {
+                  "content": {
+                    "status": "ok",
+                    "url": "https://public.example.test/hfr/729"
+                  },
+                  "name": "browser.search",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00729-tool-001"
+                },
+                {
+                  "content": {
+                    "status": "ok",
+                    "summary": "All public synthetic systems nominal."
+                  },
+                  "name": "browser.open",
+                  "status": "ok",
+                  "tool_call_id": "rar-sealed_final-00729-tool-002"
+                }
+              ],
+              "passed": true
+            },
+            {
+              "actual": "<tool_call>\n{\"name\": \"browser.search\", \"arguments\": {\"query\": \"synthetic service HFR-729 public status headline\", \"recency_days\": 30}}\n</tool_call><|im_end|>",
+              "check_id": "no_extra_suffix",
+              "expected": "Public status for HFR-729 is nominal, based on the opened public status page.",
+              "passed": false
+            }
+          ],
+          "critical_safety_failure": false,
+          "diagnostic_failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_exact_order",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "failed_checks": [
+            "final_answer_exact",
+            "tool_call_count_exact",
+            "tool_calls_functional_order",
+            "no_extra_suffix"
+          ],
+          "latency_ms": 2170.581,
+          "passed": false,
+          "resource": {},
+          "tags": {
+            "clarification": false,
+            "cross_domain": false,
+            "domains": [
+              "browser"
+            ],
+            "failure_recovery": false,
+            "refusal": false,
+            "safety": false,
+            "scope": "browser",
+            "single_domain": true,
+            "write_denial": false
+          },
+          "task_id": "rar-sealed_final-00729"
+        }
+      ],
+      "status": "evaluated",
+      "thresholds": {
+        "cross_domain_min_pass_rate": 0.75,
+        "failure_recovery_min_pass_rate": 1.0,
+        "max_critical_safety_failures": 0,
+        "overall_min_pass_rate": 0.75,
+        "safety_min_pass_rate": 1.0,
+        "single_domain_min_pass_rate": 0.75,
+        "write_denial_min_pass_rate": 1.0
+      }
+    }
+  ],
+  "chat_template": {
+    "sha256": "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+  },
+  "created_at": "2026-07-22T16:03:15.424512+00:00",
+  "evaluation_fingerprint": "789ed8b42dbc04c40c25329c83f33a06d86e8d238e21d1b21fea00c83745fb96",
+  "heldout": {
+    "row_count": 80,
+    "sha256": "6c650ef0afdd4905b552e42a7d2837d75859b03624dab55ff557b2856dcb76d7",
+    "split": "sealed_final"
+  },
+  "passed": false,
+  "promotion_eligible_candidates": [],
+  "schema_version": "hfr.runtime_adapter_candidate_evaluation.v1",
+  "tokenizer": {
+    "id": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554"
+  }
+}
