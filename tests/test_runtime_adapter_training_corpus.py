@@ -162,6 +162,7 @@ class RuntimeAdapterTrainingCorpusTests(unittest.TestCase):
             build = subprocess.run(
                 [
                     sys.executable,
+                    "-I",
                     "scripts/build_runtime_adapter_training_corpus.py",
                     "--output-dir",
                     str(output),
@@ -171,8 +172,9 @@ class RuntimeAdapterTrainingCorpusTests(unittest.TestCase):
                 cwd=ROOT,
                 text=True,
                 capture_output=True,
-                check=True,
+                check=False,
             )
+            self.assertEqual(build.returncode, 0, build.stderr)
             summary = json.loads(build.stdout)
             self.assertEqual(summary["total_rows"], 36)
             self.assertTrue(Path(summary["model_manifest"]).is_file())
