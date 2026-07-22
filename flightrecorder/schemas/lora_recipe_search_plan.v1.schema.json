@@ -15,7 +15,7 @@
       "items": {
         "enum": [
           "sft_learning_rate", "dpo_learning_rate", "batch_size", "gradient_accumulation_steps",
-          "max_steps", "max_length", "lora_r", "lora_alpha", "lora_dropout"
+          "max_steps", "max_length", "action_turn_repeats", "lora_r", "lora_alpha", "lora_dropout"
         ],
         "type": "string"
       },
@@ -86,6 +86,7 @@
         "data_seed": { "minimum": 0, "type": "integer" },
         "dpo_learning_rate": { "maximum": 0.01, "minimum": 0.0000001, "type": "number" },
         "gradient_accumulation_steps": { "maximum": 1024, "minimum": 1, "type": "integer" },
+        "action_turn_repeats": { "maximum": 32, "minimum": 0, "type": "integer" },
         "lora_alpha": { "maximum": 1024, "minimum": 1, "type": "integer" },
         "lora_dropout": { "exclusiveMaximum": 1, "minimum": 0, "type": "number" },
         "lora_r": { "enum": [4, 8, 16, 32, 64, 128], "type": "integer" },

@@ -234,6 +234,100 @@ def prepare_sft_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return prepared
 
 
+def prepare_action_turn_sft_rows(
+    rows: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Project reviewed trajectories to their first native tool-call turn.
+
+    Full action-SFT trajectories remain in the training mixture. These derived
+    rows let a governed recipe give additional weight to exact tool names and
+    arguments without copying, editing, or admitting any new source records.
+    No-tool safety responses are deliberately excluded from the projection;
+    they retain their normal full-trajectory weight.
+    """
+
+    prepared: list[dict[str, Any]] = []
+    for row in rows:
+        messages = row.get("messages")
+        if not isinstance(messages, list):
+            continue
+        for index, message in enumerate(messages):
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            tool_calls = message.get("tool_calls")
+            if not isinstance(tool_calls, list) or not tool_calls:
+                break
+            prepared.append(
+                {
+                    "messages": messages[: index + 1],
+                    "tools": row.get("tools") if isinstance(row.get("tools"), list) else [],
+                }
+            )
+            break
+    return prepared
+
+
+def prepare_action_sft_curriculum(
+    rows: Iterable[dict[str, Any]], *, action_turn_repeats: int
+) -> list[dict[str, Any]]:
+    """Return full trajectories plus repeated first-action projections."""
+
+    source_rows = list(rows)
+    full_rows = prepare_sft_rows(source_rows)
+    action_rows = prepare_action_turn_sft_rows(source_rows)
+    return full_rows + action_rows * action_turn_repeats
+
+
+def supervised_token_coverage(
+    tokenized_rows: Iterable[dict[str, Any]], *, max_length: int
+) -> dict[str, Any]:
+    """Measure assistant-label visibility after the configured truncation.
+
+    TRL constructs assistant masks before its collator applies ``max_length``.
+    Without this check a long prompt can retain a valid mask in preprocessing
+    while every supervised label is truncated away at training time.
+    """
+
+    if max_length <= 0:
+        raise ValueError("max_length must be positive")
+    row_count = 0
+    truncated_rows = 0
+    zero_visible_rows: list[int] = []
+    partial_visible_rows: list[int] = []
+    visible_counts: list[int] = []
+    total_counts: list[int] = []
+    for index, row in enumerate(tokenized_rows):
+        labels = row.get("labels")
+        if not isinstance(labels, (list, tuple)):
+            raise ValueError(f"tokenized row {index} has no labels sequence")
+        row_count += 1
+        total = sum(1 for label in labels if label != -100)
+        visible = sum(1 for label in labels[:max_length] if label != -100)
+        total_counts.append(total)
+        visible_counts.append(visible)
+        if len(labels) > max_length:
+            truncated_rows += 1
+        if visible == 0:
+            zero_visible_rows.append(index)
+        elif visible < total:
+            partial_visible_rows.append(index)
+    return {
+        "row_count": row_count,
+        "max_length": max_length,
+        "truncated_row_count": truncated_rows,
+        "zero_visible_row_count": len(zero_visible_rows),
+        "zero_visible_row_indices": zero_visible_rows,
+        "partial_visible_row_count": len(partial_visible_rows),
+        "partial_visible_row_indices": partial_visible_rows,
+        "fully_visible_row_count": row_count - len(partial_visible_rows) - len(zero_visible_rows),
+        "min_visible_supervised_tokens": min(visible_counts) if visible_counts else 0,
+        "max_visible_supervised_tokens": max(visible_counts) if visible_counts else 0,
+        "min_total_supervised_tokens": min(total_counts) if total_counts else 0,
+        "max_total_supervised_tokens": max(total_counts) if total_counts else 0,
+        "passed": row_count > 0 and not zero_visible_rows,
+    }
+
+
 def prepare_dpo_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     prepared: list[dict[str, Any]] = []
     for row in rows:
@@ -1506,7 +1600,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     action_sft_source = raw["fr_action_sft"]
     dpo_source = raw["fr_dpo"]
     sft_rows = prepare_sft_rows(sft_source)
-    action_sft_rows = prepare_sft_rows(action_sft_source)
+    action_sft_rows = prepare_action_sft_curriculum(
+        action_sft_source, action_turn_repeats=args.action_turn_repeats
+    )
     dpo_rows = prepare_dpo_rows(dpo_source)
     reward_model_rows = raw["fr_reward_model"]
     step_reward_rows = raw["fr_step_rewards"]
@@ -1535,7 +1631,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     )
     if args.limit:
         sft_rows = sft_rows[: args.limit]
-        action_sft_rows = action_sft_rows[: args.limit]
+        action_sft_rows = prepare_action_sft_curriculum(
+            action_sft_source[: args.limit],
+            action_turn_repeats=args.action_turn_repeats,
+        )
         dpo_rows = dpo_rows[: args.limit]
         reward_model_rows = reward_model_rows[: args.limit]
         step_reward_rows = step_reward_rows[: args.limit]
@@ -1705,6 +1804,14 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "reward_model": len(reward_model_rows),
             "step_rewards": len(step_reward_rows),
         },
+        "action_turn_curriculum": {
+            "extra_repeats": args.action_turn_repeats,
+            "eligible_first_action_rows": len(
+                prepare_action_turn_sft_rows(action_sft_source)
+            ),
+            "source_rows_unchanged": True,
+            "no_tool_safety_rows_repeated": False,
+        },
         "full_prepared_counts": full_prepared_counts,
         "hyperparameters": {
             "sft_epochs": args.sft_epochs,
@@ -1720,6 +1827,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "lora_alpha": args.lora_alpha,
             "lora_dropout": args.lora_dropout,
             "assistant_only_loss": not args.all_message_loss,
+            "action_turn_repeats": args.action_turn_repeats,
             "seed": args.seed,
             "data_seed": args.data_seed,
             "save_steps": args.save_steps,
@@ -2032,6 +2140,13 @@ def _add_hyperparameter_checks(checks: list[dict[str, Any]], args: argparse.Name
     add_check(checks, "limit_non_negative", args.limit >= 0, "row limit is non-negative", actual={"limit": args.limit})
     add_check(
         checks,
+        "action_turn_repeats_bounded",
+        0 <= args.action_turn_repeats <= 32,
+        "first-action curriculum repeats are in [0, 32]",
+        actual={"action_turn_repeats": args.action_turn_repeats},
+    )
+    add_check(
+        checks,
         "task_family_values_non_empty",
         all(str(value).strip() for value in args.task_family),
         "task-family selectors are non-empty exact values",
@@ -2251,12 +2366,18 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
     _, scoped_raw = load_task_scoped_training_rows(paths, args.task_family)
     trace_sft_rows = prepare_sft_rows(scoped_raw["trace_sft"])
     fr_sft_rows = prepare_sft_rows(scoped_raw["fr_sft"] + scoped_raw["fr_action_sft"])
-    fr_action_sft_rows = prepare_sft_rows(scoped_raw["fr_action_sft"])
+    fr_action_source = scoped_raw["fr_action_sft"]
+    fr_action_sft_rows = prepare_action_sft_curriculum(
+        fr_action_source, action_turn_repeats=args.action_turn_repeats
+    )
     fr_dpo_rows = prepare_dpo_rows(scoped_raw["fr_dpo"])
     if args.limit:
         trace_sft_rows = trace_sft_rows[: args.limit]
         fr_sft_rows = fr_sft_rows[: args.limit]
-        fr_action_sft_rows = fr_action_sft_rows[: args.limit]
+        fr_action_sft_rows = prepare_action_sft_curriculum(
+            fr_action_source[: args.limit],
+            action_turn_repeats=args.action_turn_repeats,
+        )
         fr_dpo_rows = fr_dpo_rows[: args.limit]
 
     device_type, dtype = _select_training_device(torch, args.device)
@@ -2384,6 +2505,15 @@ def run_training(args: argparse.Namespace, plan: dict[str, Any], plan_path: Path
             processing_class=tokenizer,
             callbacks=trainer_callbacks(),
         )
+        coverage = supervised_token_coverage(
+            trainer.train_dataset, max_length=args.max_length
+        )
+        result["sft_supervision_coverage"] = coverage
+        if not coverage["passed"]:
+            raise SystemExit(
+                "SFT supervision coverage failed after max-length truncation: "
+                f"{coverage['zero_visible_row_count']} rows have zero visible assistant labels"
+            )
         resume_checkpoint = str(args.resume_from_checkpoint) if args.resume_phase == "sft" else None
         train_output = trainer.train(resume_from_checkpoint=resume_checkpoint)
         trainer.save_model(str(out))
@@ -3167,6 +3297,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Additional Python module name to require during --preflight-only checks; repeatable for tests or wrapper-specific trainers",
     )
     parser.add_argument("--limit", type=int, default=0, help="Limit rows for smoke tests")
+    parser.add_argument(
+        "--action-turn-repeats",
+        type=int,
+        default=0,
+        help=(
+            "Add this many derived copies of each reviewed first assistant tool-call turn; "
+            "full trajectories and registered source bytes remain unchanged"
+        ),
+    )
     parser.add_argument("--sft-epochs", type=float, default=3.0)
     parser.add_argument("--dpo-epochs", type=float, default=3.0)
     parser.add_argument("--sft-learning-rate", type=float, default=1e-4)

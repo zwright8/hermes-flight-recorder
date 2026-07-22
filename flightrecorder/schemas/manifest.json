@@ -1372,7 +1372,7 @@
     {
       "artifact": "runtime_adapter_candidate_evaluation",
       "artifact_schema_version": "hfr.runtime_adapter_candidate_evaluation.v1",
-      "description": "Sealed independent evaluation report for runtime adapter candidates with fail-closed promotion eligibility.",
+      "description": "Development or sealed-final independent evaluation report for runtime adapter candidates with fail-closed promotion eligibility.",
       "filename": "runtime_adapter_candidate_evaluation.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/runtime_adapter_candidate_evaluation.v1.schema.json",
       "name": "runtime_adapter_candidate_evaluation"

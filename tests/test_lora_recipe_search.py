@@ -50,6 +50,18 @@ class _Evaluator:
         }
 
 
+class _ExplodingProposer:
+    def propose(self, state):
+        del state
+        raise AssertionError("proposer should not be called")
+
+
+class _ExplodingEvaluator:
+    def evaluate(self, recipe, *, trial_id, development_suite_path):
+        del recipe, trial_id, development_suite_path
+        raise AssertionError("evaluator should not be called")
+
+
 class LoraRecipeSearchTests(unittest.TestCase):
     def test_demo_replays_search_and_promotion_boundaries(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -91,6 +103,52 @@ class LoraRecipeSearchTests(unittest.TestCase):
 
             with self.assertRaisesRegex(LoraRecipeSearchError, "held-out tags"):
                 _build_plan(root, suite_path)
+
+    def test_action_turn_repeat_is_additive_bounded_recipe_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            legacy_recipe = _recipe()
+            plan = build_search_plan(
+                campaign_id="action-focus",
+                objective="Weight exact first action turns.",
+                development_suite_path=suite_path,
+                base_recipe=legacy_recipe,
+                mutable_fields=["action_turn_repeats"],
+                budget={
+                    "max_trials": 2,
+                    "max_cost_usd": 0.1,
+                    "max_duration_seconds": 10.0,
+                    "per_trial_cost_ceiling_usd": 0.02,
+                    "per_trial_duration_ceiling_seconds": 2.0,
+                },
+                out_path=root / "search_plan.json",
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+
+            self.assertEqual(plan["base_recipe"]["action_turn_repeats"], 0)
+            plan_path = root / "search_plan.json"
+            write_json(plan_path, plan)
+            self.assertTrue(check_schema_file(plan_path)["passed"])
+
+            invalid = dict(legacy_recipe)
+            invalid["action_turn_repeats"] = 33
+            with self.assertRaisesRegex(LoraRecipeSearchError, "action_turn_repeats"):
+                build_search_plan(
+                    campaign_id="action-focus-invalid",
+                    objective="Reject an unbounded curriculum.",
+                    development_suite_path=suite_path,
+                    base_recipe=invalid,
+                    mutable_fields=["action_turn_repeats"],
+                    budget={
+                        "max_trials": 1,
+                        "max_cost_usd": 0.1,
+                        "max_duration_seconds": 10.0,
+                        "per_trial_cost_ceiling_usd": 0.02,
+                        "per_trial_duration_ceiling_seconds": 2.0,
+                    },
+                    out_path=root / "invalid_plan.json",
+                )
 
     def test_unauthorized_mutation_is_blocked_without_evaluation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +244,191 @@ class LoraRecipeSearchTests(unittest.TestCase):
 
             self.assertFalse(validation["passed"])
             self.assertIn("decision does not replay", "\n".join(validation["errors"]))
+
+    def test_resume_continues_from_valid_trial_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            plan_path = _build_plan(root, suite_path)
+            first_proposal = {
+                "proposal_id": "rank-32",
+                "hypothesis": "Increase adapter rank.",
+                "mutations": {"lora_r": 32},
+                "estimated_cost_usd": 0.01,
+                "estimated_duration_seconds": 1.0,
+            }
+            next_proposal = {
+                "proposal_id": "dropout-10",
+                "hypothesis": "Increase dropout after the stronger rank incumbent.",
+                "mutations": {"lora_dropout": 0.1},
+                "estimated_cost_usd": 0.01,
+                "estimated_duration_seconds": 1.0,
+            }
+            result_path = root / "search_result.json"
+            run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer([first_proposal]),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+            result_path.unlink()
+            evaluator = _Evaluator()
+
+            result = run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer([first_proposal, next_proposal]),
+                evaluator=evaluator,
+                created_at="2026-07-20T00:01:00+00:00",
+                resume=True,
+            )
+
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["trial_count"], 3)
+            self.assertTrue((root / "trial-002-dropout-10.json").is_file())
+            self.assertEqual(evaluator.calls, [("trial-002-dropout-10", suite_path)])
+            self.assertTrue(validate_search_result(result_path)["passed"])
+
+    def test_resume_reuses_completed_valid_search_result_without_evaluator_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            plan_path = _build_plan(root, suite_path)
+            result_path = root / "search_result.json"
+            expected = run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer([]),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+
+            resumed = run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_ExplodingProposer(),
+                evaluator=_ExplodingEvaluator(),
+                created_at="2026-07-20T00:01:00+00:00",
+                resume=True,
+            )
+
+            self.assertEqual(resumed, expected)
+
+    def test_resume_recovers_a_valid_failed_proposer_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            plan_path = _build_plan(root, suite_path)
+            result_path = root / "search_result.json"
+            failed = run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_ExplodingProposer(),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+            self.assertFalse(failed["passed"])
+            self.assertEqual(failed["stop_reason"], "proposer_failed")
+
+            proposal = {
+                "proposal_id": "rank-32",
+                "hypothesis": "Increase adapter rank.",
+                "mutations": {"lora_r": 32},
+                "estimated_cost_usd": 0.01,
+                "estimated_duration_seconds": 1.0,
+            }
+            resumed = run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer([proposal]),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:01:00+00:00",
+                resume=True,
+            )
+
+            self.assertTrue(resumed["passed"])
+            self.assertEqual(resumed["trial_count"], 2)
+            self.assertTrue(validate_search_result(result_path)["passed"])
+
+    def test_resume_rejects_gapped_trial_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            plan_path = _build_plan(root, suite_path)
+            result_path = root / "search_result.json"
+            run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer(
+                    [
+                        {
+                            "proposal_id": "rank-32",
+                            "hypothesis": "Increase adapter rank.",
+                            "mutations": {"lora_r": 32},
+                            "estimated_cost_usd": 0.01,
+                            "estimated_duration_seconds": 1.0,
+                        },
+                        {
+                            "proposal_id": "dropout-10",
+                            "hypothesis": "Increase dropout.",
+                            "mutations": {"lora_dropout": 0.1},
+                            "estimated_cost_usd": 0.01,
+                            "estimated_duration_seconds": 1.0,
+                        },
+                    ]
+                ),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+            result_path.unlink()
+            (root / "trial-001-rank-32.json").unlink()
+
+            with self.assertRaisesRegex(LoraRecipeSearchError, "gaps"):
+                run_search(
+                    plan_path=plan_path,
+                    out_path=result_path,
+                    proposer=_QueueProposer([]),
+                    evaluator=_ExplodingEvaluator(),
+                    created_at="2026-07-20T00:01:00+00:00",
+                    resume=True,
+                )
+
+    def test_resume_rejects_tampered_or_plan_mismatched_trial_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite_path = _write_development_suite(root)
+            plan_path = _build_plan(root, suite_path)
+            result_path = root / "search_result.json"
+            first_proposal = {
+                "proposal_id": "rank-32",
+                "hypothesis": "Increase adapter rank.",
+                "mutations": {"lora_r": 32},
+                "estimated_cost_usd": 0.01,
+                "estimated_duration_seconds": 1.0,
+            }
+            run_search(
+                plan_path=plan_path,
+                out_path=result_path,
+                proposer=_QueueProposer([first_proposal]),
+                evaluator=_Evaluator(),
+                created_at="2026-07-20T00:00:00+00:00",
+            )
+            result_path.unlink()
+            trial_path = root / "trial-001-rank-32.json"
+            trial = json.loads(trial_path.read_text(encoding="utf-8"))
+            trial["source_plan"]["sha256"] = "0" * 64
+            write_json(trial_path, trial)
+
+            with self.assertRaisesRegex(LoraRecipeSearchError, "source plan fingerprint"):
+                run_search(
+                    plan_path=plan_path,
+                    out_path=result_path,
+                    proposer=_QueueProposer([first_proposal]),
+                    evaluator=_ExplodingEvaluator(),
+                    created_at="2026-07-20T00:01:00+00:00",
+                    resume=True,
+                )
 
 
 def _build_plan(root: Path, suite_path: Path) -> Path:

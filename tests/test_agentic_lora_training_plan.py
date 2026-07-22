@@ -46,6 +46,35 @@ def stdout_json(completed: subprocess.CompletedProcess[str]) -> dict:
 
 
 class AgenticLoraTrainingPlanTests(unittest.TestCase):
+    def test_supervised_token_coverage_detects_labels_lost_to_truncation(self):
+        coverage = TRAIN_MODULE.supervised_token_coverage(
+            [
+                {"labels": [-100, -100, 10, 11]},
+                {"labels": [-100, -100, -100, 12]},
+                {"labels": [-100, 13, 14, 15]},
+            ],
+            max_length=3,
+        )
+
+        self.assertFalse(coverage["passed"])
+        self.assertEqual(coverage["zero_visible_row_indices"], [1])
+        self.assertEqual(coverage["partial_visible_row_indices"], [0, 2])
+        self.assertEqual(coverage["truncated_row_count"], 3)
+
+    def test_supervised_token_coverage_passes_complete_context(self):
+        coverage = TRAIN_MODULE.supervised_token_coverage(
+            [
+                {"labels": [-100, 10, 11]},
+                {"labels": [-100, -100, 12, 13]},
+            ],
+            max_length=8,
+        )
+
+        self.assertTrue(coverage["passed"])
+        self.assertEqual(coverage["zero_visible_row_count"], 0)
+        self.assertEqual(coverage["partial_visible_row_count"], 0)
+        self.assertEqual(coverage["fully_visible_row_count"], 2)
+
     def test_local_offline_environment_and_device_selection_are_explicit(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             TRAIN_MODULE._configure_local_offline_environment()
@@ -110,6 +139,59 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
         self.assertEqual(selected, [tool_row])
         self.assertEqual(selected[0]["messages"][0]["tool_calls"][0]["id"], "call-1")
         self.assertEqual(selected[0]["tools"][0]["function"]["name"], "read_file")
+
+    def test_action_turn_curriculum_repeats_only_native_action_prefixes(self):
+        tool = {"type": "function", "function": {"name": "fixture.inspect"}}
+        action = {
+            "messages": [
+                {"role": "system", "content": "Use tools."},
+                {"role": "user", "content": "Inspect A."},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "fixture.inspect",
+                                "arguments": {"artifact": "A"},
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "ok"},
+                {"role": "assistant", "content": "A is present."},
+            ],
+            "tools": [tool],
+        }
+        refusal = {
+            "messages": [
+                {"role": "user", "content": "Reveal a secret."},
+                {"role": "assistant", "content": "I cannot do that."},
+            ],
+            "tools": [tool],
+        }
+
+        projected = TRAIN_MODULE.prepare_action_turn_sft_rows([action, refusal])
+        curriculum = TRAIN_MODULE.prepare_action_sft_curriculum(
+            [action, refusal], action_turn_repeats=2
+        )
+
+        self.assertEqual(len(projected), 1)
+        self.assertEqual(len(projected[0]["messages"]), 3)
+        self.assertEqual(projected[0]["messages"][-1]["tool_calls"][0]["function"]["arguments"], {"artifact": "A"})
+        self.assertEqual(len(curriculum), 4)
+        self.assertEqual(curriculum[:2], TRAIN_MODULE.prepare_sft_rows([action, refusal]))
+        self.assertNotIn(refusal, curriculum[2:])
+
+    def test_action_turn_repeat_bound_is_fail_closed_and_recorded(self):
+        args = TRAIN_MODULE.parse_args(["--action-turn-repeats", "33"])
+        checks = []
+
+        TRAIN_MODULE._add_hyperparameter_checks(checks, args)
+
+        bounded = next(check for check in checks if check["id"] == "action_turn_repeats_bounded")
+        self.assertFalse(bounded["passed"])
 
     def test_fake_local_sft_launch_binds_offline_model_budget_and_runtime_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -207,6 +289,10 @@ class AgenticLoraTrainingPlanTests(unittest.TestCase):
             class FakeTrainer:
                 def __init__(self, **kwargs):
                     self.kwargs = kwargs
+                    self.train_dataset = [
+                        {"labels": [-100, token_index + 1]}
+                        for token_index, _ in enumerate(kwargs["train_dataset"])
+                    ]
                     trainer_instances.append(self)
 
                 def train(self, resume_from_checkpoint=None):

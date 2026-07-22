@@ -33,6 +33,7 @@ RECIPE_FIELDS = (
     "gradient_accumulation_steps",
     "max_steps",
     "max_length",
+    "action_turn_repeats",
     "lora_r",
     "lora_alpha",
     "lora_dropout",
@@ -47,6 +48,7 @@ MUTABLE_RECIPE_FIELDS = frozenset(
         "gradient_accumulation_steps",
         "max_steps",
         "max_length",
+        "action_turn_repeats",
         "lora_r",
         "lora_alpha",
         "lora_dropout",
@@ -167,6 +169,7 @@ def run_search(
     proposer: RecipeProposer,
     evaluator: RecipeEvaluator,
     created_at: str | None = None,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Run a baseline-first, keep-or-discard search under the immutable plan."""
 
@@ -186,11 +189,18 @@ def run_search(
 
     trial_dir = result_root
     instant = created_at or _utc_now()
-    trials: list[dict[str, Any]] = []
-    trial_refs: list[dict[str, Any]] = []
-    spent_cost = 0.0
-    spent_duration = 0.0
-    incumbent: dict[str, Any] | None = None
+    if resume and result_path.exists():
+        existing_validation = validate_search_result(result_path)
+        if not existing_validation["passed"]:
+            raise LoraRecipeSearchError(
+                "existing search result cannot be resumed: " + "; ".join(existing_validation["errors"])
+            )
+        existing_result = _read_object(result_path, "search result")
+        if existing_result["source_plan"]["sha256"] != plan_ref["sha256"]:
+            raise LoraRecipeSearchError("existing search result is bound to a different search plan")
+        if existing_result.get("passed") is True:
+            return existing_result
+
     terminal_error = ""
     stop_reason = "proposer_finished"
 
@@ -202,7 +212,44 @@ def run_search(
         "estimated_duration_seconds": plan["budget"]["per_trial_duration_ceiling_seconds"],
     }
 
+    trials: list[dict[str, Any]] = []
+    trial_refs: list[dict[str, Any]] = []
+    spent_cost = 0.0
+    spent_duration = 0.0
+    incumbent: dict[str, Any] | None = None
     proposal: dict[str, Any] | None = baseline
+    if resume:
+        resumed = _resume_search_state(
+            plan=plan,
+            plan_ref=plan_ref,
+            result_root=result_root,
+            proposer=proposer,
+        )
+        trials = resumed["trials"]
+        trial_refs = resumed["trial_refs"]
+        spent_cost = resumed["spent_cost"]
+        spent_duration = resumed["spent_duration"]
+        incumbent = resumed["incumbent"]
+        terminal_error = resumed["terminal_error"]
+        stop_reason = resumed["stop_reason"]
+        proposal = None
+        if trials and not terminal_error and stop_reason == "proposer_finished":
+            if len(trials) >= plan["budget"]["max_trials"]:
+                stop_reason = "max_trials_reached"
+            else:
+                try:
+                    proposal = proposer.propose(_search_state(plan, trials, incumbent, spent_cost, spent_duration))
+                except Exception as exc:
+                    terminal_error = redact_text(f"proposer failed: {exc}")
+                    stop_reason = "proposer_failed"
+                if proposal is not None and not isinstance(proposal, dict):
+                    terminal_error = "proposer returned a non-object proposal"
+                    stop_reason = "proposer_failed"
+                    proposal = None
+                if proposal is None and not terminal_error:
+                    stop_reason = "proposer_finished"
+        elif not trials:
+            proposal = baseline
     while proposal is not None:
         if len(trials) >= plan["budget"]["max_trials"]:
             stop_reason = "max_trials_reached"
@@ -348,10 +395,279 @@ def run_search(
             stop_reason = "proposer_failed"
             break
 
+    result = _build_search_result(
+        plan=plan,
+        plan_ref=plan_ref,
+        trials=trials,
+        trial_refs=trial_refs,
+        spent_cost=spent_cost,
+        spent_duration=spent_duration,
+        incumbent=incumbent,
+        terminal_error=terminal_error,
+        stop_reason=stop_reason,
+        created_at=_offset_timestamp(instant, len(trials)),
+    )
+    schema = check_schema_contract(result, name_or_id="lora_recipe_search_result")
+    if not schema["passed"]:
+        raise LoraRecipeSearchError("search result schema violation: " + "; ".join(schema["errors"]))
+    write_json(result_path, result)
+    return result
+
+
+def _resume_search_state(
+    *,
+    plan: dict[str, Any],
+    plan_ref: dict[str, Any],
+    result_root: Path,
+    proposer: RecipeProposer,
+) -> dict[str, Any]:
+    trial_paths = _existing_trial_paths(result_root)
+    if not trial_paths:
+        return {
+            "trials": [],
+            "trial_refs": [],
+            "spent_cost": 0.0,
+            "spent_duration": 0.0,
+            "incumbent": None,
+            "terminal_error": "",
+            "stop_reason": "proposer_finished",
+        }
+
+    errors: list[str] = []
+    trials: list[dict[str, Any]] = []
+    trial_refs: list[dict[str, Any]] = []
+    incumbent: dict[str, Any] | None = None
+    spent_cost = 0.0
+    spent_duration = 0.0
+    terminal_error = ""
+    stop_reason = "proposer_finished"
+
+    for expected_index, trial_path in enumerate(trial_paths):
+        trial = _read_object(trial_path, "trial receipt")
+        trials.append(trial)
+        trial_schema = check_schema_contract(trial, name_or_id="lora_recipe_trial")
+        errors.extend(f"trial-{expected_index:03d}: {error}" for error in trial_schema["errors"])
+        if errors:
+            continue
+
+        if trial.get("trial_index") != expected_index:
+            errors.append(f"trial-{expected_index:03d} has a non-contiguous trial_index")
+        if trial.get("campaign_id") != plan["campaign_id"]:
+            errors.append(f"trial-{expected_index:03d} campaign_id does not match plan")
+        if trial.get("source_plan", {}).get("sha256") != plan_ref["sha256"]:
+            errors.append(f"trial-{expected_index:03d} source plan fingerprint does not match plan")
+        if trial.get("development_suite", {}).get("sha256") != plan["development_suite"]["sha256"]:
+            errors.append(f"trial-{expected_index:03d} development suite fingerprint does not match plan")
+        proposal = _resume_expected_proposal(
+            proposer=proposer,
+            plan=plan,
+            trials=trials[:-1],
+            incumbent=incumbent,
+            spent_cost=spent_cost,
+            spent_duration=spent_duration,
+            expected_index=expected_index,
+        )
+        recorded_proposal = trial.get("proposal") if isinstance(trial.get("proposal"), dict) else {}
+        expected_proposal_record = _proposal_record(proposal, expected_index=expected_index)
+        expected_proposal_errors = _proposal_errors(proposal, plan, is_baseline=expected_index == 0)
+
+        expected_trial_id = f"trial-{expected_index:03d}-{_slug(expected_proposal_record['proposal_id'])}"
+        if trial.get("trial_id") != expected_trial_id:
+            errors.append(f"trial-{expected_index:03d} trial_id does not match proposal id")
+        if trial_path.name != f"{expected_trial_id}.json":
+            errors.append(f"trial-{expected_index:03d} filename does not match trial_id")
+
+        parent_recipe = copy.deepcopy(
+            plan["base_recipe"] if expected_index == 0 else (incumbent or {}).get("recipe", plan["base_recipe"])
+        )
+        expected_recipe = copy.deepcopy(parent_recipe)
+        if not expected_proposal_errors:
+            expected_recipe.update(copy.deepcopy(expected_proposal_record["mutations"]))
+            try:
+                expected_recipe = _validated_recipe(expected_recipe)
+            except LoraRecipeSearchError as exc:
+                expected_proposal_errors.append(str(exc))
+                expected_recipe = parent_recipe
+        estimate_cost = _number(proposal.get("estimated_cost_usd") if isinstance(proposal, dict) else None)
+        estimate_duration = _number(
+            proposal.get("estimated_duration_seconds") if isinstance(proposal, dict) else None
+        )
+        if not expected_proposal_errors and (
+            spent_cost + estimate_cost > plan["budget"]["max_cost_usd"]
+            or spent_duration + estimate_duration > plan["budget"]["max_duration_seconds"]
+        ):
+            expected_proposal_errors.append("proposal estimate exceeds remaining campaign budget")
+            stop_reason = "estimated_budget_exhausted"
+        expected_proposal_record["validation_errors"] = expected_proposal_errors
+        if recorded_proposal != expected_proposal_record:
+            errors.append(f"trial-{expected_index:03d} proposal does not match the deterministic proposer replay")
+        if trial.get("recipe") != expected_recipe:
+            errors.append(f"trial-{expected_index:03d} recipe does not replay from parent plus mutations")
+        if _canonical_sha256(trial.get("recipe")) != trial.get("recipe_sha256"):
+            errors.append(f"trial-{expected_index:03d} recipe_sha256 does not match recipe")
+        if expected_index == 0:
+            if trial.get("parent_trial_id") is not None:
+                errors.append("baseline trial must not have a parent")
+        elif trial.get("parent_trial_id") != (incumbent or {}).get("trial_id"):
+            errors.append(f"trial-{expected_index:03d} parent does not match the active incumbent")
+        if trial.get("execution_boundary") != {
+            "development_only": True,
+            "heldout_accessed": False,
+            "promotion_applied": False,
+        }:
+            errors.append(f"trial-{expected_index:03d} violates the development-only boundary")
+
+        evaluation = trial.get("evaluation") if isinstance(trial.get("evaluation"), dict) else {}
+        expected_status = "blocked" if expected_proposal_errors else str(trial.get("status") or "")
+        trial_cost = _number(evaluation.get("cost_usd"))
+        trial_duration = _number(evaluation.get("duration_seconds"))
+        budget_violation = (
+            trial_cost > plan["budget"]["per_trial_cost_ceiling_usd"]
+            or trial_duration > plan["budget"]["per_trial_duration_ceiling_seconds"]
+            or spent_cost + trial_cost > plan["budget"]["max_cost_usd"]
+            or spent_duration + trial_duration > plan["budget"]["max_duration_seconds"]
+        )
+        if budget_violation:
+            expected_status = "budget_violation"
+            terminal_error = "evaluator reported usage outside the immutable budget"
+            stop_reason = "actual_budget_violation"
+        if expected_status == "blocked":
+            if trial.get("status") != "blocked":
+                errors.append(f"trial-{expected_index:03d} status does not match replayed proposal validation")
+        elif budget_violation != (trial.get("status") == "budget_violation"):
+            errors.append(f"trial-{expected_index:03d} budget-violation status does not match reported usage")
+
+        expected_decision = _trial_decision(
+            plan=plan,
+            status=str(trial.get("status") or ""),
+            evaluation=evaluation,
+            incumbent=incumbent,
+            is_baseline=expected_index == 0,
+            proposal_errors=expected_proposal_errors,
+        )
+        if expected_decision["outcome"] in {"baseline", "keep"}:
+            expected_decision["incumbent_trial_id_after"] = trial.get("trial_id")
+        if trial.get("decision") != expected_decision:
+            errors.append(f"trial-{expected_index:03d} decision does not replay from policy and metrics")
+
+        if trial.get("decision", {}).get("outcome") in {"baseline", "keep"}:
+            incumbent = {
+                "trial_id": trial["trial_id"],
+                "recipe": copy.deepcopy(trial["recipe"]),
+                "recipe_sha256": trial["recipe_sha256"],
+                "candidate_identity_sha256": trial["evaluation"]["candidate_identity_sha256"],
+                "development_metric": trial["evaluation"]["primary_metric"],
+            }
+        spent_cost = round(spent_cost + trial_cost, 8)
+        spent_duration = round(spent_duration + trial_duration, 6)
+        if not terminal_error and expected_index == 0 and trial.get("decision", {}).get("outcome") != "baseline":
+            terminal_error = "baseline evaluation did not produce an admissible incumbent"
+            stop_reason = "baseline_failed"
+        receipt_ref = _artifact_ref(trial_path, result_root, expected_schema=TRIAL_SCHEMA_VERSION)
+        receipt_ref.update(
+            {
+                "trial_index": expected_index,
+                "trial_id": trial["trial_id"],
+                "status": trial["status"],
+                "outcome": trial["decision"]["outcome"],
+            }
+        )
+        trial_refs.append(receipt_ref)
+        if terminal_error or stop_reason == "estimated_budget_exhausted":
+            break
+
+    if errors:
+        raise LoraRecipeSearchError("existing trial receipts cannot be resumed: " + "; ".join(errors))
+    if len(trials) != len(trial_paths):
+        raise LoraRecipeSearchError("existing trial receipts contain entries after a terminal receipt")
+    return {
+        "trials": trials,
+        "trial_refs": trial_refs,
+        "spent_cost": spent_cost,
+        "spent_duration": spent_duration,
+        "incumbent": incumbent,
+        "terminal_error": terminal_error,
+        "stop_reason": stop_reason,
+    }
+
+
+def _existing_trial_paths(result_root: Path) -> list[Path]:
+    indexed: dict[int, Path] = {}
+    errors: list[str] = []
+    for path in sorted(result_root.glob("trial-*.json")):
+        parts = path.name.split("-", 2)
+        if len(parts) < 3 or not parts[1].isdigit():
+            errors.append(f"trial receipt has an unsafe filename: {path.name}")
+            continue
+        index = int(parts[1])
+        if index in indexed:
+            errors.append(f"multiple trial receipts claim index {index}")
+        indexed[index] = path
+    if errors:
+        raise LoraRecipeSearchError("existing trial receipts cannot be resumed: " + "; ".join(errors))
+    if not indexed:
+        return []
+    expected = set(range(max(indexed) + 1))
+    missing = sorted(expected - set(indexed))
+    if missing:
+        raise LoraRecipeSearchError(f"existing trial receipts have gaps: {missing!r}")
+    return [indexed[index] for index in sorted(indexed)]
+
+
+def _resume_expected_proposal(
+    *,
+    proposer: RecipeProposer,
+    plan: dict[str, Any],
+    trials: list[dict[str, Any]],
+    incumbent: dict[str, Any] | None,
+    spent_cost: float,
+    spent_duration: float,
+    expected_index: int,
+) -> dict[str, Any]:
+    if expected_index == 0:
+        return {
+            "proposal_id": "baseline",
+            "hypothesis": "Establish the unmodified recipe baseline.",
+            "mutations": {},
+            "estimated_cost_usd": plan["budget"]["per_trial_cost_ceiling_usd"],
+            "estimated_duration_seconds": plan["budget"]["per_trial_duration_ceiling_seconds"],
+        }
+    try:
+        proposal = proposer.propose(_search_state(plan, trials, incumbent, spent_cost, spent_duration))
+    except Exception as exc:
+        raise LoraRecipeSearchError(f"proposer failed while replaying trial-{expected_index:03d}: {redact_text(str(exc))}") from exc
+    if not isinstance(proposal, dict):
+        raise LoraRecipeSearchError(f"proposer did not replay trial-{expected_index:03d}")
+    return proposal
+
+
+def _proposal_record(proposal: dict[str, Any], *, expected_index: int) -> dict[str, Any]:
+    return {
+        "proposal_id": str(proposal.get("proposal_id") or f"proposal-{expected_index:03d}"),
+        "hypothesis": redact_text(str(proposal.get("hypothesis") or "")),
+        "mutations": copy.deepcopy(proposal.get("mutations", {})),
+        "estimated_cost_usd": _number(proposal.get("estimated_cost_usd")),
+        "estimated_duration_seconds": _number(proposal.get("estimated_duration_seconds")),
+    }
+
+
+def _build_search_result(
+    *,
+    plan: dict[str, Any],
+    plan_ref: dict[str, Any],
+    trials: list[dict[str, Any]],
+    trial_refs: list[dict[str, Any]],
+    spent_cost: float,
+    spent_duration: float,
+    incumbent: dict[str, Any] | None,
+    terminal_error: str,
+    stop_reason: str,
+    created_at: str,
+) -> dict[str, Any]:
     ready = incumbent is not None and not terminal_error
-    result = {
+    return {
         "schema_version": SEARCH_RESULT_SCHEMA_VERSION,
-        "created_at": _offset_timestamp(instant, len(trials)),
+        "created_at": created_at,
         "campaign_id": plan["campaign_id"],
         "passed": ready,
         "status": "complete" if ready else "failed",
@@ -389,11 +705,6 @@ def run_search(
             ),
         },
     }
-    schema = check_schema_contract(result, name_or_id="lora_recipe_search_result")
-    if not schema["passed"]:
-        raise LoraRecipeSearchError("search result schema violation: " + "; ".join(schema["errors"]))
-    write_json(result_path, result)
-    return result
 
 
 def validate_search_plan(path: str | Path) -> dict[str, Any]:
@@ -796,6 +1107,7 @@ def _search_state(
         "trial_count": len(trials),
         "mutable_fields": list(plan["mutable_fields"]),
         "selection_policy": copy.deepcopy(plan["selection_policy"]),
+        "plan_budget": copy.deepcopy(plan["budget"]),
         "incumbent": copy.deepcopy(incumbent),
         "trials": summaries,
         "remaining_budget": {
@@ -920,11 +1232,14 @@ def _empty_evaluation(status: str, *, diagnostics: list[str] | None = None) -> d
 def _validated_recipe(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise LoraRecipeSearchError("recipe must be an object")
-    missing = sorted(set(RECIPE_FIELDS) - set(value))
-    unknown = sorted(set(value) - set(RECIPE_FIELDS))
+    recipe = copy.deepcopy(value)
+    # Additive v1 compatibility: older plans retain the exact behavior of no
+    # derived first-action repeats while new plans bind the value explicitly.
+    recipe.setdefault("action_turn_repeats", 0)
+    missing = sorted(set(RECIPE_FIELDS) - set(recipe))
+    unknown = sorted(set(recipe) - set(RECIPE_FIELDS))
     if missing or unknown:
         raise LoraRecipeSearchError(f"recipe fields mismatch (missing={missing!r}, unknown={unknown!r})")
-    recipe = copy.deepcopy(value)
     if recipe["mode"] not in SUPPORTED_MODES:
         raise LoraRecipeSearchError(f"recipe mode must be one of {sorted(SUPPORTED_MODES)!r}")
     for field in ("sft_learning_rate", "dpo_learning_rate"):
@@ -936,6 +1251,7 @@ def _validated_recipe(value: Any) -> dict[str, Any]:
         "gradient_accumulation_steps": (1, 1024),
         "max_steps": (1, 100_000),
         "max_length": (128, 32_768),
+        "action_turn_repeats": (0, 32),
         "lora_alpha": (1, 1024),
         "seed": (0, 2**31 - 1),
         "data_seed": (0, 2**31 - 1),

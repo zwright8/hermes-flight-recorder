@@ -2,7 +2,7 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/runtime_adapter_candidate_evaluation.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Sealed, independently scored evaluation report for base, generalist, specialist, and atomic composition adapter candidates.",
+  "description": "Independently scored development or sealed-final evaluation report for base, generalist, specialist, and atomic composition adapter candidates.",
   "properties": {
     "schema_version": {"const": "hfr.runtime_adapter_candidate_evaluation.v1"},
     "created_at": {"minLength": 1, "type": "string"},
@@ -60,7 +60,7 @@
       "properties": {
         "row_count": {"minimum": 1, "type": "integer"},
         "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
-        "split": {"const": "sealed_final"}
+        "split": {"enum": ["development", "sealed_final"]}
       },
       "required": ["row_count", "sha256", "split"],
       "type": "object"
