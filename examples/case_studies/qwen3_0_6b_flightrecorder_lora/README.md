@@ -109,10 +109,6 @@ Two failures made the reproducibility boundary clearer:
    template does not return an assistant mask. The trainer now exposes
    `--all-message-loss` and records the selected behavior in its launch plan.
 
-A Hugging Face Jobs launch was also attempted but rejected before compute with
-HTTP 402 because the account had insufficient prepaid credit. No managed job,
-charge, model repository, or external artifact was created.
-
 ## Claim boundary
 
 This case study proves the end-to-end interface:
