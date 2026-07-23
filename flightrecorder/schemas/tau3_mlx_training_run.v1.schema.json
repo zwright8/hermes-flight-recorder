@@ -96,9 +96,13 @@
     },
     "training_binding": {
       "description": "Cryptographic binding for mixture training protocol, local base model identity, dataset provenance, and deterministic recipe.",
-      "type": [
-        "object",
-        "null"
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/trainingBinding"
+        }
       ]
     },
     "terminal_status": {
@@ -165,14 +169,66 @@
           "type": "boolean"
         },
         "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
+          "$ref": "#/$defs/sha256"
         }
       },
       "required": [
         "path",
         "read_only",
         "sha256"
+      ],
+      "type": "object"
+    },
+    "protocolSignatureProvenance": {
+      "additionalProperties": true,
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "source": {
+          "enum": [
+            "protocol_manifest.signature",
+            "protocol.signature",
+            "protocol_file_sha256_content_seal"
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "algorithm"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "trainingBinding": {
+      "additionalProperties": true,
+      "properties": {
+        "protocol": {
+          "additionalProperties": true,
+          "properties": {
+            "protocol_signature": {
+              "$ref": "#/$defs/sha256"
+            },
+            "protocol_signature_provenance": {
+              "$ref": "#/$defs/protocolSignatureProvenance"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "sha256",
+            "protocol_signature",
+            "protocol_signature_provenance"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "protocol"
       ],
       "type": "object"
     },

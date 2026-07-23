@@ -325,8 +325,13 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertGreaterEqual(receipt["adapter"]["file_count"], 3)
             self.assertEqual(receipt["losses"]["last_train"], 1.25)
             self.assertEqual(receipt["losses"]["last_validation"], 0.75)
+            self.assertIsNone(receipt["training_binding"])
             schema = check_schema_contract(_read_json(root / "out" / "training_receipt.json"), name_or_id="tau3_mlx_training_run")
             self.assertTrue(schema["passed"], schema["errors"])
+            prelaunch = _read_json(root / "out" / "prelaunch_receipt.json")
+            self.assertIsNone(prelaunch["training_binding"])
+            prelaunch_schema = check_schema_contract(prelaunch, name_or_id="tau3_mlx_training_run")
+            self.assertTrue(prelaunch_schema["passed"], prelaunch_schema["errors"])
 
     def test_crash_is_classified_without_weights_updated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -471,8 +476,94 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertEqual(cfg["lora_parameters"], {"rank": 16, "scale": 20.0, "dropout": 0.0})
             self.assertEqual(receipt["training_binding"]["model"]["identity_sha256"], _sha256(identity))
             self.assertEqual(receipt["training_binding"]["protocol"]["sha256"], _sha256(protocol))
+            self.assertEqual(receipt["training_binding"]["protocol"]["protocol_signature"], "a" * 64)
+            self.assertEqual(
+                receipt["training_binding"]["protocol"]["protocol_signature_provenance"],
+                {"source": "protocol_manifest.signature", "algorithm": "sha256"},
+            )
             self.assertRegex(receipt["training_binding"]["recipe"]["recipe_id"], r"^tau3-mlx-recipe-[0-9a-f]{16}$")
             self.assertTrue(receipt["weights_updated"])
+
+    def test_training_binding_schema_requires_protocol_signature_lineage(self) -> None:
+        binding = {
+            "protocol": {
+                "sha256": "b" * 64,
+                "protocol_signature": "a" * 64,
+                "protocol_signature_provenance": {
+                    "source": "protocol_manifest.signature",
+                    "algorithm": "sha256",
+                },
+            },
+        }
+        receipt = {
+            "schema_version": "hfr.tau3_mlx_training_run.v1",
+            "phase": "prelaunch",
+            "created_at": "2026-07-23T00:00:00Z",
+            "bundle": {},
+            "output_dir": ".",
+            "command": [],
+            "config": {},
+            "training_binding": binding,
+            "checks": [],
+            "weights_updated": False,
+            "terminal_status": "prelaunch",
+        }
+        valid = check_schema_contract(receipt, name_or_id="tau3_mlx_training_run")
+        self.assertTrue(valid["passed"], valid["errors"])
+
+        for missing_field in ("sha256", "protocol_signature", "protocol_signature_provenance"):
+            with self.subTest(missing_field=missing_field):
+                invalid = json.loads(json.dumps(receipt))
+                invalid["training_binding"]["protocol"].pop(missing_field)
+                result = check_schema_contract(invalid, name_or_id="tau3_mlx_training_run")
+                self.assertFalse(result["passed"], result["errors"])
+
+        missing_protocol = json.loads(json.dumps(receipt))
+        missing_protocol["training_binding"].pop("protocol")
+        result = check_schema_contract(missing_protocol, name_or_id="tau3_mlx_training_run")
+        self.assertFalse(result["passed"], result["errors"])
+
+    def test_unsigned_protocol_uses_protocol_file_sha256_as_content_seal_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            _mutate_json(protocol, lambda payload: payload["protocol_manifest"].pop("signature", None))
+            receipt = run_tau3_mlx_training(
+                mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            self.assertEqual(receipt["training_binding"]["protocol"]["protocol_signature"], _sha256(protocol))
+            self.assertEqual(
+                receipt["training_binding"]["protocol"]["protocol_signature_provenance"],
+                {"source": "protocol_file_sha256_content_seal", "algorithm": "sha256"},
+            )
+            schema = check_schema_contract(receipt, name_or_id="tau3_mlx_training_run")
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_invalid_embedded_protocol_signature_fails_closed_without_content_seal_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            _mutate_json(protocol, lambda payload: payload["protocol_manifest"].__setitem__("signature", "not-a-sha"))
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                )
 
     def test_mixture_resume_cli_adds_resume_adapter_file_and_records_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -554,12 +554,20 @@ def _check_mixture_launch_readiness(
     _add_check(checks, "model_local_regular_under_workspace", model_dir.is_dir() and model_dir.resolve().is_relative_to(root), str(model_dir), "local model directory under workspace")
     _add_check(checks, "timeout_within_budget", cfg.timeout_seconds <= MAX_TIMEOUT_SECONDS, cfg.timeout_seconds, f"<= {MAX_TIMEOUT_SECONDS}")
     _add_check(checks, "hyperparameters_within_bounds", _config_within_bounds(cfg), _config_record(cfg), "bounded local training hyperparameters")
+    protocol_signature = _protocol_signature_binding(protocol, protocol_sha256)
+    _add_check(
+        checks,
+        "protocol_signature_binding_is_sha256",
+        bool(protocol_signature["protocol_signature"]),
+        protocol_signature,
+        "64 hex protocol signature or protocol-file content seal",
+    )
     return {
         "protocol": {
             "path": str(protocol_path),
             "sha256": protocol_sha256,
             "schema_version": protocol.get("schema_version"),
-            "protocol_signature": _protocol_signature(protocol),
+            **protocol_signature,
             "model_freeze_sha256": _canonical_sha256(protocol.get("model_freeze")),
             "recipe_space_sha256": _canonical_sha256(protocol.get("recipe_space")),
             "mlx_qlora_plan_sha256": _canonical_sha256(protocol.get("mlx_qlora_plan")),
@@ -825,13 +833,36 @@ def _protocol_base_model(protocol: dict[str, Any]) -> dict[str, Any]:
     return base if isinstance(base, dict) else {}
 
 
-def _protocol_signature(protocol: dict[str, Any]) -> str | None:
+def _protocol_signature_binding(protocol: dict[str, Any], protocol_sha256: str) -> dict[str, Any]:
+    signature, source = _protocol_signature(protocol)
+    if signature is not None:
+        return {
+            "protocol_signature": signature if _is_sha256(signature) else None,
+            "protocol_signature_provenance": {
+                "source": source,
+                "algorithm": "sha256",
+            },
+        }
+    return {
+        "protocol_signature": protocol_sha256,
+        "protocol_signature_provenance": {
+            "source": "protocol_file_sha256_content_seal",
+            "algorithm": "sha256",
+        },
+    }
+
+
+def _protocol_signature(protocol: dict[str, Any]) -> tuple[str | None, str | None]:
     manifest = protocol.get("protocol_manifest")
     if isinstance(manifest, dict) and isinstance(manifest.get("signature"), str):
-        return manifest["signature"]
+        return manifest["signature"], "protocol_manifest.signature"
     if isinstance(protocol.get("signature"), str):
-        return str(protocol["signature"])
-    return None
+        return str(protocol["signature"]), "protocol.signature"
+    return None, None
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _extract_protocol_sha256(value: Any) -> str | None:

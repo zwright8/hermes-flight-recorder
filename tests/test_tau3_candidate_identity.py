@@ -172,6 +172,10 @@ def _write_training_fixture(root: Path) -> Path:
             "protocol": {
                 "sha256": "0" * 64,
                 "protocol_signature": "1" * 64,
+                "protocol_signature_provenance": {
+                    "source": "protocol_manifest.signature",
+                    "algorithm": "sha256",
+                },
                 "model_freeze_sha256": "2" * 64,
                 "recipe_space_sha256": "3" * 64,
                 "mlx_qlora_plan_sha256": "4" * 64,
