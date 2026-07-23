@@ -1,0 +1,129 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_generation_retry_source.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "covered_success_task_count": {"minimum": 0, "type": "integer"},
+    "created_at": {"type": "string"},
+    "domain_filter": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "items": {"enum": ["airline", "retail", "telecom"]},
+          "type": "array",
+          "uniqueItems": true
+        }
+      ]
+    },
+    "generation_manifests": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "failure_count": {"minimum": 0, "type": "integer"},
+          "non_success_result_count": {"minimum": 0, "type": "integer"},
+          "path": {"type": "string"},
+          "reward_1_normal_result_count": {"minimum": 0, "type": "integer"},
+          "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "size_bytes": {"minimum": 0, "type": "integer"},
+          "success_count": {"minimum": 0, "type": "integer"},
+          "training_admitted_success_count": {"minimum": 0, "type": "integer"},
+          "training_excluded_success_count": {"minimum": 0, "type": "integer"},
+          "task_receipt_count": {"minimum": 0, "type": "integer"}
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "sha256",
+          "task_receipt_count",
+          "success_count",
+          "failure_count",
+          "reward_1_normal_result_count",
+          "training_admitted_success_count",
+          "training_excluded_success_count",
+          "non_success_result_count"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "output_jsonl": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "size_bytes", "sha256"],
+      "type": "object"
+    },
+    "schema_version": {"const": "hfr.tau3_generation_retry_source.v1"},
+    "sealed_payload_accessed": {"const": false},
+    "sealed_rows": {"const": 0},
+    "selected_task_count": {"minimum": 0, "type": "integer"},
+    "selected_task_identity_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "selected_tasks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {"enum": ["airline", "retail", "telecom"]},
+          "prompt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "row_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "split": {"enum": ["train", "development"]},
+          "task_id_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "task_identity_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "task_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+        },
+        "required": [
+          "domain",
+          "split",
+          "task_id_sha256",
+          "task_identity_sha256",
+          "task_sha256",
+          "prompt_sha256",
+          "row_sha256"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "source_jsonl_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+          "size_bytes": {"minimum": 0, "type": "integer"}
+        },
+        "required": ["path", "size_bytes", "sha256"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "source_task_count": {"minimum": 1, "type": "integer"},
+    "tau_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "test_rows": {"const": 0},
+    "training_started": {"const": false}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "tau_revision",
+    "source_jsonl_files",
+    "generation_manifests",
+    "domain_filter",
+    "source_task_count",
+    "covered_success_task_count",
+    "selected_task_count",
+    "selected_tasks",
+    "selected_task_identity_sha256",
+    "output_jsonl",
+    "sealed_rows",
+    "test_rows",
+    "sealed_payload_accessed",
+    "training_started"
+  ],
+  "title": "Tau-3 Generation Retry Source Manifest",
+  "type": "object"
+}

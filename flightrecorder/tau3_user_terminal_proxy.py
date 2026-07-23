@@ -40,6 +40,7 @@ POSITIVE_SIGNAL_RE = re.compile(
     r"\bcellular connection\s*:\s*connected\b)",
     flags=re.IGNORECASE,
 )
+TRANSFER_SUCCESS_RE = re.compile(r"^\s*transfer successful\.?\s*$", flags=re.IGNORECASE)
 
 
 class Tau3UserTerminalProxyError(ValueError):
@@ -59,11 +60,14 @@ def terminal_reason(payload: dict[str, Any]) -> str | None:
     ).lower()
     if not all(marker in system_text for marker in USER_SIMULATOR_MARKERS):
         return None
-    observations = "\n".join(
+    tool_observations = [
         _message_text(message)
         for message in messages
         if isinstance(message, dict) and message.get("role") == "tool"
-    )
+    ]
+    if any(TRANSFER_SUCCESS_RE.fullmatch(observation) for observation in tool_observations):
+        return "transfer_successful"
+    observations = "\n".join(tool_observations)
     if MOBILE_SCENARIO_MARKER in system_text and EXCELLENT_SPEED_RE.search(observations):
         return "mobile_excellent_speed"
     if SERVICE_SCENARIO_MARKER in system_text:
@@ -179,7 +183,8 @@ def build_server(
                 reason = terminal_reason(payload)
                 if reason is not None:
                     request_sha256 = hashlib.sha256(body).hexdigest()
-                    response = _completion(payload, "###STOP###")
+                    marker = "TRANSFER" if reason == "transfer_successful" else "STOP"
+                    response = _completion(payload, f"###{marker}###")
                     _append_audit(
                         audit_path,
                         {
@@ -188,7 +193,7 @@ def build_server(
                             "request_sha256": request_sha256,
                             "response_sha256": hashlib.sha256(response).hexdigest(),
                             "reason": reason,
-                            "marker": "STOP",
+                            "marker": marker,
                             "payload_recorded": False,
                         },
                         audit_lock,

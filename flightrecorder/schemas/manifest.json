@@ -10,6 +10,14 @@
       "name": "tau3_benchmark_run"
     },
     {
+      "artifact": "tau3_generation_retry_source",
+      "artifact_schema_version": "hfr.tau3_generation_retry_source.v1",
+      "description": "Hash-bound retry source manifest for Tau-3 tasks lacking reward-1 normal teacher generation results.",
+      "filename": "tau3_generation_retry_source.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_generation_retry_source.v1.schema.json",
+      "name": "tau3_generation_retry_source"
+    },
+    {
       "artifact": "tau3_teacher_generation_run",
       "artifact_schema_version": "hfr.tau3_teacher_generation_run.v1",
       "description": "Receipts for governed official-Tau teacher trajectory generation runs.",

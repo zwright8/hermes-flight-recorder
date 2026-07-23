@@ -218,6 +218,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_candidate_selection",
             "tau3_conversation_import",
             "tau3_evaluation",
+            "tau3_generation_retry_source",
             "tau3_mlx_dataset",
             "tau3_mlx_training_run",
             "tau3_model_identity",
