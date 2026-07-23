@@ -12,6 +12,7 @@ from flightrecorder.tau3_teacher_generation import (
     Tau3TeacherGenerationConfig,
     Tau3TeacherGenerationError,
     _tau2_argv,
+    main,
     run_tau3_teacher_generation,
 )
 
@@ -125,6 +126,137 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
                 created_at="2026-07-22T00:00:00Z",
             )
             self.assertEqual(resumed["success_count"], 1)
+
+    def test_custom_decoding_is_bound_into_manifest_and_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            out = root / "out"
+            teacher = Tau3Endpoint(
+                model="openai/local-teacher",
+                api_base="http://127.0.0.1:1/v1",
+                temperature=0.4,
+                top_p=0.95,
+                max_tokens=768,
+            )
+            user = Tau3Endpoint(
+                model="openai/local-user",
+                api_base="http://localhost:2/v1",
+                temperature=0.2,
+                top_p=0.8,
+                max_tokens=384,
+            )
+            manifest = run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=out,
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=teacher,
+                user=user,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                created_at="2026-07-22T00:00:00Z",
+            )
+            self.assertEqual(manifest["teacher"]["temperature"], 0.4)
+            self.assertEqual(manifest["teacher"]["top_p"], 0.95)
+            self.assertEqual(manifest["teacher"]["max_tokens"], 768)
+            self.assertEqual(manifest["user_simulator"]["temperature"], 0.2)
+            self.assertEqual(manifest["user_simulator"]["top_p"], 0.8)
+            self.assertEqual(manifest["user_simulator"]["max_tokens"], 384)
+
+            prelaunch = json.loads((out / "prelaunch_receipt.json").read_text(encoding="utf-8"))
+            self.assertEqual(prelaunch["teacher"], manifest["teacher"])
+            self.assertEqual(prelaunch["user_simulator"], manifest["user_simulator"])
+
+            receipt = json.loads(next(out.glob("task-*.json")).read_text(encoding="utf-8"))
+            command = receipt["command"]
+            teacher_args = json.loads(command[command.index("--agent-llm-args") + 1])
+            user_args = json.loads(command[command.index("--user-llm-args") + 1])
+            self.assertEqual(teacher_args["temperature"], 0.4)
+            self.assertEqual(teacher_args["top_p"], 0.95)
+            self.assertEqual(teacher_args["max_tokens"], 768)
+            self.assertEqual(user_args["temperature"], 0.2)
+            self.assertEqual(user_args["top_p"], 0.8)
+            self.assertEqual(user_args["max_tokens"], 384)
+
+    def test_rejects_unsafe_decoding_ranges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            valid = Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1")
+            cases = [
+                ("teacher temperature", Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1", temperature=-0.1), valid),
+                ("teacher top_p", Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1", top_p=0.0), valid),
+                ("teacher max_tokens", Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1", max_tokens=0), valid),
+                ("user temperature", valid, Tau3Endpoint(model="openai/local-user", api_base="http://127.0.0.1:2/v1", temperature=2.1)),
+                ("user top_p", valid, Tau3Endpoint(model="openai/local-user", api_base="http://127.0.0.1:2/v1", top_p=1.1)),
+                ("user max_tokens", valid, Tau3Endpoint(model="openai/local-user", api_base="http://127.0.0.1:2/v1", max_tokens=8193)),
+            ]
+            for message, teacher, user in cases:
+                with self.subTest(message=message):
+                    with self.assertRaisesRegex(Tau3TeacherGenerationError, message):
+                        run_tau3_teacher_generation(
+                            source_jsonl=source,
+                            out_dir=root / message.replace(" ", "-"),
+                            tau_repo=repo,
+                            tau_venv_bin=tau2,
+                            expected_tau_revision=self.revision,
+                            teacher=teacher,
+                            user=user,
+                            config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                        )
+
+    def test_cli_accepts_decoding_controls_with_default_safe_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            out = root / "out"
+            exit_code = main(
+                [
+                    "--source-jsonl",
+                    str(source),
+                    "--out",
+                    str(out),
+                    "--tau-repo",
+                    str(repo),
+                    "--tau-venv-bin",
+                    str(tau2),
+                    "--expected-tau-revision",
+                    self.revision,
+                    "--teacher-model",
+                    "openai/local-teacher",
+                    "--teacher-api-base",
+                    "http://127.0.0.1:1/v1",
+                    "--teacher-temperature",
+                    "0.6",
+                    "--teacher-top-p",
+                    "0.7",
+                    "--teacher-max-tokens",
+                    "512",
+                    "--user-model",
+                    "openai/local-user",
+                    "--user-api-base",
+                    "http://127.0.0.1:2/v1",
+                    "--max-tasks",
+                    "1",
+                    "--timeout-seconds",
+                    "2",
+                ]
+            )
+            self.assertEqual(exit_code, 0)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["teacher"]["temperature"], 0.6)
+            self.assertEqual(manifest["teacher"]["top_p"], 0.7)
+            self.assertEqual(manifest["teacher"]["max_tokens"], 512)
+            self.assertEqual(manifest["user_simulator"]["temperature"], 0.0)
+            self.assertEqual(manifest["user_simulator"]["top_p"], 1.0)
+            self.assertEqual(manifest["user_simulator"]["max_tokens"], 1024)
 
     def test_rejects_sealed_and_remote_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:

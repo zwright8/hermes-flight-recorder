@@ -11,6 +11,7 @@ from flightrecorder.schema_registry import check_schema_file
 from flightrecorder.tau3_capture import canonical_sha256
 from flightrecorder.tau3_conversation_ingest import (
     Tau3ConversationIngestError,
+    _resolve_generation_ref_with_cwd_fallback,
     export_tau3_tool_schemas,
     import_tau3_conversations,
 )
@@ -121,6 +122,53 @@ class Tau3ConversationIngestTests(unittest.TestCase):
             self.assertTrue(all(len(row["task_receipt_sha256"]) == 64 for row in admitted))
             self.assertTrue(all(Path(row["task_receipt_path"]).is_file() for row in admitted))
             self.assertTrue(check_schema_file(root / "out" / "manifest.json", "tau3_conversation_import")["passed"])
+
+    def test_generation_manifest_accepts_repository_relative_prelaunch_receipt(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            source_dir = self._write_source(root)
+            tools = self._write_tools(root)
+            train_results = self._write_results(root, "train", task_id="1", sim_id="sim-train")
+            valid_results = self._write_results(root, "valid", task_id="2", sim_id="sim-valid")
+            generation = self._write_generation_manifest(
+                root,
+                [train_results, valid_results],
+                repository_relative_prelaunch=True,
+            )
+
+            manifest = import_tau3_conversations(
+                [],
+                root / "out",
+                source_dir=source_dir,
+                tool_schema_path=tools,
+                generation_manifest_paths=[generation],
+                expected_tau_revision=REVISION,
+            )
+
+            self.assertEqual(manifest["generation_provenance"]["admitted_success_count"], 2)
+            self.assertEqual(manifest["counts"], {"train": 1, "valid": 1})
+
+    def test_generation_relative_reference_wins_over_cwd_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generation = root / "generation"
+            generation.mkdir()
+            expected = generation / "prelaunch_receipt.json"
+            expected.write_text("generation\n", encoding="utf-8")
+            unrelated_cwd = root / "cwd"
+            unrelated_cwd.mkdir()
+            (unrelated_cwd / expected.name).write_text("unrelated\n", encoding="utf-8")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(unrelated_cwd)
+                resolved = _resolve_generation_ref_with_cwd_fallback(
+                    generation,
+                    expected.name,
+                    "prelaunch_receipt.path",
+                )
+            finally:
+                os.chdir(previous_cwd)
+            self.assertEqual(resolved, expected)
 
     def test_generation_manifest_excludes_errored_tool_success_without_dropping_clean_results(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -809,6 +857,7 @@ class Tau3ConversationIngestTests(unittest.TestCase):
         success_results: list[Path],
         *,
         protocol_marker: str = "default",
+        repository_relative_prelaunch: bool = False,
     ) -> Path:
         generation_dir = root / "generation"
         generation_dir.mkdir(parents=True)
@@ -877,6 +926,11 @@ class Tau3ConversationIngestTests(unittest.TestCase):
         }
         failed_path.write_text(json.dumps(failed_receipt), encoding="utf-8")
         task_receipts.append({"path": failed_path.name, "terminal_status": "failed", "result_sha256": None})
+        prelaunch_record_path = (
+            str(prelaunch_path.relative_to(Path.cwd()))
+            if repository_relative_prelaunch
+            else prelaunch_path.name
+        )
         manifest = {
             "schema_version": "hfr.tau3_teacher_generation_run.v1",
             "phase": "final",
@@ -888,7 +942,7 @@ class Tau3ConversationIngestTests(unittest.TestCase):
             "protocol": protocol_record,
             "config": self._generation_config(len(success_results) + 1),
             "task_count": len(success_results) + 1,
-            "prelaunch_receipt": {"path": prelaunch_path.name, "sha256": _file_sha(prelaunch_path), "size": prelaunch_path.stat().st_size},
+            "prelaunch_receipt": {"path": prelaunch_record_path, "sha256": _file_sha(prelaunch_path), "size": prelaunch_path.stat().st_size},
             "success_count": len(success_results),
             "failure_count": 1,
             "task_receipts": task_receipts,

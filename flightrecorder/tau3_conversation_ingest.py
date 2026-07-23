@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
 from .tau3_capture import canonical_sha256
 
@@ -870,7 +871,13 @@ def _require_explicit_results_match_derived(
 
 
 def _replay_file_record(base: Path, record: dict[str, Any], where: str) -> None:
-    path = _resolve_generation_ref(base, record.get("path"), f"{where}.path")
+    path = _resolve_generation_ref_with_cwd_fallback(base, record.get("path"), f"{where}.path")
+    if path_has_symlink_component(path, include_leaf=True):
+        raise Tau3ConversationIngestError(f"{where}.path must not contain symlink components")
+    resolved_base = base.resolve(strict=True)
+    resolved_path = path.resolve(strict=False)
+    if resolved_base not in resolved_path.parents:
+        raise Tau3ConversationIngestError(f"{where}.path must remain inside the generation directory")
     expected_sha256 = _nonempty_str(record.get("sha256"), f"{where}.sha256")
     if not _is_sha256(expected_sha256):
         raise Tau3ConversationIngestError(f"{where}.sha256 must be a SHA-256 string")
@@ -913,8 +920,11 @@ def _resolve_generation_ref_with_cwd_fallback(base: Path, value: Any, where: str
         return path
     if any(part == ".." for part in path.parts):
         raise Tau3ConversationIngestError(f"{where} must not escape the generation directory")
+    base_relative = base / path
+    if base_relative.is_file():
+        return base_relative
     cwd_relative = Path.cwd() / path
-    return cwd_relative if cwd_relative.is_file() else base / path
+    return cwd_relative if cwd_relative.is_file() else base_relative
 
 
 def _receipt_reward(receipt: dict[str, Any], receipt_path: Path) -> float:

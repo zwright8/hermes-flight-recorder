@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -19,6 +20,8 @@ from .schema_registry import check_schema_contract
 TAU3_TEACHER_GENERATION_RUN_SCHEMA_VERSION = "hfr.tau3_teacher_generation_run.v1"
 DOMAINS = {"airline", "retail", "telecom"}
 TRAIN_SPLITS = {"train", "development"}
+MAX_DECODING_TEMPERATURE = 2.0
+MAX_DECODING_TOKENS = 8192
 
 
 class Tau3TeacherGenerationError(ValueError):
@@ -74,6 +77,8 @@ def run_tau3_teacher_generation(
     out.mkdir(parents=True, exist_ok=True)
     final_manifest_path = out / "manifest.json"
     _validate_config(cfg)
+    _validate_endpoint(teacher, "teacher")
+    _validate_endpoint(user, "user")
     _require_loopback(teacher.api_base, "teacher")
     _require_loopback(user.api_base, "user")
     _require_revision(repo, expected_tau_revision)
@@ -217,8 +222,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--teacher-model", required=True)
     parser.add_argument("--teacher-api-base", required=True)
+    parser.add_argument("--teacher-temperature", type=float, default=0.0)
+    parser.add_argument("--teacher-top-p", type=float, default=1.0)
+    parser.add_argument("--teacher-max-tokens", type=int, default=1024)
     parser.add_argument("--user-model", required=True)
     parser.add_argument("--user-api-base", required=True)
+    parser.add_argument("--user-temperature", type=float, default=0.0)
+    parser.add_argument("--user-top-p", type=float, default=1.0)
+    parser.add_argument("--user-max-tokens", type=int, default=1024)
     parser.add_argument("--protocol", type=Path)
     parser.add_argument("--max-tasks", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=30)
@@ -238,8 +249,20 @@ def main(argv: list[str] | None = None) -> int:
             tau_repo=args.tau_repo,
             tau_venv_bin=args.tau_venv_bin,
             expected_tau_revision=args.expected_tau_revision,
-            teacher=Tau3Endpoint(model=args.teacher_model, api_base=args.teacher_api_base),
-            user=Tau3Endpoint(model=args.user_model, api_base=args.user_api_base),
+            teacher=Tau3Endpoint(
+                model=args.teacher_model,
+                api_base=args.teacher_api_base,
+                temperature=args.teacher_temperature,
+                top_p=args.teacher_top_p,
+                max_tokens=args.teacher_max_tokens,
+            ),
+            user=Tau3Endpoint(
+                model=args.user_model,
+                api_base=args.user_api_base,
+                temperature=args.user_temperature,
+                top_p=args.user_top_p,
+                max_tokens=args.user_max_tokens,
+            ),
             protocol_path=args.protocol,
             config=Tau3TeacherGenerationConfig(
                 max_steps=args.max_steps,
@@ -413,6 +436,15 @@ def _validate_config(config: Tau3TeacherGenerationConfig) -> None:
         raise Tau3TeacherGenerationError("timeout_seconds must be between 1 and 3600")
     if config.agent not in {"auto", "llm_agent", "llm_agent_gt"}:
         raise Tau3TeacherGenerationError("agent must be auto, llm_agent, or llm_agent_gt")
+
+
+def _validate_endpoint(endpoint: Tau3Endpoint, label: str) -> None:
+    if not math.isfinite(endpoint.temperature) or not 0.0 <= endpoint.temperature <= MAX_DECODING_TEMPERATURE:
+        raise Tau3TeacherGenerationError(f"{label} temperature must be between 0.0 and {MAX_DECODING_TEMPERATURE}")
+    if not math.isfinite(endpoint.top_p) or not 0.0 < endpoint.top_p <= 1.0:
+        raise Tau3TeacherGenerationError(f"{label} top_p must be greater than 0.0 and at most 1.0")
+    if not 1 <= endpoint.max_tokens <= MAX_DECODING_TOKENS:
+        raise Tau3TeacherGenerationError(f"{label} max_tokens must be between 1 and {MAX_DECODING_TOKENS}")
 
 
 def _config_record(config: Tau3TeacherGenerationConfig) -> dict[str, Any]:
