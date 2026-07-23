@@ -213,6 +213,20 @@ def _base_bundle(root: Path, *, mode: str = "production", ready: bool = True) ->
             "resume": {"enabled": True},
             "stop_conditions": ["divergence", "budget"],
             "output_contract": {"adapter_only": True},
+            "tokenizer_compatibility": {
+                "schema_version": "hfr.tau3_tokenizer_compatibility.v1",
+                "passed": True,
+                "checked": True,
+                "row_count": 3,
+                "max_rendered_tokens": 1024,
+                "max_seq_length": 4096,
+                "harness_context_window": 8192,
+                "over_max_seq_length_count": 0,
+                "over_context_window_count": 0,
+                "local_only": True,
+                "network": False,
+                "training_started": False,
+            },
         },
         "training/recipe_space.json": {
             "schema_version": "hfr.tau3.recipe_space.v1",
@@ -623,6 +637,23 @@ class Tau3TrainingArtifactValidatorTests(unittest.TestCase):
             self.assertFalse(result["passed"])
             self.assertIn("mlx_qlora_plan_approved", failed)
             self.assertIn("candidate_selection_contract_approved", failed)
+
+    def test_rejects_rows_beyond_tokenizer_sequence_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = _base_bundle(Path(tmp))
+            def exceed(payload):
+                compatibility = payload["tokenizer_compatibility"]
+                compatibility["passed"] = False
+                compatibility["max_rendered_tokens"] = 5000
+                compatibility["over_max_seq_length_count"] = 1
+            _mutate_json(bundle / "training/mlx_qlora_plan.json", exceed)
+            _rewrite_manifest(bundle)
+
+            result = validate_tau3_training_bundle(bundle, strict=True)
+
+            failed = {check["id"] for check in result["checks"] if not check["passed"]}
+            self.assertFalse(result["passed"])
+            self.assertIn("mlx_tokenizer_sequence_budget_passed", failed)
 
     def test_rejects_full_training_or_launch_started(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

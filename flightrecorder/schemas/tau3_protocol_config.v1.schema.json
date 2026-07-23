@@ -1,0 +1,41 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_protocol_config.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen Tau-3 Training Protocol",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol_manifest",
+    "tau_revision",
+    "split_manifest",
+    "harness_contract",
+    "model_freeze",
+    "budget",
+    "sealed_manifest",
+    "mlx_qlora_plan",
+    "recipe_space",
+    "candidate_selection_contract",
+    "contamination_attestation",
+    "redaction_attestation",
+    "licenses",
+    "environment_manifest"
+  ],
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_protocol_config.v1"},
+    "protocol_manifest": {"type": "object"},
+    "tau_revision": {"type": "object"},
+    "split_manifest": {"type": "object"},
+    "harness_contract": {"type": "object"},
+    "model_freeze": {"type": "object"},
+    "budget": {"type": "object"},
+    "sealed_manifest": {"type": "object"},
+    "mlx_qlora_plan": {"type": "object"},
+    "recipe_space": {"type": "object"},
+    "candidate_selection_contract": {"type": "object"},
+    "contamination_attestation": {"type": "object"},
+    "redaction_attestation": {"type": "object"},
+    "licenses": {"type": "array", "minItems": 4},
+    "environment_manifest": {"type": "object"}
+  }
+}

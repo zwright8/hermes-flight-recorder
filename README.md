@@ -238,12 +238,13 @@ stricter local-only contract over airline, retail, and telecom. It captures
 conversations, tool results, state deltas, executable outcomes, safety labels,
 and reviewer dispositions; creates balanced admission/rejection,
 contamination, redaction, license, SFT, action-SFT, and DPO artifacts; and
-stops at a hash-checked MLX-LM QLoRA launch handoff. Its deterministic rehearsal
-is always marked not training-ready, while production validation requires real
-pinned local Tau and 7–9B model assets. A fail-closed
-[production-input template](examples/tau3_training/protocol_config.template.json),
-complete model-tree identity builder, and read-only source preflight make those
-local inputs auditable before bundle generation.
+stops at a hash-checked MLX-LM QLoRA launch handoff. The workflow now prepares
+family-disjoint training/development sources from an exact Tau checkout,
+materializes a hashes-only sealed manifest, replays official training-side
+actions through Tau, retains both admitted and rejected behavior variants,
+seals complete local model trees, and freezes the study protocol. Production
+validation requires all of that evidence; a template or rehearsal cannot pass
+as training-ready.
 
 ```bash
 .venv/bin/python scripts/build_tau3_training_artifacts.py \
@@ -255,6 +256,52 @@ local inputs auditable before bundle generation.
   --strict \
   --allow-rehearsal
 ```
+
+The production flow is: pin Tau and the three local MLX snapshots; partition
+official sources; generate balanced non-sealed captures; build each model-tree
+identity; freeze `local/tau3/protocol.json`; run the source preflight; then
+build and strictly validate `runs/tau3_core_training_artifacts`. The generated
+trainer directory contains MLX-native `train.jsonl` and `valid.jsonl` views and
+deliberately contains no test view. Production also renders every row through
+the pinned base tokenizer and fails closed if it would exceed the frozen
+training sequence or common harness context window.
+
+```bash
+.venv/bin/python scripts/prepare_tau3_training_sources.py \
+  --tau-repo local/tau3/repository \
+  --expected-revision 1d244f5dca42944b67a379b44bfeb9f5748f189d \
+  --out local/tau3/source-v1
+
+.venv/bin/python scripts/generate_tau3_training_captures.py \
+  --tau-repo local/tau3/repository \
+  --expected-revision 1d244f5dca42944b67a379b44bfeb9f5748f189d \
+  --train-tasks local/tau3/source-v1/training_source/train_tasks.jsonl \
+  --development-tasks local/tau3/source-v1/training_source/development_tasks.jsonl \
+  --tau-python local/tau3/venv/bin/python \
+  --out local/tau3/captures-v1 \
+  --seed 8675309 \
+  --sample-salt hfr-tau3-core-agent-study-v1
+
+.venv/bin/python scripts/check_tau3_training_sources.py \
+  --config local/tau3/protocol.json \
+  --out local/tau3/source_preflight.json
+
+.venv/bin/python scripts/build_tau3_training_artifacts.py \
+  --mode production \
+  --config local/tau3/protocol.json \
+  --captures local/tau3/training_captures.jsonl \
+  --out runs/tau3_core_training_artifacts
+
+.venv/bin/python scripts/validate_tau3_training_artifacts.py \
+  --bundle runs/tau3_core_training_artifacts \
+  --strict
+```
+
+See the full guide for the exact model revisions, model download verification,
+identity commands, protocol-freeze command, and current 192-capture,
+74-trainer-row readiness results. These commands prepare launch
+evidence only: they do not start training, access the sealed evaluation,
+publish weights, or promote a model.
 
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and

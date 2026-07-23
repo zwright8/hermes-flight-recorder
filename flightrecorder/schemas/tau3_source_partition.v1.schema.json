@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_source_partition.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Source Partition",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_source_partition.v1"},
+    "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "task_schema_version": {"type": "string", "minLength": 1},
+    "algorithm": {"type": "string", "minLength": 1},
+    "algorithm_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "salt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "counts": {
+      "type": "object",
+      "required": ["train_tasks", "development_tasks", "sealed_tasks", "train_families", "development_families"],
+      "properties": {
+        "train_tasks": {"type": "integer", "minimum": 1},
+        "development_tasks": {"type": "integer", "minimum": 1},
+        "sealed_tasks": {"type": "integer", "minimum": 1},
+        "train_families": {"type": "integer", "minimum": 1},
+        "development_families": {"type": "integer", "minimum": 1}
+      }
+    },
+    "proofs": {
+      "type": "object",
+      "required": ["train_development_family_disjoint", "sealed_payload_non_materialization", "sealed_payload_files", "official_test_sealed"],
+      "properties": {
+        "train_development_family_disjoint": {"const": true},
+        "sealed_payload_non_materialization": {"const": true},
+        "sealed_payload_files": {"type": "array", "maxItems": 0},
+        "official_test_sealed": {"const": true}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["train.json", "development.json", "training_source/train_tasks.jsonl", "training_source/development_tasks.jsonl", "sealed.json"],
+      "additionalProperties": {
+        "type": "object",
+        "required": ["size", "sha256"],
+        "properties": {
+          "size": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  },
+  "required": ["schema_version", "source_revision", "task_schema_version", "algorithm", "algorithm_sha256", "salt_sha256", "counts", "proofs", "artifacts"]
+}

@@ -21,6 +21,7 @@ demo_artifacts/
 live_smoke_artifacts/
 live_openclaw_smoke_artifacts/
 live_coven_smoke_artifacts/
+local/
 *.sensitive.json
 *.local.json
 *.local.md

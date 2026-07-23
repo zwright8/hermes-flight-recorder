@@ -29,7 +29,17 @@
       "properties": {
         "before_hash": {"type": "string", "minLength": 1},
         "after_hash": {"type": "string", "minLength": 1},
-        "changes": {"type": "array", "items": {"type": "object"}},
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "kind", "before", "after"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "kind": {"enum": ["added", "removed", "changed"]}
+            }
+          }
+        },
         "executable": {"const": true}
       }
     },

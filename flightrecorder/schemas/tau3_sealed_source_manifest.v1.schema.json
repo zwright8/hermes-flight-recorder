@@ -1,0 +1,28 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_sealed_source_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Hashes-Only Sealed Source Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_sealed_source_manifest.v1"},
+    "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "hashes_only": {"const": true},
+    "task_count": {"type": "integer", "minimum": 1},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id_sha256", "prompt_sha256", "task_sha256"],
+        "properties": {
+          "task_id_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  },
+  "required": ["schema_version", "source_revision", "hashes_only", "task_count", "entries"]
+}

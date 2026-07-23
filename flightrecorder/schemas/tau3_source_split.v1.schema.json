@@ -1,0 +1,35 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_source_split.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Training-Side Split",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_source_split.v1"},
+    "split": {"enum": ["train", "development"]},
+    "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "task_schema_version": {"type": "string", "minLength": 1},
+    "algorithm": {"type": "string", "minLength": 1},
+    "salt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "task_count": {"type": "integer", "minimum": 1},
+    "family_count": {"type": "integer", "minimum": 1},
+    "family_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["domain", "raw_id", "raw_id_sha256", "prompt_sha256", "task_sha256", "family_id"],
+        "properties": {
+          "domain": {"enum": ["airline", "retail", "telecom"]},
+          "raw_id": {"type": "string", "minLength": 1},
+          "raw_id_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "family_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  },
+  "required": ["schema_version", "split", "source_revision", "task_schema_version", "algorithm", "salt_sha256", "task_count", "family_count", "family_ids", "tasks"]
+}

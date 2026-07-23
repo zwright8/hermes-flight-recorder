@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan  # noqa: E402
 from flightrecorder.agentic_training_runtime import build_agentic_training_runtime_preflight  # noqa: E402
+from flightrecorder.gate_contract import build_gate_decision  # noqa: E402
 from flightrecorder.preflight import (  # noqa: E402
     build_trainer_launch_check,
     build_trainer_preflight,
@@ -124,7 +125,10 @@ def build_bundle(
             raise Tau3BundleBuildError("production mode requires --config and --captures")
         config = _read_object(Path(config_path), "production config")
         captures = _read_jsonl(Path(captures_path), "Tau captures")
-        production_checks = _production_source_checks(config)
+        production_checks = _production_source_checks(
+            config,
+            supplied_captures_path=Path(captures_path),
+        )
     else:
         if config_path is not None or captures_path is not None:
             raise Tau3BundleBuildError("rehearsal mode does not accept production config or captures")
@@ -194,9 +198,23 @@ def build_bundle(
     # archive-local trainer input copy below training/.
     trainer_export_dir = out / "training" / "input_export"
     shutil.copytree(out / "exports", trainer_export_dir)
+    mlx_dataset = _write_mlx_dataset_views(
+        out / "exports" / "sft.jsonl",
+        out / "exports" / "action_sft.jsonl",
+        trainer_export_dir,
+        captures,
+    )
+    tokenizer_compatibility = _tokenizer_compatibility(
+        config,
+        trainer_export_dir,
+        mode=mode,
+    )
     training_gate = evaluate_training_gate(
         _read_object(out / "exports" / "dataset_metrics.json", "dataset metrics"),
-        training_export_path=out / "exports",
+        # The gate consumes dataset_metrics.json directly. Bind its semantic
+        # snapshot to that exact compact source; the full export is validated
+        # and independently attested by trainer preflight below.
+        training_export_path=out / "exports" / "dataset_metrics.json",
         min_episodes=len(captures),
         min_preferences=1,
         min_sft=1,
@@ -208,20 +226,61 @@ def build_bundle(
         min_trainer_view_source_fingerprint_rate=1.0,
         max_unverified_trainer_view_source_fingerprints=0,
         min_trace_final_answer_rate=1.0,
-        min_trace_tool_or_api_rate=1.0,
+        # Four of the eight required behavior families are intentionally
+        # no-action clarification or negative evidence. Require substantial
+        # tool coverage without rejecting those governed no-action traces.
+        min_trace_tool_or_api_rate=0.45,
         max_trace_empty_final_answers=0,
         require_task_families=sorted({str(row["task_family"]) for row in captures}),
         require_trace_event_types=["user_message", "tool_call", "tool_result", "assistant_message"],
         validation_summary=export_validation,
         require_valid_export=True,
     )
+    token_check = {
+        "id": "mlx_tokenizer_sequence_budget",
+        "passed": tokenizer_compatibility["passed"] is True,
+        "actual": {
+            "checked": tokenizer_compatibility["checked"],
+            "max_rendered_tokens": tokenizer_compatibility["max_rendered_tokens"],
+            "over_max_seq_length_count": tokenizer_compatibility["over_max_seq_length_count"],
+            "over_context_window_count": tokenizer_compatibility["over_context_window_count"],
+        },
+        "expected": {
+            "over_max_seq_length_count": 0,
+            "over_context_window_count": 0,
+        },
+        "summary": (
+            "mlx_tokenizer_sequence_budget: "
+            f"passed={tokenizer_compatibility['passed']}, "
+            f"max_tokens={tokenizer_compatibility['max_rendered_tokens']}, "
+            f"max_seq_length={tokenizer_compatibility['max_seq_length']}"
+        ),
+    }
+    training_gate["checks"].append(token_check)
+    training_gate["metrics"]["mlx_tokenizer_compatibility"] = tokenizer_compatibility
+    training_gate["check_count"] = len(training_gate["checks"])
+    training_gate["failed_check_count"] = sum(
+        1 for check in training_gate["checks"] if check.get("passed") is False
+    )
+    training_gate["passed"] = training_gate["failed_check_count"] == 0
+    training_gate["decision"] = build_gate_decision(
+        passed=training_gate["passed"],
+        checks=training_gate["checks"],
+        metrics=training_gate["metrics"],
+    )
     _write_json(out / "training" / "training_gate.json", training_gate)
 
     model_manifest = _model_manifest(config, mode)
-    dataset_manifest = _dataset_manifest(out, export_manifest, trainer_export_dir)
+    dataset_manifest = _dataset_manifest(out, export_manifest, trainer_export_dir, mlx_dataset)
     _write_json(out / "training" / "model_manifest.json", model_manifest)
     _write_json(out / "training" / "dataset_manifest.json", dataset_manifest)
-    _write_json(out / "training" / "mlx_qlora_plan.json", config["mlx_qlora_plan"])
+    mlx_qlora_plan = dict(config["mlx_qlora_plan"])
+    mlx_qlora_plan["tokenizer_compatibility"] = tokenizer_compatibility
+    mlx_qlora_plan["passed"] = bool(
+        mlx_qlora_plan.get("passed") is True
+        and tokenizer_compatibility["passed"] is True
+    )
+    _write_json(out / "training" / "mlx_qlora_plan.json", mlx_qlora_plan)
     _write_json(out / "training" / "recipe_space.json", config["recipe_space"])
     _write_json(out / "training" / "candidate_selection_contract.json", config["candidate_selection_contract"])
 
@@ -724,18 +783,19 @@ def _model_manifest(config: dict[str, Any], mode: str) -> dict[str, Any]:
     }
 
 
-def _dataset_manifest(out: Path, export_manifest: dict[str, Any], trainer_export_dir: Path) -> dict[str, Any]:
+def _dataset_manifest(
+    out: Path,
+    export_manifest: dict[str, Any],
+    trainer_export_dir: Path,
+    mlx_dataset: dict[str, Any],
+) -> dict[str, Any]:
     counts = {
         "sft": int(export_manifest["sft_count"]),
-        "action_sft": int(export_manifest["action_sft_count"]),
         "dpo": int(export_manifest["dpo_count"]),
-        "episodes": int(export_manifest["episode_count"]),
     }
     schema_versions = {
         "sft": "hfr.rl.sft.v1",
-        "action_sft": "hfr.rl.action_sft.v1",
         "dpo": "hfr.rl.dpo.v1",
-        "episodes": "hfr.rl.episode.v1",
     }
     relative_export_dir = trainer_export_dir.relative_to(out / "training")
     return {
@@ -751,8 +811,310 @@ def _dataset_manifest(out: Path, export_manifest: dict[str, Any], trainer_export
                 "schema_version": schema_versions[name],
             }
             for name, count in counts.items()
+        } | {
+            "mlx_train": {
+                "path": (relative_export_dir / "train.jsonl").as_posix(),
+                "row_count": int(mlx_dataset["counts"]["train"]),
+                "schema_version": "mlx.chat_jsonl.v1",
+            },
+            "mlx_valid": {
+                "path": (relative_export_dir / "valid.jsonl").as_posix(),
+                "row_count": int(mlx_dataset["counts"]["valid"]),
+                "schema_version": "mlx.chat_jsonl.v1",
+            },
+        },
+        "mlx_dataset_manifest": {
+            "path": (relative_export_dir / "mlx_dataset_manifest.json").as_posix(),
+            "sha256": _sha256(trainer_export_dir / "mlx_dataset_manifest.json"),
+            "sealed_rows": 0,
         },
     }
+
+
+def _write_mlx_dataset_views(
+    sft_path: Path,
+    action_sft_path: Path,
+    trainer_export_dir: Path,
+    captures: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Materialize the exact local MLX chat files consumed by ``--data``."""
+
+    sft_rows = _read_jsonl(sft_path, "SFT export")
+    action_rows = _read_jsonl(action_sft_path, "action-SFT export")
+    sft_by_episode = _index_trainer_rows(sft_rows, "SFT")
+    action_by_episode = _index_trainer_rows(action_rows, "action-SFT")
+    capture_by_episode = {
+        str(capture["trajectory_id"]): capture for capture in captures
+    }
+    split_by_episode = {
+        str(capture["trajectory_id"]): str(capture["split"])
+        for capture in captures
+        if capture.get("outcome", {}).get("success") is True
+        and capture.get("review", {}).get("disposition") == "admit"
+    }
+    unexpected = sorted((set(sft_by_episode) | set(action_by_episode)) - set(split_by_episode))
+    if unexpected:
+        raise Tau3BundleBuildError(
+            "trainer exports contain a non-admitted or unknown episode: " + unexpected[0]
+        )
+    views: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
+    source_counts = {"action_sft": 0, "canonical_capture_fallback": 0}
+    tool_trajectory_counts = {"train": 0, "valid": 0}
+    for episode_id in sorted(split_by_episode):
+        split = split_by_episode[episode_id]
+        sft_row = sft_by_episode.get(episode_id)
+        if sft_row is None:
+            raise Tau3BundleBuildError(f"admitted capture has no SFT trainer row: {episode_id!r}")
+        action_row = action_by_episode.get(episode_id)
+        source_row = action_row or sft_row
+        source_kind = "action_sft" if action_row is not None else "canonical_capture_fallback"
+        # MLX renders with the pinned base chat template, which expects tool
+        # arguments as objects. The generic action-SFT export serializes those
+        # arguments for portability, so derive the executable chat view from
+        # the same reviewed canonical capture for both source classes.
+        messages = _capture_messages(capture_by_episode[episode_id])
+        tools = source_row.get("tools") or capture_by_episode[episode_id].get("tools")
+        if not isinstance(messages, list) or not messages:
+            raise Tau3BundleBuildError(f"trainer row has no messages: {episode_id!r}")
+        if not isinstance(tools, list) or not tools:
+            raise Tau3BundleBuildError(f"trainer row has no exact tool schemas: {episode_id!r}")
+        view_name = "train" if split == "train" else "valid"
+        record = {
+            "messages": messages,
+            "tools": tools,
+            "metadata": {
+                "episode_id": episode_id,
+                "source_view": source_kind,
+                "source_schema_version": str(source_row.get("schema_version") or ""),
+                "source_fingerprint_status": str(source_row.get("source_fingerprint_status") or ""),
+            },
+        }
+        source_counts[source_kind] += 1
+        if any(isinstance(message, dict) and message.get("tool_calls") for message in messages):
+            tool_trajectory_counts[view_name] += 1
+        views[view_name].append(record)
+    if not views["train"] or not views["valid"]:
+        raise Tau3BundleBuildError("MLX trainer views require non-empty train and development rows")
+    for name in ("train", "valid"):
+        views[name].sort(key=lambda row: str(row["metadata"]["episode_id"]))
+        _write_jsonl(trainer_export_dir / f"{name}.jsonl", views[name])
+    manifest = {
+        "schema_version": "hfr.tau3_mlx_dataset.v1",
+        "passed": True,
+        "format": "mlx-chat-jsonl",
+        "source": "reviewed_action_sft_with_canonical_capture_fallback",
+        "source_counts": source_counts,
+        "counts": {name: len(rows) for name, rows in views.items()},
+        "tool_trajectory_counts": tool_trajectory_counts,
+        "files": {
+            name: {
+                "path": f"{name}.jsonl",
+                "size": (trainer_export_dir / f"{name}.jsonl").stat().st_size,
+                "sha256": _sha256(trainer_export_dir / f"{name}.jsonl"),
+            }
+            for name in ("train", "valid")
+        },
+        "sealed_rows": 0,
+        "test_file_present": False,
+        "training_started": False,
+    }
+    _write_json(trainer_export_dir / "mlx_dataset_manifest.json", manifest)
+    return manifest
+
+
+def _capture_messages(capture: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert a reviewed canonical capture into MLX chat-template messages."""
+
+    messages: list[dict[str, Any]] = []
+    for index, event in enumerate(capture.get("events") or []):
+        if not isinstance(event, dict):
+            raise Tau3BundleBuildError(f"capture event {index} must be an object")
+        event_type = event.get("type")
+        if event_type == "user_message":
+            messages.append({"role": "user", "content": str(event.get("content") or event.get("text") or "")})
+        elif event_type == "assistant_message":
+            messages.append({"role": "assistant", "content": str(event.get("content") or event.get("text") or "")})
+        elif event_type == "tool_call":
+            tool_name = str(event.get("tool_name") or "")
+            call_id = str(event.get("tool_call_id") or "")
+            args = event.get("args")
+            if not tool_name or not call_id or not isinstance(args, dict):
+                raise Tau3BundleBuildError(f"capture tool_call event {index} is incomplete")
+            messages.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": args,
+                    },
+                }],
+            })
+        elif event_type == "tool_result":
+            tool_name = str(event.get("tool_name") or "")
+            call_id = str(event.get("tool_call_id") or "")
+            if not tool_name or not call_id:
+                raise Tau3BundleBuildError(f"capture tool_result event {index} is incomplete")
+            result = event.get("result")
+            content = (
+                json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                if not isinstance(result, str)
+                else result
+            )
+            messages.append({"role": "tool", "name": tool_name, "tool_call_id": call_id, "content": content})
+        else:
+            raise Tau3BundleBuildError(f"unsupported capture event type at index {index}: {event_type!r}")
+    if not messages:
+        raise Tau3BundleBuildError("canonical capture has no trainer messages")
+    return messages
+
+
+def _tokenizer_compatibility(
+    config: dict[str, Any],
+    trainer_export_dir: Path,
+    *,
+    mode: str,
+) -> dict[str, Any]:
+    """Render every MLX row with the pinned local tokenizer, without inference."""
+
+    plan = config.get("mlx_qlora_plan") if isinstance(config.get("mlx_qlora_plan"), dict) else {}
+    harness = config.get("harness_contract") if isinstance(config.get("harness_contract"), dict) else {}
+    max_seq_length = _command_int(plan.get("command_argv"), "--max-seq-length", default=4096)
+    context_window = int(harness.get("context_window") or max_seq_length)
+    rows = [
+        (split, row)
+        for split in ("train", "valid")
+        for row in _read_jsonl(trainer_export_dir / f"{split}.jsonl", f"MLX {split} data")
+    ]
+    if mode == "rehearsal":
+        return {
+            "schema_version": "hfr.tau3_tokenizer_compatibility.v1",
+            "passed": True,
+            "checked": False,
+            "method": "synthetic_rehearsal_exemption",
+            "row_count": len(rows),
+            "tool_trajectory_row_count": sum(
+                1 for _, row in rows
+                if any(message.get("tool_calls") for message in row.get("messages", []) if isinstance(message, dict))
+            ),
+            "max_rendered_tokens": 0,
+            "max_seq_length": max_seq_length,
+            "harness_context_window": context_window,
+            "over_max_seq_length_count": 0,
+            "over_context_window_count": 0,
+            "longest_episode_id": "",
+            "local_only": True,
+            "network": False,
+            "training_started": False,
+        }
+
+    freeze = config.get("model_freeze") if isinstance(config.get("model_freeze"), dict) else {}
+    base = freeze.get("base_model") if isinstance(freeze.get("base_model"), dict) else {}
+    model_path_value = str(base.get("local_path") or "")
+    model_path = Path(model_path_value) if model_path_value else Path("__missing_base_model__")
+    try:
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            local_files_only=True,
+            trust_remote_code=False,
+        )
+        chat_template_sha256 = canonical_sha256(str(getattr(tokenizer, "chat_template", "") or ""))
+        lengths: list[tuple[int, str]] = []
+        tool_rows = 0
+        for _, row in rows:
+            messages = row.get("messages")
+            tools = row.get("tools")
+            encoded = tokenizer.apply_chat_template(
+                messages,
+                tools=tools,
+                tokenize=True,
+                add_generation_prompt=False,
+            )
+            input_ids = encoded.get("input_ids") if hasattr(encoded, "get") else encoded
+            if not isinstance(input_ids, list) or not input_ids:
+                raise Tau3BundleBuildError("pinned tokenizer returned no input_ids")
+            episode_id = str(row.get("metadata", {}).get("episode_id") or "")
+            lengths.append((len(input_ids), episode_id))
+            tool_rows += int(
+                any(message.get("tool_calls") for message in messages if isinstance(message, dict))
+            )
+    except Exception as exc:
+        return {
+            "schema_version": "hfr.tau3_tokenizer_compatibility.v1",
+            "passed": False,
+            "checked": True,
+            "method": "pinned_base_apply_chat_template",
+            "row_count": len(rows),
+            "tool_trajectory_row_count": 0,
+            "max_rendered_tokens": 0,
+            "max_seq_length": max_seq_length,
+            "harness_context_window": context_window,
+            "over_max_seq_length_count": len(rows),
+            "over_context_window_count": len(rows),
+            "longest_episode_id": "",
+            "error_type": type(exc).__name__,
+            "error_sha256": canonical_sha256(str(exc)),
+            "local_only": True,
+            "network": False,
+            "training_started": False,
+        }
+    longest_length, longest_episode_id = max(lengths, default=(0, ""))
+    over_max = sum(length > max_seq_length for length, _ in lengths)
+    over_context = sum(length > context_window for length, _ in lengths)
+    return {
+        "schema_version": "hfr.tau3_tokenizer_compatibility.v1",
+        "passed": over_max == 0 and over_context == 0 and len(lengths) == len(rows),
+        "checked": True,
+        "method": "pinned_base_apply_chat_template",
+        "model_id": str(base.get("name") or ""),
+        "model_revision": str(base.get("revision") or ""),
+        "model_identity_sha256": str(base.get("local_identity_sha256") or ""),
+        "chat_template_sha256": chat_template_sha256,
+        "row_count": len(lengths),
+        "tool_trajectory_row_count": tool_rows,
+        "min_rendered_tokens": min((length for length, _ in lengths), default=0),
+        "max_rendered_tokens": longest_length,
+        "max_seq_length": max_seq_length,
+        "harness_context_window": context_window,
+        "over_max_seq_length_count": over_max,
+        "over_context_window_count": over_context,
+        "longest_episode_id": longest_episode_id,
+        "local_only": True,
+        "network": False,
+        "training_started": False,
+    }
+
+
+def _command_int(argv: Any, flag: str, *, default: int) -> int:
+    if not isinstance(argv, list):
+        return default
+    values = [argv[index + 1] for index, token in enumerate(argv[:-1]) if token == flag]
+    if len(values) != 1:
+        return default
+    try:
+        value = int(values[0])
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _index_trainer_rows(
+    rows: list[dict[str, Any]],
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        episode_id = str(row.get("episode_id") or row.get("sample_id") or "")
+        if not episode_id:
+            raise Tau3BundleBuildError(f"{label} row is missing episode_id")
+        if episode_id in indexed:
+            raise Tau3BundleBuildError(f"{label} export contains duplicate episode_id: {episode_id}")
+        indexed[episode_id] = row
+    return indexed
 
 
 def _trainer_command(config: dict[str, Any], mode: str) -> str:
@@ -849,7 +1211,11 @@ def _write_evidence_bundle(
     })
 
 
-def _production_source_checks(config: dict[str, Any]) -> list[dict[str, Any]]:
+def _production_source_checks(
+    config: dict[str, Any],
+    *,
+    supplied_captures_path: Path | None = None,
+) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
     rendered_config = json.dumps(config, sort_keys=True)
     checks.append({
@@ -910,6 +1276,42 @@ def _production_source_checks(config: dict[str, Any]) -> list[dict[str, Any]]:
             "passed": bool(expected_hash and actual_hash == expected_hash),
             "expected": expected_hash,
             "actual": actual_hash,
+        })
+
+    capture_freeze = (
+        split_manifest.get("training_captures")
+        if isinstance(split_manifest.get("training_captures"), dict)
+        else {}
+    )
+    capture_path_value = str(capture_freeze.get("local_path") or "")
+    capture_path = Path(capture_path_value) if capture_path_value else Path("__missing_training_captures__")
+    expected_capture_hash = str(capture_freeze.get("sha256") or "")
+    actual_capture_hash = _sha256(capture_path) if capture_path.is_file() else ""
+    checks.append({
+        "id": "training_captures_hash_matches_frozen_input",
+        "passed": bool(expected_capture_hash and actual_capture_hash == expected_capture_hash),
+        "expected": expected_capture_hash,
+        "actual": actual_capture_hash,
+    })
+    actual_capture_count = len(_read_jsonl(capture_path, "frozen Tau captures")) if capture_path.is_file() else 0
+    checks.append({
+        "id": "training_captures_count_matches_frozen_input",
+        "passed": actual_capture_count == capture_freeze.get("row_count") and actual_capture_count > 0,
+        "expected": capture_freeze.get("row_count"),
+        "actual": actual_capture_count,
+    })
+    if supplied_captures_path is not None:
+        supplied_regular = (
+            supplied_captures_path.is_file()
+            and not supplied_captures_path.is_symlink()
+            and not path_has_symlink_component(supplied_captures_path, include_leaf=True)
+        )
+        supplied_hash = _sha256(supplied_captures_path) if supplied_regular else ""
+        checks.append({
+            "id": "supplied_training_captures_match_frozen_input",
+            "passed": bool(expected_capture_hash and supplied_hash == expected_capture_hash),
+            "expected": expected_capture_hash,
+            "actual": supplied_hash,
         })
 
     freeze = config.get("model_freeze") if isinstance(config.get("model_freeze"), dict) else {}
@@ -1215,7 +1617,7 @@ def _rehearsal_captures() -> list[dict[str, Any]]:
                 "task_id": f"synthetic-{domain}-{index}",
                 "task_family": task_family,
                 "domain": domain,
-                "split": "train",
+                "split": "development" if index % 4 == 0 else "train",
                 "behavior": behavior,
                 "prompt": prompt,
                 "prompt_hash": canonical_sha256(prompt),

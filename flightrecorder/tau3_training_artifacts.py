@@ -453,9 +453,29 @@ def _validate_training(ctx: _Context) -> None:
     rehearsal = _payload(ctx, "rehearsal_result")
     evidence = _payload(ctx, "evidence_bundle")
     candidate = _payload(ctx, "candidate_selection_contract")
+    tokenizer = (
+        mlx.get("tokenizer_compatibility")
+        if isinstance(mlx.get("tokenizer_compatibility"), dict)
+        else {}
+    )
+    bundle_mode = str(_payload(ctx, "manifest").get("bundle_mode") or "")
 
     ctx.add("mlx_qlora_plan_approved", _passed(mlx), _summary(mlx), "passed")
     ctx.add("mlx_qlora_4bit_lora", _is_4bit(_pick(mlx, "quantization", "quantization_bits", "bits")) and _lora(_pick(mlx, "method", "adapter_type", "training_method")), _pick(mlx, "method", "adapter_type", "training_method", "quantization", "quantization_bits"), "4-bit QLoRA/LoRA")
+    ctx.add(
+        "mlx_tokenizer_sequence_budget_passed",
+        tokenizer.get("passed") is True
+        and tokenizer.get("over_max_seq_length_count") == 0
+        and tokenizer.get("over_context_window_count") == 0,
+        _summary(tokenizer),
+        "all trainer rows render within sequence and harness context limits",
+    )
+    ctx.add(
+        "mlx_tokenizer_production_checked",
+        bundle_mode != "production" or tokenizer.get("checked") is True,
+        tokenizer.get("checked"),
+        True if bundle_mode == "production" else "not required for rehearsal",
+    )
     ctx.add("recipe_search_bounded", _truthy(recipe, "bounded", "bounded_search") or _number(_pick(recipe, "max_trials", "candidate_count")) is not None, _summary(recipe), "bounded recipe search")
     ctx.add("recipe_search_development_only", _truthy(recipe, "development_only") and not _truthy(recipe, "sealed_used"), _summary(recipe), "development only, sealed unused")
     ctx.add(
@@ -821,7 +841,13 @@ def _local_only(payload: dict[str, Any]) -> bool:
 
 def _sealed_prompt_hashes(ctx: _Context) -> set[str]:
     sealed = _payload(ctx, "sealed_manifest")
-    values = _pick(sealed, "prompt_hashes", "sealed_prompt_hashes", "hashes")
+    values = _pick(
+        sealed,
+        "leakage_blocking_hashes",
+        "prompt_hashes",
+        "sealed_prompt_hashes",
+        "hashes",
+    )
     if isinstance(values, list):
         return {str(item) for item in values if isinstance(item, str)}
     if isinstance(values, dict):

@@ -243,6 +243,32 @@ class Tau3ModelIdentityTests(unittest.TestCase):
             },
         )
 
+    def test_builder_requires_supplied_captures_to_match_frozen_hash(self) -> None:
+        template = json.loads(
+            (ROOT / "examples" / "tau3_training" / "protocol_config.template.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frozen = root / "frozen.jsonl"
+            supplied = root / "supplied.jsonl"
+            frozen.write_text('{"trajectory_id":"frozen"}\n', encoding="utf-8")
+            supplied.write_text('{"trajectory_id":"other"}\n', encoding="utf-8")
+            template["split_manifest"]["training_captures"] = {
+                "local_path": str(frozen),
+                "sha256": hashlib.sha256(frozen.read_bytes()).hexdigest(),
+                "row_count": 1,
+            }
+
+            checks = {
+                check["id"]: check
+                for check in _production_source_checks(
+                    template,
+                    supplied_captures_path=supplied,
+                )
+            }
+
+            self.assertFalse(checks["supplied_training_captures_match_frozen_input"]["passed"])
+
 
 if __name__ == "__main__":
     unittest.main()

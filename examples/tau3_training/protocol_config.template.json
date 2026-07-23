@@ -66,7 +66,7 @@
     "system_prompt_sha256": "REPLACE_WITH_SYSTEM_PROMPT_SHA256",
     "tools_sha256": "REPLACE_WITH_ORDERED_TOOL_SCHEMA_SHA256",
     "tool_order": "frozen",
-    "context_window": 8192,
+    "context_window": 16384,
     "decoding": {
       "temperature": 0.0,
       "top_p": 1.0,
@@ -200,7 +200,7 @@
       "rank": [8, 16, 32],
       "alpha": [16, 32, 64],
       "learning_rate": [0.00001, 0.0002],
-      "sequence_length": [2048, 8192],
+      "sequence_length": [4096, 16384],
       "steps": [100, 2000]
     }
   },

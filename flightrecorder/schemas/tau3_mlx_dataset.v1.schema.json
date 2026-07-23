@@ -1,0 +1,60 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_mlx_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 MLX Trainer Dataset",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_mlx_dataset.v1"},
+    "passed": {"const": true},
+    "format": {"const": "mlx-chat-jsonl"},
+    "source": {"const": "reviewed_action_sft_with_canonical_capture_fallback"},
+    "source_counts": {
+      "type": "object",
+      "required": ["action_sft", "canonical_capture_fallback"],
+      "properties": {
+        "action_sft": {"type": "integer", "minimum": 0},
+        "canonical_capture_fallback": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tool_trajectory_counts": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 1},
+        "valid": {"type": "integer", "minimum": 1}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 1},
+        "valid": {"type": "integer", "minimum": 1}
+      }
+    },
+    "files": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"$ref": "#/$defs/file"},
+        "valid": {"$ref": "#/$defs/file"}
+      }
+    },
+    "sealed_rows": {"const": 0},
+    "test_file_present": {"const": false},
+    "training_started": {"const": false}
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(train|valid)\\.jsonl$"},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "required": ["schema_version", "passed", "format", "source", "source_counts", "counts", "tool_trajectory_counts", "files", "sealed_rows", "test_file_present", "training_started"]
+}

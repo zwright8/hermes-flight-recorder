@@ -78,6 +78,20 @@ def validate_tau3_capture(capture: Any) -> list[str]:
             errors.append("state_transition.before_hash must match starting_state_hash")
         if transition.get("executable") is not True:
             errors.append("state_transition.executable must be true")
+        changes = transition.get("changes")
+        if isinstance(changes, list):
+            for index, change in enumerate(changes):
+                if not isinstance(change, dict):
+                    errors.append(f"state_transition.changes[{index}] must be an object")
+                    continue
+                if change.get("kind") not in {"added", "removed", "changed"}:
+                    errors.append(
+                        f"state_transition.changes[{index}].kind must be added, removed, or changed"
+                    )
+                if not isinstance(change.get("path"), str) or not change["path"]:
+                    errors.append(f"state_transition.changes[{index}].path must be a non-empty string")
+                if "before" not in change or "after" not in change:
+                    errors.append(f"state_transition.changes[{index}] must include before and after")
     outcome = capture.get("outcome")
     if not isinstance(outcome, dict):
         errors.append("outcome must be an object")

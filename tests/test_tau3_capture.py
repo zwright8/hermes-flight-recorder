@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.tau3_capture import capture_to_hfr, validate_tau3_capture
+from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_training_artifacts import REQUIRED_ARTIFACTS, validate_tau3_training_bundle
 from scripts.build_tau3_training_artifacts import (
     Tau3BundleBuildError,
+    _capture_messages,
     _finalize_bundle_manifest,
     _public_contract,
     _local_model_identity_matches,
@@ -56,6 +58,26 @@ class Tau3CaptureTests(unittest.TestCase):
         self.assertTrue(any("sealed" in error for error in errors))
         self.assertIn("state_transition.executable must be true", errors)
 
+    def test_noncanonical_state_change_kind_fails_closed(self):
+        capture = _rehearsal_captures()[0]
+        capture["state_transition"]["changes"][0]["kind"] = "hash_transition"
+
+        errors = validate_tau3_capture(capture)
+
+        self.assertTrue(any("kind must be added, removed, or changed" in error for error in errors))
+
+    def test_canonical_capture_fallback_preserves_recovery_tool_sequence(self):
+        capture = next(row for row in _rehearsal_captures() if row["behavior"] == "recovery")
+
+        messages = _capture_messages(capture)
+
+        calls = [message for message in messages if message.get("tool_calls")]
+        results = [message for message in messages if message.get("role") == "tool"]
+        self.assertEqual(len(calls), len(results))
+        self.assertGreater(len(calls), 0)
+        self.assertEqual(calls[0]["tool_calls"][0]["id"], results[0]["tool_call_id"])
+        self.assertIsInstance(calls[0]["tool_calls"][0]["function"]["arguments"], dict)
+
     def test_rehearsal_builder_emits_complete_non_ready_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
@@ -88,6 +110,25 @@ class Tau3CaptureTests(unittest.TestCase):
             self.assertEqual(export["sft_count"], 8)
             self.assertEqual(export["action_sft_count"], 8)
             self.assertEqual(export["dpo_count"], 8)
+            training_gate = json.loads((bundle / "training" / "training_gate.json").read_text(encoding="utf-8"))
+            self.assertTrue(training_gate["training_export"].endswith("/exports/dataset_metrics.json"))
+            mlx_dir = bundle / "training" / "input_export"
+            mlx_manifest = json.loads((mlx_dir / "mlx_dataset_manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(mlx_manifest["passed"])
+            self.assertTrue(check_schema_contract(mlx_manifest, name_or_id="tau3_mlx_dataset")["passed"])
+            self.assertGreater(mlx_manifest["counts"]["train"], 0)
+            self.assertGreater(mlx_manifest["counts"]["valid"], 0)
+            self.assertGreater(mlx_manifest["tool_trajectory_counts"]["train"], 0)
+            self.assertGreater(mlx_manifest["tool_trajectory_counts"]["valid"], 0)
+            self.assertFalse((mlx_dir / "test.jsonl").exists())
+            dataset_manifest = json.loads((bundle / "training" / "dataset_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(dataset_manifest["views"]), {"sft", "dpo", "mlx_train", "mlx_valid"})
+            mlx_plan = json.loads((bundle / "training" / "mlx_qlora_plan.json").read_text(encoding="utf-8"))
+            self.assertTrue(mlx_plan["tokenizer_compatibility"]["passed"])
+            self.assertFalse(mlx_plan["tokenizer_compatibility"]["checked"])
+            train_row = json.loads((mlx_dir / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
+            self.assertTrue(train_row["messages"])
+            self.assertTrue(train_row["tools"])
             launch = json.loads((bundle / "training" / "trainer_launch_check.json").read_text(encoding="utf-8"))
             self.assertTrue(launch["passed"])
             self.assertFalse(launch.get("executed", False))
