@@ -29,6 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-action-repeat", type=int, default=3)
     parser.add_argument("--max-action-to-non-action-ratio", type=float, default=3.0)
     parser.add_argument("--min-rendered-tokens", type=int, default=1)
+    parser.add_argument("--max-rendered-tokens", type=int)
     parser.add_argument(
         "--variant",
         action="append",
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
             max_action_to_non_action_ratio=args.max_action_to_non_action_ratio,
             exclude_over_budget=args.exclude_over_budget,
             min_rendered_tokens=args.min_rendered_tokens,
+            max_rendered_tokens=args.max_rendered_tokens,
             variant_names=tuple(args.variant) if args.variant else None,
         )
     except (OSError, Tau3TrainingMixtureError, ValueError) as exc:

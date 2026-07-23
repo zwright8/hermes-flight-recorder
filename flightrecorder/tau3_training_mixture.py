@@ -16,7 +16,13 @@ from .schema_registry import check_schema_contract
 TAU3_TRAINING_MIXTURE_SCHEMA_VERSION = "hfr.tau3_training_mixture.v1"
 
 INPUT_FIELDS = {"messages", "metadata", "tools"}
-VARIANTS = ("full_trajectories", "assistant_turn_targets", "action_upweighted")
+VARIANTS = (
+    "full_trajectories",
+    "assistant_turn_targets",
+    "compact_context_targets",
+    "action_upweighted",
+)
+COMPACT_CONTEXT_POLICY = "retain_untruncated_suffix_from_first_user_and_exact_schemas_for_invoked_tools"
 TRAIN_SPLITS = {"train"}
 VALID_SPLITS = {"development", "validation", "valid"}
 FORBIDDEN_EPISODE_MARKERS = ("-test-", "-sealed-", "_test_", "_sealed_")
@@ -71,6 +77,7 @@ def build_tau3_training_mixtures(
     max_action_to_non_action_ratio: float = 3.0,
     exclude_over_budget: bool = False,
     min_rendered_tokens: int = 1,
+    max_rendered_tokens: int | None = None,
     variant_names: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Derive new-only MLX mixture variants from clean train/valid views."""
@@ -86,8 +93,15 @@ def build_tau3_training_mixtures(
     _require_new_output(out)
     if max_seq_length <= 0 or context_window <= 0:
         raise Tau3TrainingMixtureError("token sequence budgets must be positive")
-    if min_rendered_tokens <= 0 or min_rendered_tokens > max_seq_length:
-        raise Tau3TrainingMixtureError("min_rendered_tokens must be between 1 and max_seq_length")
+    rendered_token_ceiling = max_seq_length if max_rendered_tokens is None else max_rendered_tokens
+    if (
+        min_rendered_tokens <= 0
+        or min_rendered_tokens > rendered_token_ceiling
+        or rendered_token_ceiling > max_seq_length
+    ):
+        raise Tau3TrainingMixtureError(
+            "rendered-token band must satisfy 1 <= min <= max <= max_seq_length"
+        )
     if max_action_repeat < 1:
         raise Tau3TrainingMixtureError("max_action_repeat must be at least 1")
     if max_action_to_non_action_ratio < 1:
@@ -125,6 +139,10 @@ def build_tau3_training_mixtures(
             "train": _assistant_turn_rows(train),
             "valid": _assistant_turn_rows(valid),
         },
+        "compact_context_targets": {
+            "train": _compact_context_rows(train),
+            "valid": _compact_context_rows(valid),
+        },
     }
     variants["action_upweighted"] = {
         split: _action_upweighted_rows(
@@ -144,6 +162,7 @@ def build_tau3_training_mixtures(
             max_seq_length=max_seq_length,
             context_window=context_window,
             min_rendered_tokens=min_rendered_tokens,
+            max_rendered_tokens=rendered_token_ceiling,
             enabled=exclude_over_budget,
         )
         token_stats = _tokenizer_stats(
@@ -207,11 +226,13 @@ def build_tau3_training_mixtures(
         "derivation": {
             "assistant_target_requires_prior_user_message": True,
             "assistant_targets_before_first_user_excluded": pre_user_assistant_targets,
+            "compact_context_policy": COMPACT_CONTEXT_POLICY,
         },
         "budget_filter": {
             "enabled": exclude_over_budget,
             "policy": "exclude_derived_rows_outside_rendered_token_band",
             "min_rendered_tokens": min_rendered_tokens,
+            "max_rendered_tokens": rendered_token_ceiling,
             "max_seq_length": max_seq_length,
             "context_window": context_window,
         },
@@ -314,6 +335,74 @@ def _assistant_turn_rows(rows: list[_SourceRow]) -> list[dict[str, Any]]:
     return derived
 
 
+def _compact_context_rows(rows: list[_SourceRow]) -> list[dict[str, Any]]:
+    derived = []
+    for source in rows:
+        messages = source.row["messages"]
+        normalized_messages = _normalize_training_messages(messages, _source_row_label(source))
+        first_user_index: int | None = None
+        for index, message in enumerate(messages):
+            if message.get("role") == "user" and first_user_index is None:
+                first_user_index = index
+            if message.get("role") != "assistant" or first_user_index is None:
+                continue
+            retained_messages = normalized_messages[first_user_index : index + 1]
+            retained_tools = _tools_invoked_in_messages(
+                source.row["tools"],
+                retained_messages,
+                label=_source_row_label(source),
+            )
+            projection = {
+                "policy": COMPACT_CONTEXT_POLICY,
+                "content_truncated": False,
+                "source_message_count": len(normalized_messages),
+                "retained_message_start_index": first_user_index,
+                "retained_message_count": len(retained_messages),
+                "source_tool_count": len(source.row["tools"]),
+                "retained_tool_count": len(retained_tools),
+                "retained_tool_names_sha256": _canonical_sha256(
+                    [_tool_name(tool) for tool in retained_tools]
+                ),
+                "retained_tools_sha256": _canonical_sha256(retained_tools),
+            }
+            derived.append(_derived_row(
+                source,
+                messages=retained_messages,
+                tools=retained_tools,
+                variant="compact_context_targets",
+                target_index=index,
+                target_kind=_assistant_target_kind(message),
+                repetition_index=0,
+                context_projection=projection,
+            ))
+    if not derived:
+        raise Tau3TrainingMixtureError("compact-context mixture has no assistant targets")
+    return derived
+
+
+def _tools_invoked_in_messages(
+    source_tools: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    *,
+    label: str,
+) -> list[dict[str, Any]]:
+    tools_by_name: dict[str, dict[str, Any]] = {}
+    for tool in source_tools:
+        name = _tool_name(tool)
+        if name in tools_by_name:
+            raise Tau3TrainingMixtureError(f"{label}: duplicate source tool schema for {name}")
+        tools_by_name[name] = tool
+    invoked_names: set[str] = set()
+    for message in messages:
+        for call in message.get("tool_calls") or []:
+            function = _object(call.get("function"), f"{label}: compact-context tool call function")
+            name = str(function.get("name") or "")
+            if name not in tools_by_name:
+                raise Tau3TrainingMixtureError(f"{label}: compact-context tool schema missing for {name}")
+            invoked_names.add(name)
+    return [tool for tool in source_tools if _tool_name(tool) in invoked_names]
+
+
 def _action_upweighted_rows(
     rows: list[dict[str, Any]],
     *,
@@ -348,13 +437,14 @@ def _derived_row(
     target_index: int | None,
     target_kind: str,
     repetition_index: int,
+    context_projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_metadata = _object(source.row.get("metadata"), "metadata")
     source_hashes = {
         "source_row_sha256": source.source_row_sha256,
         "source_messages_sha256": _canonical_sha256(source.row["messages"]),
         "source_metadata_sha256": _canonical_sha256(source_metadata),
-        "source_tools_sha256": _canonical_sha256(tools),
+        "source_tools_sha256": _canonical_sha256(source.row["tools"]),
     }
     output_metadata = {
         **source_metadata,
@@ -370,6 +460,8 @@ def _derived_row(
         "tool_argument_encoding": "object",
         "provenance_hashes": source_hashes,
     }
+    if context_projection is not None:
+        output_metadata["context_projection"] = context_projection
     derived = {"messages": messages, "tools": tools, "metadata": output_metadata}
     output_metadata["derived_row_sha256"] = _canonical_sha256({
         "messages": messages,
@@ -412,6 +504,30 @@ def _variant_manifest(
     for row in rows_by_split["train"] + rows_by_split["valid"]:
         kind = str(row["metadata"]["target_kind"])
         target_counts[kind] = target_counts.get(kind, 0) + 1
+    domain_counts: dict[str, dict[str, int]] = {}
+    family_counts: dict[str, int] = {}
+    for split in ("train", "valid"):
+        split_domains: dict[str, int] = {}
+        split_families: set[str] = set()
+        for row in rows_by_split[split]:
+            metadata = row["metadata"]
+            domain = str(metadata.get("domain") or "unknown")
+            split_domains[domain] = split_domains.get(domain, 0) + 1
+            split_families.add(str(metadata["source_family_id"]))
+        domain_counts[split] = dict(sorted(split_domains.items()))
+        family_counts[split] = len(split_families)
+    derivation: dict[str, Any] = {
+        "assistant_target_requires_prior_user_message": True,
+        "assistant_targets_before_first_user_excluded": (
+            pre_user_assistant_targets if variant_name != "full_trajectories" else 0
+        ),
+    }
+    if variant_name == "compact_context_targets":
+        derivation["context_projection"] = {
+            "policy": COMPACT_CONTEXT_POLICY,
+            "content_truncated": False,
+            "source_trajectory_hashes_preserved": True,
+        }
     return {
         "schema_version": TAU3_TRAINING_MIXTURE_SCHEMA_VERSION,
         "variant": variant_name,
@@ -420,6 +536,8 @@ def _variant_manifest(
         "source_binding": source_binding,
         "counts": counts,
         "target_counts": target_counts,
+        "domain_counts": domain_counts,
+        "family_counts": family_counts,
         "files": {
             split: {
                 "path": f"{split}.jsonl",
@@ -444,12 +562,7 @@ def _variant_manifest(
         "sealed_rows": 0,
         "test_rows": 0,
         "training_started": False,
-        "derivation": {
-            "assistant_target_requires_prior_user_message": True,
-            "assistant_targets_before_first_user_excluded": (
-                pre_user_assistant_targets if variant_name != "full_trajectories" else 0
-            ),
-        },
+        "derivation": derivation,
         "budget_filter": budget_filter,
     }
 
@@ -461,6 +574,7 @@ def _apply_budget_filter(
     max_seq_length: int,
     context_window: int,
     min_rendered_tokens: int,
+    max_rendered_tokens: int,
     enabled: bool,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     kept: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
@@ -471,6 +585,7 @@ def _apply_budget_filter(
                 rendered_tokens = _rendered_token_length(tokenizer, row)
                 over_budget = (
                     rendered_tokens < min_rendered_tokens
+                    or rendered_tokens > max_rendered_tokens
                     or rendered_tokens > max_seq_length
                     or rendered_tokens > context_window
                 )
@@ -486,6 +601,7 @@ def _apply_budget_filter(
         "enabled": enabled,
         "policy": "exclude_derived_rows_outside_rendered_token_band",
         "min_rendered_tokens": min_rendered_tokens,
+        "max_rendered_tokens": max_rendered_tokens,
         "max_seq_length": max_seq_length,
         "context_window": context_window,
         "input_counts": {split: len(rows_by_split[split]) for split in ("train", "valid")},

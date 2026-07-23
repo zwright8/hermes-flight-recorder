@@ -133,6 +133,64 @@ def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
 
 
 class Tau3TrainingMixtureTests(unittest.TestCase):
+    def test_compact_context_retains_untruncated_user_suffix_and_invoked_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            train = _row("tau3-train-retail-success-001", "family-train")
+            train["messages"] = [
+                {"role": "system", "content": "Long policy fixture."},
+                {"role": "assistant", "content": "Welcome."},
+                *train["messages"],
+            ]
+            train["tools"].append(_tool("unused"))
+            valid = _row("tau3-development-retail-success-002", "family-valid")
+            valid["messages"] = [
+                {"role": "system", "content": "Long policy fixture."},
+                {"role": "assistant", "content": "Welcome."},
+                *valid["messages"],
+            ]
+            valid["tools"].append(_tool("unused"))
+            _write_jsonl(source / "train.jsonl", [train])
+            _write_jsonl(source / "valid.jsonl", [valid])
+            _write_source_manifest(source)
+
+            with _install_fake_transformers(_MappingArgumentsTokenizer()):
+                build_tau3_training_mixtures(
+                    source,
+                    root / "mixtures",
+                    tokenizer_path=root / "tokenizer",
+                    variant_names=("compact_context_targets",),
+                )
+
+            variant = root / "mixtures" / "compact_context_targets"
+            rows = [json.loads(line) for line in (variant / "train.jsonl").read_text().splitlines()]
+            self.assertEqual(len(rows), 2)
+            expected_source_tools_sha256 = hashlib.sha256(json.dumps(
+                train["tools"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")).hexdigest()
+            for row in rows:
+                self.assertEqual(row["messages"][0]["role"], "user")
+                self.assertNotIn("Long policy fixture.", json.dumps(row["messages"]))
+                self.assertEqual([tool["function"]["name"] for tool in row["tools"]], ["lookup"])
+                projection = row["metadata"]["context_projection"]
+                self.assertEqual(projection["policy"], (
+                    "retain_untruncated_suffix_from_first_user_and_exact_schemas_for_invoked_tools"
+                ))
+                self.assertFalse(projection["content_truncated"])
+                self.assertEqual(projection["retained_message_start_index"], 2)
+                self.assertEqual(projection["source_tool_count"], 2)
+                self.assertEqual(projection["retained_tool_count"], 1)
+                self.assertEqual(
+                    row["metadata"]["provenance_hashes"]["source_tools_sha256"],
+                    expected_source_tools_sha256,
+                )
+            manifest = json.loads((variant / "manifest.json").read_text())
+            self.assertFalse(manifest["derivation"]["context_projection"]["content_truncated"])
+
     def test_builds_selected_variant_with_a_hash_audited_token_band(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -155,6 +213,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
                     max_seq_length=160,
                     context_window=160,
                     min_rendered_tokens=100,
+                    max_rendered_tokens=140,
                     exclude_over_budget=True,
                     variant_names=("assistant_turn_targets",),
                 )
@@ -165,6 +224,9 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
                 (root / "mixtures" / "assistant_turn_targets" / "manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(selected["budget_filter"]["min_rendered_tokens"], 100)
+            self.assertEqual(selected["budget_filter"]["max_rendered_tokens"], 140)
+            self.assertLessEqual(selected["tokenizer"]["max_rendered_tokens"], 140)
+            self.assertGreater(selected["budget_filter"]["excluded"]["train"]["count"], 0)
             self.assertGreater(selected["counts"]["train"], 0)
             self.assertGreater(selected["counts"]["valid"], 0)
 
@@ -292,7 +354,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
 
                 self.assertFalse((root / "mixtures").exists())
 
-    def test_builds_three_governed_variants_from_safe_fixtures(self) -> None:
+    def test_builds_four_governed_variants_from_safe_fixtures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / "input_export"
@@ -308,9 +370,15 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             self.assertEqual([item["name"] for item in manifest["variants"]], [
                 "full_trajectories",
                 "assistant_turn_targets",
+                "compact_context_targets",
                 "action_upweighted",
             ])
-            for variant in ("full_trajectories", "assistant_turn_targets", "action_upweighted"):
+            for variant in (
+                "full_trajectories",
+                "assistant_turn_targets",
+                "compact_context_targets",
+                "action_upweighted",
+            ):
                 variant_dir = root / "mixtures" / variant
                 variant_manifest = json.loads((variant_dir / "manifest.json").read_text(encoding="utf-8"))
                 check = check_schema_contract(variant_manifest, name_or_id=TAU3_TRAINING_MIXTURE_SCHEMA_VERSION)
@@ -319,6 +387,8 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
                     json.loads(line)
                     for line in (variant_dir / "train.jsonl").read_text(encoding="utf-8").splitlines()
                 ]
+                self.assertEqual(variant_manifest["domain_counts"]["train"], {"unknown": len(rows)})
+                self.assertEqual(variant_manifest["family_counts"]["train"], 1)
                 self.assertIn("provenance_hashes", rows[0]["metadata"])
                 self.assertEqual(rows[0]["metadata"]["source_episode_id"], "tau3-train-retail-success-001")
                 self.assertFalse((variant_dir / "test.jsonl").exists())
