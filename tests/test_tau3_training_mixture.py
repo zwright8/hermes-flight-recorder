@@ -133,6 +133,43 @@ def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
 
 
 class Tau3TrainingMixtureTests(unittest.TestCase):
+    def test_explicit_budget_filter_excludes_and_hashes_only_oversized_derived_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            _write_jsonl(source / "train.jsonl", [
+                _row("tau3-train-retail-success-001", "family-train-1", assistant_text="Short answer."),
+                _row("tau3-train-retail-success-002", "family-train-2", assistant_text="x" * 600),
+            ])
+            _write_jsonl(
+                source / "valid.jsonl",
+                [_row("tau3-development-retail-success-003", "family-valid", assistant_text="Short valid answer.")],
+            )
+            _write_source_manifest(source)
+
+            with _install_fake_transformers(_MappingArgumentsTokenizer()):
+                manifest = build_tau3_training_mixtures(
+                    source,
+                    root / "mixtures",
+                    tokenizer_path=root / "tokenizer",
+                    max_seq_length=120,
+                    context_window=120,
+                    exclude_over_budget=True,
+                )
+
+            full_manifest = json.loads(
+                (root / "mixtures" / "full_trajectories" / "manifest.json").read_text(encoding="utf-8")
+            )
+            budget_filter = full_manifest["budget_filter"]
+            self.assertTrue(manifest["budget_filter"]["enabled"])
+            self.assertEqual(full_manifest["counts"], {"train": 1, "valid": 1})
+            self.assertEqual(budget_filter["input_counts"], {"train": 2, "valid": 1})
+            self.assertEqual(budget_filter["excluded"]["train"]["count"], 1)
+            self.assertEqual(budget_filter["excluded"]["valid"]["count"], 0)
+            self.assertRegex(budget_filter["excluded"]["train"]["derived_row_ids_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(full_manifest["tokenizer"]["over_max_seq_length_count"], 0)
+            self.assertEqual(full_manifest["tokenizer"]["over_context_window_count"], 0)
+
     def test_excludes_pre_user_assistant_greetings_from_turn_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -197,7 +234,14 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             self.assertEqual(_sha256(source / "train.jsonl"), source_train_sha256)
 
     def test_rejects_invalid_or_non_object_json_tool_arguments(self) -> None:
-        for invalid_arguments in ('{"id":"a","id":"b"}', '["abc"]', '{not-json}'):
+        for invalid_arguments in (
+            '{"id":"a","id":"b"}',
+            '["abc"]',
+            '{not-json}',
+            '{"id":NaN}',
+            '{"id":Infinity}',
+            '{"id":-Infinity}',
+        ):
             with self.subTest(arguments=invalid_arguments), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 source = root / "input_export"
@@ -315,6 +359,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             with _install_fake_transformers(_Tokenizer(multiplier=100)):
                 with self.assertRaisesRegex(Tau3TrainingMixtureError, "exceeds tokenizer"):
                     build_tau3_training_mixtures(source, root / "overflow", tokenizer_path=root / "tokenizer", max_seq_length=8, context_window=8)
+            self.assertFalse((root / "overflow").exists())
 
 
 if __name__ == "__main__":

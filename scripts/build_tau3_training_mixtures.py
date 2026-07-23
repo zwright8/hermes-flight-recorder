@@ -27,6 +27,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--context-window", type=int, default=8192)
     parser.add_argument("--max-action-repeat", type=int, default=3)
     parser.add_argument("--max-action-to-non-action-ratio", type=float, default=3.0)
+    parser.add_argument(
+        "--exclude-over-budget",
+        action="store_true",
+        help="Explicitly exclude and hash derived rows that exceed the sequence or context budget",
+    )
     return parser.parse_args(argv)
 
 
@@ -41,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             context_window=args.context_window,
             max_action_repeat=args.max_action_repeat,
             max_action_to_non_action_ratio=args.max_action_to_non_action_ratio,
+            exclude_over_budget=args.exclude_over_budget,
         )
     except (OSError, Tau3TrainingMixtureError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

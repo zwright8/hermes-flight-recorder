@@ -30,7 +30,10 @@ MAX_RANK = 256
 MAX_BATCH_SIZE = 64
 MAX_GRAD_ACCUMULATION = 512
 MAX_SEQ_LENGTH = 65_536
-LOSS_RE = re.compile(r"\b(?P<kind>train|training|valid|validation|val)(?:[_ -]?loss)?\b[^0-9+-]*(?P<loss>[+-]?(?:\d+(?:\.\d*)?|\.\d+))", re.IGNORECASE)
+LOSS_RE = re.compile(
+    r"\b(?P<kind>train|training|valid|validation|val)[_ -]*loss\b\s*[:=]?\s*(?P<loss>[+-]?(?:\d+(?:\.\d*)?|\.\d+))",
+    re.IGNORECASE,
+)
 SECRET_RE = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{8,}|hf_[A-Za-z0-9]{8,})\b")
 FORBIDDEN_TOKEN_FRAGMENTS = (
     "--push-to-hub",

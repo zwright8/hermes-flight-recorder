@@ -52,6 +52,14 @@ class TokenizerStats:
         return self.over_max_seq_length_count == 0 and self.over_context_window_count == 0
 
 
+@dataclass(frozen=True)
+class _PreparedVariant:
+    name: str
+    rows_by_split: dict[str, list[dict[str, Any]]]
+    tokenizer_stats: TokenizerStats
+    budget_filter: dict[str, Any]
+
+
 def build_tau3_training_mixtures(
     source_dir: str | Path,
     out_dir: str | Path,
@@ -61,6 +69,7 @@ def build_tau3_training_mixtures(
     context_window: int = 8192,
     max_action_repeat: int = 3,
     max_action_to_non_action_ratio: float = 3.0,
+    exclude_over_budget: bool = False,
 ) -> dict[str, Any]:
     """Derive new-only MLX mixture variants from clean train/valid views."""
 
@@ -110,15 +119,16 @@ def build_tau3_training_mixtures(
         for split, rows in variants["assistant_turn_targets"].items()
     }
 
-    out.mkdir(parents=True)
     source_binding = _source_binding(source)
-    variant_manifests = []
+    prepared_variants: list[_PreparedVariant] = []
     for variant_name in VARIANTS:
-        variant_dir = out / variant_name
-        variant_dir.mkdir()
-        rows_by_split = variants[variant_name]
-        for split in ("train", "valid"):
-            _write_jsonl(variant_dir / f"{split}.jsonl", rows_by_split[split])
+        rows_by_split, budget_filter = _apply_budget_filter(
+            tokenizer,
+            variants[variant_name],
+            max_seq_length=max_seq_length,
+            context_window=context_window,
+            enabled=exclude_over_budget,
+        )
         token_stats = _tokenizer_stats(
             tokenizer,
             [row for split in ("train", "valid") for row in rows_by_split[split]],
@@ -127,19 +137,34 @@ def build_tau3_training_mixtures(
         )
         if not token_stats.passed:
             raise Tau3TrainingMixtureError(f"{variant_name} exceeds tokenizer sequence/context budget")
+        prepared_variants.append(_PreparedVariant(
+            name=variant_name,
+            rows_by_split=rows_by_split,
+            tokenizer_stats=token_stats,
+            budget_filter=budget_filter,
+        ))
+
+    out.mkdir(parents=True)
+    variant_manifests = []
+    for prepared in prepared_variants:
+        variant_dir = out / prepared.name
+        variant_dir.mkdir()
+        for split in ("train", "valid"):
+            _write_jsonl(variant_dir / f"{split}.jsonl", prepared.rows_by_split[split])
         manifest = _variant_manifest(
             variant_dir,
-            variant_name,
-            rows_by_split,
+            prepared.name,
+            prepared.rows_by_split,
             source_binding=source_binding,
-            tokenizer_stats=token_stats,
+            tokenizer_stats=prepared.tokenizer_stats,
             max_seq_length=max_seq_length,
             context_window=context_window,
             pre_user_assistant_targets=pre_user_assistant_targets,
+            budget_filter=prepared.budget_filter,
         )
         check = check_schema_contract(manifest, name_or_id=TAU3_TRAINING_MIXTURE_SCHEMA_VERSION)
         if check["passed"] is not True:
-            raise Tau3TrainingMixtureError(f"{variant_name} manifest schema failed: {check['errors']}")
+            raise Tau3TrainingMixtureError(f"{prepared.name} manifest schema failed: {check['errors']}")
         _write_json(variant_dir / "manifest.json", manifest)
         variant_manifests.append(manifest)
 
@@ -166,6 +191,12 @@ def build_tau3_training_mixtures(
             "assistant_target_requires_prior_user_message": True,
             "assistant_targets_before_first_user_excluded": pre_user_assistant_targets,
         },
+        "budget_filter": {
+            "enabled": exclude_over_budget,
+            "policy": "exclude_derived_rows_over_sequence_or_context_budget",
+            "max_seq_length": max_seq_length,
+            "context_window": context_window,
+        },
     }
     _write_json(out / "manifest.json", root_manifest)
     return root_manifest
@@ -187,10 +218,7 @@ def _load_split(path: Path, *, split_name: str, allowed_splits: set[str]) -> lis
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise Tau3TrainingMixtureError(f"{path.name}:{line_number}: invalid JSON: {exc.msg}") from exc
+        row = _strict_json_loads(line, f"{path.name}:{line_number}")
         if not isinstance(row, dict):
             raise Tau3TrainingMixtureError(f"{path.name}:{line_number}: row must be an object")
         unexpected = sorted(set(row) - INPUT_FIELDS)
@@ -359,6 +387,7 @@ def _variant_manifest(
     max_seq_length: int,
     context_window: int,
     pre_user_assistant_targets: int,
+    budget_filter: dict[str, Any],
 ) -> dict[str, Any]:
     counts = {split: len(rows_by_split[split]) for split in ("train", "valid")}
     target_counts: dict[str, int] = {}
@@ -403,6 +432,47 @@ def _variant_manifest(
                 pre_user_assistant_targets if variant_name != "full_trajectories" else 0
             ),
         },
+        "budget_filter": budget_filter,
+    }
+
+
+def _apply_budget_filter(
+    tokenizer: Any,
+    rows_by_split: dict[str, list[dict[str, Any]]],
+    *,
+    max_seq_length: int,
+    context_window: int,
+    enabled: bool,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    kept: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
+    excluded: dict[str, list[str]] = {"train": [], "valid": []}
+    for split in ("train", "valid"):
+        for row in rows_by_split[split]:
+            if enabled:
+                rendered_tokens = _rendered_token_length(tokenizer, row)
+                over_budget = rendered_tokens > max_seq_length or rendered_tokens > context_window
+            else:
+                over_budget = False
+            if over_budget:
+                excluded[split].append(str(row["metadata"].get("derived_row_sha256") or ""))
+            else:
+                kept[split].append(row)
+        if not kept[split]:
+            raise Tau3TrainingMixtureError(f"budget filter removed every {split} row")
+    return kept, {
+        "enabled": enabled,
+        "policy": "exclude_derived_rows_over_sequence_or_context_budget",
+        "max_seq_length": max_seq_length,
+        "context_window": context_window,
+        "input_counts": {split: len(rows_by_split[split]) for split in ("train", "valid")},
+        "kept_counts": {split: len(kept[split]) for split in ("train", "valid")},
+        "excluded": {
+            split: {
+                "count": len(excluded[split]),
+                "derived_row_ids_sha256": _canonical_sha256(sorted(excluded[split])),
+            }
+            for split in ("train", "valid")
+        },
     }
 
 
@@ -415,16 +485,7 @@ def _tokenizer_stats(
 ) -> TokenizerStats:
     lengths: list[tuple[int, str]] = []
     for row in rows:
-        encoded = tokenizer.apply_chat_template(
-            row["messages"],
-            tools=row.get("tools"),
-            tokenize=True,
-            add_generation_prompt=False,
-        )
-        input_ids = encoded.get("input_ids") if hasattr(encoded, "get") else encoded
-        if not isinstance(input_ids, list) or not input_ids:
-            raise Tau3TrainingMixtureError("pinned tokenizer returned no input_ids")
-        lengths.append((len(input_ids), str(row["metadata"].get("derived_row_sha256") or "")))
+        lengths.append((_rendered_token_length(tokenizer, row), str(row["metadata"].get("derived_row_sha256") or "")))
     longest_length, longest_row_id = max(lengths, default=(0, ""))
     return TokenizerStats(
         row_count=len(lengths),
@@ -435,6 +496,19 @@ def _tokenizer_stats(
         longest_row_id=longest_row_id,
         chat_template_sha256=_canonical_sha256(str(getattr(tokenizer, "chat_template", "") or "")),
     )
+
+
+def _rendered_token_length(tokenizer: Any, row: dict[str, Any]) -> int:
+    encoded = tokenizer.apply_chat_template(
+        row["messages"],
+        tools=row.get("tools"),
+        tokenize=True,
+        add_generation_prompt=False,
+    )
+    input_ids = encoded.get("input_ids") if hasattr(encoded, "get") else encoded
+    if not isinstance(input_ids, list) or not input_ids:
+        raise Tau3TrainingMixtureError("pinned tokenizer returned no input_ids")
+    return len(input_ids)
 
 
 def _load_tokenizer(path: Path) -> Any:
@@ -507,13 +581,7 @@ def _normalize_training_messages(messages: list[dict[str, Any]], label: str) -> 
             arguments = function.get("arguments")
             argument_label = f"{label}: tool-call arguments at message {message_index}, call {call_index}"
             if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(
-                        arguments,
-                        object_pairs_hook=lambda pairs: _unique_json_object(pairs, argument_label),
-                    )
-                except json.JSONDecodeError as exc:
-                    raise Tau3TrainingMixtureError(f"{argument_label} are invalid JSON: {exc.msg}") from exc
+                arguments = _strict_json_loads(arguments, argument_label)
             if not isinstance(arguments, dict):
                 raise Tau3TrainingMixtureError(f"{argument_label} must decode to an object")
             copied_function["arguments"] = arguments
@@ -531,6 +599,21 @@ def _unique_json_object(pairs: list[tuple[str, Any]], label: str) -> dict[str, A
             raise Tau3TrainingMixtureError(f"{label} contain duplicate key: {key}")
         value[key] = item
     return value
+
+
+def _strict_json_loads(value: str, label: str) -> Any:
+    try:
+        return json.loads(
+            value,
+            object_pairs_hook=lambda pairs: _unique_json_object(pairs, label),
+            parse_constant=lambda constant: _reject_json_constant(constant, label),
+        )
+    except json.JSONDecodeError as exc:
+        raise Tau3TrainingMixtureError(f"{label}: invalid JSON: {exc.msg}") from exc
+
+
+def _reject_json_constant(constant: str, label: str) -> Any:
+    raise Tau3TrainingMixtureError(f"{label} contains non-standard JSON constant: {constant}")
 
 
 def _source_row_label(source: _SourceRow) -> str:
@@ -576,10 +659,7 @@ def _episode_split(episode_id: str) -> str:
 def _source_binding(source: Path) -> dict[str, Any]:
     manifest_path = source / "manifest.json"
     _require_source_file(manifest_path, "source corpus manifest")
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise Tau3TrainingMixtureError(f"source corpus manifest is invalid JSON: {exc.msg}") from exc
+    manifest = _strict_json_loads(manifest_path.read_text(encoding="utf-8"), "source corpus manifest")
     if not isinstance(manifest, dict):
         raise Tau3TrainingMixtureError("source corpus manifest must be an object")
     if manifest.get("schema_version") != "hfr.tau3_conversation_import.v1" or manifest.get("passed") is not True:
@@ -668,11 +748,24 @@ def _require_new_output(path: Path) -> None:
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.write_text("".join(json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    path.write_text(
+        "".join(
+            json.dumps(
+                row,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+            for row in rows
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
 
 
 def _sha256(path: Path) -> str:
@@ -684,7 +777,13 @@ def _sha256(path: Path) -> str:
 
 
 def _canonical_sha256(value: Any) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 

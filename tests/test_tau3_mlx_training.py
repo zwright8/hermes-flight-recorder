@@ -49,6 +49,14 @@ elif mode == 'oom':
     sys.exit(1)
 elif mode == 'no_output':
     sys.exit(0)
+elif mode == 'mlx_progress':
+    print('Starting training..., iters: 100')
+    print('Iter 1: Train loss 1.234, It/sec 0.1')
+    print('Iter 1: Val loss 0.442, Val took 59.258s', file=sys.stderr)
+    print('Training took 100s')
+    os.makedirs(adapter, exist_ok=True)
+    open(os.path.join(adapter, 'adapter_config.json'), 'w').write('{{"r": 16}}\\n')
+    open(os.path.join(adapter, 'adapters.safetensors'), 'wb').write(b'fake-adapter')
 else:
     os.makedirs(adapter, exist_ok=True)
     open(os.path.join(adapter, 'adapter_config.json'), 'w').write('{{"r": 16}}\\n')
@@ -332,6 +340,23 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertIsNone(prelaunch["training_binding"])
             prelaunch_schema = check_schema_contract(prelaunch, name_or_id="tau3_mlx_training_run")
             self.assertTrue(prelaunch_schema["passed"], prelaunch_schema["errors"])
+
+    def test_mlx_progress_parser_records_only_explicit_loss_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "mlx_progress")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            self.assertEqual(receipt["terminal_status"], "success")
+            self.assertTrue(receipt["weights_updated"])
+            self.assertEqual(receipt["losses"]["train"], [1.25, 1.234])
+            self.assertEqual(receipt["losses"]["validation"], [0.75, 0.442])
+            self.assertNotIn(100.0, receipt["losses"]["train"])
+            self.assertNotIn(59.258, receipt["losses"]["validation"])
 
     def test_crash_is_classified_without_weights_updated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
