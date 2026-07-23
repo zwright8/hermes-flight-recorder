@@ -1,0 +1,136 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_mlx_training_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Prelaunch or final receipt for a local MLX-LM QLoRA Tau-3 training run.",
+  "properties": {
+    "adapter": {
+      "type": "object"
+    },
+    "adapter_weight_file_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "bundle": {
+      "type": "object"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "command": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "config": {
+      "type": "object"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "elapsed_seconds": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "interrupted": {
+      "type": "boolean"
+    },
+    "losses": {
+      "type": "object"
+    },
+    "mlx_lora_config": {
+      "type": "object"
+    },
+    "output_dir": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "peak_child_rss_kb": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "phase": {
+      "enum": [
+        "prelaunch",
+        "final"
+      ]
+    },
+    "prelaunch_receipt": {
+      "type": "object"
+    },
+    "schema_checked": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_mlx_training_run.v1"
+    },
+    "telemetry": {
+      "type": "object"
+    },
+    "terminal_status": {
+      "enum": [
+        "prelaunch",
+        "success",
+        "crash",
+        "timeout",
+        "interrupted",
+        "oom",
+        "no_output"
+      ]
+    },
+    "timed_out": {
+      "type": "boolean"
+    },
+    "weights_updated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "phase",
+    "created_at",
+    "bundle",
+    "output_dir",
+    "command",
+    "config",
+    "checks",
+    "weights_updated",
+    "terminal_status"
+  ],
+  "title": "Hermes Flight Recorder Tau-3 MLX Training Run",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": {},
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected"
+      ],
+      "type": "object"
+    }
+  }
+}

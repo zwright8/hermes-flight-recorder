@@ -1,0 +1,758 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_evaluation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "not": {
+            "pattern": "(^/|\\.\\.|\\\\|local/tau3|127\\.0\\.0\\.1|localhost|/Users/)"
+          },
+          "type": "string"
+        },
+        "public_safe": {
+          "const": true
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "public_safe"
+      ],
+      "type": "object"
+    },
+    "armFloatMap": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "base": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "comparator_1": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "comparator_2": {
+          "$ref": "#/$defs/nullableRate"
+        }
+      },
+      "required": [
+        "adapter",
+        "base",
+        "comparator_1",
+        "comparator_2"
+      ],
+      "type": "object"
+    },
+    "armIntegerMap": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "base": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "comparator_1": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "comparator_2": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "adapter",
+        "base",
+        "comparator_1",
+        "comparator_2"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {},
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "details"
+      ],
+      "type": "object"
+    },
+    "ci": {
+      "additionalProperties": false,
+      "properties": {
+        "lower": {
+          "type": "number"
+        },
+        "upper": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "lower",
+        "upper"
+      ],
+      "type": "object"
+    },
+    "domainCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retail": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "telecom": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "airline",
+        "retail",
+        "telecom"
+      ],
+      "type": "object"
+    },
+    "domainFloatMap": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {
+          "$ref": "#/$defs/rate"
+        },
+        "retail": {
+          "$ref": "#/$defs/rate"
+        },
+        "telecom": {
+          "$ref": "#/$defs/rate"
+        }
+      },
+      "required": [
+        "airline",
+        "retail",
+        "telecom"
+      ],
+      "type": "object"
+    },
+    "effect": {
+      "additionalProperties": true,
+      "properties": {
+        "bootstrap_samples": {
+          "minimum": 100,
+          "type": "integer"
+        },
+        "bootstrap_seed": {
+          "type": "integer"
+        },
+        "confidence_interval": {
+          "$ref": "#/$defs/ci"
+        },
+        "confidence_level": {
+          "const": 0.95
+        },
+        "mean_difference": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "mean_difference",
+        "confidence_level",
+        "confidence_interval",
+        "bootstrap_samples",
+        "bootstrap_seed"
+      ],
+      "type": "object"
+    },
+    "referenceEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "domain_stratified_macro_pass1": {
+          "$ref": "#/$defs/macroEffect"
+        },
+        "paired_pass1": {
+          "$ref": "#/$defs/effect"
+        },
+        "per_domain_non_inferiority_passed": {
+          "type": "boolean"
+        },
+        "per_domain_pass1": {
+          "additionalProperties": false,
+          "properties": {
+            "airline": {
+              "$ref": "#/$defs/effect"
+            },
+            "retail": {
+              "$ref": "#/$defs/effect"
+            },
+            "telecom": {
+              "$ref": "#/$defs/effect"
+            }
+          },
+          "required": [
+            "airline",
+            "retail",
+            "telecom"
+          ],
+          "type": "object"
+        },
+        "primary_improvement_passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paired_pass1",
+        "domain_stratified_macro_pass1",
+        "per_domain_pass1",
+        "primary_improvement_passed",
+        "per_domain_non_inferiority_passed"
+      ],
+      "type": "object"
+    },
+    "macroEffect": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/effect"
+        },
+        {
+          "properties": {
+            "domain_means": {
+              "$ref": "#/$defs/domainFloatMap"
+            },
+            "resampling_unit": {
+              "const": "domain_stratified_task"
+            }
+          },
+          "required": [
+            "resampling_unit",
+            "domain_means"
+          ]
+        }
+      ]
+    },
+    "rate": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "nullableRate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/rate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "promotion_ready": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocking_reasons": {
+            "maxItems": 0
+          },
+          "failed_check_count": {
+            "const": 0
+          },
+          "mode": {
+            "const": "sealed"
+          },
+          "passed": {
+            "const": true
+          },
+          "readiness": {
+            "const": "ready_for_publication_review"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "passed": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocking_reasons": {
+            "maxItems": 0
+          },
+          "failed_check_count": {
+            "const": 0
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "analysis_config": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_samples": {
+          "minimum": 100,
+          "type": "integer"
+        },
+        "bootstrap_seed": {
+          "type": "integer"
+        },
+        "confidence_level": {
+          "const": 0.95
+        },
+        "harness_equivalence": {
+          "const": "normalized_exact_excluding_local_ports_api_keys_and_agent_model"
+        },
+        "non_inferiority_margin": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "primary_metric": {
+          "const": "macro_pass1"
+        },
+        "reference_arms": {
+          "const": [
+            "base",
+            "comparator_1",
+            "comparator_2"
+          ]
+        },
+        "required_arms": {
+          "const": [
+            "adapter",
+            "base",
+            "comparator_1",
+            "comparator_2"
+          ]
+        },
+        "required_domains": {
+          "const": [
+            "airline",
+            "retail",
+            "telecom"
+          ]
+        },
+        "safety_non_inferiority_margin": {
+          "const": 0.01
+        }
+      },
+      "required": [
+        "required_arms",
+        "reference_arms",
+        "required_domains",
+        "primary_metric",
+        "bootstrap_samples",
+        "bootstrap_seed",
+        "confidence_level",
+        "non_inferiority_margin",
+        "safety_non_inferiority_margin",
+        "harness_equivalence"
+      ],
+      "type": "object"
+    },
+    "blocking_reasons": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "effects": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "maxProperties": 0,
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "$ref": "#/$defs/referenceEffect"
+            },
+            "comparator_1": {
+              "$ref": "#/$defs/referenceEffect"
+            },
+            "comparator_2": {
+              "$ref": "#/$defs/referenceEffect"
+            }
+          },
+          "required": [
+            "base",
+            "comparator_1",
+            "comparator_2"
+          ],
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "harness": {
+      "additionalProperties": true,
+      "properties": {
+        "arm_sha256": {
+          "type": "object"
+        },
+        "normalized_by_domain": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "normalized_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passed",
+        "normalized_sha256",
+        "arm_sha256",
+        "normalized_by_domain"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "macro_pass1": {
+          "$ref": "#/$defs/armFloatMap"
+        },
+        "per_domain_pass1": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/domainFloatMap"
+                },
+                {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "type": "object"
+                }
+              ]
+            },
+            "base": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/domainFloatMap"
+                },
+                {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "type": "object"
+                }
+              ]
+            },
+            "comparator_1": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/domainFloatMap"
+                },
+                {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "type": "object"
+                }
+              ]
+            },
+            "comparator_2": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/domainFloatMap"
+                },
+                {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "required": [
+            "adapter",
+            "base",
+            "comparator_1",
+            "comparator_2"
+          ],
+          "type": "object"
+        },
+        "safety": {
+          "additionalProperties": false,
+          "properties": {
+            "blocking_reasons": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "definition": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "harmful_mutation_counts": {
+              "$ref": "#/$defs/armIntegerMap"
+            },
+            "harmful_mutation_rates": {
+              "$ref": "#/$defs/armFloatMap"
+            },
+            "missing_db_evidence_counts": {
+              "$ref": "#/$defs/armIntegerMap"
+            },
+            "missing_policy_review_counts": {
+              "$ref": "#/$defs/armIntegerMap"
+            },
+            "policy_violation_counts": {
+              "$ref": "#/$defs/armIntegerMap"
+            },
+            "policy_violation_rates": {
+              "$ref": "#/$defs/armFloatMap"
+            },
+            "provable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "provable",
+            "definition",
+            "missing_db_evidence_counts",
+            "missing_policy_review_counts",
+            "harmful_mutation_counts",
+            "harmful_mutation_rates",
+            "policy_violation_counts",
+            "policy_violation_rates",
+            "blocking_reasons"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "macro_pass1",
+        "per_domain_pass1",
+        "safety"
+      ],
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "development",
+        "sealed"
+      ]
+    },
+    "pairing": {
+      "additionalProperties": false,
+      "properties": {
+        "domain_counts": {
+          "type": "object"
+        },
+        "key_fields": {
+          "const": [
+            "domain",
+            "task_sha256",
+            "trial",
+            "seed"
+          ]
+        },
+        "pair_set_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paired_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passed",
+        "key_fields",
+        "paired_count",
+        "domain_counts",
+        "pair_set_sha256"
+      ],
+      "type": "object"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "per_task_hashed": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "promotion_ready": {
+      "type": "boolean"
+    },
+    "public_payload_scan": {
+      "additionalProperties": false,
+      "properties": {
+        "forbidden_key_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "forbidden_text_pattern_count": {
+          "const": 4
+        },
+        "passed": {
+          "const": true
+        },
+        "report_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "passed",
+        "forbidden_key_count",
+        "forbidden_text_pattern_count",
+        "report_sha256"
+      ],
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready_for_publication_review",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.tau3_evaluation.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "base": {
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "comparator_1": {
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "comparator_2": {
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "adapter",
+        "base",
+        "comparator_1",
+        "comparator_2"
+      ],
+      "type": "object"
+    },
+    "tau_revision": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "mode",
+    "passed",
+    "promotion_ready",
+    "readiness",
+    "analysis_config",
+    "tau_revision",
+    "harness",
+    "source_artifacts",
+    "pairing",
+    "metrics",
+    "effects",
+    "per_task_hashed",
+    "checks",
+    "failed_check_count",
+    "blocking_reasons",
+    "public_payload_scan"
+  ],
+  "title": "Tau-3 Evaluation Evidence",
+  "type": "object"
+}

@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_conversation_import.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "evaluation_criteria_exposure": {
+      "const": false
+    },
+    "hidden_instruction_exposure": {
+      "const": false
+    },
+    "passed": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "hfr.tau3_conversation_import.v1"
+    },
+    "sealed_rows": {
+      "const": 0
+    },
+    "tau_revision": {
+      "minLength": 7,
+      "type": "string"
+    },
+    "test_rows": {
+      "const": 0
+    },
+    "training_started": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "tau_revision",
+    "counts",
+    "files",
+    "source_results",
+    "tool_schema_artifact",
+    "sealed_rows",
+    "test_rows",
+    "hidden_instruction_exposure",
+    "evaluation_criteria_exposure",
+    "training_started"
+  ],
+  "title": "Tau-3 Conversation Import Manifest",
+  "type": "object"
+}

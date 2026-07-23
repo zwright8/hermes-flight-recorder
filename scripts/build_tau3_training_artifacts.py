@@ -940,6 +940,8 @@ def _capture_messages(capture: dict[str, Any]) -> list[dict[str, Any]]:
             args = event.get("args")
             if not tool_name or not call_id or not isinstance(args, dict):
                 raise Tau3BundleBuildError(f"capture tool_call event {index} is incomplete")
+            if str(event.get("requestor") or "assistant") != "assistant":
+                raise Tau3BundleBuildError(f"capture tool_call event {index} has non-assistant requestor")
             messages.append({
                 "role": "assistant",
                 "content": "",
@@ -957,6 +959,8 @@ def _capture_messages(capture: dict[str, Any]) -> list[dict[str, Any]]:
             call_id = str(event.get("tool_call_id") or "")
             if not tool_name or not call_id:
                 raise Tau3BundleBuildError(f"capture tool_result event {index} is incomplete")
+            if str(event.get("requestor") or "assistant") != "assistant":
+                raise Tau3BundleBuildError(f"capture tool_result event {index} has non-assistant requestor")
             result = event.get("result")
             content = (
                 json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

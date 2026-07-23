@@ -1,0 +1,75 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_training_mixture.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Training Mixture",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_training_mixture.v1"},
+    "variant": {"type": "string", "minLength": 1},
+    "format": {"const": "mlx-chat-jsonl"},
+    "passed": {"const": true},
+    "source_binding": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"$ref": "#/$defs/sourceFile"},
+        "valid": {"$ref": "#/$defs/sourceFile"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 1},
+        "valid": {"type": "integer", "minimum": 1}
+      }
+    },
+    "files": {
+      "type": "object",
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"$ref": "#/$defs/outputFile"},
+        "valid": {"$ref": "#/$defs/outputFile"}
+      }
+    },
+    "tokenizer": {
+      "type": "object",
+      "required": ["checked", "method", "row_count", "max_rendered_tokens", "max_seq_length", "harness_context_window", "over_max_seq_length_count", "over_context_window_count"],
+      "properties": {
+        "checked": {"const": true},
+        "method": {"const": "pinned_base_apply_chat_template"},
+        "row_count": {"type": "integer", "minimum": 1},
+        "max_rendered_tokens": {"type": "integer", "minimum": 1},
+        "max_seq_length": {"type": "integer", "minimum": 1},
+        "harness_context_window": {"type": "integer", "minimum": 1},
+        "over_max_seq_length_count": {"const": 0},
+        "over_context_window_count": {"const": 0},
+        "chat_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "sealed_rows": {"const": 0},
+    "test_rows": {"const": 0},
+    "training_started": {"const": false}
+  },
+  "$defs": {
+    "sourceFile": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(train|valid)\\.jsonl$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "outputFile": {
+      "type": "object",
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(train|valid)\\.jsonl$"},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "required": ["schema_version", "variant", "format", "passed", "source_binding", "sealed_rows", "test_rows", "training_started"]
+}

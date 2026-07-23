@@ -1,0 +1,97 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_teacher_generation_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "phase": {
+      "enum": ["prelaunch", "task", "final"]
+    },
+    "tau_revision": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "source": {
+      "type": "object"
+    },
+    "teacher": {
+      "type": "object"
+    },
+    "user_simulator": {
+      "type": "object"
+    },
+    "config": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {"enum": ["auto", "llm_agent", "llm_agent_gt"]},
+        "communication_protocol_enforced": {"type": "boolean"},
+        "max_errors": {"minimum": 1, "maximum": 100, "type": "integer"},
+        "max_steps": {"minimum": 1, "maximum": 100, "type": "integer"},
+        "max_tasks": {"minimum": 1, "type": "integer"},
+        "seed": {"type": "integer"},
+        "timeout_seconds": {"minimum": 1, "maximum": 3600, "type": "integer"}
+      },
+      "required": [
+        "agent",
+        "communication_protocol_enforced",
+        "max_errors",
+        "max_steps",
+        "max_tasks",
+        "seed",
+        "timeout_seconds"
+      ],
+      "type": "object"
+    },
+    "task_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "success_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failure_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "loopback_only": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "hfr.tau3_teacher_generation_run.v1"
+    },
+    "sealed_payload_accessed": {
+      "const": false
+    },
+    "sealed_rows": {
+      "const": 0
+    },
+    "test_rows": {
+      "const": 0
+    },
+    "training_started": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "phase",
+    "tau_revision",
+    "source",
+    "teacher",
+    "user_simulator",
+    "config",
+    "task_count",
+    "sealed_payload_accessed",
+    "training_started"
+  ],
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"const": "final"}}},
+      "then": {
+        "required": ["success_count", "failure_count", "task_receipts", "loopback_only", "sealed_rows", "test_rows"]
+      }
+    }
+  ],
+  "title": "Tau-3 Teacher Generation Run Receipt",
+  "type": "object"
+}

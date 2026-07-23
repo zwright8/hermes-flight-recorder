@@ -1,0 +1,451 @@
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+from typing import Any
+
+from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.tau3_mlx_training import (
+    Tau3MlxTrainingConfig,
+    Tau3MlxTrainingError,
+    run_tau3_mlx_training,
+)
+from flightrecorder.tau3_model_identity import build_tau3_model_identity
+from tests.test_tau3_training_artifacts import _base_bundle, _rewrite_manifest, _write_json, _write_jsonl
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _mutate_json(path: Path, mutate) -> None:
+    payload = _read_json(path)
+    mutate(payload)
+    _write_json(path, payload)
+
+
+def _install_fake_python(root: Path, mode: str) -> None:
+    python = root / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    script = f"""#!/usr/bin/env python3
+import os, sys, time
+mode = {mode!r}
+adapter = sys.argv[sys.argv.index('--adapter-path') + 1] if '--adapter-path' in sys.argv else None
+print('train loss 1.25')
+print('validation loss 0.75', file=sys.stderr)
+if mode == 'sleep':
+    time.sleep(2)
+elif mode == 'crash':
+    print('simulated crash', file=sys.stderr)
+    sys.exit(9)
+elif mode == 'oom':
+    print('out of memory while allocating adapter', file=sys.stderr)
+    sys.exit(1)
+elif mode == 'no_output':
+    sys.exit(0)
+else:
+    os.makedirs(adapter, exist_ok=True)
+    open(os.path.join(adapter, 'adapter_config.json'), 'w').write('{{"r": 16}}\\n')
+    open(os.path.join(adapter, 'adapters.safetensors'), 'wb').write(b'fake-adapter')
+    os.makedirs(os.path.join(adapter, 'checkpoint-0001'), exist_ok=True)
+    open(os.path.join(adapter, 'checkpoint-0001', 'weights.npz'), 'wb').write(b'fake-checkpoint')
+"""
+    python.write_text(script, encoding="utf-8")
+    python.chmod(0o755)
+
+
+def _runner_bundle(root: Path, *, attestation: bool = True) -> Path:
+    bundle = _base_bundle(root)
+    input_export = bundle / "training" / "input_export"
+    input_export.mkdir()
+    rows = [
+        {"messages": [{"role": "user", "content": "Fix itinerary"}, {"role": "assistant", "content": "I updated the itinerary."}]},
+        {"messages": [{"role": "user", "content": "Check order"}, {"role": "assistant", "content": "The order is ready."}]},
+    ]
+    _write_jsonl(input_export / "train.jsonl", [rows[0]])
+    _write_jsonl(input_export / "valid.jsonl", [rows[1]])
+    files = {}
+    for name in ("train", "valid"):
+        path = input_export / f"{name}.jsonl"
+        files[name] = {"path": path.name, "size": path.stat().st_size, "sha256": _sha256(path)}
+    _write_json(
+        input_export / "mlx_dataset_manifest.json",
+        {
+            "schema_version": "hfr.tau3_mlx_dataset.v1",
+            "passed": True,
+            "counts": {"train": 1, "valid": 1},
+            "files": files,
+            "sealed_rows": 0,
+            "test_file_present": False,
+            "training_started": False,
+        },
+    )
+    dataset_manifest = _read_json(bundle / "training" / "dataset_manifest.json")
+    dataset_manifest.update(
+        {
+            "local_only": True,
+            "views": {
+                "mlx_train": {"path": "input_export/train.jsonl", "row_count": 1, "schema_version": "mlx.chat_jsonl.v1"},
+                "mlx_valid": {"path": "input_export/valid.jsonl", "row_count": 1, "schema_version": "mlx.chat_jsonl.v1"},
+            },
+            "mlx_dataset_manifest": {
+                "path": "input_export/mlx_dataset_manifest.json",
+                "sha256": _sha256(input_export / "mlx_dataset_manifest.json"),
+                "sealed_rows": 0,
+            },
+        }
+    )
+    if attestation:
+        dataset_manifest["training_target_quality"] = {
+            "schema_version": "hfr.tau3_training_target_quality.v1",
+            "passed": True,
+            "evaluation_criteria_exposure": False,
+            "exact_match_count": 0,
+            "substantial_exposure_count": 0,
+        }
+    _write_json(bundle / "training" / "dataset_manifest.json", dataset_manifest)
+    _write_json(
+        bundle / "training" / "model_manifest.json",
+        {
+            "schema_version": "hfr.tau3.model_manifest.v1",
+            "model_id": "local-dense-8b",
+            "base_model": "local-dense-8b",
+            "revision": "base-rev",
+            "local_only": True,
+        },
+    )
+    _rewrite_manifest(bundle)
+    return bundle
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _fake_model(root: Path) -> tuple[Path, Path]:
+    model = root / "models" / "base"
+    model.mkdir(parents=True)
+    (model / "config.json").write_text('{"model_type":"fake"}\n', encoding="utf-8")
+    (model / "tokenizer.json").write_text('{"version":"1.0"}\n', encoding="utf-8")
+    (model / "model.safetensors").write_bytes(b"fake-weights")
+    identity = build_tau3_model_identity(model, model_id="fake/base-9b", revision="1234567890abcdef")
+    identity_path = root / "identity.json"
+    _write_json(identity_path, identity)
+    return model, identity_path
+
+
+def _mixture_variant(root: Path, *, contaminated: bool = False) -> Path:
+    source = root / "clean_source"
+    source.mkdir()
+    train_source = {
+        "messages": [{"role": "user", "content": "Book travel"}, {"role": "assistant", "content": "I can help with that."}],
+        "metadata": {"episode_id": "airline-train-family1-task1", "task_family": "family1", "source_fingerprint_status": "verified"},
+        "tools": [],
+    }
+    valid_source = {
+        "messages": [{"role": "user", "content": "Check order"}, {"role": "assistant", "content": "The order is ready."}],
+        "metadata": {"episode_id": "retail-development-family2-task1", "task_family": "family2", "source_fingerprint_status": "verified"},
+        "tools": [],
+    }
+    _write_jsonl(source / "train.jsonl", [train_source])
+    _write_jsonl(source / "valid.jsonl", [valid_source])
+    variant = root / "mixtures" / "assistant_turn_targets"
+    variant.mkdir(parents=True)
+    train_row = {"messages": train_source["messages"], "metadata": {"source_row_sha256": _sha256(source / "train.jsonl")}}
+    if contaminated:
+        train_row["metadata"]["invented_tau_tool"] = True
+    valid_row = {"messages": valid_source["messages"], "metadata": {"source_row_sha256": _sha256(source / "valid.jsonl")}}
+    _write_jsonl(variant / "train.jsonl", [train_row])
+    _write_jsonl(variant / "valid.jsonl", [valid_row])
+    _write_json(
+        variant / "manifest.json",
+        {
+            "schema_version": "hfr.tau3_training_mixture.v1",
+            "variant": "assistant_turn_targets",
+            "format": "mlx-chat-jsonl",
+            "passed": True,
+            "source_binding": {
+                "source_dir": str(source),
+                "train": {"path": "train.jsonl", "sha256": _sha256(source / "train.jsonl")},
+                "valid": {"path": "valid.jsonl", "sha256": _sha256(source / "valid.jsonl")},
+            },
+            "counts": {"train": 1, "valid": 1},
+            "files": {
+                "train": {"path": "train.jsonl", "size": (variant / "train.jsonl").stat().st_size, "sha256": _sha256(variant / "train.jsonl")},
+                "valid": {"path": "valid.jsonl", "size": (variant / "valid.jsonl").stat().st_size, "sha256": _sha256(variant / "valid.jsonl")},
+            },
+            "tokenizer": {
+                "checked": True,
+                "method": "pinned_base_apply_chat_template",
+                "row_count": 2,
+                "max_rendered_tokens": 32,
+                "max_seq_length": 8192,
+                "harness_context_window": 8192,
+                "over_max_seq_length_count": 0,
+                "over_context_window_count": 0,
+                "chat_template_sha256": "0" * 64,
+            },
+            "sealed_rows": 0,
+            "test_rows": 0,
+            "training_started": False,
+        },
+    )
+    return variant
+
+
+def _refresh_protocol_signature(bundle: Path) -> None:
+    import hashlib
+
+    protocol_path = bundle / "protocol" / "protocol_manifest.json"
+    protocol = _read_json(protocol_path)
+    protocol.pop("signature", None)
+    payload = {
+        "protocol_manifest": protocol,
+        "tau_revision": _read_json(bundle / "protocol" / "tau_revision.json"),
+        "split_manifest": _read_json(bundle / "protocol" / "split_manifest.json"),
+        "harness_contract": _read_json(bundle / "protocol" / "harness_contract.json"),
+        "model_freeze": _read_json(bundle / "protocol" / "model_freeze.json"),
+        "budget": _read_json(bundle / "protocol" / "budget.json"),
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+    protocol["signature"] = digest
+    _write_json(protocol_path, protocol)
+
+
+class Tau3MlxTrainingRunnerTests(unittest.TestCase):
+    def test_success_writes_schema_checked_receipt_and_fingerprints_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            receipt = run_tau3_mlx_training(
+                bundle_dir=bundle,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                created_at="2026-07-22T00:00:00Z",
+            )
+            self.assertEqual(receipt["terminal_status"], "success")
+            self.assertTrue(receipt["weights_updated"])
+            self.assertGreaterEqual(receipt["adapter"]["file_count"], 3)
+            self.assertEqual(receipt["losses"]["last_train"], 1.25)
+            self.assertEqual(receipt["losses"]["last_validation"], 0.75)
+            schema = check_schema_contract(_read_json(root / "out" / "training_receipt.json"), name_or_id="tau3_mlx_training_run")
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_crash_is_classified_without_weights_updated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "crash")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(timeout_seconds=5),
+            )
+            self.assertEqual(receipt["terminal_status"], "crash")
+            self.assertFalse(receipt["weights_updated"])
+
+    def test_timeout_is_classified_and_terminates_child(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "sleep")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(timeout_seconds=1),
+            )
+            self.assertEqual(receipt["terminal_status"], "timeout")
+            self.assertTrue(receipt["timed_out"])
+            self.assertFalse(receipt["weights_updated"])
+
+    def test_no_output_success_is_failure_for_weight_update_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "no_output")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(timeout_seconds=5),
+            )
+            self.assertEqual(receipt["terminal_status"], "no_output")
+            self.assertFalse(receipt["weights_updated"])
+
+    def test_oom_is_classified_without_weights_updated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "oom")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(timeout_seconds=5),
+            )
+            self.assertEqual(receipt["terminal_status"], "oom")
+            self.assertFalse(receipt["weights_updated"])
+
+    def test_tampered_bundle_is_rejected_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            _mutate_json(bundle / "protocol/budget.json", lambda payload: payload.__setitem__("max_seconds", 604801))
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "strict production bundle validation failed"):
+                run_tau3_mlx_training(bundle_dir=bundle, output_dir=root / "out", workspace_root=root)
+
+    def test_forbidden_launch_flags_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            _mutate_json(
+                bundle / "training/mlx_qlora_plan.json",
+                lambda payload: payload["command_argv"].extend(["--push-to-hub", "--report-to", "wandb"]),
+            )
+            _rewrite_manifest(bundle)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "strict production bundle validation failed|prelaunch checks failed"):
+                run_tau3_mlx_training(bundle_dir=bundle, output_dir=root / "out", workspace_root=root)
+
+    def test_symlinked_bundle_and_nonlocal_output_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            link = root / "linked_bundle"
+            link.symlink_to(bundle, target_is_directory=True)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "symlink|workspace root"):
+                run_tau3_mlx_training(bundle_dir=link, output_dir=root / "out1", workspace_root=root)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "under workspace root"):
+                run_tau3_mlx_training(bundle_dir=bundle, output_dir=Path(outside) / "out", workspace_root=root)
+
+    def test_sealed_or_test_trainer_view_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            _mutate_json(
+                bundle / "training/dataset_manifest.json",
+                lambda payload: payload["views"].__setitem__("mlx_test", {"path": "input_export/test.jsonl", "row_count": 1}),
+            )
+            _rewrite_manifest(bundle)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(bundle_dir=bundle, output_dir=root / "out", workspace_root=root)
+
+    def test_attestation_is_not_required_when_direct_semantic_scan_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root, attestation=False)
+            receipt = run_tau3_mlx_training(
+                bundle_dir=bundle,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(timeout_seconds=5),
+            )
+            self.assertTrue(receipt["weights_updated"])
+
+    def test_mixture_variant_training_uses_mlx_0313_argv_and_readonly_lora_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            receipt = run_tau3_mlx_training(
+                mixture_dir=_mixture_variant(root),
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            command = receipt["command"]
+            self.assertIn("--fine-tune-type", command)
+            self.assertIn("lora", command)
+            self.assertIn("--grad-accumulation-steps", command)
+            self.assertIn("--steps-per-report", command)
+            self.assertIn("--steps-per-eval", command)
+            self.assertNotIn("--lora-rank", command)
+            self.assertNotIn("--lora-scale", command)
+            self.assertTrue(receipt["mlx_lora_config"]["read_only"])
+            cfg = _read_json(root / "out" / "mlx_lora_config.json")
+            self.assertEqual(cfg["lora_parameters"], {"rank": 16, "scale": 20.0, "dropout": 0.0})
+            self.assertTrue(receipt["weights_updated"])
+
+    def test_normal_venv_python_leaf_symlink_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            python = root / ".venv" / "bin" / "python"
+            target = root / "runtime-python"
+            python.replace(target)
+            python.symlink_to(target)
+            model, identity = _fake_model(root)
+            receipt = run_tau3_mlx_training(
+                mixture_dir=_mixture_variant(root),
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            self.assertEqual(receipt["command"][0], str(target.resolve()))
+            self.assertTrue(receipt["weights_updated"])
+
+    def test_mixture_semantic_scan_rejects_invented_tau_tool_even_with_manifest_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root, contaminated=True),
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(timeout_seconds=5),
+                )
+
+    def test_computed_evaluation_criteria_exposure_blocks_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root, attestation=False)
+            source = bundle / "training_source"
+            source.mkdir()
+            criterion = "Refund must be denied unless the passenger provides a refundable fare code."
+            _write_jsonl(
+                source / "train_tasks.jsonl",
+                [{"id": "task-1", "evaluation_criteria": {"must": criterion}}],
+            )
+            _mutate_json(
+                bundle / "protocol/split_manifest.json",
+                lambda payload: payload.__setitem__("source_paths", {"train": "training_source/train_tasks.jsonl"}),
+            )
+            _refresh_protocol_signature(bundle)
+            _write_jsonl(
+                bundle / "training" / "input_export" / "train.jsonl",
+                [{"messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": criterion}]}],
+            )
+            manifest = _read_json(bundle / "training" / "input_export" / "mlx_dataset_manifest.json")
+            manifest["files"]["train"]["size"] = (bundle / "training" / "input_export" / "train.jsonl").stat().st_size
+            manifest["files"]["train"]["sha256"] = _sha256(bundle / "training" / "input_export" / "train.jsonl")
+            _write_json(bundle / "training" / "input_export" / "mlx_dataset_manifest.json", manifest)
+            _mutate_json(
+                bundle / "training/dataset_manifest.json",
+                lambda payload: payload["mlx_dataset_manifest"].__setitem__("sha256", _sha256(bundle / "training" / "input_export" / "mlx_dataset_manifest.json")),
+            )
+            _rewrite_manifest(bundle)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(bundle_dir=bundle, output_dir=root / "out", workspace_root=root)
+
+
+if __name__ == "__main__":
+    unittest.main()

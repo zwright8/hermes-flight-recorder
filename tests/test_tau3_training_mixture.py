@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import types
+import unittest
+from pathlib import Path
+from typing import Any
+from unittest import mock
+
+from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.tau3_training_mixture import (
+    TAU3_TRAINING_MIXTURE_SCHEMA_VERSION,
+    Tau3TrainingMixtureError,
+    build_tau3_training_mixtures,
+)
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def _tool(name: str = "lookup") -> dict[str, Any]:
+    return {
+        "type": "function",
+        "name": name,
+        "function": {
+            "name": name,
+            "description": "lookup fixture",
+            "parameters": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": ["id"],
+            },
+            "version": "tau3-recorded-tool-schema-v1",
+        },
+    }
+
+
+def _row(episode_id: str, family: str, *, assistant_text: str = "I checked the record and can proceed.", tool_name: str = "lookup") -> dict[str, Any]:
+    return {
+        "messages": [
+            {"role": "user", "content": "Please check my account."},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": tool_name, "arguments": {"id": "abc"}},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "name": tool_name, "content": "{\"ok\":true}"},
+            {"role": "assistant", "content": assistant_text},
+        ],
+        "metadata": {
+            "episode_id": episode_id,
+            "task_family": family,
+            "source_view": "action_sft",
+            "source_schema_version": "hfr.rl.action_sft.v1",
+            "source_fingerprint_status": "verified",
+            "source_fingerprints": {
+                "scenario": {"sha256": "a" * 64, "path": "source_scenario.json", "exists": True},
+                "source_trace": {"sha256": "b" * 64, "path": "source_trace.json", "exists": True},
+            },
+        },
+        "tools": [_tool(tool_name)],
+    }
+
+
+class _Tokenizer:
+    chat_template = "fixture-chat-template"
+
+    def __init__(self, *, multiplier: int = 1) -> None:
+        self.multiplier = multiplier
+
+    def apply_chat_template(self, messages: list[dict[str, Any]], **kwargs: Any) -> list[int]:
+        self.kwargs = kwargs
+        size = sum(len(str(message.get("content") or "")) + 1 for message in messages)
+        return list(range(max(1, size * self.multiplier)))
+
+
+def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
+    module = types.ModuleType("transformers")
+
+    class AutoTokenizer:
+        @staticmethod
+        def from_pretrained(path: Path, **kwargs: Any) -> _Tokenizer:
+            AutoTokenizer.path = path
+            AutoTokenizer.kwargs = kwargs
+            return tokenizer
+
+    module.AutoTokenizer = AutoTokenizer
+    return mock.patch.dict(sys.modules, {"transformers": module})
+
+
+class Tau3TrainingMixtureTests(unittest.TestCase):
+    def test_builds_three_governed_variants_from_safe_fixtures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            _write_jsonl(source / "train.jsonl", [_row("tau3-train-retail-success-001", "family-train")])
+            _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+
+            with _install_fake_transformers(_Tokenizer()):
+                manifest = build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+            self.assertTrue(manifest["passed"])
+            self.assertEqual([item["name"] for item in manifest["variants"]], [
+                "full_trajectories",
+                "assistant_turn_targets",
+                "action_upweighted",
+            ])
+            for variant in ("full_trajectories", "assistant_turn_targets", "action_upweighted"):
+                variant_dir = root / "mixtures" / variant
+                variant_manifest = json.loads((variant_dir / "manifest.json").read_text(encoding="utf-8"))
+                check = check_schema_contract(variant_manifest, name_or_id=TAU3_TRAINING_MIXTURE_SCHEMA_VERSION)
+                self.assertTrue(check["passed"], check["errors"])
+                rows = [
+                    json.loads(line)
+                    for line in (variant_dir / "train.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                self.assertIn("provenance_hashes", rows[0]["metadata"])
+                self.assertEqual(rows[0]["metadata"]["source_episode_id"], "tau3-train-retail-success-001")
+                self.assertFalse((variant_dir / "test.jsonl").exists())
+
+            action_rows = [
+                json.loads(line)
+                for line in (root / "mixtures" / "action_upweighted" / "train.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            action_count = sum(row["metadata"]["target_kind"] == "tool_call" for row in action_rows)
+            non_action_count = len(action_rows) - action_count
+            self.assertLessEqual(action_count, 3 * non_action_count)
+            self.assertGreater(action_count, 1)
+
+    def test_rejects_evaluator_criteria_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            _write_jsonl(source / "train.jsonl", [
+                _row("tau3-train-airline-clarification-001", "family-train", assistant_text="Check that Agent does not offer partial cabin changes.")
+            ])
+            _write_jsonl(source / "valid.jsonl", [_row("tau3-development-airline-success-002", "family-valid")])
+            with _install_fake_transformers(_Tokenizer()):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "evaluator-criteria leakage"):
+                    build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+    def test_rejects_test_or_sealed_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            _write_jsonl(source / "train.jsonl", [_row("tau3-test-retail-success-001", "family-train")])
+            _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            with _install_fake_transformers(_Tokenizer()):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "split mismatch"):
+                    build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+    def test_rejects_missing_tool_schema_and_unpaired_results(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            bad = _row("tau3-train-retail-success-001", "family-train", tool_name="missing_schema")
+            bad["tools"] = [_tool("different")]
+            _write_jsonl(source / "train.jsonl", [bad])
+            _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            with _install_fake_transformers(_Tokenizer()):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "missing tool schema"):
+                    build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+    def test_rejects_source_tamper_duplicate_output_and_overflow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            tampered = _row("tau3-train-retail-success-001", "family-train")
+            tampered["metadata"]["source_fingerprint_status"] = "unverified"
+            _write_jsonl(source / "train.jsonl", [tampered])
+            _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            with _install_fake_transformers(_Tokenizer()):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "unverified source fingerprint"):
+                    build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+            _write_jsonl(source / "train.jsonl", [_row("tau3-train-retail-success-001", "family-train")])
+            occupied = root / "occupied"
+            occupied.mkdir()
+            (occupied / "keep").write_text("x", encoding="utf-8")
+            with _install_fake_transformers(_Tokenizer()):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "output directory must be new or empty"):
+                    build_tau3_training_mixtures(source, occupied, tokenizer_path=root / "tokenizer")
+
+            with _install_fake_transformers(_Tokenizer(multiplier=100)):
+                with self.assertRaisesRegex(Tau3TrainingMixtureError, "exceeds tokenizer"):
+                    build_tau3_training_mixtures(source, root / "overflow", tokenizer_path=root / "tokenizer", max_seq_length=8, context_window=8)
+
+
+if __name__ == "__main__":
+    unittest.main()

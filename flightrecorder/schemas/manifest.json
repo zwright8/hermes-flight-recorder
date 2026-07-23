@@ -2,6 +2,38 @@
   "schema_version": "hfr.schema_catalog.v1",
   "schemas": [
     {
+      "artifact": "tau3_teacher_generation_run",
+      "artifact_schema_version": "hfr.tau3_teacher_generation_run.v1",
+      "description": "Receipts for governed official-Tau teacher trajectory generation runs.",
+      "filename": "tau3_teacher_generation_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_teacher_generation_run.v1.schema.json",
+      "name": "tau3_teacher_generation_run"
+    },
+    {
+      "artifact": "tau3_conversation_import",
+      "artifact_schema_version": "hfr.tau3_conversation_import.v1",
+      "description": "Manifest for importing official Tau-3 text simulations into governed train/valid MLX views.",
+      "filename": "tau3_conversation_import.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_conversation_import.v1.schema.json",
+      "name": "tau3_conversation_import"
+    },
+    {
+      "artifact": "tau3_mlx_training_run",
+      "artifact_schema_version": "hfr.tau3_mlx_training_run.v1",
+      "description": "Prelaunch or final receipt for a local MLX-LM QLoRA Tau-3 training run.",
+      "filename": "tau3_mlx_training_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_mlx_training_run.v1.schema.json",
+      "name": "tau3_mlx_training_run"
+    },
+    {
+      "artifact": "tau3_evaluation",
+      "artifact_schema_version": "hfr.tau3_evaluation.v1",
+      "description": "Public-safe paired Tau-3 evaluation, statistics, safety, and promotion evidence.",
+      "filename": "tau3_evaluation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_evaluation.v1.schema.json",
+      "name": "tau3_evaluation"
+    },
+    {
       "artifact": "scenario",
       "artifact_schema_version": "hfr.scenario.contract.v1",
       "description": "Scenario contract accepted by run, score, and run-suite.",
@@ -1472,6 +1504,14 @@
       "filename": "tau3_mlx_dataset.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/tau3_mlx_dataset.v1.schema.json",
       "name": "tau3_mlx_dataset"
+    },
+    {
+      "artifact": "tau3_training_mixture",
+      "artifact_schema_version": "hfr.tau3_training_mixture.v1",
+      "description": "Governed MLX train/valid mixture variants with immutable source-row, message, metadata, and tokenizer-budget binding.",
+      "filename": "tau3_training_mixture.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_training_mixture.v1.schema.json",
+      "name": "tau3_training_mixture"
     },
     {
       "artifact": "tau3_source_partition",
