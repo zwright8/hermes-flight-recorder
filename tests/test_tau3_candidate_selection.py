@@ -50,6 +50,7 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             self.assertEqual(lock["candidate_identity_sha256"], _sha256(better_tie.candidate_identity_path))
             self.assertNotEqual(lock["candidate_identity_sha256"], report["selection"]["candidate_identity_canonical_sha256"])
             self.assertEqual(report["selection"]["candidate_identity_sha256"], _sha256(better_tie.candidate_identity_path))
+            self.assertIsNone(_read(better_tie.development_manifest_path)["sealed_authorization"])
             self.assertTrue(lock["hashes_only"])
             self.assertFalse(lock["local_paths_included"])
             self.assertTrue(check_schema_file(root / "candidate-lock.json", "tau3_candidate_lock")["passed"])
@@ -613,6 +614,7 @@ def _benchmark_manifest(
         },
         "source": _file_ref(staged_source, "development.json"),
         "sealed_task_count_manifest": None,
+        "sealed_authorization": None,
         "candidate_lock": None,
         "candidate_identity": candidate_identity,
         "task_selection": {"split": "development"},
@@ -641,6 +643,7 @@ def _benchmark_manifest(
             "config",
             "source",
             "sealed_task_count_manifest",
+            "sealed_authorization",
             "candidate_lock",
             "candidate_identity",
             "task_selection",
