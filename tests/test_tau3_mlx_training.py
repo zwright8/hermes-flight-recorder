@@ -13,6 +13,7 @@ from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
+    _write_telemetry,
     main as tau3_mlx_training_main,
     run_tau3_mlx_training,
 )
@@ -316,6 +317,15 @@ def _refresh_protocol_signature(bundle: Path) -> None:
 
 
 class Tau3MlxTrainingRunnerTests(unittest.TestCase):
+    def test_telemetry_event_is_flushed_for_live_observation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "telemetry.jsonl"
+            losses: dict[str, list[float]] = {"train": [], "validation": []}
+            with path.open("x", encoding="utf-8") as handle:
+                _write_telemetry(handle, "stdout", "Iter 1: Train loss 1.25", losses)
+                self.assertGreater(path.stat().st_size, 0)
+            self.assertEqual(losses["train"], [1.25])
+
     def test_success_writes_schema_checked_receipt_and_fingerprints_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

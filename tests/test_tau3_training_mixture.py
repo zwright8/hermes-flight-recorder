@@ -133,6 +133,41 @@ def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
 
 
 class Tau3TrainingMixtureTests(unittest.TestCase):
+    def test_builds_selected_variant_with_a_hash_audited_token_band(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            _write_jsonl(source / "train.jsonl", [
+                _row("tau3-train-retail-success-001", "family-train-1", assistant_text="x" * 80),
+                _row("tau3-train-retail-success-002", "family-train-2", assistant_text="x" * 600),
+            ])
+            _write_jsonl(
+                source / "valid.jsonl",
+                [_row("tau3-development-retail-success-003", "family-valid", assistant_text="x" * 80)],
+            )
+            _write_source_manifest(source)
+
+            with _install_fake_transformers(_MappingArgumentsTokenizer()):
+                manifest = build_tau3_training_mixtures(
+                    source,
+                    root / "mixtures",
+                    tokenizer_path=root / "tokenizer",
+                    max_seq_length=160,
+                    context_window=160,
+                    min_rendered_tokens=100,
+                    exclude_over_budget=True,
+                    variant_names=("assistant_turn_targets",),
+                )
+
+            self.assertEqual([variant["name"] for variant in manifest["variants"]], ["assistant_turn_targets"])
+            self.assertFalse((root / "mixtures" / "full_trajectories").exists())
+            selected = json.loads(
+                (root / "mixtures" / "assistant_turn_targets" / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(selected["budget_filter"]["min_rendered_tokens"], 100)
+            self.assertGreater(selected["counts"]["train"], 0)
+            self.assertGreater(selected["counts"]["valid"], 0)
+
     def test_explicit_budget_filter_excludes_and_hashes_only_oversized_derived_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

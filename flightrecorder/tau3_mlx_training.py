@@ -1429,6 +1429,7 @@ def _write_telemetry(handle: Any, stream_name: str, line: str, losses: dict[str,
         kind = match.group("kind").lower()
         losses["validation" if kind in {"valid", "validation", "val"} else "train"].append(value)
     handle.write(json.dumps({"time": _now_utc(), "stream": stream_name, "text": text}, sort_keys=True) + "\n")
+    handle.flush()
     return 1
 
 

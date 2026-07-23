@@ -70,6 +70,8 @@ def build_tau3_training_mixtures(
     max_action_repeat: int = 3,
     max_action_to_non_action_ratio: float = 3.0,
     exclude_over_budget: bool = False,
+    min_rendered_tokens: int = 1,
+    variant_names: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Derive new-only MLX mixture variants from clean train/valid views."""
 
@@ -84,10 +86,24 @@ def build_tau3_training_mixtures(
     _require_new_output(out)
     if max_seq_length <= 0 or context_window <= 0:
         raise Tau3TrainingMixtureError("token sequence budgets must be positive")
+    if min_rendered_tokens <= 0 or min_rendered_tokens > max_seq_length:
+        raise Tau3TrainingMixtureError("min_rendered_tokens must be between 1 and max_seq_length")
     if max_action_repeat < 1:
         raise Tau3TrainingMixtureError("max_action_repeat must be at least 1")
     if max_action_to_non_action_ratio < 1:
         raise Tau3TrainingMixtureError("max_action_to_non_action_ratio must be at least 1")
+    selected_variant_names: tuple[str, ...]
+    if variant_names is None:
+        selected_variant_names = VARIANTS
+    else:
+        if not variant_names:
+            raise Tau3TrainingMixtureError("at least one mixture variant must be selected")
+        if len(set(variant_names)) != len(variant_names):
+            raise Tau3TrainingMixtureError("mixture variants must be unique")
+        unknown_variants = sorted(set(variant_names) - set(VARIANTS))
+        if unknown_variants:
+            raise Tau3TrainingMixtureError(f"unknown mixture variant: {unknown_variants[0]}")
+        selected_variant_names = tuple(name for name in VARIANTS if name in variant_names)
 
     train = _load_split(source / "train.jsonl", split_name="train", allowed_splits=TRAIN_SPLITS)
     valid = _load_split(source / "valid.jsonl", split_name="valid", allowed_splits=VALID_SPLITS)
@@ -121,12 +137,13 @@ def build_tau3_training_mixtures(
 
     source_binding = _source_binding(source)
     prepared_variants: list[_PreparedVariant] = []
-    for variant_name in VARIANTS:
+    for variant_name in selected_variant_names:
         rows_by_split, budget_filter = _apply_budget_filter(
             tokenizer,
             variants[variant_name],
             max_seq_length=max_seq_length,
             context_window=context_window,
+            min_rendered_tokens=min_rendered_tokens,
             enabled=exclude_over_budget,
         )
         token_stats = _tokenizer_stats(
@@ -193,7 +210,8 @@ def build_tau3_training_mixtures(
         },
         "budget_filter": {
             "enabled": exclude_over_budget,
-            "policy": "exclude_derived_rows_over_sequence_or_context_budget",
+            "policy": "exclude_derived_rows_outside_rendered_token_band",
+            "min_rendered_tokens": min_rendered_tokens,
             "max_seq_length": max_seq_length,
             "context_window": context_window,
         },
@@ -442,6 +460,7 @@ def _apply_budget_filter(
     *,
     max_seq_length: int,
     context_window: int,
+    min_rendered_tokens: int,
     enabled: bool,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     kept: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
@@ -450,7 +469,11 @@ def _apply_budget_filter(
         for row in rows_by_split[split]:
             if enabled:
                 rendered_tokens = _rendered_token_length(tokenizer, row)
-                over_budget = rendered_tokens > max_seq_length or rendered_tokens > context_window
+                over_budget = (
+                    rendered_tokens < min_rendered_tokens
+                    or rendered_tokens > max_seq_length
+                    or rendered_tokens > context_window
+                )
             else:
                 over_budget = False
             if over_budget:
@@ -461,7 +484,8 @@ def _apply_budget_filter(
             raise Tau3TrainingMixtureError(f"budget filter removed every {split} row")
     return kept, {
         "enabled": enabled,
-        "policy": "exclude_derived_rows_over_sequence_or_context_budget",
+        "policy": "exclude_derived_rows_outside_rendered_token_band",
+        "min_rendered_tokens": min_rendered_tokens,
         "max_seq_length": max_seq_length,
         "context_window": context_window,
         "input_counts": {split: len(rows_by_split[split]) for split in ("train", "valid")},

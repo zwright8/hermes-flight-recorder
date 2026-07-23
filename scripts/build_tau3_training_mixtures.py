@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from flightrecorder.tau3_training_mixture import (  # noqa: E402
+    VARIANTS,
     Tau3TrainingMixtureError,
     build_tau3_training_mixtures,
 )
@@ -27,6 +28,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--context-window", type=int, default=8192)
     parser.add_argument("--max-action-repeat", type=int, default=3)
     parser.add_argument("--max-action-to-non-action-ratio", type=float, default=3.0)
+    parser.add_argument("--min-rendered-tokens", type=int, default=1)
+    parser.add_argument(
+        "--variant",
+        action="append",
+        choices=VARIANTS,
+        help="Build only this variant; repeat to select multiple variants",
+    )
     parser.add_argument(
         "--exclude-over-budget",
         action="store_true",
@@ -47,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             max_action_repeat=args.max_action_repeat,
             max_action_to_non_action_ratio=args.max_action_to_non_action_ratio,
             exclude_over_budget=args.exclude_over_budget,
+            min_rendered_tokens=args.min_rendered_tokens,
+            variant_names=tuple(args.variant) if args.variant else None,
         )
     except (OSError, Tau3TrainingMixtureError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
