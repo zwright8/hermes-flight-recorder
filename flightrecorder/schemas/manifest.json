@@ -58,6 +58,14 @@
       "name": "tau3_candidate_selection"
     },
     {
+      "artifact": "tau3_candidate_attempt_ledger",
+      "artifact_schema_version": "hfr.tau3_candidate_attempt_ledger.v1",
+      "description": "Public-safe census ledger for governed Tau-3 candidate training attempts.",
+      "filename": "tau3_candidate_attempt_ledger.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_attempt_ledger.v1.schema.json",
+      "name": "tau3_candidate_attempt_ledger"
+    },
+    {
       "artifact": "tau3_candidate_identity",
       "artifact_schema_version": "hfr.tau3_candidate_identity.v1",
       "description": "Public-safe hash-only identity binding one governed Tau-3 development candidate to final MLX training output and endpoint model string.",

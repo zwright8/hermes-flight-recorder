@@ -1,0 +1,365 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_attempt_ledger.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public-safe census ledger for governed Tau-3 candidate training attempts.",
+  "properties": {
+    "attempt_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "attempts": {
+      "items": {
+        "$ref": "#/$defs/attempt"
+      },
+      "type": "array"
+    },
+    "campaign": {
+      "additionalProperties": false,
+      "properties": {
+        "campaign_marker_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "root_ref": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "required": [
+        "root_ref",
+        "campaign_marker_sha256"
+      ],
+      "type": "object"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "failed_attempt_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "lock": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "created_at",
+            "sha256"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "schema_checked": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "hfr.tau3_candidate_attempt_ledger.v1"
+    },
+    "status_counts": {
+      "additionalProperties": false,
+      "properties": {
+        "completed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "interrupted": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "malformed-receipt": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing-receipt": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timeout": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "completed",
+        "failed",
+        "timeout",
+        "interrupted",
+        "missing-receipt",
+        "malformed-receipt"
+      ],
+      "type": "object"
+    },
+    "successful_attempt_count": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "schema_checked",
+    "created_at",
+    "campaign",
+    "lock",
+    "attempt_count",
+    "status_counts",
+    "successful_attempt_count",
+    "failed_attempt_count",
+    "attempts"
+  ],
+  "title": "Tau-3 Candidate Attempt Ledger",
+  "type": "object",
+  "$defs": {
+    "attempt": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$",
+          "type": "string"
+        },
+        "attempt_ref": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "bindings": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter_tree_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "config_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "dataset_files_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "dataset_manifest_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "model_identity_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "protocol_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "protocol_signature": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "recipe_sha256": {
+              "$ref": "#/$defs/nullableSha256"
+            }
+          },
+          "required": [
+            "protocol_sha256",
+            "protocol_signature",
+            "model_identity_sha256",
+            "dataset_manifest_sha256",
+            "dataset_files_sha256",
+            "recipe_sha256",
+            "config_sha256",
+            "adapter_tree_sha256"
+          ],
+          "type": "object"
+        },
+        "failure_reasons": {
+          "items": {
+            "enum": [
+              "malformed_intent",
+              "malformed_outcome",
+              "malformed_receipt",
+              "missing_intent",
+              "missing_outcome",
+              "missing_receipt",
+              "receipt_not_successful",
+              "receipt_parse_error",
+              "receipt_reference_error",
+              "receipt_schema_invalid",
+              "receipt_unsafe_symlink"
+            ]
+          },
+          "uniqueItems": true,
+          "type": "array"
+        },
+        "intent": {
+          "$ref": "#/$defs/optionalFileRef"
+        },
+        "metrics": {
+          "additionalProperties": false,
+          "properties": {
+            "elapsed_seconds": {
+              "$ref": "#/$defs/nullableNonnegativeNumber"
+            },
+            "last_train_loss": {
+              "$ref": "#/$defs/nullableNumber"
+            },
+            "last_validation_loss": {
+              "$ref": "#/$defs/nullableNumber"
+            },
+            "peak_child_rss_kb": {
+              "$ref": "#/$defs/nullableNonnegativeInteger"
+            },
+            "train_losses": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "validation_losses": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "weights_updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "elapsed_seconds",
+            "peak_child_rss_kb",
+            "weights_updated",
+            "last_train_loss",
+            "last_validation_loss",
+            "train_losses",
+            "validation_losses"
+          ],
+          "type": "object"
+        },
+        "outcome": {
+          "$ref": "#/$defs/optionalFileRef"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "timeout",
+            "interrupted",
+            "missing-receipt",
+            "malformed-receipt"
+          ]
+        },
+        "training_receipt": {
+          "$ref": "#/$defs/optionalFileRef"
+        }
+      },
+      "required": [
+        "attempt_id",
+        "attempt_ref",
+        "status",
+        "failure_reasons",
+        "intent",
+        "outcome",
+        "training_receipt",
+        "bindings",
+        "metrics"
+      ],
+      "type": "object"
+    },
+    "fileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "optionalFileRef": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/fileRef"
+        }
+      ]
+    },
+    "nullableNonnegativeInteger": {
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableNonnegativeNumber": {
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableNumber": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "relativePath": {
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?!.*(^|[\\\\/])~([\\\\/]|$))(?!.*\\\\).+$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}
