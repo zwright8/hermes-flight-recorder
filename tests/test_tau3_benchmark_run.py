@@ -40,16 +40,17 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         )
         self.assertEqual(
             _command_timeout_seconds(
-                protocol={"sealed_manifest": {"task_count": 100}},
+                protocol={"sealed_manifest": {}},
                 config=config,
                 domain="airline",
                 tasks_by_domain=None,
+                sealed_task_count=100,
             ),
             60030,
         )
 
         with self.assertRaisesRegex(Tau3BenchmarkRunError, "positive command task count"):
-            _command_timeout_seconds(protocol={"sealed_manifest": {}}, config=config, domain="airline", tasks_by_domain=None)
+            _command_timeout_seconds(protocol={"sealed_manifest": {"task_count": 100}}, config=config, domain="airline", tasks_by_domain=None)
 
     def test_development_runs_domain_seed_commands_and_resumes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,7 +133,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            protocol = self._protocol(root, candidate_lock=lock)
+            sealed_manifest = self._sealed_source_manifest(root, task_count=100)
+            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
             endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
 
             manifest = run_tau3_benchmark_arm(
@@ -147,6 +149,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     mode="sealed",
                     arm_id="adapter",
                     protocol_path=protocol,
+                    sealed_task_count_manifest=sealed_manifest,
                     candidate_lock=lock,
                     candidate_lock_sha256=self._sha256(lock),
                     timeout_seconds=2,
@@ -156,11 +159,15 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             self.assertIsNone(manifest["source"])
             self.assertEqual(manifest["candidate_lock"]["sha256"], self._sha256(lock))
             self.assertEqual(manifest["candidate_lock"]["path"], "inputs/candidate_lock.json")
+            self.assertEqual(manifest["sealed_task_count_manifest"]["sha256"], self._sha256(sealed_manifest))
+            self.assertEqual(manifest["sealed_task_count_manifest"]["path"], "inputs/sealed_task_count_manifest.json")
+            self.assertEqual(manifest["sealed_task_count_manifest"]["task_count"], 100)
             self.assertEqual(manifest["protocol"]["path"], "inputs/protocol.json")
             self.assertEqual(manifest["prelaunch_receipt"]["path"], "prelaunch_receipt.json")
             self.assertEqual(manifest["arm_identity"]["candidate_identity_sha256"], candidate_identity_sha256)
             self.assertEqual(manifest["arm_identity"]["adapter"]["tree_sha256"], self._tree_sha256(adapter))
             self.assertFalse(manifest["task_selection"]["task_ids_in_command"])
+            self.assertEqual(manifest["task_selection"]["sealed_task_count"], 100)
             command = json.loads((root / "sealed-out" / "run-airline-seed202.json").read_text(encoding="utf-8"))["command"]
             self.assertEqual(command[command.index("--task-split-name") + 1], "test")
             self.assertNotIn("--task-ids", command)
@@ -181,6 +188,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         mode="sealed",
                         arm_id="adapter",
                         protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -196,7 +204,35 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     agent=endpoint,
                     user=self._endpoint("local/user", 18081),
                     reviewer=self._endpoint("local/reviewer", 18082),
-                    config=Tau3BenchmarkConfig(mode="sealed", arm_id="adapter", protocol_path=protocol),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                    ),
+                )
+
+            drifted = root / "sealed-count-drifted"
+            shutil.copytree(root / "sealed-out", drifted)
+            (drifted / "inputs" / "sealed_task_count_manifest.json").write_text('{"tampered":true}\n', encoding="utf-8")
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "staged sealed task-count manifest drifted"):
+                run_tau3_benchmark_arm(
+                    out_dir=drifted,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
                 )
 
     def test_development_adapter_uses_candidate_identity_without_lock(self):
@@ -334,6 +370,210 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     user=self._endpoint("local/user", 18081),
                     reviewer=self._endpoint("local/reviewer", 18082),
                     config=Tau3BenchmarkConfig(mode="development", arm_id="adapter", protocol_path=protocol, source_split=source, candidate_identity=identity),
+                )
+
+    def test_sealed_task_count_manifest_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            adapter = self._adapter(root)
+            lock = root / "candidate-lock.json"
+            lock.write_text(
+                json.dumps(
+                    {
+                        "candidate_identity_sha256": "b" * 64,
+                        "candidate": {"adapter_id": "local/adapter", "adapter_tree_sha256": self._tree_sha256(adapter)},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            sealed_manifest = self._sealed_source_manifest(root, task_count=100)
+            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
+            endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
+
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "sealed-task-count-manifest"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-missing-count",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+            bad_hash_manifest = self._sealed_source_manifest(root, task_count=99)
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "sealed task-count manifest sha256"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-bad-hash",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=bad_hash_manifest,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+            payload_manifest = self._sealed_source_manifest(root, task_count=100, entry_extra={"raw_id": "air-1"})
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "schema failed|hash-only"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-payload",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=payload_manifest,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+    def test_sealed_task_count_manifest_rejects_symlink_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            adapter = self._adapter(root)
+            lock = root / "candidate-lock.json"
+            lock.write_text(
+                json.dumps(
+                    {
+                        "candidate_identity_sha256": "b" * 64,
+                        "candidate": {"adapter_id": "local/adapter", "adapter_tree_sha256": self._tree_sha256(adapter)},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            sealed_manifest = self._sealed_source_manifest(root, task_count=100)
+            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
+            endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
+
+            sealed_link = root / "sealed-link.json"
+            os.symlink(sealed_manifest, sealed_link)
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "sealed task-count manifest must not contain symlink"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-source-symlink",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_link,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+            inputs_symlink_out = root / "sealed-inputs-symlink"
+            inputs_symlink_out.mkdir()
+            symlink_target = root / "inputs-target"
+            symlink_target.mkdir()
+            os.symlink(symlink_target, inputs_symlink_out / "inputs")
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "destination must not contain symlink"):
+                run_tau3_benchmark_arm(
+                    out_dir=inputs_symlink_out,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+            staged_symlink_out = root / "sealed-staged-symlink"
+            staged_inputs = staged_symlink_out / "inputs"
+            staged_inputs.mkdir(parents=True)
+            (staged_inputs / "protocol.json").write_text(protocol.read_text(encoding="utf-8"), encoding="utf-8")
+            os.symlink(sealed_manifest, staged_inputs / "sealed_task_count_manifest.json")
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "staged sealed task-count manifest destination must not contain symlink"):
+                run_tau3_benchmark_arm(
+                    out_dir=staged_symlink_out,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+    def test_development_rejects_sealed_task_count_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._development_source(root)
+            sealed_manifest = self._sealed_source_manifest(root, task_count=100)
+            protocol = self._protocol(root, source=source)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            endpoint = self._endpoint("local/base", 18080)
+
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "development mode must not receive a sealed task-count manifest"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "dev-sealed-count",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=endpoint,
+                    reviewer=endpoint,
+                    config=Tau3BenchmarkConfig(
+                        mode="development",
+                        arm_id="base",
+                        protocol_path=protocol,
+                        source_split=source,
+                        sealed_task_count_manifest=sealed_manifest,
+                        timeout_seconds=2,
+                    ),
                 )
 
     def test_refuses_remote_endpoint_changed_resume_and_unreceipted_output(self):
@@ -779,10 +1019,39 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
 
-    def _protocol(self, root: Path, *, source: Path | None = None, candidate_lock: Path | None = None) -> Path:
+    def _sealed_source_manifest(self, root: Path, *, task_count: int, entry_extra: dict[str, object] | None = None) -> Path:
+        path = root / f"sealed-{len(list(root.glob('sealed-*.json')))}.json"
+        entries = []
+        for index in range(task_count):
+            entry: dict[str, object] = {
+                "task_id_sha256": hashlib_sha256(f"task-id-{index}".encode("utf-8")).hexdigest(),
+                "prompt_sha256": hashlib_sha256(f"prompt-{index}".encode("utf-8")).hexdigest(),
+                "task_sha256": hashlib_sha256(f"task-{index}".encode("utf-8")).hexdigest(),
+            }
+            if entry_extra is not None:
+                entry.update(entry_extra)
+            entries.append(entry)
+        payload = {
+            "schema_version": "hfr.tau3_sealed_source_manifest.v1",
+            "source_revision": self.revision,
+            "hashes_only": True,
+            "task_count": task_count,
+            "entries": entries,
+        }
+        path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        return path
+
+    def _protocol(
+        self,
+        root: Path,
+        *,
+        source: Path | None = None,
+        sealed_manifest: Path | None = None,
+        candidate_lock: Path | None = None,
+    ) -> Path:
         path = root / f"protocol-{len(list(root.glob('protocol-*.json')))}.json"
         dev_hash = self._sha256(source) if source is not None else "d" * 64
-        sealed_hash = "e" * 64
+        sealed_hash = self._sha256(sealed_manifest) if sealed_manifest is not None else "e" * 64
         candidate_lock_hash = self._sha256(candidate_lock) if candidate_lock is not None else "c" * 64
         payload = {
             "schema_version": "hfr.tau3_protocol_config.v1",
@@ -837,7 +1106,6 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 "access_count": 0,
                 "manifest_sha256": sealed_hash,
                 "prompt_template_hashes": ["f" * 64],
-                "task_count": 100,
             },
             "mlx_qlora_plan": {},
             "recipe_space": {},

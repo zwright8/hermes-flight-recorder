@@ -604,6 +604,11 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
     if mode == "sealed" and lock_ref is not None:
         lock_payload = read_json(root / lock_ref["path"])
         arm_lock_ref = write_hashed_json(arm_dir, "candidate-lock.json", lock_payload)
+    sealed_task_count_ref = None
+    if mode == "sealed":
+        sealed_task_count_ref = write_hashed_json(arm_dir, "sealed-task-count-manifest.json", sealed_source_manifest())
+        sealed_task_count_ref["hashes_only"] = True
+        sealed_task_count_ref["task_count"] = 3
     arm_identity = adapter_arm_identity(arm_id, mode, identity_ref, arm_lock_ref, lock_payload) if arm_id == "adapter" else {"arm_id": arm_id, "source": "protocol_model_freeze", "endpoint_model_sha256": "8" * 64}
     run_refs = []
     for domain in DOMAINS:
@@ -665,6 +670,7 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
         "reviewer": endpoint(),
         "config": config(),
         "source": source_ref if mode == "development" else None,
+        "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
         "candidate_lock": arm_lock_ref if mode == "sealed" else None,
         "candidate_identity": identity_ref,
         "task_selection": task_selection(mode),
@@ -690,6 +696,7 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
         "reviewer": endpoint(),
         "config": config(),
         "source": source_ref if mode == "development" else None,
+        "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
         "candidate_lock": arm_lock_ref if mode == "sealed" else None,
         "candidate_identity": identity_ref,
         "task_selection": task_selection(mode),
@@ -747,6 +754,7 @@ def task_selection(mode: str) -> dict[str, Any]:
             "task_ids_in_command": False,
             "task_payload_accessed": False,
             "domains": list(DOMAINS),
+            "sealed_task_count": 3,
             "task_count_by_domain": None,
         }
     return {
@@ -755,8 +763,23 @@ def task_selection(mode: str) -> dict[str, Any]:
         "task_ids_in_command": True,
         "task_payload_accessed": False,
         "domains": list(DOMAINS),
+        "sealed_task_count": None,
         "task_count_by_domain": {domain: 1 for domain in DOMAINS},
         "task_id_sha256_by_domain": {domain: ["9" * 64] for domain in DOMAINS},
+    }
+
+
+def sealed_source_manifest() -> dict[str, Any]:
+    return {
+        "schema_version": "hfr.tau3_sealed_source_manifest.v1",
+        "source_revision": "a" * 40,
+        "hashes_only": True,
+        "task_count": 3,
+        "entries": [
+            {"task_id_sha256": "1" * 64, "prompt_sha256": "2" * 64, "task_sha256": "3" * 64},
+            {"task_id_sha256": "4" * 64, "prompt_sha256": "5" * 64, "task_sha256": "6" * 64},
+            {"task_id_sha256": "7" * 64, "prompt_sha256": "8" * 64, "task_sha256": "9" * 64},
+        ],
     }
 
 
@@ -879,7 +902,7 @@ def build_public_report(root: Path, sealed_refs: list[dict[str, str]]) -> dict[s
         for receipt_ref in manifest["run_receipts"]:
             receipt = read_json(manifest_path.parent / receipt_ref["path"])
             arm_paths[arm].append(manifest_path.parent / receipt["result_path"])
-    report = analyze_tau3_evaluation(
+    analyze_tau3_evaluation(
         arm_result_paths=arm_paths,
         out_path=root / "public-evaluation-report.json",
         mode="sealed",

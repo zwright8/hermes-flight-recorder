@@ -54,6 +54,7 @@ class Tau3BenchmarkConfig:
     max_errors: int = 10
     domains: tuple[str, ...] = DOMAINS
     source_split: Path | None = None
+    sealed_task_count_manifest: Path | None = None
     candidate_identity: Path | None = None
     candidate_identity_sha256: str | None = None
     candidate_lock: Path | None = None
@@ -111,10 +112,20 @@ def run_tau3_benchmark_arm(
     )
     _require_revision(repo, expected_tau_revision)
     tasks_by_domain = _development_tasks_by_domain(config.source_split, expected_tau_revision) if config.mode == "development" else None
+    sealed_task_count_manifest = (
+        _sealed_task_count_manifest_record(config.sealed_task_count_manifest, protocol=protocol, expected_revision=expected_tau_revision)
+        if config.mode == "sealed"
+        else None
+    )
     protocol_ref = _stage_input_file(config.protocol_path, out, "inputs/protocol.json", "protocol")
     source_ref = (
         _stage_input_file(config.source_split, out, "inputs/development_source.json", "development source")
         if config.mode == "development" and config.source_split is not None
+        else None
+    )
+    sealed_task_count_ref = (
+        _stage_input_file(config.sealed_task_count_manifest, out, "inputs/sealed_task_count_manifest.json", "sealed task-count manifest")
+        if config.mode == "sealed" and config.sealed_task_count_manifest is not None
         else None
     )
     candidate_identity_ref = (
@@ -152,9 +163,14 @@ def run_tau3_benchmark_arm(
         "reviewer": _endpoint_record(reviewer),
         "config": _config_record(config),
         "source": source_ref,
+        "sealed_task_count_manifest": _sealed_task_count_binding(sealed_task_count_ref, sealed_task_count_manifest),
         "candidate_identity": candidate_identity,
         "candidate_lock": candidate_lock,
-        "task_selection": _task_selection_record(config, tasks_by_domain),
+        "task_selection": _task_selection_record(
+            config,
+            tasks_by_domain,
+            sealed_task_count=sealed_task_count_manifest["task_count"] if sealed_task_count_manifest is not None else None,
+        ),
         "extra_binding": config.extra_binding,
     }
     final_manifest_path = out / "manifest.json"
@@ -210,6 +226,7 @@ def run_tau3_benchmark_arm(
                 config=config,
                 domain=domain,
                 tasks_by_domain=tasks_by_domain,
+                sealed_task_count=sealed_task_count_manifest["task_count"] if sealed_task_count_manifest is not None else None,
             )
             start = time.monotonic()
             try:
@@ -321,6 +338,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tau-venv-bin", type=Path, required=True)
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--source-split", type=Path)
+    parser.add_argument("--sealed-task-count-manifest", type=Path)
     parser.add_argument("--candidate-identity", type=Path)
     parser.add_argument("--candidate-identity-sha256")
     parser.add_argument("--candidate-lock", type=Path)
@@ -357,6 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                 arm_id=args.arm_id,
                 protocol_path=args.protocol_path,
                 source_split=args.source_split,
+                sealed_task_count_manifest=args.sealed_task_count_manifest,
                 candidate_identity=args.candidate_identity,
                 candidate_identity_sha256=args.candidate_identity_sha256,
                 candidate_lock=args.candidate_lock,
@@ -891,18 +910,71 @@ def _candidate_identity_record(config: Tau3BenchmarkConfig, staged_ref: dict[str
     return record
 
 
+def _sealed_task_count_manifest_record(path: Path | None, *, protocol: dict[str, Any], expected_revision: str) -> dict[str, Any]:
+    if path is None:
+        raise Tau3BenchmarkRunError("sealed mode requires --sealed-task-count-manifest")
+    if path_has_symlink_component(path, include_leaf=True):
+        raise Tau3BenchmarkRunError(f"sealed task-count manifest must not contain symlink components: {path}")
+    payload = _read_json(path)
+    schema = check_schema_contract(payload, name_or_id="tau3_sealed_source_manifest")
+    if schema.get("passed") is not True:
+        errors = "; ".join(str(error) for error in schema.get("errors", []))
+        raise Tau3BenchmarkRunError("sealed task-count manifest schema failed: " + errors)
+    if payload.get("schema_version") != "hfr.tau3_sealed_source_manifest.v1":
+        raise Tau3BenchmarkRunError("sealed task-count manifest must use hfr.tau3_sealed_source_manifest.v1")
+    if payload.get("source_revision") != expected_revision:
+        raise Tau3BenchmarkRunError("sealed task-count manifest revision mismatch")
+    if payload.get("hashes_only") is not True:
+        raise Tau3BenchmarkRunError("sealed task-count manifest must be hashes-only")
+    task_count = payload.get("task_count")
+    if not isinstance(task_count, int) or isinstance(task_count, bool) or task_count < 1:
+        raise Tau3BenchmarkRunError("sealed task-count manifest task_count must be a positive integer")
+    entries = payload.get("entries")
+    if not isinstance(entries, list) or len(entries) != task_count:
+        raise Tau3BenchmarkRunError("sealed task-count manifest task_count mismatch")
+    allowed_entry_keys = {"task_id_sha256", "prompt_sha256", "task_sha256"}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or set(entry) != allowed_entry_keys:
+            raise Tau3BenchmarkRunError(f"sealed task-count manifest entry {index} is not hash-only")
+    digest = _sha256(path)
+    split_hashes = _protocol_split_hashes(protocol)
+    sealed_manifest = _dict(protocol.get("sealed_manifest"))
+    if digest != split_hashes.get("sealed") or digest != sealed_manifest.get("manifest_sha256"):
+        raise Tau3BenchmarkRunError("sealed task-count manifest sha256 does not match protocol sealed split")
+    return {"task_count": task_count, "sha256": digest}
+
+
+def _sealed_task_count_binding(staged_ref: dict[str, Any] | None, count_record: dict[str, Any] | None) -> dict[str, Any] | None:
+    if count_record is None:
+        return None
+    if staged_ref is None:
+        raise Tau3BenchmarkRunError("sealed mode requires a staged sealed task-count manifest")
+    record = dict(staged_ref)
+    record["task_count"] = count_record["task_count"]
+    record["hashes_only"] = True
+    return record
+
+
 def _schema_validated_candidate_id(payload: dict[str, Any]) -> str | None:
     candidate_id = payload.get("candidate_id")
     return candidate_id if isinstance(candidate_id, str) and candidate_id else None
 
 
-def _task_selection_record(config: Tau3BenchmarkConfig, tasks_by_domain: dict[str, list[str]] | None) -> dict[str, Any]:
+def _task_selection_record(
+    config: Tau3BenchmarkConfig,
+    tasks_by_domain: dict[str, list[str]] | None,
+    *,
+    sealed_task_count: int | None = None,
+) -> dict[str, Any]:
     if config.mode == "sealed":
+        if sealed_task_count is None:
+            raise Tau3BenchmarkRunError("sealed mode requires a validated task count")
         return {
             "official_split": "test",
             "task_ids_in_command": False,
             "task_payload_accessed": False,
             "domains": list(config.domains),
+            "sealed_task_count": sealed_task_count,
             "task_count_by_domain": None,
         }
     assert tasks_by_domain is not None
@@ -912,6 +984,7 @@ def _task_selection_record(config: Tau3BenchmarkConfig, tasks_by_domain: dict[st
         "task_ids_in_command": True,
         "task_payload_accessed": False,
         "domains": list(config.domains),
+        "sealed_task_count": None,
         "task_count_by_domain": {domain: len(tasks_by_domain[domain]) for domain in config.domains},
         "task_id_sha256_by_domain": {
             domain: [hashlib.sha256(task_id.encode("utf-8")).hexdigest() for task_id in tasks_by_domain[domain]]
@@ -1002,8 +1075,12 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         raise Tau3BenchmarkRunError("timeout_seconds must be between 1 and 7200")
     if config.mode == "development" and config.candidate_lock is not None:
         raise Tau3BenchmarkRunError("development mode must not receive a candidate lock")
+    if config.mode == "development" and config.sealed_task_count_manifest is not None:
+        raise Tau3BenchmarkRunError("development mode must not receive a sealed task-count manifest")
     if config.mode == "sealed" and config.source_split is not None:
         raise Tau3BenchmarkRunError("sealed mode must not receive a source split")
+    if config.mode == "sealed" and config.sealed_task_count_manifest is None:
+        raise Tau3BenchmarkRunError("sealed mode requires --sealed-task-count-manifest")
     if config.mode == "sealed" and config.candidate_identity is not None:
         raise Tau3BenchmarkRunError("sealed mode must not receive a candidate identity")
     if config.mode == "development" and config.arm_id != "adapter" and config.candidate_identity is not None:
@@ -1081,6 +1158,7 @@ def _command_timeout_seconds(
     config: Tau3BenchmarkConfig,
     domain: str,
     tasks_by_domain: dict[str, list[str]] | None,
+    sealed_task_count: int | None = None,
 ) -> int:
     """Bound the whole Tau command without confusing it with the per-task timeout."""
 
@@ -1088,8 +1166,7 @@ def _command_timeout_seconds(
     if tasks_by_domain is not None:
         task_count = len(tasks_by_domain.get(domain, ()))
     else:
-        sealed = protocol.get("sealed_manifest")
-        task_count = sealed.get("task_count") if isinstance(sealed, dict) else None
+        task_count = sealed_task_count
     if not isinstance(task_count, int) or isinstance(task_count, bool) or task_count < 1:
         raise Tau3BenchmarkRunError(f"cannot derive a positive command task count for {domain}")
     return config.timeout_seconds * task_count + config.command_timeout_padding_seconds
@@ -1238,7 +1315,15 @@ def _copy_file_new(source: Path, destination: Path) -> None:
 def _stage_input_file(source: Path, output_root: Path, rel: str, label: str) -> dict[str, Any]:
     if not source.is_file():
         raise Tau3BenchmarkRunError(f"{label} does not exist: {source}")
+    if path_has_symlink_component(source, include_leaf=True):
+        raise Tau3BenchmarkRunError(f"{label} must not contain symlink components: {source}")
     destination = _resolve_output_relative_path(rel, output_root)
+    if path_has_symlink_component(destination, include_leaf=True):
+        raise Tau3BenchmarkRunError(f"staged {label} destination must not contain symlink components: {rel}")
+    output_root_resolved = output_root.resolve(strict=True)
+    destination_resolved = destination.resolve(strict=False)
+    if not destination_resolved.is_relative_to(output_root_resolved):
+        raise Tau3BenchmarkRunError(f"staged {label} destination escapes output directory: {rel}")
     source_sha256 = _sha256(source)
     if destination.exists():
         if not destination.is_file() or _sha256(destination) != source_sha256:

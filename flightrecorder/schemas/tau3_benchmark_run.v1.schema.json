@@ -86,6 +86,12 @@
         {"type": "null"}
       ]
     },
+    "sealed_task_count_manifest": {
+      "anyOf": [
+        {"$ref": "#/$defs/sealed_task_count_manifest_ref"},
+        {"type": "null"}
+      ]
+    },
     "candidate_lock": {
       "anyOf": [
         {"$ref": "#/$defs/output_file_ref"},
@@ -157,6 +163,7 @@
     "reviewer",
     "config",
     "task_selection",
+    "sealed_task_count_manifest",
     "candidate_identity",
     "sealed_payload_accessed",
     "sealed_task_ids_materialized",
@@ -191,9 +198,10 @@
       "then": {
         "properties": {
           "source": {"type": "null"},
+          "sealed_task_count_manifest": {"type": "object"},
           "candidate_lock": {"type": "object"}
         },
-        "required": ["candidate_lock"]
+        "required": ["candidate_lock", "sealed_task_count_manifest"]
       }
     },
     {
@@ -201,6 +209,7 @@
       "then": {
         "properties": {
           "source": {"type": "object"},
+          "sealed_task_count_manifest": {"type": "null"},
           "candidate_lock": {"type": "null"}
         },
         "required": ["source"]
@@ -243,6 +252,18 @@
         "size": {"minimum": 0, "type": "integer"}
       },
       "required": ["path", "sha256", "size"],
+      "type": "object"
+    },
+    "sealed_task_count_manifest_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "hashes_only": {"const": true},
+        "path": {"$ref": "#/$defs/output_relative_path"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size": {"minimum": 0, "type": "integer"},
+        "task_count": {"minimum": 1, "type": "integer"}
+      },
+      "required": ["hashes_only", "path", "sha256", "size", "task_count"],
       "type": "object"
     },
     "output_relative_path": {

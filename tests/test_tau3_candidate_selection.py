@@ -521,7 +521,6 @@ def _benchmark_manifest(
     out = root / (directory or arm)
     raw_dir = out / "raw"
     protocol_sha = _ensure_protocol(root)
-    source_sha = _sha256(root / "development.json")
     staged_protocol = out / "protocol.json"
     staged_source = out / "development.json"
     _write(staged_protocol, _read(root / "protocol.json"))
@@ -613,6 +612,7 @@ def _benchmark_manifest(
             "user": "user_simulator",
         },
         "source": _file_ref(staged_source, "development.json"),
+        "sealed_task_count_manifest": None,
         "candidate_lock": None,
         "candidate_identity": candidate_identity,
         "task_selection": {"split": "development"},
@@ -640,6 +640,7 @@ def _benchmark_manifest(
             "reviewer",
             "config",
             "source",
+            "sealed_task_count_manifest",
             "candidate_lock",
             "candidate_identity",
             "task_selection",
