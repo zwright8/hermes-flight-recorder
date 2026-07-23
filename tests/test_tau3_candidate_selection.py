@@ -708,7 +708,14 @@ def _training_receipt(root: Path, candidate_id: str, *, protocol_sha: str) -> Pa
         "losses": {"train": [1.25], "validation": [0.75], "last_train": 1.25, "last_validation": 0.75},
         "schema_checked": True,
         "training_binding": {
-            "protocol": {"sha256": protocol_sha, "protocol_signature": "5" * 64},
+            "protocol": {
+                "sha256": protocol_sha,
+                "protocol_signature": "5" * 64,
+                "protocol_signature_provenance": {
+                    "source": "protocol_file_sha256_content_seal",
+                    "algorithm": "sha256",
+                },
+            },
             "model": {"identity_sha256": "6" * 64, "tree_sha256": "7" * 64},
             "dataset": {"manifest_sha256": "8" * 64, "files_sha256": "9" * 64, "source_binding_sha256": "a" * 64},
             "recipe": {"recipe_sha256": _hash(candidate_id + "-recipe")},

@@ -360,7 +360,15 @@ def build_training_receipts(root: Path, protocol_ref: dict[str, str]) -> dict[st
     adapter_files = [{"path": "adapter_model.safetensors", "size": adapter_file.stat().st_size, "sha256": sha256_file(adapter_file), "kind": "adapter"}]
     adapter = {"path": "adapter", "file_count": 1, "files": adapter_files, "tree_sha256": tree_sha256(adapter_files)}
     binding = {
-        "protocol": {"path": "protocol.json", "sha256": protocol_ref["sha256"], "protocol_signature": "6" * 64},
+        "protocol": {
+            "path": "protocol.json",
+            "sha256": protocol_ref["sha256"],
+            "protocol_signature": "6" * 64,
+            "protocol_signature_provenance": {
+                "source": "protocol_file_sha256_content_seal",
+                "algorithm": "sha256",
+            },
+        },
         "model": {
             "identity_sha256": "c" * 64,
             "tree_sha256": "d" * 64,
