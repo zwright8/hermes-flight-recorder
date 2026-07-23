@@ -5,9 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from flightrecorder.tau3_training_artifacts import validate_tau3_training_bundle
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from flightrecorder.tau3_training_artifacts import validate_tau3_training_bundle  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

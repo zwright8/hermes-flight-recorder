@@ -380,6 +380,8 @@ class Tau3TrainingArtifactValidatorTests(unittest.TestCase):
 
     def test_cli_writes_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
             bundle = _base_bundle(Path(tmp))
             out = Path(tmp) / "validation.json"
             proc = subprocess.run(
@@ -392,6 +394,7 @@ class Tau3TrainingArtifactValidatorTests(unittest.TestCase):
                     "--out",
                     str(out),
                 ],
+                cwd=cwd,
                 check=False,
                 capture_output=True,
                 text=True,

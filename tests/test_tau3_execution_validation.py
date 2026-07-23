@@ -15,6 +15,7 @@ from flightrecorder.tau3_execution_validation import (
     validate_tau3_training_result_bundle,
 )
 from flightrecorder.tau3_mlx_training import Tau3MlxTrainingConfig, run_tau3_mlx_training
+from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
 from tests.test_tau3_mlx_training import _fake_model, _install_fake_python, _mixture_variant, _protocol_config
 
 
@@ -320,8 +321,8 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
 
 
 def build_execution_bundle(root: Path) -> None:
-    protocol = {"schema_version": "hfr.tau3_protocol_config.v1", "protocol_manifest": {"signature": "fixture"}}
-    protocol_ref = write_hashed_json(root, "protocol.json", protocol)
+    sealed_source_ref = write_hashed_json(root, "sealed-source-manifest.json", sealed_source_manifest())
+    protocol_ref = write_hashed_json(root, "protocol.json", protocol_config(sealed_source_ref["sha256"]))
     receipt_ref = build_training_receipts(root, protocol_ref)
     dev_refs = [
         build_arm(root, "development", "base", protocol_ref["sha256"], None),
@@ -329,7 +330,8 @@ def build_execution_bundle(root: Path) -> None:
     ]
     selection_ref = build_candidate_selection_report(root, receipt_ref, dev_refs[1])
     lock_ref = build_candidate_lock(root, receipt_ref, protocol_ref, dev_refs[1], selection_ref)
-    sealed_refs = [build_arm(root, "sealed", arm, protocol_ref["sha256"], lock_ref) for arm in ARMS]
+    authorization_ref = build_sealed_authorization(root, lock_ref, protocol_ref, sealed_source_ref)
+    sealed_refs = [build_arm(root, "sealed", arm, protocol_ref["sha256"], lock_ref, sealed_source_ref, authorization_ref) for arm in ARMS]
     report_ref = build_public_report(root, sealed_refs)
     manifest = {
         "schema_version": "hfr.tau3_execution_bundle.v1",
@@ -499,6 +501,99 @@ def build_candidate_lock(
     return write_hashed_json(root, "candidate-lock.json", lock)
 
 
+def build_sealed_authorization(
+    root: Path,
+    lock_ref: dict[str, Any],
+    protocol_ref: dict[str, Any],
+    sealed_source_ref: dict[str, Any],
+) -> dict[str, Any]:
+    out = root / "sealed-authorization.json"
+    if out.exists():
+        out.unlink()
+    create_tau3_sealed_authorization(
+        candidate_lock=root / lock_ref["path"],
+        protocol=root / protocol_ref["path"],
+        sealed_source_manifest=root / sealed_source_ref["path"],
+        out=out,
+        created_at="2026-07-23T00:21:00Z",
+    )
+    return {"path": "sealed-authorization.json", "sha256": sha256_file(out), "size": out.stat().st_size}
+
+
+def protocol_config(sealed_source_sha256: str) -> dict[str, Any]:
+    return {
+        "schema_version": "hfr.tau3_protocol_config.v1",
+        "protocol_manifest": {"signature": "fixture"},
+        "tau_revision": {
+            "revision": "a" * 40,
+            "split_hashes": {"train": "d" * 64, "development": "e" * 64, "sealed": sealed_source_sha256},
+        },
+        "split_manifest": {
+            "splits": {
+                "train": {"sha256": "d" * 64, "sealed": False},
+                "development": {"sha256": "e" * 64, "sealed": False},
+                "sealed": {"sha256": sealed_source_sha256, "sealed": True},
+            }
+        },
+        "harness_contract": {
+            "domains": list(DOMAINS),
+            "context_window": 16384,
+            "decoding": {
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_output_tokens": 1024,
+                "seeds": list(SEEDS),
+            },
+            "turn_limit": 30,
+            "retry_policy": "none",
+            "no_test_time_search": True,
+            "test_time_search": False,
+        },
+        "model_freeze": {
+            "base_model": {"name": "local/base", "revision": "base-rev", "local_identity_sha256": "b" * 64},
+            "comparators": [
+                {"name": "local/comparator-1", "revision": "cmp1-rev", "local_identity_sha256": "c" * 64},
+                {"name": "local/comparator-2", "revision": "cmp2-rev", "local_identity_sha256": "d" * 64},
+            ],
+        },
+        "budget": {"passed": True, "max_training_hours": 24, "max_benchmark_hours": 48},
+        "sealed_manifest": {"access_count": 0, "manifest_sha256": sealed_source_sha256, "prompt_template_hashes": ["f" * 64]},
+        "mlx_qlora_plan": {},
+        "recipe_space": {},
+        "candidate_selection_contract": {"passed": True},
+        "contamination_attestation": {"passed": True},
+        "redaction_attestation": {"passed": True},
+        "licenses": [
+            {"status": "approved", "training_allowed": True},
+            {"status": "approved", "training_allowed": True},
+            {"status": "approved", "training_allowed": True},
+            {"status": "approved", "training_allowed": True},
+        ],
+        "environment_manifest": {},
+    }
+
+
+def sealed_authorization_ref(
+    path: str,
+    authorization_path: Path,
+    candidate_lock_sha256: str,
+    protocol_sha256: str,
+    sealed_source_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "path": path,
+        "sha256": sha256_file(authorization_path),
+        "size": authorization_path.stat().st_size,
+        "authorized": True,
+        "candidate_lock_sha256": candidate_lock_sha256,
+        "protocol_sha256": protocol_sha256,
+        "sealed_source_sha256": sealed_source_sha256,
+        "task_count": 100,
+        "arms": list(ARMS),
+        "seeds": list(SEEDS),
+    }
+
+
 def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], development_adapter_ref: dict[str, str]) -> dict[str, str]:
     development_adapter = read_json(root / development_adapter_ref["path"])
     identity_ref = development_adapter["candidate_identity"]
@@ -586,12 +681,22 @@ def update_candidate_lock_time(root: Path, created_at: str) -> None:
         prelaunch["candidate_lock"] = arm_lock_ref
         write_json(prelaunch_path, prelaunch)
         arm["prelaunch_receipt"]["sha256"] = sha256_file(prelaunch_path)
+        arm["prelaunch_receipt"]["size"] = prelaunch_path.stat().st_size
         write_json(arm_path, arm)
         arm_ref["sha256"] = sha256_file(arm_path)
+        arm_ref["size"] = arm_path.stat().st_size
     write_json(manifest_path, manifest)
 
 
-def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref: dict[str, str] | None) -> dict[str, str]:
+def build_arm(
+    root: Path,
+    mode: str,
+    arm_id: str,
+    protocol_sha256: str,
+    lock_ref: dict[str, str] | None,
+    sealed_source_ref: dict[str, Any] | None = None,
+    authorization_ref: dict[str, Any] | None = None,
+) -> dict[str, str]:
     arm_dir = root / "benchmark" / mode / arm_id
     arm_dir.mkdir(parents=True)
     protocol_record = write_hashed_json(arm_dir, "protocol.json", read_json(root / "protocol.json"))
@@ -614,9 +719,22 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
         arm_lock_ref = write_hashed_json(arm_dir, "candidate-lock.json", lock_payload)
     sealed_task_count_ref = None
     if mode == "sealed":
-        sealed_task_count_ref = write_hashed_json(arm_dir, "sealed-task-count-manifest.json", sealed_source_manifest())
+        sealed_source = read_json(root / sealed_source_ref["path"]) if sealed_source_ref is not None else sealed_source_manifest()
+        sealed_task_count_ref = write_hashed_json(arm_dir, "sealed-task-count-manifest.json", sealed_source)
         sealed_task_count_ref["hashes_only"] = True
-        sealed_task_count_ref["task_count"] = 3
+        sealed_task_count_ref["task_count"] = 100
+    sealed_authorization = None
+    if mode == "sealed" and authorization_ref is not None and lock_ref is not None and sealed_source_ref is not None:
+        auth_payload = read_json(root / authorization_ref["path"])
+        auth_path = arm_dir / "sealed-authorization.json"
+        write_json(auth_path, auth_payload)
+        sealed_authorization = sealed_authorization_ref(
+            "sealed-authorization.json",
+            auth_path,
+            lock_ref["sha256"],
+            protocol_sha256,
+            sealed_source_ref["sha256"],
+        )
     arm_identity = adapter_arm_identity(arm_id, mode, identity_ref, arm_lock_ref, lock_payload) if arm_id == "adapter" else {"arm_id": arm_id, "source": "protocol_model_freeze", "endpoint_model_sha256": "8" * 64}
     run_refs = []
     for domain in DOMAINS:
@@ -679,6 +797,7 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
         "config": config(),
         "source": source_ref if mode == "development" else None,
         "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
+        "sealed_authorization": sealed_authorization if mode == "sealed" else None,
         "candidate_lock": arm_lock_ref if mode == "sealed" else None,
         "candidate_identity": identity_ref,
         "task_selection": task_selection(mode),
@@ -705,6 +824,7 @@ def build_arm(root: Path, mode: str, arm_id: str, protocol_sha256: str, lock_ref
         "config": config(),
         "source": source_ref if mode == "development" else None,
         "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
+        "sealed_authorization": sealed_authorization if mode == "sealed" else None,
         "candidate_lock": arm_lock_ref if mode == "sealed" else None,
         "candidate_identity": identity_ref,
         "task_selection": task_selection(mode),
@@ -762,7 +882,7 @@ def task_selection(mode: str) -> dict[str, Any]:
             "task_ids_in_command": False,
             "task_payload_accessed": False,
             "domains": list(DOMAINS),
-            "sealed_task_count": 3,
+            "sealed_task_count": 100,
             "task_count_by_domain": None,
         }
     return {
@@ -782,11 +902,14 @@ def sealed_source_manifest() -> dict[str, Any]:
         "schema_version": "hfr.tau3_sealed_source_manifest.v1",
         "source_revision": "a" * 40,
         "hashes_only": True,
-        "task_count": 3,
+        "task_count": 100,
         "entries": [
-            {"task_id_sha256": "1" * 64, "prompt_sha256": "2" * 64, "task_sha256": "3" * 64},
-            {"task_id_sha256": "4" * 64, "prompt_sha256": "5" * 64, "task_sha256": "6" * 64},
-            {"task_id_sha256": "7" * 64, "prompt_sha256": "8" * 64, "task_sha256": "9" * 64},
+            {
+                "task_id_sha256": tree_value_sha256(f"task-id-{index}"),
+                "prompt_sha256": tree_value_sha256(f"prompt-{index}"),
+                "task_sha256": tree_value_sha256(f"task-{index}"),
+            }
+            for index in range(100)
         ],
     }
 

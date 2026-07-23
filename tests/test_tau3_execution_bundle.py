@@ -127,13 +127,15 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
     def test_cli_builds_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            cwd = root / "cwd"
+            cwd.mkdir()
             source = root / "source"
             build_execution_bundle(source)
             out = root / "bundle"
             proc = subprocess.run(
                 [
                     sys.executable,
-                    "scripts/build_tau3_execution_bundle.py",
+                    str(Path(__file__).resolve().parents[1] / "scripts" / "build_tau3_execution_bundle.py"),
                     "--out",
                     str(out),
                     "--git-commit",
@@ -165,7 +167,7 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
                     str(source / "public-evaluation-report.json"),
                     "--keep-writable",
                 ],
-                cwd=Path(__file__).resolve().parents[1],
+                cwd=cwd,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

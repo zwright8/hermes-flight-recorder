@@ -8,7 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-from flightrecorder.tau3_execution_bundle import (
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from flightrecorder.tau3_execution_bundle import (  # noqa: E402
     Tau3ExecutionBundleError,
     build_tau3_execution_bundle,
     parse_arm_arg,

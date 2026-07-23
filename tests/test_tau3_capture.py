@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -83,7 +84,7 @@ class Tau3CaptureTests(unittest.TestCase):
             bundle = Path(tmp) / "bundle"
             completed = subprocess.run(
                 [
-                    str(ROOT / ".venv" / "bin" / "python"),
+                    sys.executable,
                     str(ROOT / "scripts" / "build_tau3_training_artifacts.py"),
                     "--mode",
                     "rehearsal",
@@ -164,7 +165,7 @@ class Tau3CaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             completed = subprocess.run(
                 [
-                    str(ROOT / ".venv" / "bin" / "python"),
+                    sys.executable,
                     str(ROOT / "scripts" / "build_tau3_training_artifacts.py"),
                     "--mode",
                     "production",
