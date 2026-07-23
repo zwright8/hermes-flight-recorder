@@ -114,7 +114,7 @@
               "training_admitted": {"type": "boolean"},
               "training_rejection_code": {
                 "anyOf": [
-                  {"enum": ["errored_tool_result", "generator_terminal_failure", "thinking_tag"]},
+                  {"enum": ["errored_tool_result", "generator_terminal_failure", "sealed_task_identity_overlap", "thinking_tag"]},
                   {"type": "null"}
                 ]
               },
@@ -149,7 +149,7 @@
                 "then": {
                   "properties": {
                     "training_rejection_code": {
-                      "enum": ["errored_tool_result", "generator_terminal_failure", "thinking_tag"]
+                      "enum": ["errored_tool_result", "generator_terminal_failure", "sealed_task_identity_overlap", "thinking_tag"]
                     },
                     "training_rejection_reason": {"minLength": 1, "type": "string"}
                   }

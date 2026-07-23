@@ -220,6 +220,98 @@ class Tau3ConversationIngestTests(unittest.TestCase):
             self.assertTrue(Path(excluded[0]["task_receipt_path"]).is_file())
             self.assertTrue(check_schema_file(root / "out" / "manifest.json", "tau3_conversation_import")["passed"])
 
+    def test_generation_manifest_quarantines_sealed_hash_overlap_without_dropping_clean_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = self._write_source(root)
+            tools = self._write_tools(root)
+            train_results = self._write_results(root, "train", task_id="1", sim_id="sim-train")
+            clean_train_task = {
+                "id": "3",
+                "description": {"purpose": "Independent reservation lookup case."},
+                "evaluation_criteria": {"communicate_info": ["confirmed"]},
+                "user_scenario": {"instructions": {"known_info": "You are Casey Lee."}},
+            }
+            clean_train_row = self._source_row(
+                "train",
+                clean_train_task,
+                "family-train-clean",
+                canonical_sha256(clean_train_task),
+            )
+            with (source_dir / "train_tasks.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(clean_train_row) + "\n")
+            clean_train_results = self._write_results(
+                root,
+                "train-clean",
+                task_id="3",
+                sim_id="sim-train-clean",
+            )
+            valid_results = self._write_results(root, "valid", task_id="2", sim_id="sim-valid")
+            generation = self._write_generation_manifest(root, [train_results, clean_train_results, valid_results])
+            sealed = root / "sealed_manifest.json"
+            sealed.write_text(json.dumps({"task_hashes": [self.train_task_sha]}), encoding="utf-8")
+
+            manifest = import_tau3_conversations(
+                [],
+                root / "out",
+                source_dir=source_dir,
+                tool_schema_path=tools,
+                generation_manifest_paths=[generation],
+                sealed_manifest_path=sealed,
+                expected_tau_revision=REVISION,
+            )
+
+            self.assertEqual(manifest["counts"], {"train": 1, "valid": 1})
+            self.assertEqual(manifest["generation_provenance"]["admitted_success_count"], 2)
+            self.assertEqual(manifest["generation_provenance"]["excluded_success_count"], 1)
+            excluded = [
+                result
+                for result in manifest["source_generation_manifests"][0]["results"]
+                if result["terminal_status"] == "success" and not result["training_admitted"]
+            ]
+            self.assertEqual(len(excluded), 1)
+            self.assertEqual(excluded[0]["training_rejection_code"], "sealed_task_identity_overlap")
+            self.assertEqual(
+                excluded[0]["training_rejection_reason"],
+                "source task identity intersects the hash-only sealed manifest",
+            )
+            self.assertTrue(check_schema_file(root / "out" / "manifest.json", "tau3_conversation_import")["passed"])
+
+    def test_generation_manifest_resolves_shared_official_prompt_template_when_identity_is_disjoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = self._write_source(root)
+            tools = self._write_tools(root)
+            train_results = self._write_results(root, "train", task_id="1", sim_id="sim-train")
+            valid_results = self._write_results(root, "valid", task_id="2", sim_id="sim-valid")
+            generation = self._write_generation_manifest(root, [train_results, valid_results])
+            sealed = root / "sealed_manifest.json"
+            sealed.write_text(
+                json.dumps({"prompt_hashes": [canonical_sha256({"prompt": "1"})]}),
+                encoding="utf-8",
+            )
+
+            manifest = import_tau3_conversations(
+                [],
+                root / "out",
+                source_dir=source_dir,
+                tool_schema_path=tools,
+                generation_manifest_paths=[generation],
+                sealed_manifest_path=sealed,
+                expected_tau_revision=REVISION,
+            )
+
+            self.assertEqual(manifest["counts"], {"train": 1, "valid": 1})
+            self.assertEqual(manifest["generation_provenance"]["admitted_success_count"], 2)
+            governance = manifest["governance"]
+            self.assertEqual(governance["sealed_task_identity_overlap_count"], 0)
+            self.assertEqual(governance["sealed_prompt_template_overlap_count"], 1)
+            self.assertTrue(governance["sealed_prompt_template_overlap_resolved"])
+            self.assertEqual(
+                governance["sealed_prompt_template_overlap_resolution"],
+                "resolved_shared_official_template",
+            )
+
     def test_generation_manifest_excludes_thinking_tag_success_that_manual_import_rejects(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -76,6 +76,8 @@ HIDDEN_PROSE_MIN_CHARS = 24
 HIDDEN_PROSE_MIN_WORDS = 4
 ERRORED_TOOL_RESULT_REJECTION_CODE = "errored_tool_result"
 ERRORED_TOOL_RESULT_REJECTION_REASON = "generated result contains an errored assistant tool result"
+SEALED_IDENTITY_OVERLAP_REJECTION_CODE = "sealed_task_identity_overlap"
+SEALED_IDENTITY_OVERLAP_REJECTION_REASON = "source task identity intersects the hash-only sealed manifest"
 THINKING_TAG_REJECTION_CODE = "thinking_tag"
 THINKING_TAG_REJECTION_REASON = "generated result contains a forbidden thinking tag"
 GENERATOR_FAILURE_REJECTION_CODE = "generator_terminal_failure"
@@ -109,6 +111,12 @@ class SourceTask:
     task: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SealedHashIndex:
+    identity_hashes: frozenset[str]
+    prompt_hashes: frozenset[str]
+
+
 def import_tau3_conversations(
     results_paths: Sequence[str | Path],
     out_dir: str | Path,
@@ -129,18 +137,6 @@ def import_tau3_conversations(
     import so partial or mixed-quality corpora cannot silently enter training.
     """
 
-    generation_records: list[dict[str, Any]] = []
-    generation_protocol: dict[str, Any] | None = None
-    if generation_manifest_paths:
-        derived_results, generation_records, generation_protocol = _derive_results_from_generation_manifests(
-            [Path(path) for path in generation_manifest_paths],
-            expected_tau_revision=expected_tau_revision,
-        )
-        if results_paths:
-            _require_explicit_results_match_derived(results_paths, derived_results)
-        results_paths = derived_results
-    if not results_paths:
-        raise Tau3ConversationIngestError("at least one Tau results.json path or --generation-manifest is required")
     out = Path(out_dir)
     _require_new_output_dir(out)
     source_root = Path(source_dir)
@@ -148,6 +144,26 @@ def import_tau3_conversations(
     tool_schema_artifact = _read_json(tool_schema_file)
     tool_contracts = _load_tool_schemas(tool_schema_file)
     source_tasks = _load_source_tasks(source_root)
+    sealed_hashes = (
+        _load_sealed_hashes(Path(sealed_manifest_path))
+        if sealed_manifest_path
+        else SealedHashIndex(identity_hashes=frozenset(), prompt_hashes=frozenset())
+    )
+
+    generation_records: list[dict[str, Any]] = []
+    generation_protocol: dict[str, Any] | None = None
+    if generation_manifest_paths:
+        derived_results, generation_records, generation_protocol = _derive_results_from_generation_manifests(
+            [Path(path) for path in generation_manifest_paths],
+            expected_tau_revision=expected_tau_revision,
+            source_tasks=source_tasks,
+            sealed_hashes=sealed_hashes,
+        )
+        if results_paths:
+            _require_explicit_results_match_derived(results_paths, derived_results)
+        results_paths = derived_results
+    if not results_paths:
+        raise Tau3ConversationIngestError("at least one Tau results.json path or --generation-manifest is required")
     source_revision_set = {task.source_revision for task in source_tasks.values()}
     if len(source_revision_set) != 1:
         raise Tau3ConversationIngestError("training sources must bind exactly one Tau revision")
@@ -160,8 +176,6 @@ def import_tau3_conversations(
         generation_revisions = {record["tau_revision"] for record in generation_records}
         if generation_revisions != source_revision_set:
             raise Tau3ConversationIngestError("generation manifest Tau revision mismatch")
-    sealed_hashes = _load_sealed_hashes(Path(sealed_manifest_path)) if sealed_manifest_path else set()
-
     rows_by_split: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
     seen_episode_ids: set[str] = set()
     seen_simulations: set[str] = set()
@@ -173,6 +187,7 @@ def import_tau3_conversations(
     rejection_count = 0
     source_revisions: set[str] = set()
     domains: set[str] = set()
+    sealed_prompt_template_overlaps: set[str] = set()
     result_records = []
 
     for results_path_raw in results_paths:
@@ -244,6 +259,9 @@ def import_tau3_conversations(
             seen_episode_ids.add(episode_id)
             seen_simulations.add(sim_key)
             seen_tau_simulation_identities.add(tau_identity)
+            source = source_tasks[(str(row["metadata"]["domain"]), str(row["metadata"]["task_id"]))]
+            if source.prompt_sha256 in sealed_hashes.prompt_hashes:
+                sealed_prompt_template_overlaps.add(source.prompt_sha256)
             normalization_count += 1 if normalization["mixed_content_tool_call"] else 0
             tau_control_marker_row_count += 1 if normalization["tau_control_markers_stripped"] else 0
             tau_control_marker_count += normalization["tau_control_markers_stripped"]
@@ -285,6 +303,7 @@ def import_tau3_conversations(
         license_id=license_id,
         generation_records=generation_records,
         generation_protocol=generation_protocol,
+        sealed_prompt_template_overlap_count=len(sealed_prompt_template_overlaps),
     )
     check = check_schema_contract(manifest, name_or_id=TAU3_CONVERSATION_CORPUS_SCHEMA_VERSION)
     if check.get("passed") is not True:
@@ -429,7 +448,7 @@ def _convert_simulation(
     domain: str,
     source_revision: str,
     source_tasks: dict[tuple[str, str], SourceTask],
-    sealed_hashes: set[str],
+    sealed_hashes: SealedHashIndex,
     tools: list[dict[str, Any]],
     system_prompt: str,
     allow_teacher_protocol_normalization: bool,
@@ -739,6 +758,8 @@ def _derive_results_from_generation_manifests(
     manifest_paths: list[Path],
     *,
     expected_tau_revision: str | None,
+    source_tasks: dict[tuple[str, str], SourceTask],
+    sealed_hashes: SealedHashIndex,
 ) -> tuple[list[Path], list[dict[str, Any]], dict[str, Any]]:
     derived_results: list[Path] = []
     generation_records: list[dict[str, Any]] = []
@@ -793,6 +814,20 @@ def _derive_results_from_generation_manifests(
                     raise Tau3ConversationIngestError(f"{receipt_path}: generated result hash mismatch")
                 simulation = _require_normal_result_evidence(result_path)
                 exclusion = _training_exclusion_for_result(simulation, result_path)
+                if exclusion is None and sealed_hashes.identity_hashes:
+                    results = _object(_read_json(result_path), f"{result_path}: results")
+                    domain = _domain_from_results(results, result_path)
+                    task_id = _nonempty_str(simulation.get("task_id"), f"{result_path}: simulation.task_id")
+                    source = source_tasks.get((domain, task_id))
+                    if source is None:
+                        raise Tau3ConversationIngestError(
+                            f"{result_path}: generated task {domain}/{task_id} is not in train/development source"
+                        )
+                    if _sealed_identity_overlap(source, sealed_hashes):
+                        exclusion = (
+                            SEALED_IDENTITY_OVERLAP_REJECTION_CODE,
+                            SEALED_IDENTITY_OVERLAP_REJECTION_REASON,
+                        )
                 result_ref = {
                     "path": str(result_path),
                     "sha256": result_sha256,
@@ -1000,15 +1035,19 @@ def _tool_name(tool: dict[str, Any]) -> str:
     return str(tool.get("name") or "")
 
 
-def _load_sealed_hashes(path: Path) -> set[str]:
+def _load_sealed_hashes(path: Path) -> SealedHashIndex:
     manifest = _read_json(path)
     if not isinstance(manifest, dict):
         raise Tau3ConversationIngestError("sealed manifest must be a hash-only object")
-    hashes: set[str] = set()
-    for key in ("task_id_hashes", "task_hashes", "prompt_hashes", "leakage_blocking_hashes", "sealed_task_hashes"):
+    identity_hashes: set[str] = set()
+    prompt_hashes: set[str] = set()
+    for key in ("task_id_hashes", "task_hashes", "leakage_blocking_hashes", "sealed_task_hashes"):
         value = manifest.get(key)
         if isinstance(value, list):
-            hashes.update(str(item) for item in value if isinstance(item, str))
+            identity_hashes.update(str(item) for item in value if isinstance(item, str))
+    legacy_prompt_hashes = manifest.get("prompt_hashes")
+    if isinstance(legacy_prompt_hashes, list):
+        prompt_hashes.update(str(item) for item in legacy_prompt_hashes if isinstance(item, str))
     entries = manifest.get("entries")
     if isinstance(entries, list):
         allowed_entry_keys = {"task_id_sha256", "task_sha256", "prompt_sha256"}
@@ -1017,21 +1056,37 @@ def _load_sealed_hashes(path: Path) -> set[str]:
                 raise Tau3ConversationIngestError(
                     f"sealed manifest entry {index} is not hash-only"
                 )
-            hashes.update(str(value) for value in entry.values() if _is_sha256(value))
-    return hashes
+            for key, value in entry.items():
+                if not _is_sha256(value):
+                    continue
+                if key == "prompt_sha256":
+                    prompt_hashes.add(str(value))
+                else:
+                    identity_hashes.add(str(value))
+    return SealedHashIndex(
+        identity_hashes=frozenset(identity_hashes),
+        prompt_hashes=frozenset(prompt_hashes),
+    )
 
 
-def _reject_if_sealed(source: SourceTask, sealed_hashes: set[str], results_path: Path, sim_id: str) -> None:
+def _reject_if_sealed(
+    source: SourceTask,
+    sealed_hashes: SealedHashIndex,
+    results_path: Path,
+    sim_id: str,
+) -> None:
+    if _sealed_identity_overlap(source, sealed_hashes):
+        raise Tau3ConversationIngestError(f"{results_path}: {sim_id}: source task identity intersects sealed hash manifest")
+
+
+def _sealed_identity_overlap(source: SourceTask, sealed_hashes: SealedHashIndex) -> bool:
     candidates = {
         source.task_sha256,
-        source.prompt_sha256,
         canonical_sha256(source.task_id),
         canonical_sha256({"domain": source.domain, "task_id": source.task_id}),
         hashlib.sha256(f"{source.domain}:{source.task_id}".encode("utf-8")).hexdigest(),
     }
-    overlap = sorted(candidates & sealed_hashes)
-    if overlap:
-        raise Tau3ConversationIngestError(f"{results_path}: {sim_id}: source task intersects sealed hash manifest")
+    return bool(candidates & sealed_hashes.identity_hashes)
 
 
 def _domain_from_results(results: dict[str, Any], path: Path) -> str:
@@ -1172,6 +1227,7 @@ def _manifest(
     license_id: str,
     generation_records: list[dict[str, Any]] | None = None,
     generation_protocol: dict[str, Any] | None = None,
+    sealed_prompt_template_overlap_count: int = 0,
 ) -> dict[str, Any]:
     counts = {"train": len(rows_by_split["train"]), "valid": len(rows_by_split["valid"])}
     files = {
@@ -1226,6 +1282,14 @@ def _manifest(
         "evaluation_criteria_exposure": False,
         "governance": {
             "sealed_payloads_read": False,
+            "sealed_task_identity_overlap_count": 0,
+            "sealed_prompt_template_overlap_count": sealed_prompt_template_overlap_count,
+            "sealed_prompt_template_overlap_resolved": sealed_prompt_template_overlap_count > 0,
+            "sealed_prompt_template_overlap_resolution": (
+                "resolved_shared_official_template"
+                if sealed_prompt_template_overlap_count > 0
+                else "not_observed"
+            ),
             "train_dev_only": True,
             "executable_reward_required": 1.0,
             "normal_terminations": sorted(NORMAL_TERMINATIONS),
