@@ -391,17 +391,36 @@ def _replay_result(
     simulation = _object(simulations[0], f"{result_path}: simulations[0]")
     if simulation.get("task_id") != expected_task_id:
         raise Tau3GenerationRetryError(f"{result_path}: simulation task_id does not match receipt/source")
-    reward_info = _object(simulation.get("reward_info"), f"{result_path}: simulations[0].reward_info")
+    termination = _nonempty_str(
+        simulation.get("termination_reason"),
+        f"{result_path}: simulations[0].termination_reason",
+    )
+    raw_reward_info = simulation.get("reward_info")
+    receipt_reward = receipt.get("reward")
+    if raw_reward_info is None:
+        if receipt_reward is not None:
+            raise Tau3GenerationRetryError(
+                f"{receipt_path}: receipt reward must be null when result reward_info is null"
+            )
+        return {
+            "sha256": result_sha,
+            "reward": None,
+            "termination_reason": termination,
+            "training_exclusion": None,
+        }
+    reward_info = _object(raw_reward_info, f"{result_path}: simulations[0].reward_info")
     reward = reward_info.get("reward")
     if isinstance(reward, bool) or not isinstance(reward, (int, float)):
         raise Tau3GenerationRetryError(f"{result_path}: reward must be numeric")
-    receipt_reward = receipt.get("reward")
     if isinstance(receipt_reward, bool) or not isinstance(receipt_reward, (int, float)):
         raise Tau3GenerationRetryError(f"{receipt_path}: receipt reward must be numeric")
     if float(receipt_reward) != float(reward):
         raise Tau3GenerationRetryError(f"{receipt_path}: receipt reward does not match result reward")
-    termination = str(simulation.get("termination_reason") or "")
-    exclusion = _training_exclusion(simulation, result_path)
+    exclusion = (
+        _training_exclusion(simulation, result_path)
+        if float(reward) == 1.0 and termination in NORMAL_TERMINATIONS
+        else None
+    )
     return {
         "sha256": result_sha,
         "reward": float(reward),

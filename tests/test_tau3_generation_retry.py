@@ -185,6 +185,33 @@ class Tau3GenerationRetryTests(unittest.TestCase):
             self.assertEqual(receipt["generation_manifests"][0]["training_excluded_success_count"], 1)
             self.assertEqual([row["task"]["id"] for row in read_jsonl(out)], ["task-1", "task-2", "task-3"])
 
+    def test_infrastructure_error_with_null_reward_info_remains_retry_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self._source_jsonl(root)
+            manifest = self._generation_run(root, success_indexes=set())
+            result_path = root / "results" / "result-0.json"
+            result = read_json(result_path)
+            result["simulations"][0]["termination_reason"] = "infrastructure_error"
+            result["simulations"][0]["reward_info"] = None
+            self._rebind_result(manifest, 0, result_path, result)
+            manifest_payload = read_json(manifest)
+            receipt_path = manifest.parent / manifest_payload["task_receipts"][0]["path"]
+            task_receipt = read_json(receipt_path)
+            task_receipt["reward"] = None
+            task_receipt["exit_code"] = 0
+            receipt_path.write_text(json.dumps(task_receipt, sort_keys=True) + "\n", encoding="utf-8")
+
+            out = root / "retry.jsonl"
+            receipt = build_tau3_generation_retry_source(
+                source_jsonl_paths=[source],
+                generation_manifest_paths=[manifest],
+                out_jsonl=out,
+            )
+            self.assertEqual(receipt["covered_success_task_count"], 0)
+            self.assertEqual(receipt["generation_manifests"][0]["non_success_result_count"], 3)
+            self.assertEqual([row["task"]["id"] for row in read_jsonl(out)], ["task-1", "task-2", "task-3"])
+
     def test_rejects_result_bound_to_a_different_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
