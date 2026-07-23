@@ -8,6 +8,7 @@ import textwrap
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
@@ -38,6 +39,7 @@ def _install_fake_python(root: Path, mode: str) -> None:
 import os, sys, time
 mode = {mode!r}
 adapter = sys.argv[sys.argv.index('--adapter-path') + 1] if '--adapter-path' in sys.argv else None
+print('MLX_DISABLE_COMPILE=' + os.environ.get('MLX_DISABLE_COMPILE', '<unset>'))
 print('train loss 1.25')
 print('validation loss 0.75', file=sys.stderr)
 if mode == 'sleep':
@@ -317,6 +319,27 @@ def _refresh_protocol_signature(bundle: Path) -> None:
 
 
 class Tau3MlxTrainingRunnerTests(unittest.TestCase):
+    def test_compile_mode_is_explicit_and_overrides_parent_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            with mock.patch.dict(os.environ, {"MLX_DISABLE_COMPILE": "unexpected"}):
+                for disabled, expected in ((False, "<unset>"), (True, "1")):
+                    receipt = run_tau3_mlx_training(
+                        bundle_dir=bundle,
+                        output_dir=root / f"out-{disabled}",
+                        workspace_root=root,
+                        config=Tau3MlxTrainingConfig(
+                            iters=2,
+                            disable_compile=disabled,
+                            timeout_seconds=5,
+                        ),
+                    )
+                    telemetry = (root / f"out-{disabled}" / "telemetry.jsonl").read_text(encoding="utf-8")
+                    self.assertIn(f"MLX_DISABLE_COMPILE={expected}", telemetry)
+                    self.assertIs(receipt["config"]["disable_compile"], disabled)
+
     def test_telemetry_event_is_flushed_for_live_observation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "telemetry.jsonl"
@@ -494,7 +517,7 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                 model_identity_path=identity,
                 output_dir=root / "out",
                 workspace_root=root,
-                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                config=Tau3MlxTrainingConfig(iters=2, disable_compile=True, timeout_seconds=5),
             )
             command = receipt["command"]
             self.assertIn("--fine-tune-type", command)
@@ -517,6 +540,7 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                 {"source": "protocol_manifest.signature", "algorithm": "sha256"},
             )
             self.assertRegex(receipt["training_binding"]["recipe"]["recipe_id"], r"^tau3-mlx-recipe-[0-9a-f]{16}$")
+            self.assertTrue(receipt["training_binding"]["recipe"]["disable_compile"])
             self.assertTrue(receipt["weights_updated"])
 
     def test_training_binding_schema_requires_protocol_signature_lineage(self) -> None:
@@ -759,18 +783,23 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                 workspace_root=root,
                 config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
             )
-            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
-                run_tau3_mlx_training(
-                    mixture_dir=mixture,
-                    protocol_path=protocol,
-                    model_path=model,
-                    model_identity_path=identity,
-                    output_dir=root / "resumed",
-                    workspace_root=root,
-                    config=Tau3MlxTrainingConfig(iters=3, rank=32, timeout_seconds=5),
-                    resume_receipt_path=root / "prior" / "training_receipt.json",
-                    resume_adapter_file=root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz",
-                )
+            mismatches = {
+                "rank": Tau3MlxTrainingConfig(iters=3, rank=32, timeout_seconds=5),
+                "compile-mode": Tau3MlxTrainingConfig(iters=3, disable_compile=True, timeout_seconds=5),
+            }
+            for label, config in mismatches.items():
+                with self.subTest(label=label), self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                    run_tau3_mlx_training(
+                        mixture_dir=mixture,
+                        protocol_path=protocol,
+                        model_path=model,
+                        model_identity_path=identity,
+                        output_dir=root / f"resumed-{label}",
+                        workspace_root=root,
+                        config=config,
+                        resume_receipt_path=root / "prior" / "training_receipt.json",
+                        resume_adapter_file=root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz",
+                    )
 
     def test_normal_venv_python_leaf_symlink_is_preserved_for_activation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

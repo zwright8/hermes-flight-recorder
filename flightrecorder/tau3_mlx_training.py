@@ -92,6 +92,7 @@ class Tau3MlxTrainingConfig:
     val_batches: int = -1
     mask_prompt: bool = True
     grad_checkpoint: bool = True
+    disable_compile: bool = False
     clear_cache_threshold: int = 0
     timeout_seconds: int = 172_800
 
@@ -215,6 +216,7 @@ def run_tau3_mlx_training(
             telemetry_path=telemetry_path,
             timeout_seconds=cfg.timeout_seconds,
             losses=losses,
+            disable_compile=cfg.disable_compile,
         )
         status = _classify(exit_code, timed_out, telemetry_path)
     except KeyboardInterrupt:
@@ -301,6 +303,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     grad = parser.add_mutually_exclusive_group()
     grad.add_argument("--grad-checkpoint", dest="grad_checkpoint", action="store_true", default=True)
     grad.add_argument("--no-grad-checkpoint", dest="grad_checkpoint", action="store_false")
+    compile_mode = parser.add_mutually_exclusive_group()
+    compile_mode.add_argument("--disable-compile", dest="disable_compile", action="store_true", default=False)
+    compile_mode.add_argument("--enable-compile", dest="disable_compile", action="store_false")
     parser.add_argument("--timeout-seconds", type=int, default=Tau3MlxTrainingConfig.timeout_seconds)
     mask = parser.add_mutually_exclusive_group()
     mask.add_argument("--mask-prompt", dest="mask_prompt", action="store_true", default=True)
@@ -326,6 +331,7 @@ def config_from_args(args: argparse.Namespace) -> Tau3MlxTrainingConfig:
         val_batches=args.val_batches,
         mask_prompt=args.mask_prompt,
         grad_checkpoint=args.grad_checkpoint,
+        disable_compile=args.disable_compile,
         clear_cache_threshold=args.clear_cache_threshold,
         timeout_seconds=args.timeout_seconds,
     )
@@ -910,6 +916,7 @@ def _recipe_record(cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
         "seed": cfg.seed,
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
+        "disable_compile": cfg.disable_compile,
     }
 
 
@@ -1362,8 +1369,30 @@ def _build_command(
     return command
 
 
-def _run_child(*, command: list[str], cwd: Path, telemetry_path: Path, timeout_seconds: int, losses: dict[str, list[float]]) -> tuple[int | None, bool, int, int]:
-    proc = subprocess.Popen(command, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+def _run_child(
+    *,
+    command: list[str],
+    cwd: Path,
+    telemetry_path: Path,
+    timeout_seconds: int,
+    losses: dict[str, list[float]],
+    disable_compile: bool,
+) -> tuple[int | None, bool, int, int]:
+    environment = os.environ.copy()
+    if disable_compile:
+        environment["MLX_DISABLE_COMPILE"] = "1"
+    else:
+        environment.pop("MLX_DISABLE_COMPILE", None)
+    proc = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     events: queue.Queue[tuple[str, str | None]] = queue.Queue()
     for stream_name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr)):
         thread = threading.Thread(target=_reader, args=(stream_name, stream, events), daemon=True)
@@ -1548,6 +1577,7 @@ def _config_record(cfg: Tau3MlxTrainingConfig, *, resume: dict[str, Any] | None 
         "val_batches": cfg.val_batches,
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
+        "disable_compile": cfg.disable_compile,
         "clear_cache_threshold": cfg.clear_cache_threshold,
         "timeout_seconds": cfg.timeout_seconds,
     }
