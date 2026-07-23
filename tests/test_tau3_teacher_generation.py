@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -19,6 +20,63 @@ REVISION = "1d244f5dca42944b67a379b44bfeb9f5748f189d"
 
 
 class Tau3TeacherGenerationTests(unittest.TestCase):
+    def test_binds_teacher_frozen_protocol_and_rejects_revision_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            protocol = root / "protocol.json"
+            protocol.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.tau3_protocol_config.v1",
+                        "tau_revision": {"revision": self.revision},
+                        "model_freeze": {"teachers": [{"name": "local-teacher"}]},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            endpoint = Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1")
+            manifest = run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=root / "out",
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=endpoint,
+                user=endpoint,
+                protocol_path=protocol,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+            )
+            self.assertEqual(manifest["protocol"]["sha256"], hashlib.sha256(protocol.read_bytes()).hexdigest())
+
+            bad = root / "bad-protocol.json"
+            bad.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.tau3_protocol_config.v1",
+                        "tau_revision": {"revision": "0" * 40},
+                        "model_freeze": {"teachers": [{"name": "local-teacher"}]},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(Tau3TeacherGenerationError, "revision mismatch"):
+                run_tau3_teacher_generation(
+                    source_jsonl=source,
+                    out_dir=root / "bad-out",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    teacher=endpoint,
+                    user=endpoint,
+                    protocol_path=bad,
+                    config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                )
+
     def test_success_failure_and_resume_are_receipted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

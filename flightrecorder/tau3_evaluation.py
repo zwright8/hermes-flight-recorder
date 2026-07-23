@@ -363,6 +363,12 @@ def _normalized_harness(info: dict[str, Any]) -> dict[str, Any]:
         "max_steps": info.get("max_steps"),
         "max_errors": info.get("max_errors"),
         "num_trials": info.get("num_trials"),
+        "max_retries": info.get("max_retries"),
+        "auto_resume": info.get("auto_resume"),
+        "auto_review": info.get("auto_review"),
+        "review_mode": info.get("review_mode"),
+        "review_model_sha256": canonical_sha256(info.get("review_model")),
+        "hallucination_retries": info.get("hallucination_retries"),
         "text_streaming_config_sha256": canonical_sha256(info.get("text_streaming_config")),
         "retrieval_config_sha256": canonical_sha256(info.get("retrieval_config")),
         "domain_name": env.get("domain_name"),
@@ -389,6 +395,16 @@ def _validate_harness(harness: dict[str, Any], *, arm: str, path: Path, errors: 
         errors.append(f"{arm}:{path}: max_steps must be 30")
     if harness.get("max_errors") != 10:
         errors.append(f"{arm}:{path}: max_errors must be 10")
+    if harness.get("num_trials") != 1:
+        errors.append(f"{arm}:{path}: num_trials must be 1 per pre-registered seed run")
+    if harness.get("max_retries") != 0:
+        errors.append(f"{arm}:{path}: max_retries must be 0")
+    if harness.get("auto_resume") is not False:
+        errors.append(f"{arm}:{path}: auto_resume must be false")
+    if harness.get("auto_review") is not True or harness.get("review_mode") != "full":
+        errors.append(f"{arm}:{path}: full automatic policy review must be enabled")
+    if harness.get("hallucination_retries") != 0:
+        errors.append(f"{arm}:{path}: hallucination_retries must be 0")
     if harness.get("agent", {}).get("implementation") != "llm_agent":
         errors.append(f"{arm}:{path}: agent implementation must be normal llm_agent")
     expected_args = {"temperature": 0.0, "top_p": 1.0, "max_tokens": 1024, "num_retries": 0}

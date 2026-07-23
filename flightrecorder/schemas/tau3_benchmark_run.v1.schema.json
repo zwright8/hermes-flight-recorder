@@ -1,0 +1,207 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_benchmark_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "hfr.tau3_benchmark_run.v1"
+    },
+    "phase": {
+      "enum": ["prelaunch", "domain_seed", "final"]
+    },
+    "tau_revision": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "mode": {
+      "enum": ["development", "sealed"]
+    },
+    "arm_id": {
+      "enum": ["adapter", "base", "comparator_1", "comparator_2"]
+    },
+    "agent": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "user_simulator": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "reviewer": {
+      "$ref": "#/$defs/endpoint"
+    },
+    "config": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {"const": "llm_agent"},
+        "auto_review": {"const": true},
+        "communication_protocol_enforced": {"const": true},
+        "context_window": {"const": 16384},
+        "domains": {"const": ["airline", "retail", "telecom"]},
+        "hallucination_retries": {"const": 0},
+        "max_concurrency": {"const": 1},
+        "max_errors": {"const": 10},
+        "max_retries": {"const": 0},
+        "max_steps": {"const": 30},
+        "num_trials": {"const": 1},
+        "resume": {"const": false},
+        "review_mode": {"const": "full"},
+        "seeds": {"const": [101, 202, 303, 404]},
+        "test_time_search": {"const": false},
+        "timeout_seconds": {"minimum": 1, "maximum": 7200, "type": "integer"},
+        "user": {"const": "user_simulator"}
+      },
+      "required": [
+        "agent",
+        "auto_review",
+        "communication_protocol_enforced",
+        "context_window",
+        "domains",
+        "hallucination_retries",
+        "max_concurrency",
+        "max_errors",
+        "max_retries",
+        "max_steps",
+        "num_trials",
+        "resume",
+        "review_mode",
+        "seeds",
+        "test_time_search",
+        "timeout_seconds",
+        "user"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "type": ["object", "null"]
+    },
+    "candidate_lock": {
+      "type": ["object", "null"]
+    },
+    "task_selection": {
+      "type": "object"
+    },
+    "run_count": {
+      "const": 12
+    },
+    "success_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failure_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "run_receipts": {
+      "items": {"$ref": "#/$defs/run_receipt_ref"},
+      "maxItems": 12,
+      "minItems": 12,
+      "type": "array"
+    },
+    "loopback_only": {
+      "const": true
+    },
+    "sealed_payload_accessed": {
+      "const": false
+    },
+    "sealed_task_ids_materialized": {
+      "const": false
+    },
+    "training_started": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "phase",
+    "tau_revision",
+    "mode",
+    "arm_id",
+    "agent",
+    "user_simulator",
+    "reviewer",
+    "config",
+    "task_selection",
+    "sealed_payload_accessed",
+    "sealed_task_ids_materialized",
+    "training_started"
+  ],
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"const": "final"}}},
+      "then": {
+        "required": ["run_count", "success_count", "failure_count", "run_receipts", "loopback_only"]
+      }
+    },
+    {
+      "if": {"properties": {"mode": {"const": "sealed"}}},
+      "then": {
+        "properties": {
+          "source": {"type": "null"},
+          "candidate_lock": {"type": "object"}
+        },
+        "required": ["candidate_lock"]
+      }
+    },
+    {
+      "if": {"properties": {"mode": {"const": "development"}}},
+      "then": {
+        "properties": {
+          "source": {"type": "object"},
+          "candidate_lock": {"type": "null"}
+        },
+        "required": ["source"]
+      }
+    }
+  ],
+  "title": "Tau-3 Benchmark Arm Run Receipt",
+  "type": "object",
+  "$defs": {
+    "endpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "context_window": {"const": 16384},
+        "endpoint_hash": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "loopback": {"const": true},
+        "max_tokens": {"const": 1024},
+        "model_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "temperature": {"const": 0.0},
+        "top_p": {"const": 1.0}
+      },
+      "required": ["context_window", "endpoint_hash", "loopback", "max_tokens", "model_sha256", "temperature", "top_p"],
+      "type": "object"
+    },
+    "result_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "reward_sum": {"type": "number"},
+        "simulation_count": {"minimum": 1, "type": "integer"},
+        "success_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["reward_sum", "simulation_count", "success_count"],
+      "type": "object"
+    },
+    "run_receipt_ref": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"terminal_status": {"const": "completed"}}},
+          "then": {
+            "properties": {
+              "result_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+              "result_summary": {"$ref": "#/$defs/result_summary"}
+            }
+          }
+        }
+      ],
+      "properties": {
+        "domain": {"enum": ["airline", "retail", "telecom"]},
+        "path": {"pattern": "^run-(airline|retail|telecom)-seed(101|202|303|404)\\.json$", "type": "string"},
+        "result_sha256": {"type": ["string", "null"]},
+        "result_summary": {"type": ["object", "null"]},
+        "seed": {"enum": [101, 202, 303, 404]},
+        "terminal_status": {"enum": ["completed", "failed", "timeout"]}
+      },
+      "required": ["domain", "path", "result_sha256", "result_summary", "seed", "terminal_status"],
+      "type": "object"
+    }
+  }
+}

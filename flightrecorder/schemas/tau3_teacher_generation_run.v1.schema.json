@@ -19,6 +19,9 @@
     "user_simulator": {
       "type": "object"
     },
+    "protocol": {
+      "type": ["object", "null"]
+    },
     "config": {
       "additionalProperties": false,
       "properties": {

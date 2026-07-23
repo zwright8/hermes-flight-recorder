@@ -212,6 +212,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "supervisor_state",
             "tau3_capture",
             "tau3_capture_generation",
+            "tau3_benchmark_run",
             "tau3_conversation_import",
             "tau3_evaluation",
             "tau3_mlx_dataset",

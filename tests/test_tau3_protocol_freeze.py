@@ -58,6 +58,18 @@ class Tau3ProtocolFreezeTests(unittest.TestCase):
                 [MODEL_SPECS["comparator-1"]["name"], MODEL_SPECS["comparator-2"]["name"]],
             )
             self.assertEqual(
+                [row["name"] for row in protocol["model_freeze"]["teachers"]],
+                [MODEL_SPECS["teacher"]["name"]],
+            )
+            teacher = protocol["model_freeze"]["teachers"][0]
+            self.assertEqual(teacher["revision"], "38740b847e4cb78f352aba30aa41c76e08e6eb46")
+            self.assertEqual(teacher["parameters_billion"], 35.0)
+            self.assertIn("mixture-of-experts", teacher["architecture"])
+            self.assertEqual(teacher["role"], "teacher_generation_and_review_only")
+            self.assertFalse(teacher["pre_run_eligibility"]["comparator_eligible"])
+            self.assertTrue(teacher["pre_run_eligibility"]["excluded_from_comparator_rule"])
+            self.assertNotEqual(teacher["pre_run_eligibility"].get("rule"), protocol["model_freeze"]["pre_run_eligibility_rule"])
+            self.assertEqual(
                 protocol["mlx_qlora_plan"]["command_argv"],
                 [
                     "python",
@@ -99,6 +111,16 @@ class Tau3ProtocolFreezeTests(unittest.TestCase):
             self.assertFalse(protocol["model_freeze"]["benchmark_superiority_claimed"])
             self.assertIn("evidence_urls", protocol["model_freeze"]["base_model"])
             self.assertEqual(protocol["model_freeze"]["base_model"]["upstream"]["name"], "Qwen/Qwen3.5-9B")
+            self.assertIn(
+                {
+                    "id": "mlx-community/Qwen3.6-35B-A3B-4bit",
+                    "status": "approved",
+                    "training_allowed": True,
+                    "license": "Apache-2.0",
+                    "usage": "teacher_generation_and_review_only",
+                },
+                protocol["licenses"],
+            )
             capture_freeze = protocol["split_manifest"]["training_captures"]
             self.assertEqual(capture_freeze["row_count"], 8)
             self.assertEqual(capture_freeze["sha256"], artifact_record(Path(fixture["captures"]))["sha256"])
@@ -137,6 +159,24 @@ class Tau3ProtocolFreezeTests(unittest.TestCase):
             write_json(Path(fixture["base_identity"]), identity)
 
             with self.assertRaisesRegex(Tau3ProtocolFreezeError, "identity does not replay"):
+                freeze_tau3_training_protocol(out=Path(tmp) / "protocol.json", **fixture)
+
+    def test_teacher_identity_tamper_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = make_fixture(Path(tmp))
+            identity = read_json(Path(fixture["teacher_identity"]))
+            identity["model_id"] = MODEL_SPECS["comparator-1"]["name"]
+            write_json(Path(fixture["teacher_identity"]), identity)
+
+            with self.assertRaisesRegex(Tau3ProtocolFreezeError, "teacher model identity does not replay"):
+                freeze_tau3_training_protocol(out=Path(tmp) / "protocol.json", **fixture)
+
+    def test_teacher_model_tree_drift_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = make_fixture(Path(tmp))
+            Path(fixture["teacher_model_path"], "weights.safetensors").write_bytes(b"changed-teacher-weights")
+
+            with self.assertRaisesRegex(Tau3ProtocolFreezeError, "teacher model identity does not replay"):
                 freeze_tau3_training_protocol(out=Path(tmp) / "protocol.json", **fixture)
 
     def test_symlink_identity_fails_closed(self):
@@ -265,6 +305,7 @@ def make_fixture(root: Path) -> dict:
         ("base", "base"),
         ("comparator-1", "comparator1"),
         ("comparator-2", "comparator2"),
+        ("teacher", "teacher"),
     ):
         model_path = models / key
         make_model(model_path)
@@ -501,6 +542,8 @@ def cli_args(fixture: dict, out: Path) -> list[str]:
         "comparator1_model_path": "--comparator1-model-path",
         "comparator2_identity": "--comparator2-identity",
         "comparator2_model_path": "--comparator2-model-path",
+        "teacher_identity": "--teacher-identity",
+        "teacher_model_path": "--teacher-model-path",
         "captures": "--captures",
     }
     args: list[str] = []

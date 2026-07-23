@@ -104,6 +104,25 @@ MODEL_SPECS = {
             "https://www.ibm.com/granite/docs/models/granite/",
         ],
     },
+    "teacher": {
+        "name": "mlx-community/Qwen3.6-35B-A3B-4bit",
+        "revision": "38740b847e4cb78f352aba30aa41c76e08e6eb46",
+        "upstream_name": "Qwen/Qwen3.6-35B-A3B",
+        "upstream_revision": "7c787ca72eef6f25ba9a43a73219a461bf0b304d",
+        "parameters_billion": 35.0,
+        "architecture": "35B mixture-of-experts transformer",
+        "license": "Apache-2.0",
+        "quantization": "mlx-4bit",
+        "tokenizer": "Qwen/Qwen3.6-35B-A3B@38740b847e4cb78f352aba30aa41c76e08e6eb46",
+        "chat_template": "qwen3.6-tool-use-chat-template",
+        "model_card_url": "https://huggingface.co/mlx-community/Qwen3.6-35B-A3B-4bit",
+        "evidence_urls": [
+            "https://huggingface.co/mlx-community/Qwen3.6-35B-A3B-4bit",
+            "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
+            "https://qwen.readthedocs.io/",
+        ],
+        "role": "teacher_generation_and_review_only",
+    },
 }
 
 
@@ -127,6 +146,8 @@ def freeze_tau3_training_protocol(
     comparator1_model_path: str | Path,
     comparator2_identity: str | Path,
     comparator2_model_path: str | Path,
+    teacher_identity: str | Path,
+    teacher_model_path: str | Path,
     captures: str | Path,
     out: str | Path,
     created_at: str = "2026-07-22T00:00:00+00:00",
@@ -160,6 +181,8 @@ def freeze_tau3_training_protocol(
         comparator1_model_path=Path(comparator1_model_path),
         comparator2_identity=Path(comparator2_identity),
         comparator2_model_path=Path(comparator2_model_path),
+        teacher_identity=Path(teacher_identity),
+        teacher_model_path=Path(teacher_model_path),
     )
     contamination = _contamination_attestation(sources, capture_rows, capture_source_bindings)
     redaction = _redaction_attestation(sources, capture_rows)
@@ -197,7 +220,12 @@ def freeze_tau3_training_protocol(
         "development_task_count": sources["development_split"]["task_count"],
         "sealed_task_count": sources["sealed_split"]["task_count"],
         "capture_count": len(capture_rows),
-        "models": [MODEL_SPECS["base"]["name"], MODEL_SPECS["comparator-1"]["name"], MODEL_SPECS["comparator-2"]["name"]],
+        "models": [
+            MODEL_SPECS["base"]["name"],
+            MODEL_SPECS["comparator-1"]["name"],
+            MODEL_SPECS["comparator-2"]["name"],
+            MODEL_SPECS["teacher"]["name"],
+        ],
     }
 
 
@@ -302,6 +330,7 @@ def _freeze_models(**paths: Path) -> dict[str, Any]:
         ("base", paths["base_identity"], paths["base_model_path"]),
         ("comparator-1", paths["comparator1_identity"], paths["comparator1_model_path"]),
         ("comparator-2", paths["comparator2_identity"], paths["comparator2_model_path"]),
+        ("teacher", paths["teacher_identity"], paths["teacher_model_path"]),
     )
     frozen: dict[str, Any] = {}
     for role, identity_path, model_path in roles:
@@ -331,22 +360,45 @@ def _freeze_models(**paths: Path) -> dict[str, Any]:
                 "name": spec["upstream_name"],
                 "revision": spec["upstream_revision"],
             },
-            "pre_run_eligibility": {
-                "rule": MODEL_SELECTION_RULE,
-                "upstream_official_or_developer_owned": True,
-                "conversion_provider": "mlx-community",
-                "conversion_identity_content_addressed": True,
-                "public_ungated": True,
-                "immutable_open_weights": True,
-                "dense_total_parameters_7_to_9b": True,
-                "license": "Apache-2.0",
-                "mlx_local_load_compatible": True,
-                "documented_tool_or_function_use": True,
-                "identical_common_harness": True,
-                "per_model_prompt_tuning": False,
-            },
+            "pre_run_eligibility": _model_eligibility(role),
         }
     return frozen
+
+
+def _model_eligibility(role: str) -> dict[str, Any]:
+    if role == "teacher":
+        return {
+            "role": "teacher_generation_and_review_only",
+            "comparator_eligible": False,
+            "rule_applied": "teacher_identity_pin_only",
+            "excluded_from_comparator_rule": True,
+            "exclusion_reason": (
+                "The teacher is a 35B mixture-of-experts model used only for generation and review. "
+                "It is not a dense 7-9B comparator candidate and is never included in comparator superiority claims."
+            ),
+            "conversion_provider": "mlx-community",
+            "conversion_identity_content_addressed": True,
+            "public_ungated": True,
+            "immutable_open_weights": True,
+            "license": "Apache-2.0",
+            "mlx_local_load_compatible": True,
+            "identical_common_harness": False,
+            "per_model_prompt_tuning": False,
+        }
+    return {
+        "rule": MODEL_SELECTION_RULE,
+        "upstream_official_or_developer_owned": True,
+        "conversion_provider": "mlx-community",
+        "conversion_identity_content_addressed": True,
+        "public_ungated": True,
+        "immutable_open_weights": True,
+        "dense_total_parameters_7_to_9b": True,
+        "license": "Apache-2.0",
+        "mlx_local_load_compatible": True,
+        "documented_tool_or_function_use": True,
+        "identical_common_harness": True,
+        "per_model_prompt_tuning": False,
+    }
 
 
 def _load_captures(path: Path) -> list[dict[str, Any]]:
@@ -550,6 +602,7 @@ def _build_protocol_config(
     domain_contracts = _capture_domain_contracts(captures)
     base_model = _public_model(models["base"])
     comparators = [_public_model(models["comparator-1"]), _public_model(models["comparator-2"])]
+    teachers = [_public_model(models["teacher"])]
     return {
         "schema_version": PROTOCOL_CONFIG_SCHEMA_VERSION,
         "protocol_manifest": {
@@ -649,7 +702,7 @@ def _build_protocol_config(
             "schema_version": "hfr.tau3_model_freeze.v1",
             "base_model": base_model,
             "comparators": comparators,
-            "teachers": [],
+            "teachers": teachers,
             "selected_at": MODEL_SELECTED_AT,
             "pre_run_eligibility_rule": MODEL_SELECTION_RULE,
             "selection_rule": (
@@ -668,6 +721,10 @@ def _build_protocol_config(
                 },
             ],
             "benchmark_superiority_claimed": False,
+            "teacher_policy": (
+                "Teachers are pinned for local generation and review evidence only. They are excluded from "
+                "the 7-9B dense comparator eligibility rule and from benchmark superiority claims."
+            ),
         },
         "budget": {
             "schema_version": "hfr.tau3_budget.v1",
@@ -774,6 +831,13 @@ def _build_protocol_config(
             {"id": "mlx-community/Qwen3.5-9B-4bit", "status": "approved", "training_allowed": True, "license": "Apache-2.0"},
             {"id": "mlx-community/Qwen3-8B-4bit", "status": "approved", "training_allowed": True, "license": "Apache-2.0"},
             {"id": "mlx-community/granite-3.3-8b-instruct-4bit", "status": "approved", "training_allowed": True, "license": "Apache-2.0"},
+            {
+                "id": "mlx-community/Qwen3.6-35B-A3B-4bit",
+                "status": "approved",
+                "training_allowed": True,
+                "license": "Apache-2.0",
+                "usage": "teacher_generation_and_review_only",
+            },
         ],
         "environment_manifest": {
             "schema_version": "hfr.tau3_environment.v1",
@@ -805,7 +869,10 @@ def _public_model(model: dict[str, Any]) -> dict[str, Any]:
         "evidence_urls",
         "pre_run_eligibility",
     )
-    return {key: model[key] for key in keys}
+    public = {key: model[key] for key in keys}
+    if "role" in model:
+        public["role"] = model["role"]
+    return public
 
 
 def _require_clean_tau_checkout(repo: Path, expected_revision: str) -> None:

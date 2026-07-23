@@ -54,6 +54,7 @@ def run_tau3_teacher_generation(
     expected_tau_revision: str,
     teacher: Tau3Endpoint,
     user: Tau3Endpoint,
+    protocol_path: str | Path | None = None,
     config: Tau3TeacherGenerationConfig | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
@@ -76,6 +77,7 @@ def run_tau3_teacher_generation(
     _require_loopback(teacher.api_base, "teacher")
     _require_loopback(user.api_base, "user")
     _require_revision(repo, expected_tau_revision)
+    protocol = _protocol_record(Path(protocol_path), expected_tau_revision) if protocol_path is not None else None
     tasks = _load_tasks(source, expected_tau_revision)[: cfg.max_tasks]
     if not tasks:
         raise Tau3TeacherGenerationError("no eligible train/development tasks")
@@ -84,6 +86,7 @@ def run_tau3_teacher_generation(
         "source": _file_record(source),
         "teacher": _endpoint_record(teacher),
         "user_simulator": _endpoint_record(user),
+        "protocol": protocol,
         "config": _config_record(cfg),
         "task_count": len(tasks),
     }
@@ -216,6 +219,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--teacher-api-base", required=True)
     parser.add_argument("--user-model", required=True)
     parser.add_argument("--user-api-base", required=True)
+    parser.add_argument("--protocol", type=Path)
     parser.add_argument("--max-tasks", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=30)
     parser.add_argument("--timeout-seconds", type=int, default=600)
@@ -236,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_tau_revision=args.expected_tau_revision,
             teacher=Tau3Endpoint(model=args.teacher_model, api_base=args.teacher_api_base),
             user=Tau3Endpoint(model=args.user_model, api_base=args.user_api_base),
+            protocol_path=args.protocol,
             config=Tau3TeacherGenerationConfig(
                 max_steps=args.max_steps,
                 timeout_seconds=args.timeout_seconds,
@@ -345,6 +350,21 @@ def _load_tasks(path: Path, expected_revision: str) -> list[dict[str, str]]:
             "has_reference_actions": "true" if actions else "false",
         })
     return rows
+
+
+def _protocol_record(path: Path, expected_revision: str) -> dict[str, Any]:
+    payload = _read_json(path)
+    if payload.get("schema_version") != "hfr.tau3_protocol_config.v1":
+        raise Tau3TeacherGenerationError("protocol is not a frozen Tau-3 protocol config")
+    revision = payload.get("tau_revision")
+    actual_revision = revision.get("revision") if isinstance(revision, dict) else None
+    if actual_revision != expected_revision:
+        raise Tau3TeacherGenerationError("protocol Tau revision mismatch")
+    model_freeze = payload.get("model_freeze")
+    teachers = model_freeze.get("teachers") if isinstance(model_freeze, dict) else None
+    if not isinstance(teachers, list) or not teachers:
+        raise Tau3TeacherGenerationError("protocol must freeze at least one teacher")
+    return _file_record(path)
 
 
 def _result_reward(path: Path) -> float | None:

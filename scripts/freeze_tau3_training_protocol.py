@@ -34,6 +34,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--comparator1-model-path", type=Path, required=True)
     parser.add_argument("--comparator2-identity", type=Path, required=True)
     parser.add_argument("--comparator2-model-path", type=Path, required=True)
+    parser.add_argument("--teacher-identity", type=Path, required=True)
+    parser.add_argument("--teacher-model-path", type=Path, required=True)
     parser.add_argument("--captures", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--created-at", default="2026-07-22T00:00:00+00:00")
@@ -60,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
             comparator1_model_path=args.comparator1_model_path,
             comparator2_identity=args.comparator2_identity,
             comparator2_model_path=args.comparator2_model_path,
+            teacher_identity=args.teacher_identity,
+            teacher_model_path=args.teacher_model_path,
             captures=args.captures,
             out=args.out,
             created_at=args.created_at,

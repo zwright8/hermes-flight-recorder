@@ -2,6 +2,14 @@
   "schema_version": "hfr.schema_catalog.v1",
   "schemas": [
     {
+      "artifact": "tau3_benchmark_run",
+      "artifact_schema_version": "hfr.tau3_benchmark_run.v1",
+      "description": "Private receipts and public-safe manifest for one official Tau-3 benchmark arm.",
+      "filename": "tau3_benchmark_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_benchmark_run.v1.schema.json",
+      "name": "tau3_benchmark_run"
+    },
+    {
       "artifact": "tau3_teacher_generation_run",
       "artifact_schema_version": "hfr.tau3_teacher_generation_run.v1",
       "description": "Receipts for governed official-Tau teacher trajectory generation runs.",
