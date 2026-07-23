@@ -225,6 +225,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_model_identity",
             "tau3_protocol_config",
             "tau3_sealed_authorization",
+            "tau3_sealed_grid_completeness",
             "tau3_sealed_source_manifest",
             "tau3_source_partition",
             "tau3_source_split",

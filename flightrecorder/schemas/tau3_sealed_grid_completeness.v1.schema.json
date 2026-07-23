@@ -1,0 +1,163 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_sealed_grid_completeness.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public-safe hash-only completeness proof for the final Tau-3 sealed benchmark grid.",
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_sealed_grid_completeness.v1"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "passed": {"const": true},
+    "status": {"const": "complete"},
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "raw_payload_included": {"const": false},
+    "scores_included": {"const": false},
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_lock_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "sealed_source_sha256": {"$ref": "#/$defs/sha256"},
+        "coverage_fingerprint_sha256": {"$ref": "#/$defs/sha256"},
+        "arm_manifest_sha256": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {"$ref": "#/$defs/sha256"},
+            "base": {"$ref": "#/$defs/sha256"},
+            "comparator_1": {"$ref": "#/$defs/sha256"},
+            "comparator_2": {"$ref": "#/$defs/sha256"}
+          },
+          "required": ["adapter", "base", "comparator_1", "comparator_2"],
+          "type": "object"
+        },
+        "model_identity_sha256": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {"$ref": "#/$defs/sha256"},
+            "base": {"$ref": "#/$defs/sha256"},
+            "comparator_1": {"$ref": "#/$defs/sha256"},
+            "comparator_2": {"$ref": "#/$defs/sha256"}
+          },
+          "required": ["adapter", "base", "comparator_1", "comparator_2"],
+          "type": "object"
+        },
+        "harness_equivalence_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "authorization_sha256",
+        "candidate_lock_sha256",
+        "protocol_sha256",
+        "sealed_source_sha256",
+        "coverage_fingerprint_sha256",
+        "arm_manifest_sha256",
+        "model_identity_sha256",
+        "harness_equivalence_sha256"
+      ],
+      "type": "object"
+    },
+    "counts": {
+      "additionalProperties": false,
+      "properties": {
+        "arm_count": {"const": 4},
+        "seed_count": {"const": 4},
+        "domain_count": {"const": 3},
+        "sealed_task_count": {"const": 100},
+        "episodes_per_arm": {"const": 400},
+        "total_episodes": {"const": 1600},
+        "per_arm_seed_task_count": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {"$ref": "#/$defs/seed_counts"},
+            "base": {"$ref": "#/$defs/seed_counts"},
+            "comparator_1": {"$ref": "#/$defs/seed_counts"},
+            "comparator_2": {"$ref": "#/$defs/seed_counts"}
+          },
+          "required": ["adapter", "base", "comparator_1", "comparator_2"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "arm_count",
+        "seed_count",
+        "domain_count",
+        "sealed_task_count",
+        "episodes_per_arm",
+        "total_episodes",
+        "per_arm_seed_task_count"
+      ],
+      "type": "object"
+    },
+    "gates": {
+      "additionalProperties": false,
+      "properties": {
+        "arms_exact": {"const": true},
+        "seeds_exact": {"const": true},
+        "domains_exact": {"const": true},
+        "sealed_task_count_exact": {"const": true},
+        "no_duplicate_task_rows": {"const": true},
+        "no_missing_task_rows": {"const": true},
+        "no_extra_task_rows": {"const": true},
+        "same_task_coverage_across_arms": {"const": true},
+        "same_task_coverage_across_seeds": {"const": true},
+        "result_hashes_replayed": {"const": true},
+        "authorization_binding_replayed": {"const": true},
+        "candidate_lock_binding_replayed": {"const": true},
+        "protocol_binding_replayed": {"const": true},
+        "sealed_source_binding_replayed": {"const": true},
+        "harness_equivalence_bound": {"const": true},
+        "model_identities_bound": {"const": true},
+        "public_payload_safe": {"const": true}
+      },
+      "required": [
+        "arms_exact",
+        "seeds_exact",
+        "domains_exact",
+        "sealed_task_count_exact",
+        "no_duplicate_task_rows",
+        "no_missing_task_rows",
+        "no_extra_task_rows",
+        "same_task_coverage_across_arms",
+        "same_task_coverage_across_seeds",
+        "result_hashes_replayed",
+        "authorization_binding_replayed",
+        "candidate_lock_binding_replayed",
+        "protocol_binding_replayed",
+        "sealed_source_binding_replayed",
+        "harness_equivalence_bound",
+        "model_identities_bound",
+        "public_payload_safe"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "status",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "scores_included",
+    "bindings",
+    "counts",
+    "gates"
+  ],
+  "title": "Tau-3 Sealed Grid Completeness",
+  "type": "object",
+  "$defs": {
+    "seed_counts": {
+      "additionalProperties": false,
+      "properties": {
+        "101": {"const": 100},
+        "202": {"const": 100},
+        "303": {"const": 100},
+        "404": {"const": 100}
+      },
+      "required": ["101", "202", "303", "404"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}
