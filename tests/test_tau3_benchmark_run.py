@@ -16,6 +16,7 @@ from flightrecorder.tau3_benchmark_run import (
     Tau3BenchmarkEndpoint,
     Tau3BenchmarkRunError,
     _command_timeout_seconds,
+    _development_tasks_by_domain,
     _reviewer_environment,
     _tau2_argv,
     run_tau3_benchmark_arm,
@@ -850,6 +851,21 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     config=Tau3BenchmarkConfig(mode="development", arm_id="base", protocol_path=protocol, source_split=source),
                 )
 
+    def test_development_source_replays_domain_qualified_raw_id_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._repo(root)
+            source = self._development_source(root)
+
+            tasks = _development_tasks_by_domain(source, self.revision)
+            self.assertEqual(tasks, {"airline": ["air-1"], "retail": ["ret-1"], "telecom": ["tel-1"]})
+
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            payload["tasks"][0]["raw_id_sha256"] = hashlib_sha256(b"air-1").hexdigest()
+            source.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "raw task id hash mismatch"):
+                _development_tasks_by_domain(source, self.revision)
+
     def test_completed_receipt_requires_hashed_result_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1165,9 +1181,9 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             "family_count": 3,
             "family_ids": ["1" * 64, "2" * 64, "3" * 64],
             "tasks": [
-                {"domain": "airline", "raw_id": "air-1", "raw_id_sha256": hashlib_sha256(b"air-1").hexdigest(), "task_sha256": "a" * 64, "prompt_sha256": "b" * 64, "family_id": "1" * 64},
-                {"domain": "retail", "raw_id": "ret-1", "raw_id_sha256": hashlib_sha256(b"ret-1").hexdigest(), "task_sha256": "c" * 64, "prompt_sha256": "d" * 64, "family_id": "2" * 64},
-                {"domain": "telecom", "raw_id": "tel-1", "raw_id_sha256": hashlib_sha256(b"tel-1").hexdigest(), "task_sha256": "e" * 64, "prompt_sha256": "f" * 64, "family_id": "3" * 64},
+                {"domain": "airline", "raw_id": "air-1", "raw_id_sha256": hashlib_sha256(b"airline:air-1").hexdigest(), "task_sha256": "a" * 64, "prompt_sha256": "b" * 64, "family_id": "1" * 64},
+                {"domain": "retail", "raw_id": "ret-1", "raw_id_sha256": hashlib_sha256(b"retail:ret-1").hexdigest(), "task_sha256": "c" * 64, "prompt_sha256": "d" * 64, "family_id": "2" * 64},
+                {"domain": "telecom", "raw_id": "tel-1", "raw_id_sha256": hashlib_sha256(b"telecom:tel-1").hexdigest(), "task_sha256": "e" * 64, "prompt_sha256": "f" * 64, "family_id": "3" * 64},
             ],
         }
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")

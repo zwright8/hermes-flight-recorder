@@ -539,7 +539,8 @@ def _development_tasks_by_domain(path: Path | None, expected_revision: str) -> d
         if raw_id is None:
             raise Tau3BenchmarkRunError(f"development source row {index} is missing raw task id")
         raw_id = str(raw_id)
-        if row.get("raw_id_sha256") != hashlib.sha256(raw_id.encode("utf-8")).hexdigest():
+        global_id = f"{domain}:{raw_id}"
+        if row.get("raw_id_sha256") != hashlib.sha256(global_id.encode("utf-8")).hexdigest():
             raise Tau3BenchmarkRunError(f"development source row {index} raw task id hash mismatch")
         if row.get("family_id") not in family_ids:
             raise Tau3BenchmarkRunError(f"development source row {index} family is not declared")
