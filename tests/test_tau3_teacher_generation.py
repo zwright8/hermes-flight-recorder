@@ -6,11 +6,13 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from flightrecorder.tau3_teacher_generation import (
     Tau3Endpoint,
     Tau3TeacherGenerationConfig,
     Tau3TeacherGenerationError,
+    _nl_assertions_judge_environment,
     _tau2_argv,
     main,
     run_tau3_teacher_generation,
@@ -169,6 +171,13 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             prelaunch = json.loads((out / "prelaunch_receipt.json").read_text(encoding="utf-8"))
             self.assertEqual(prelaunch["teacher"], manifest["teacher"])
             self.assertEqual(prelaunch["user_simulator"], manifest["user_simulator"])
+            self.assertEqual(prelaunch["nl_assertions_judge"], manifest["nl_assertions_judge"])
+            self.assertEqual(manifest["nl_assertions_judge"]["request_model"], "gpt-4.1-2025-04-14")
+            self.assertEqual(manifest["nl_assertions_judge"]["served_model"], teacher.model)
+            self.assertEqual(manifest["nl_assertions_judge"]["endpoint"], teacher.api_base)
+            self.assertEqual(manifest["nl_assertions_judge"]["temperature"], 0.0)
+            self.assertIsNone(manifest["nl_assertions_judge"]["top_p"])
+            self.assertIsNone(manifest["nl_assertions_judge"]["max_tokens"])
 
             receipt = json.loads(next(out.glob("task-*.json")).read_text(encoding="utf-8"))
             command = receipt["command"]
@@ -180,6 +189,110 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             self.assertEqual(user_args["temperature"], 0.2)
             self.assertEqual(user_args["top_p"], 0.8)
             self.assertEqual(user_args["max_tokens"], 384)
+            self.assertEqual(teacher_args["api_base"], teacher.api_base)
+            self.assertEqual(user_args["api_base"], user.api_base)
+
+    def test_nl_assertions_judge_environment_is_local_and_strips_credentials(self):
+        endpoint = Tau3Endpoint(
+            model="openai/local-teacher",
+            api_base="http://127.0.0.1:18082/v1",
+        )
+        with patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "external-secret",
+                "OPENAI_BASE_URL": "https://api.openai.com/v1",
+                "ANTHROPIC_API_KEY": "external-secret",
+                "HF_TOKEN": "external-secret",
+                "AWS_ACCESS_KEY_ID": "external-secret",
+                "AWS_SECRET_ACCESS_KEY": "external-secret",
+                "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/external-secret.json",
+                "GITHUB_PAT": "external-secret",
+                "SSH_AUTH_SOCK": "/tmp/external-agent.sock",
+                "GENERIC_SECRET": "external-secret",
+                "PATH": "/bin",
+            },
+            clear=True,
+        ):
+            env = _nl_assertions_judge_environment(endpoint)
+        self.assertEqual(env["OPENAI_API_BASE"], endpoint.api_base)
+        self.assertEqual(env["OPENAI_API_KEY"], "local")
+        self.assertNotIn("OPENAI_BASE_URL", env)
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("HF_TOKEN", env)
+        self.assertNotIn("AWS_ACCESS_KEY_ID", env)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
+        self.assertNotIn("GOOGLE_APPLICATION_CREDENTIALS", env)
+        self.assertNotIn("GITHUB_PAT", env)
+        self.assertNotIn("SSH_AUTH_SOCK", env)
+        self.assertNotIn("GENERIC_SECRET", env)
+        self.assertEqual(env["PATH"], "/bin")
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost")
+        self.assertEqual(env["no_proxy"], "127.0.0.1,localhost")
+
+    def test_generation_subprocess_receives_only_local_judge_credentials(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            endpoint = Tau3Endpoint(
+                model="openai/local-teacher",
+                api_base="http://127.0.0.1:18082/v1",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "OPENAI_API_KEY": "external-secret",
+                    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+                    "ANTHROPIC_API_KEY": "external-secret",
+                    "HF_TOKEN": "external-secret",
+                    "AWS_ACCESS_KEY_ID": "external-secret",
+                    "AWS_SECRET_ACCESS_KEY": "external-secret",
+                    "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/external-secret.json",
+                    "GITHUB_PAT": "external-secret",
+                    "SSH_AUTH_SOCK": "/tmp/external-agent.sock",
+                    "GENERIC_SECRET": "external-secret",
+                },
+            ):
+                run_tau3_teacher_generation(
+                    source_jsonl=source,
+                    out_dir=root / "out",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    teacher=endpoint,
+                    user=Tau3Endpoint(
+                        model="openai/local-user",
+                        api_base="http://127.0.0.1:18083/v1",
+                    ),
+                    config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                )
+            env_path = next((repo / "data" / "simulations" / "hfr-generation" / "out").rglob("judge-env.json"))
+            observed = json.loads(env_path.read_text(encoding="utf-8"))
+            self.assertEqual(observed["OPENAI_API_BASE"], endpoint.api_base)
+            self.assertEqual(observed["OPENAI_API_KEY"], "local")
+            self.assertIsNone(observed["OPENAI_BASE_URL"])
+            self.assertIsNone(observed["ANTHROPIC_API_KEY"])
+            self.assertIsNone(observed["HF_TOKEN"])
+            self.assertIsNone(observed["AWS_ACCESS_KEY_ID"])
+            self.assertIsNone(observed["AWS_SECRET_ACCESS_KEY"])
+            self.assertIsNone(observed["GOOGLE_APPLICATION_CREDENTIALS"])
+            self.assertIsNone(observed["GITHUB_PAT"])
+            self.assertIsNone(observed["SSH_AUTH_SOCK"])
+            self.assertIsNone(observed["GENERIC_SECRET"])
+
+    def test_nl_assertions_judge_rejects_credentialed_or_ambiguous_loopback_urls(self):
+        bad_urls = (
+            "http://user:pass@127.0.0.1:18082/v1",
+            "http://127.0.0.1:18082/v1?key=secret",
+            "http://127.0.0.1:18082/v1#secret",
+        )
+        for api_base in bad_urls:
+            with self.subTest(api_base=api_base):
+                endpoint = Tau3Endpoint(model="openai/local-teacher", api_base=api_base)
+                with self.assertRaises(Tau3TeacherGenerationError):
+                    _nl_assertions_judge_environment(endpoint)
 
     def test_rejects_unsafe_decoding_ranges(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,6 +478,42 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             self.assertEqual(manifest["failure_count"], 1)
             self.assertEqual(resumed["failure_count"], 1)
 
+    def test_partial_resume_rejects_nl_assertions_judge_binding_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            out = root / "out"
+            endpoint = Tau3Endpoint(model="openai/local", api_base="http://127.0.0.1:1/v1")
+            run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=out,
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=endpoint,
+                user=endpoint,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+            )
+            (out / "manifest.json").unlink()
+            prelaunch_path = out / "prelaunch_receipt.json"
+            prelaunch = json.loads(prelaunch_path.read_text(encoding="utf-8"))
+            prelaunch["nl_assertions_judge"]["served_model"] = "drifted-model"
+            prelaunch_path.write_text(json.dumps(prelaunch) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(Tau3TeacherGenerationError, "prelaunch receipt does not match"):
+                run_tau3_teacher_generation(
+                    source_jsonl=source,
+                    out_dir=out,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    teacher=endpoint,
+                    user=endpoint,
+                    config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                )
+
     def test_final_resume_rejects_changed_config_and_drifted_result(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -383,6 +532,23 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
                 user=endpoint,
                 config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2, seed=101),
             )
+            final_manifest = out / "manifest.json"
+            manifest_payload = json.loads(final_manifest.read_text(encoding="utf-8"))
+            manifest_payload["nl_assertions_judge"]["served_model"] = "drifted-model"
+            final_manifest.write_text(json.dumps(manifest_payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(Tau3TeacherGenerationError, "nl_assertions_judge"):
+                run_tau3_teacher_generation(
+                    source_jsonl=source,
+                    out_dir=out,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    teacher=endpoint,
+                    user=endpoint,
+                    config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2, seed=101),
+                )
+            manifest_payload["nl_assertions_judge"]["served_model"] = endpoint.model
+            final_manifest.write_text(json.dumps(manifest_payload) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(Tau3TeacherGenerationError, "stale or invalid"):
                 run_tau3_teacher_generation(
                     source_jsonl=source,
@@ -440,11 +606,17 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
         path = root / "tau2"
         path.write_text(
             "#!/usr/bin/env python3\n"
-            "import json, pathlib, sys\n"
+            "import json, os, pathlib, sys\n"
             "save_to=sys.argv[sys.argv.index('--save-to')+1]\n"
             f"reward={reward!r}\n"
             "out=pathlib.Path.cwd()/'data'/'simulations'/save_to\n"
             "out.mkdir(parents=True, exist_ok=True)\n"
+            "json.dump({key: os.environ.get(key) for key in "
+            "['OPENAI_API_BASE', 'OPENAI_BASE_URL', 'OPENAI_API_KEY', "
+            "'ANTHROPIC_API_KEY', 'HF_TOKEN', 'AWS_ACCESS_KEY_ID', "
+            "'AWS_SECRET_ACCESS_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', "
+            "'GITHUB_PAT', 'SSH_AUTH_SOCK', 'GENERIC_SECRET']}, "
+            "open(out/'judge-env.json','w'))\n"
             "json.dump({'simulations':[{'reward_info':{'reward':reward}}]}, open(out/'results.json','w'))\n",
             encoding="utf-8",
         )

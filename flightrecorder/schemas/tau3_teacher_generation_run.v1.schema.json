@@ -19,6 +19,48 @@
     "user_simulator": {
       "type": "object"
     },
+    "nl_assertions_judge": {
+      "additionalProperties": false,
+      "properties": {
+        "decoding_note": {
+          "type": "string"
+        },
+        "endpoint": {
+          "pattern": "^https?://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?(/.*)?$",
+          "type": "string"
+        },
+        "loopback": {
+          "const": true
+        },
+        "max_tokens": {
+          "type": "null"
+        },
+        "request_model": {
+          "const": "gpt-4.1-2025-04-14"
+        },
+        "served_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "temperature": {
+          "const": 0.0
+        },
+        "top_p": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "request_model",
+        "served_model",
+        "endpoint",
+        "loopback",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "decoding_note"
+      ],
+      "type": "object"
+    },
     "protocol": {
       "type": ["object", "null"]
     },

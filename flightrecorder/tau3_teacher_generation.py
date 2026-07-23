@@ -18,10 +18,25 @@ from urllib.parse import urlparse
 from .schema_registry import check_schema_contract
 
 TAU3_TEACHER_GENERATION_RUN_SCHEMA_VERSION = "hfr.tau3_teacher_generation_run.v1"
+TAU3_NL_ASSERTIONS_REQUEST_MODEL = "gpt-4.1-2025-04-14"
 DOMAINS = {"airline", "retail", "telecom"}
 TRAIN_SPLITS = {"train", "development"}
 MAX_DECODING_TEMPERATURE = 2.0
 MAX_DECODING_TOKENS = 8192
+SAFE_SUBPROCESS_ENV_KEYS = {
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "NO_COLOR",
+    "PATH",
+    "PYTHONIOENCODING",
+    "PYTHONUNBUFFERED",
+    "TEMP",
+    "TERM",
+    "TMP",
+    "TMPDIR",
+    "TZ",
+}
 
 
 class Tau3TeacherGenerationError(ValueError):
@@ -91,6 +106,7 @@ def run_tau3_teacher_generation(
         "source": _file_record(source),
         "teacher": _endpoint_record(teacher),
         "user_simulator": _endpoint_record(user),
+        "nl_assertions_judge": _nl_assertions_judge_record(teacher),
         "protocol": protocol,
         "config": _config_record(cfg),
         "task_count": len(tasks),
@@ -117,7 +133,16 @@ def run_tau3_teacher_generation(
         existing_prelaunch = _read_json(prelaunch_path)
         if any(
             existing_prelaunch.get(key) != prelaunch.get(key)
-            for key in ("tau_revision", "source", "teacher", "user_simulator", "protocol", "config", "task_count")
+            for key in (
+                "tau_revision",
+                "source",
+                "teacher",
+                "user_simulator",
+                "nl_assertions_judge",
+                "protocol",
+                "config",
+                "task_count",
+            )
         ):
             raise Tau3TeacherGenerationError("existing prelaunch receipt does not match this generation run")
     else:
@@ -146,6 +171,7 @@ def run_tau3_teacher_generation(
             proc = subprocess.run(
                 argv,
                 cwd=repo,
+                env=_nl_assertions_judge_environment(teacher),
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -408,6 +434,14 @@ def _require_loopback(api_base: str, label: str) -> None:
     parsed = urlparse(api_base)
     if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"127.0.0.1", "localhost"}:
         raise Tau3TeacherGenerationError(f"{label} endpoint must be loopback: {api_base}")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise Tau3TeacherGenerationError(f"{label} endpoint has an invalid port: {api_base}") from exc
+    if parsed.username is not None or parsed.password is not None:
+        raise Tau3TeacherGenerationError(f"{label} endpoint must not contain userinfo: {api_base}")
+    if parsed.query or parsed.fragment:
+        raise Tau3TeacherGenerationError(f"{label} endpoint must not contain a query or fragment: {api_base}")
 
 
 def _require_revision(repo: Path, expected_revision: str) -> None:
@@ -537,12 +571,48 @@ def _endpoint_record(endpoint: Tau3Endpoint) -> dict[str, Any]:
     parsed = urlparse(endpoint.api_base)
     return {
         "model": endpoint.model,
-        "endpoint": f"{parsed.scheme}://{parsed.hostname}:{parsed.port or 80}{parsed.path}",
+        "endpoint": endpoint.api_base,
         "loopback": parsed.hostname in {"127.0.0.1", "localhost"},
         "temperature": endpoint.temperature,
         "top_p": endpoint.top_p,
         "max_tokens": endpoint.max_tokens,
     }
+
+
+def _nl_assertions_judge_record(teacher: Tau3Endpoint) -> dict[str, Any]:
+    """Bind Tau's implicit NL-assertions judge to the frozen local teacher."""
+
+    _require_loopback(teacher.api_base, "NL assertions judge")
+    parsed = urlparse(teacher.api_base)
+    return {
+        "request_model": TAU3_NL_ASSERTIONS_REQUEST_MODEL,
+        "served_model": teacher.model,
+        "endpoint": teacher.api_base,
+        "loopback": parsed.hostname in {"127.0.0.1", "localhost"},
+        "temperature": 0.0,
+        "top_p": None,
+        "max_tokens": None,
+        "decoding_note": (
+            "Pinned Tau explicitly sets temperature=0.0 for NL assertions; "
+            "top_p and max_tokens are omitted and therefore are not claimed as runner-enforced."
+        ),
+    }
+
+
+def _nl_assertions_judge_environment(teacher: Tau3Endpoint) -> dict[str, str]:
+    """Route Tau's implicit OpenAI judge locally without forwarding credentials."""
+
+    _require_loopback(teacher.api_base, "NL assertions judge")
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() in SAFE_SUBPROCESS_ENV_KEYS
+    }
+    env["OPENAI_API_BASE"] = teacher.api_base
+    env["OPENAI_API_KEY"] = "local"
+    env["NO_PROXY"] = "127.0.0.1,localhost"
+    env["no_proxy"] = "127.0.0.1,localhost"
+    return env
 
 
 def _sha256(path: Path) -> str:
