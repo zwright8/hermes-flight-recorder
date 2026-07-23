@@ -175,6 +175,8 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             self.assertEqual(manifest["nl_assertions_judge"]["request_model"], "gpt-4.1-2025-04-14")
             self.assertEqual(manifest["nl_assertions_judge"]["served_model"], teacher.model)
             self.assertEqual(manifest["nl_assertions_judge"]["endpoint"], teacher.api_base)
+            self.assertEqual(manifest["nl_assertions_judge"]["upstream_endpoint"], teacher.api_base)
+            self.assertEqual(manifest["nl_assertions_judge"]["routing"], "direct_loopback")
             self.assertEqual(manifest["nl_assertions_judge"]["temperature"], 0.0)
             self.assertIsNone(manifest["nl_assertions_judge"]["top_p"])
             self.assertIsNone(manifest["nl_assertions_judge"]["max_tokens"])
@@ -282,6 +284,73 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             self.assertIsNone(observed["SSH_AUTH_SOCK"])
             self.assertIsNone(observed["GENERIC_SECRET"])
 
+    def test_generation_can_route_nl_judge_through_alias_proxy_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            teacher = Tau3Endpoint(model="/models/local-teacher", api_base="http://127.0.0.1:18082/v1")
+            judge = Tau3Endpoint(model="/models/local-teacher", api_base="http://127.0.0.1:18085/v1")
+            manifest = run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=root / "out",
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=teacher,
+                user=Tau3Endpoint(model="openai/local-user", api_base="http://127.0.0.1:18083/v1"),
+                nl_judge=judge,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+            )
+            self.assertEqual(manifest["nl_assertions_judge"]["endpoint"], judge.api_base)
+            self.assertEqual(manifest["nl_assertions_judge"]["served_model"], teacher.model)
+            self.assertEqual(manifest["nl_assertions_judge"]["upstream_endpoint"], teacher.api_base)
+            self.assertEqual(manifest["nl_assertions_judge"]["routing"], "loopback_model_alias_proxy")
+
+            env_path = next((repo / "data" / "simulations" / "hfr-generation" / "out").rglob("judge-env.json"))
+            observed = json.loads(env_path.read_text(encoding="utf-8"))
+            self.assertEqual(observed["OPENAI_API_BASE"], judge.api_base)
+
+    def test_legacy_direct_judge_records_resume_without_rewriting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._source(root, split="train")
+            tau2 = self._fake_tau2(root, repo, reward=1.0)
+            endpoint = Tau3Endpoint(model="openai/local-teacher", api_base="http://127.0.0.1:18082/v1")
+            out = root / "out"
+            run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=out,
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=endpoint,
+                user=endpoint,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+            )
+            for path in (out / "prelaunch_receipt.json", out / "manifest.json"):
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["nl_assertions_judge"].pop("routing")
+                payload["nl_assertions_judge"].pop("upstream_endpoint")
+                path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+            resumed = run_tau3_teacher_generation(
+                source_jsonl=source,
+                out_dir=out,
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                teacher=endpoint,
+                user=endpoint,
+                config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+            )
+            self.assertEqual(resumed["success_count"], 1)
+            legacy_manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertNotIn("routing", legacy_manifest["nl_assertions_judge"])
+            self.assertNotIn("upstream_endpoint", legacy_manifest["nl_assertions_judge"])
+
     def test_nl_assertions_judge_rejects_credentialed_or_ambiguous_loopback_urls(self):
         bad_urls = (
             "http://user:pass@127.0.0.1:18082/v1",
@@ -356,6 +425,10 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
                     "openai/local-user",
                     "--user-api-base",
                     "http://127.0.0.1:2/v1",
+                    "--nl-judge-model",
+                    "openai/local-teacher",
+                    "--nl-judge-api-base",
+                    "http://127.0.0.1:3/v1",
                     "--max-tasks",
                     "1",
                     "--timeout-seconds",
@@ -370,6 +443,9 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             self.assertEqual(manifest["user_simulator"]["temperature"], 0.0)
             self.assertEqual(manifest["user_simulator"]["top_p"], 1.0)
             self.assertEqual(manifest["user_simulator"]["max_tokens"], 1024)
+            self.assertEqual(manifest["nl_assertions_judge"]["endpoint"], "http://127.0.0.1:3/v1")
+            self.assertEqual(manifest["nl_assertions_judge"]["upstream_endpoint"], "http://127.0.0.1:1/v1")
+            self.assertEqual(manifest["nl_assertions_judge"]["routing"], "loopback_model_alias_proxy")
 
     def test_rejects_sealed_and_remote_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:

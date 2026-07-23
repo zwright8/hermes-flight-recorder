@@ -38,6 +38,9 @@
         "request_model": {
           "const": "gpt-4.1-2025-04-14"
         },
+        "routing": {
+          "enum": ["direct_loopback", "loopback_model_alias_proxy"]
+        },
         "served_model": {
           "minLength": 1,
           "type": "string"
@@ -47,6 +50,10 @@
         },
         "top_p": {
           "type": "null"
+        },
+        "upstream_endpoint": {
+          "pattern": "^https?://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?(/.*)?$",
+          "type": "string"
         }
       },
       "required": [
@@ -58,6 +65,21 @@
         "top_p",
         "max_tokens",
         "decoding_note"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "routing": {
+                "const": "loopback_model_alias_proxy"
+              }
+            },
+            "required": ["routing"]
+          },
+          "then": {
+            "required": ["upstream_endpoint"]
+          }
+        }
       ],
       "type": "object"
     },

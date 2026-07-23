@@ -72,6 +72,7 @@ def run_tau3_teacher_generation(
     expected_tau_revision: str,
     teacher: Tau3Endpoint,
     user: Tau3Endpoint,
+    nl_judge: Tau3Endpoint | None = None,
     protocol_path: str | Path | None = None,
     config: Tau3TeacherGenerationConfig | None = None,
     created_at: str | None = None,
@@ -94,8 +95,11 @@ def run_tau3_teacher_generation(
     _validate_config(cfg)
     _validate_endpoint(teacher, "teacher")
     _validate_endpoint(user, "user")
+    judge = nl_judge or Tau3Endpoint(model=teacher.model, api_base=teacher.api_base)
+    _validate_endpoint(judge, "NL assertions judge")
     _require_loopback(teacher.api_base, "teacher")
     _require_loopback(user.api_base, "user")
+    _require_loopback(judge.api_base, "NL assertions judge")
     _require_revision(repo, expected_tau_revision)
     protocol = _protocol_record(Path(protocol_path), expected_tau_revision) if protocol_path is not None else None
     tasks = _load_tasks(source, expected_tau_revision)[: cfg.max_tasks]
@@ -106,7 +110,7 @@ def run_tau3_teacher_generation(
         "source": _file_record(source),
         "teacher": _endpoint_record(teacher),
         "user_simulator": _endpoint_record(user),
-        "nl_assertions_judge": _nl_assertions_judge_record(teacher),
+        "nl_assertions_judge": _nl_assertions_judge_record(judge, upstream=teacher),
         "protocol": protocol,
         "config": _config_record(cfg),
         "task_count": len(tasks),
@@ -132,7 +136,7 @@ def run_tau3_teacher_generation(
     if prelaunch_path.exists():
         existing_prelaunch = _read_json(prelaunch_path)
         if any(
-            existing_prelaunch.get(key) != prelaunch.get(key)
+            not _binding_value_matches(key, existing_prelaunch.get(key), prelaunch.get(key))
             for key in (
                 "tau_revision",
                 "source",
@@ -171,7 +175,7 @@ def run_tau3_teacher_generation(
             proc = subprocess.run(
                 argv,
                 cwd=repo,
-                env=_nl_assertions_judge_environment(teacher),
+                env=_nl_assertions_judge_environment(judge),
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -256,6 +260,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--user-temperature", type=float, default=0.0)
     parser.add_argument("--user-top-p", type=float, default=1.0)
     parser.add_argument("--user-max-tokens", type=int, default=1024)
+    parser.add_argument("--nl-judge-model", help="local served model used by the Tau NL assertion judge; defaults to --teacher-model")
+    parser.add_argument("--nl-judge-api-base", help="loopback endpoint for Tau's implicit NL assertion judge; defaults to --teacher-api-base")
     parser.add_argument("--protocol", type=Path)
     parser.add_argument("--max-tasks", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=30)
@@ -288,6 +294,10 @@ def main(argv: list[str] | None = None) -> int:
                 temperature=args.user_temperature,
                 top_p=args.user_top_p,
                 max_tokens=args.user_max_tokens,
+            ),
+            nl_judge=Tau3Endpoint(
+                model=args.nl_judge_model or args.teacher_model,
+                api_base=args.nl_judge_api_base or args.teacher_api_base,
             ),
             protocol_path=args.protocol,
             config=Tau3TeacherGenerationConfig(
@@ -505,7 +515,7 @@ def _validate_resumable_manifest(
     if manifest.get("phase") != "final":
         errors.append("existing manifest is not final")
     for key, expected in expected_binding.items():
-        if manifest.get(key) != expected:
+        if not _binding_value_matches(key, manifest.get(key), expected):
             errors.append(f"existing manifest {key} does not match this generation run")
     receipts = manifest.get("task_receipts")
     if not isinstance(receipts, list) or len(receipts) != len(tasks):
@@ -579,15 +589,19 @@ def _endpoint_record(endpoint: Tau3Endpoint) -> dict[str, Any]:
     }
 
 
-def _nl_assertions_judge_record(teacher: Tau3Endpoint) -> dict[str, Any]:
+def _nl_assertions_judge_record(judge: Tau3Endpoint, *, upstream: Tau3Endpoint | None = None) -> dict[str, Any]:
     """Bind Tau's implicit NL-assertions judge to the frozen local teacher."""
 
-    _require_loopback(teacher.api_base, "NL assertions judge")
-    parsed = urlparse(teacher.api_base)
+    _require_loopback(judge.api_base, "NL assertions judge")
+    upstream_endpoint = upstream or judge
+    _require_loopback(upstream_endpoint.api_base, "NL assertions judge upstream")
+    parsed = urlparse(judge.api_base)
     return {
         "request_model": TAU3_NL_ASSERTIONS_REQUEST_MODEL,
-        "served_model": teacher.model,
-        "endpoint": teacher.api_base,
+        "served_model": judge.model,
+        "endpoint": judge.api_base,
+        "upstream_endpoint": upstream_endpoint.api_base,
+        "routing": "loopback_model_alias_proxy" if judge.api_base != upstream_endpoint.api_base else "direct_loopback",
         "loopback": parsed.hostname in {"127.0.0.1", "localhost"},
         "temperature": 0.0,
         "top_p": None,
@@ -599,16 +613,33 @@ def _nl_assertions_judge_record(teacher: Tau3Endpoint) -> dict[str, Any]:
     }
 
 
-def _nl_assertions_judge_environment(teacher: Tau3Endpoint) -> dict[str, str]:
+def _binding_value_matches(key: str, observed: Any, expected: Any) -> bool:
+    if key == "nl_assertions_judge":
+        return _normalize_nl_assertions_judge_record(observed) == _normalize_nl_assertions_judge_record(expected)
+    return observed == expected
+
+
+def _normalize_nl_assertions_judge_record(record: Any) -> Any:
+    if not isinstance(record, dict):
+        return record
+    normalized = dict(record)
+    if "upstream_endpoint" not in normalized and isinstance(normalized.get("endpoint"), str):
+        normalized["upstream_endpoint"] = normalized["endpoint"]
+    if "routing" not in normalized:
+        normalized["routing"] = "direct_loopback"
+    return normalized
+
+
+def _nl_assertions_judge_environment(judge: Tau3Endpoint) -> dict[str, str]:
     """Route Tau's implicit OpenAI judge locally without forwarding credentials."""
 
-    _require_loopback(teacher.api_base, "NL assertions judge")
+    _require_loopback(judge.api_base, "NL assertions judge")
     env = {
         key: value
         for key, value in os.environ.items()
         if key.upper() in SAFE_SUBPROCESS_ENV_KEYS
     }
-    env["OPENAI_API_BASE"] = teacher.api_base
+    env["OPENAI_API_BASE"] = judge.api_base
     env["OPENAI_API_KEY"] = "local"
     env["NO_PROXY"] = "127.0.0.1,localhost"
     env["no_proxy"] = "127.0.0.1,localhost"
