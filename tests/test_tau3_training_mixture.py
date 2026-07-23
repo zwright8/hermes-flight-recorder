@@ -101,6 +101,23 @@ class _Tokenizer:
         return list(range(max(1, size * self.multiplier)))
 
 
+class _MappingArgumentsTokenizer(_Tokenizer):
+    def apply_chat_template(self, messages: list[dict[str, Any]], **kwargs: Any) -> list[int]:
+        for message in messages:
+            for tool_call in message.get("tool_calls") or []:
+                arguments = tool_call["function"]["arguments"]
+                if not isinstance(arguments, dict):
+                    raise TypeError("tool-call arguments must be an object")
+        return super().apply_chat_template(messages, **kwargs)
+
+
+class _UserQueryTokenizer(_MappingArgumentsTokenizer):
+    def apply_chat_template(self, messages: list[dict[str, Any]], **kwargs: Any) -> list[int]:
+        if not any(message.get("role") == "user" for message in messages):
+            raise TypeError("no user query")
+        return super().apply_chat_template(messages, **kwargs)
+
+
 def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
     module = types.ModuleType("transformers")
 
@@ -116,6 +133,86 @@ def _install_fake_transformers(tokenizer: _Tokenizer) -> mock._patch:
 
 
 class Tau3TrainingMixtureTests(unittest.TestCase):
+    def test_excludes_pre_user_assistant_greetings_from_turn_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            train = _row("tau3-train-retail-success-001", "family-train")
+            valid = _row("tau3-development-retail-success-002", "family-valid")
+            for row in (train, valid):
+                row["messages"] = [
+                    {"role": "system", "content": "Follow policy."},
+                    {"role": "assistant", "content": "Hello, how can I help?"},
+                    *row["messages"],
+                ]
+            _write_jsonl(source / "train.jsonl", [train])
+            _write_jsonl(source / "valid.jsonl", [valid])
+            _write_source_manifest(source)
+
+            with _install_fake_transformers(_UserQueryTokenizer()):
+                manifest = build_tau3_training_mixtures(
+                    source,
+                    root / "mixtures",
+                    tokenizer_path=root / "tokenizer",
+                )
+
+            assistant_manifest = json.loads(
+                (root / "mixtures" / "assistant_turn_targets" / "manifest.json").read_text(encoding="utf-8")
+            )
+            assistant_rows = [
+                json.loads(line)
+                for line in (root / "mixtures" / "assistant_turn_targets" / "train.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertTrue(manifest["passed"])
+            self.assertEqual(len(assistant_rows), 2)
+            self.assertEqual(assistant_manifest["derivation"]["assistant_targets_before_first_user_excluded"], 2)
+            self.assertTrue(all(any(message["role"] == "user" for message in row["messages"]) for row in assistant_rows))
+
+    def test_normalizes_canonical_json_tool_arguments_for_qwen_templates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input_export"
+            train = _row("tau3-train-retail-success-001", "family-train")
+            valid = _row("tau3-development-retail-success-002", "family-valid")
+            train["messages"][1]["tool_calls"][0]["function"]["arguments"] = '{"id":"abc"}'
+            valid["messages"][1]["tool_calls"][0]["function"]["arguments"] = '{"id":"def"}'
+            _write_jsonl(source / "train.jsonl", [train])
+            _write_jsonl(source / "valid.jsonl", [valid])
+            _write_source_manifest(source)
+            source_train_sha256 = _sha256(source / "train.jsonl")
+
+            with _install_fake_transformers(_MappingArgumentsTokenizer()):
+                build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+            derived = json.loads(
+                (root / "mixtures" / "full_trajectories" / "train.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            arguments = derived["messages"][1]["tool_calls"][0]["function"]["arguments"]
+            self.assertEqual(arguments, {"id": "abc"})
+            self.assertEqual(derived["metadata"]["tool_argument_encoding"], "object")
+            self.assertEqual(_sha256(source / "train.jsonl"), source_train_sha256)
+
+    def test_rejects_invalid_or_non_object_json_tool_arguments(self) -> None:
+        for invalid_arguments in ('{"id":"a","id":"b"}', '["abc"]', '{not-json}'):
+            with self.subTest(arguments=invalid_arguments), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                source = root / "input_export"
+                train = _row("tau3-train-retail-success-001", "family-train")
+                train["messages"][1]["tool_calls"][0]["function"]["arguments"] = invalid_arguments
+                _write_jsonl(source / "train.jsonl", [train])
+                _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+                _write_source_manifest(source)
+
+                with _install_fake_transformers(_MappingArgumentsTokenizer()):
+                    with self.assertRaisesRegex(Tau3TrainingMixtureError, "tool-call arguments"):
+                        build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
+
+                self.assertFalse((root / "mixtures").exists())
+
     def test_builds_three_governed_variants_from_safe_fixtures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

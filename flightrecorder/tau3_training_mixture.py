@@ -87,6 +87,10 @@ def build_tau3_training_mixtures(
         raise Tau3TrainingMixtureError("train/valid task-family overlap: " + overlap[0])
 
     tokenizer = _load_tokenizer(tokenizer_root)
+    pre_user_assistant_targets = sum(
+        _count_pre_user_assistant_targets(rows)
+        for rows in (train, valid)
+    )
     variants = {
         "full_trajectories": {
             "train": [_full_row(row) for row in train],
@@ -131,6 +135,7 @@ def build_tau3_training_mixtures(
             tokenizer_stats=token_stats,
             max_seq_length=max_seq_length,
             context_window=context_window,
+            pre_user_assistant_targets=pre_user_assistant_targets,
         )
         check = check_schema_contract(manifest, name_or_id=TAU3_TRAINING_MIXTURE_SCHEMA_VERSION)
         if check["passed"] is not True:
@@ -157,6 +162,10 @@ def build_tau3_training_mixtures(
         "sealed_rows": 0,
         "test_rows": 0,
         "training_started": False,
+        "derivation": {
+            "assistant_target_requires_prior_user_message": True,
+            "assistant_targets_before_first_user_excluded": pre_user_assistant_targets,
+        },
     }
     _write_json(out / "manifest.json", root_manifest)
     return root_manifest
@@ -222,7 +231,7 @@ def _full_row(source: _SourceRow) -> dict[str, Any]:
     row = source.row
     return _derived_row(
         source,
-        messages=[dict(message) for message in row["messages"]],
+        messages=_normalize_training_messages(row["messages"], _source_row_label(source)),
         tools=row["tools"],
         variant="full_trajectories",
         target_index=None,
@@ -235,12 +244,19 @@ def _assistant_turn_rows(rows: list[_SourceRow]) -> list[dict[str, Any]]:
     derived = []
     for source in rows:
         messages = source.row["messages"]
+        normalized_messages = _normalize_training_messages(messages, _source_row_label(source))
+        seen_user = False
         for index, message in enumerate(messages):
+            if message.get("role") == "user":
+                seen_user = True
+                continue
             if message.get("role") != "assistant":
+                continue
+            if not seen_user:
                 continue
             derived.append(_derived_row(
                 source,
-                messages=[dict(item) for item in messages[: index + 1]],
+                messages=normalized_messages[: index + 1],
                 tools=source.row["tools"],
                 variant="assistant_turn_targets",
                 target_index=index,
@@ -305,6 +321,7 @@ def _derived_row(
         "target_message_index": target_index,
         "target_kind": target_kind,
         "repetition_index": repetition_index,
+        "tool_argument_encoding": "object",
         "provenance_hashes": source_hashes,
     }
     derived = {"messages": messages, "tools": tools, "metadata": output_metadata}
@@ -341,6 +358,7 @@ def _variant_manifest(
     tokenizer_stats: TokenizerStats,
     max_seq_length: int,
     context_window: int,
+    pre_user_assistant_targets: int,
 ) -> dict[str, Any]:
     counts = {split: len(rows_by_split[split]) for split in ("train", "valid")}
     target_counts: dict[str, int] = {}
@@ -379,6 +397,12 @@ def _variant_manifest(
         "sealed_rows": 0,
         "test_rows": 0,
         "training_started": False,
+        "derivation": {
+            "assistant_target_requires_prior_user_message": True,
+            "assistant_targets_before_first_user_excluded": (
+                pre_user_assistant_targets if variant_name != "full_trajectories" else 0
+            ),
+        },
     }
 
 
@@ -452,6 +476,78 @@ def _validate_tool_pairing(messages: list[dict[str, Any]], tools: list[dict[str,
             raise Tau3TrainingMixtureError(f"{label}: tool call not immediately paired before message {index}")
     if pending:
         raise Tau3TrainingMixtureError(f"{label}: missing tool result for {sorted(pending)[0]}")
+
+
+def _normalize_training_messages(messages: list[dict[str, Any]], label: str) -> list[dict[str, Any]]:
+    """Copy messages and adapt canonical OpenAI arguments for MLX chat templates."""
+
+    normalized: list[dict[str, Any]] = []
+    for message_index, message in enumerate(messages):
+        copied_message = dict(message)
+        raw_calls = message.get("tool_calls")
+        if raw_calls is None:
+            normalized.append(copied_message)
+            continue
+        if not isinstance(raw_calls, list):
+            raise Tau3TrainingMixtureError(
+                f"{label}: tool calls at message {message_index} must be a list"
+            )
+        copied_calls: list[dict[str, Any]] = []
+        for call_index, call in enumerate(raw_calls):
+            if not isinstance(call, dict):
+                raise Tau3TrainingMixtureError(
+                    f"{label}: tool call {call_index} at message {message_index} must be an object"
+                )
+            copied_call = dict(call)
+            function = _object(
+                call.get("function"),
+                f"{label}: tool call {call_index} at message {message_index} function",
+            )
+            copied_function = dict(function)
+            arguments = function.get("arguments")
+            argument_label = f"{label}: tool-call arguments at message {message_index}, call {call_index}"
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(
+                        arguments,
+                        object_pairs_hook=lambda pairs: _unique_json_object(pairs, argument_label),
+                    )
+                except json.JSONDecodeError as exc:
+                    raise Tau3TrainingMixtureError(f"{argument_label} are invalid JSON: {exc.msg}") from exc
+            if not isinstance(arguments, dict):
+                raise Tau3TrainingMixtureError(f"{argument_label} must decode to an object")
+            copied_function["arguments"] = arguments
+            copied_call["function"] = copied_function
+            copied_calls.append(copied_call)
+        copied_message["tool_calls"] = copied_calls
+        normalized.append(copied_message)
+    return normalized
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]], label: str) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise Tau3TrainingMixtureError(f"{label} contain duplicate key: {key}")
+        value[key] = item
+    return value
+
+
+def _source_row_label(source: _SourceRow) -> str:
+    return f"{source.split_name}.jsonl:{source.line_number}"
+
+
+def _count_pre_user_assistant_targets(rows: list[_SourceRow]) -> int:
+    count = 0
+    for source in rows:
+        seen_user = False
+        for message in source.row["messages"]:
+            role = message.get("role")
+            if role == "user":
+                seen_user = True
+            elif role == "assistant" and not seen_user:
+                count += 1
+    return count
 
 
 def _reject_evaluator_leak(messages: list[dict[str, Any]], label: str) -> None:
