@@ -82,6 +82,14 @@
       "name": "tau3_candidate_lock"
     },
     {
+      "artifact": "tau3_sealed_authorization",
+      "artifact_schema_version": "hfr.tau3_sealed_authorization.v1",
+      "description": "Public-safe fail-closed authorization for Tau-3 sealed benchmark arms.",
+      "filename": "tau3_sealed_authorization.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_sealed_authorization.v1.schema.json",
+      "name": "tau3_sealed_authorization"
+    },
+    {
       "artifact": "scenario",
       "artifact_schema_version": "hfr.scenario.contract.v1",
       "description": "Scenario contract accepted by run, score, and run-suite.",

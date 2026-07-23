@@ -92,6 +92,12 @@
         {"type": "null"}
       ]
     },
+    "sealed_authorization": {
+      "anyOf": [
+        {"$ref": "#/$defs/sealed_authorization_ref"},
+        {"type": "null"}
+      ]
+    },
     "candidate_lock": {
       "anyOf": [
         {"$ref": "#/$defs/output_file_ref"},
@@ -165,6 +171,7 @@
     "task_selection",
     "sealed_task_count_manifest",
     "candidate_identity",
+    "sealed_authorization",
     "sealed_payload_accessed",
     "sealed_task_ids_materialized",
     "training_started"
@@ -199,9 +206,10 @@
         "properties": {
           "source": {"type": "null"},
           "sealed_task_count_manifest": {"type": "object"},
+          "sealed_authorization": {"type": "object"},
           "candidate_lock": {"type": "object"}
         },
-        "required": ["candidate_lock", "sealed_task_count_manifest"]
+        "required": ["candidate_lock", "sealed_task_count_manifest", "sealed_authorization"]
       }
     },
     {
@@ -210,6 +218,7 @@
         "properties": {
           "source": {"type": "object"},
           "sealed_task_count_manifest": {"type": "null"},
+          "sealed_authorization": {"type": "null"},
           "candidate_lock": {"type": "null"}
         },
         "required": ["source"]
@@ -264,6 +273,34 @@
         "task_count": {"minimum": 1, "type": "integer"}
       },
       "required": ["hashes_only", "path", "sha256", "size", "task_count"],
+      "type": "object"
+    },
+    "sealed_authorization_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "arms": {"const": ["adapter", "base", "comparator_1", "comparator_2"]},
+        "authorized": {"const": true},
+        "candidate_lock_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "path": {"$ref": "#/$defs/output_relative_path"},
+        "protocol_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "sealed_source_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "seeds": {"const": [101, 202, 303, 404]},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size": {"minimum": 0, "type": "integer"},
+        "task_count": {"const": 100}
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "authorized",
+        "candidate_lock_sha256",
+        "protocol_sha256",
+        "sealed_source_sha256",
+        "task_count",
+        "arms",
+        "seeds"
+      ],
       "type": "object"
     },
     "output_relative_path": {

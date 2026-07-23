@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from flightrecorder import tau3_sealed_authorization as sealed_auth_module
+from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_benchmark_run import (
     Tau3BenchmarkConfig,
     Tau3BenchmarkEndpoint,
@@ -18,6 +20,8 @@ from flightrecorder.tau3_benchmark_run import (
     _tau2_argv,
     run_tau3_benchmark_arm,
 )
+from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
+from flightrecorder.tau3_sealed_authorization import validate_tau3_sealed_authorization
 
 
 class Tau3BenchmarkRunTests(unittest.TestCase):
@@ -121,20 +125,10 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             repo = self._repo(root)
             tau2 = self._fake_tau2(root, reward=1.0)
             adapter = self._adapter(root)
-            candidate_identity_sha256 = "b" * 64
-            lock = root / "candidate-lock.json"
-            lock.write_text(
-                json.dumps(
-                    {
-                        "candidate_identity_sha256": candidate_identity_sha256,
-                        "candidate": {"adapter_id": "local/adapter", "adapter_tree_sha256": self._tree_sha256(adapter)},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
-            )
             sealed_manifest = self._sealed_source_manifest(root, task_count=100)
-            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
+            protocol = self._protocol(root, sealed_manifest=sealed_manifest)
+            lock = self._candidate_lock(root, adapter=adapter, protocol=protocol)
+            authorization = self._sealed_authorization(root, lock=lock, protocol=protocol, sealed_manifest=sealed_manifest)
             endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
 
             manifest = run_tau3_benchmark_arm(
@@ -150,6 +144,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     arm_id="adapter",
                     protocol_path=protocol,
                     sealed_task_count_manifest=sealed_manifest,
+                    sealed_authorization=authorization,
+                    sealed_authorization_sha256=self._sha256(authorization),
                     candidate_lock=lock,
                     candidate_lock_sha256=self._sha256(lock),
                     timeout_seconds=2,
@@ -162,9 +158,12 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             self.assertEqual(manifest["sealed_task_count_manifest"]["sha256"], self._sha256(sealed_manifest))
             self.assertEqual(manifest["sealed_task_count_manifest"]["path"], "inputs/sealed_task_count_manifest.json")
             self.assertEqual(manifest["sealed_task_count_manifest"]["task_count"], 100)
+            self.assertEqual(manifest["sealed_authorization"]["sha256"], self._sha256(authorization))
+            self.assertEqual(manifest["sealed_authorization"]["path"], "inputs/sealed_authorization.json")
+            self.assertEqual(manifest["sealed_authorization"]["candidate_lock_sha256"], self._sha256(lock))
             self.assertEqual(manifest["protocol"]["path"], "inputs/protocol.json")
             self.assertEqual(manifest["prelaunch_receipt"]["path"], "prelaunch_receipt.json")
-            self.assertEqual(manifest["arm_identity"]["candidate_identity_sha256"], candidate_identity_sha256)
+            self.assertEqual(manifest["arm_identity"]["candidate_identity_sha256"], "b" * 64)
             self.assertEqual(manifest["arm_identity"]["adapter"]["tree_sha256"], self._tree_sha256(adapter))
             self.assertFalse(manifest["task_selection"]["task_ids_in_command"])
             self.assertEqual(manifest["task_selection"]["sealed_task_count"], 100)
@@ -189,6 +188,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -209,6 +210,25 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                    ),
+                )
+
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "sealed-authorization"):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-missing-authorization",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        candidate_lock=lock,
                     ),
                 )
 
@@ -229,11 +249,80 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
                     ),
                 )
+
+            auth_drifted = root / "sealed-auth-drifted"
+            shutil.copytree(root / "sealed-out", auth_drifted)
+            (auth_drifted / "inputs" / "sealed_authorization.json").write_text('{"tampered":true}\n', encoding="utf-8")
+            with self.assertRaisesRegex(Tau3BenchmarkRunError, "staged sealed authorization drifted"):
+                run_tau3_benchmark_arm(
+                    out_dir=auth_drifted,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+            source_auth_mutated = root / "sealed-source-auth-mutated"
+
+            def mutate_source_and_validate(**kwargs):
+                authorization_path = Path(kwargs["authorization_path"])
+                self.assertEqual(authorization_path, source_auth_mutated / "inputs" / "sealed_authorization.json")
+                authorization.chmod(0o600)
+                authorization.write_text('{"tampered_source":true}\n', encoding="utf-8")
+                return {
+                    "sha256": self._sha256(authorization_path),
+                    "size": authorization_path.stat().st_size,
+                    "authorized": True,
+                    "candidate_lock_sha256": self._sha256(lock),
+                    "protocol_sha256": self._sha256(protocol),
+                    "sealed_source_sha256": self._sha256(sealed_manifest),
+                    "task_count": 100,
+                    "arms": ["adapter", "base", "comparator_1", "comparator_2"],
+                    "seeds": [101, 202, 303, 404],
+                }
+
+            with patch("flightrecorder.tau3_benchmark_run.validate_tau3_sealed_authorization", side_effect=mutate_source_and_validate):
+                run_tau3_benchmark_arm(
+                    out_dir=source_auth_mutated,
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint("local/reviewer", 18082),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+            self.assertNotEqual(self._sha256(authorization), self._sha256(source_auth_mutated / "inputs" / "sealed_authorization.json"))
 
     def test_development_adapter_uses_candidate_identity_without_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -378,19 +467,10 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             repo = self._repo(root)
             tau2 = self._fake_tau2(root, reward=1.0)
             adapter = self._adapter(root)
-            lock = root / "candidate-lock.json"
-            lock.write_text(
-                json.dumps(
-                    {
-                        "candidate_identity_sha256": "b" * 64,
-                        "candidate": {"adapter_id": "local/adapter", "adapter_tree_sha256": self._tree_sha256(adapter)},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
-            )
             sealed_manifest = self._sealed_source_manifest(root, task_count=100)
-            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
+            protocol = self._protocol(root, sealed_manifest=sealed_manifest)
+            lock = self._candidate_lock(root, adapter=adapter, protocol=protocol)
+            authorization = self._sealed_authorization(root, lock=lock, protocol=protocol, sealed_manifest=sealed_manifest)
             endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
 
             with self.assertRaisesRegex(Tau3BenchmarkRunError, "sealed-task-count-manifest"):
@@ -427,6 +507,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=bad_hash_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -448,11 +530,86 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=payload_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
                     ),
                 )
+
+    def test_sealed_authorization_schema_and_governance_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._repo(root)
+            adapter = self._adapter(root)
+            sealed_manifest = self._sealed_source_manifest(root, task_count=100)
+            protocol = self._protocol(root, sealed_manifest=sealed_manifest)
+            lock = self._candidate_lock(root, adapter=adapter, protocol=protocol)
+            authorization = self._sealed_authorization(root, lock=lock, protocol=protocol, sealed_manifest=sealed_manifest)
+            payload = json.loads(authorization.read_text(encoding="utf-8"))
+
+            self.assertTrue(check_schema_contract(payload, name_or_id="tau3_sealed_authorization")["passed"])
+            self.assertTrue(payload["authorized"])
+            self.assertEqual(payload["candidate_lock"]["sha256"], self._sha256(lock))
+            self.assertEqual(payload["protocol"]["sha256"], self._sha256(protocol))
+            self.assertEqual(payload["sealed_source"]["manifest_sha256"], self._sha256(sealed_manifest))
+            self.assertEqual(payload["sealed_source"]["task_count"], 100)
+            self.assertEqual(payload["frozen_contract"]["seeds"], [101, 202, 303, 404])
+            self.assertEqual(payload["frozen_contract"]["arms"], ["adapter", "base", "comparator_1", "comparator_2"])
+            self.assertFalse(payload["local_paths_included"])
+            self.assertFalse(payload["raw_payload_included"])
+            self.assertNotIn(str(root), json.dumps(payload, sort_keys=True))
+
+            failed_protocol = json.loads(protocol.read_text(encoding="utf-8"))
+            failed_protocol["redaction_attestation"]["passed"] = False
+            failed_protocol_path = root / "failed-redaction-protocol.json"
+            failed_protocol_path.write_text(json.dumps(failed_protocol) + "\n", encoding="utf-8")
+            failed_lock = self._candidate_lock(root, adapter=adapter, protocol=failed_protocol_path)
+            with self.assertRaisesRegex(ValueError, "redaction gate"):
+                create_tau3_sealed_authorization(
+                    candidate_lock=failed_lock,
+                    protocol=failed_protocol_path,
+                    sealed_source_manifest=sealed_manifest,
+                    out=root / "failed-auth.json",
+                    created_at="2026-07-22T00:00:01+00:00",
+                )
+
+            replay_tampered = dict(payload)
+            replay_tampered["created_at"] = "2026-07-21T23:59:59+00:00"
+            replay_tampered_path = root / "replay-tampered-auth.json"
+            replay_tampered_path.write_text(json.dumps(replay_tampered, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "created after candidate lock"):
+                validate_tau3_sealed_authorization(
+                    authorization_path=replay_tampered_path,
+                    candidate_lock_path=lock,
+                    protocol_path=protocol,
+                    sealed_source_manifest_path=sealed_manifest,
+                    arm_id="adapter",
+                    seeds=(101, 202, 303, 404),
+                    expected_tau_revision=self.revision,
+                )
+
+            real_fstat = sealed_auth_module.os.fstat
+            seen = {"count": 0}
+
+            def drifting_fstat(fd):
+                stat_result = real_fstat(fd)
+                seen["count"] += 1
+                if seen["count"] == 2:
+                    lock.write_text(lock.read_text(encoding="utf-8") + " ", encoding="utf-8")
+                    return real_fstat(fd)
+                return stat_result
+
+            with patch.object(sealed_auth_module.os, "fstat", side_effect=drifting_fstat):
+                with self.assertRaisesRegex(ValueError, "changed while being read|read size mismatch"):
+                    create_tau3_sealed_authorization(
+                        candidate_lock=lock,
+                        protocol=protocol,
+                        sealed_source_manifest=sealed_manifest,
+                        out=root / "toctou-auth.json",
+                        created_at="2026-07-22T00:00:01+00:00",
+                    )
 
     def test_sealed_task_count_manifest_rejects_symlink_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -460,19 +617,10 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             repo = self._repo(root)
             tau2 = self._fake_tau2(root, reward=1.0)
             adapter = self._adapter(root)
-            lock = root / "candidate-lock.json"
-            lock.write_text(
-                json.dumps(
-                    {
-                        "candidate_identity_sha256": "b" * 64,
-                        "candidate": {"adapter_id": "local/adapter", "adapter_tree_sha256": self._tree_sha256(adapter)},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
-            )
             sealed_manifest = self._sealed_source_manifest(root, task_count=100)
-            protocol = self._protocol(root, candidate_lock=lock, sealed_manifest=sealed_manifest)
+            protocol = self._protocol(root, sealed_manifest=sealed_manifest)
+            lock = self._candidate_lock(root, adapter=adapter, protocol=protocol)
+            authorization = self._sealed_authorization(root, lock=lock, protocol=protocol, sealed_manifest=sealed_manifest)
             endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
 
             sealed_link = root / "sealed-link.json"
@@ -491,6 +639,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_link,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -516,6 +666,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -541,6 +693,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         arm_id="adapter",
                         protocol_path=protocol,
                         sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(authorization),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -1041,6 +1195,46 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
 
+    def _candidate_lock(self, root: Path, *, adapter: Path, protocol: Path, created_at: str = "2026-07-22T00:00:00+00:00") -> Path:
+        path = root / f"candidate-lock-{len(list(root.glob('candidate-lock-*.json')))}.json"
+        endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
+        payload = {
+            "schema_version": "hfr.tau3_candidate_lock.v1",
+            "created_at": created_at,
+            "selected_candidate_id_hash": "1" * 64,
+            "candidate_identity_sha256": "b" * 64,
+            "development_selection_report_sha256": "2" * 64,
+            "development_benchmark_manifest_sha256": "3" * 64,
+            "training_receipt_sha256": "4" * 64,
+            "endpoint_model_sha256": hashlib_sha256(endpoint.model.encode("utf-8")).hexdigest(),
+            "adapter_tree_sha256": self._tree_sha256(adapter),
+            "recipe_sha256": "5" * 64,
+            "base_identity_sha256": hashlib_sha256(b"local/base").hexdigest(),
+            "base_tree_sha256": "6" * 64,
+            "dataset_manifest_sha256": "7" * 64,
+            "dataset_files_sha256": "8" * 64,
+            "source_binding_sha256": "9" * 64,
+            "protocol_sha256": self._sha256(protocol),
+            "protocol_signature": "a" * 64,
+            "hashes_only": True,
+            "sealed_access_authorized": True,
+            "local_paths_included": False,
+            "raw_payload_included": False,
+        }
+        path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        return path
+
+    def _sealed_authorization(self, root: Path, *, lock: Path, protocol: Path, sealed_manifest: Path) -> Path:
+        path = root / f"sealed-authorization-{len(list(root.glob('sealed-authorization-*.json')))}.json"
+        create_tau3_sealed_authorization(
+            candidate_lock=lock,
+            protocol=protocol,
+            sealed_source_manifest=sealed_manifest,
+            out=path,
+            created_at="2026-07-22T00:00:01+00:00",
+        )
+        return path
+
     def _protocol(
         self,
         root: Path,
@@ -1052,10 +1246,9 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         path = root / f"protocol-{len(list(root.glob('protocol-*.json')))}.json"
         dev_hash = self._sha256(source) if source is not None else "d" * 64
         sealed_hash = self._sha256(sealed_manifest) if sealed_manifest is not None else "e" * 64
-        candidate_lock_hash = self._sha256(candidate_lock) if candidate_lock is not None else "c" * 64
         payload = {
             "schema_version": "hfr.tau3_protocol_config.v1",
-            "protocol_manifest": {"candidate_lock_sha256": candidate_lock_hash},
+            "protocol_manifest": {},
             "tau_revision": {
                 "revision": self.revision,
                 "split_hashes": {"train": "a" * 64, "development": dev_hash, "sealed": sealed_hash},
@@ -1101,7 +1294,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     },
                 ],
             },
-            "budget": {},
+            "budget": {"passed": True, "max_training_hours": 24, "max_benchmark_hours": 48},
             "sealed_manifest": {
                 "access_count": 0,
                 "manifest_sha256": sealed_hash,
@@ -1109,10 +1302,15 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             },
             "mlx_qlora_plan": {},
             "recipe_space": {},
-            "candidate_selection_contract": {"candidate_lock_sha256": candidate_lock_hash},
-            "contamination_attestation": {},
-            "redaction_attestation": {},
-            "licenses": [{}, {}, {}, {}],
+            "candidate_selection_contract": {"passed": True},
+            "contamination_attestation": {"passed": True},
+            "redaction_attestation": {"passed": True},
+            "licenses": [
+                {"status": "approved", "training_allowed": True},
+                {"status": "approved", "training_allowed": True},
+                {"status": "approved", "training_allowed": True},
+                {"status": "approved", "training_allowed": True},
+            ],
             "environment_manifest": {},
         }
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")

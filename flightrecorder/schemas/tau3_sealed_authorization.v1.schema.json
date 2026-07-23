@@ -1,0 +1,161 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_sealed_authorization.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public-safe fail-closed authorization for Tau-3 sealed benchmark arms.",
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_sealed_authorization.v1"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "authorized": {"const": true},
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "raw_payload_included": {"const": false},
+    "candidate_lock": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {"minLength": 1, "type": "string"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_signature": {"$ref": "#/$defs/sha256"},
+        "sealed_access_authorized": {"const": true},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["sha256", "created_at", "protocol_sha256", "protocol_signature", "sealed_access_authorized"],
+      "type": "object"
+    },
+    "protocol": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "signature_sha256": {"$ref": "#/$defs/sha256"},
+        "signature_provenance": {"const": "candidate_lock.protocol_signature"},
+        "tau_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"}
+      },
+      "required": ["sha256", "signature_sha256", "signature_provenance", "tau_revision"],
+      "type": "object"
+    },
+    "sealed_source": {
+      "additionalProperties": false,
+      "properties": {
+        "hashes_only": {"const": true},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "task_count": {"const": 100}
+      },
+      "required": ["manifest_sha256", "task_count", "hashes_only"],
+      "type": "object"
+    },
+    "frozen_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "arms": {"const": ["adapter", "base", "comparator_1", "comparator_2"]},
+        "context_window": {"const": 16384},
+        "domains": {"const": ["airline", "retail", "telecom"]},
+        "harness_sha256": {"$ref": "#/$defs/sha256"},
+        "no_test_time_search": {"const": true},
+        "prompt_context_decoding_sha256": {"$ref": "#/$defs/sha256"},
+        "seeds": {"const": [101, 202, 303, 404]},
+        "tool_contract_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "arms",
+        "seeds",
+        "domains",
+        "context_window",
+        "tool_contract_sha256",
+        "prompt_context_decoding_sha256",
+        "harness_sha256",
+        "no_test_time_search"
+      ],
+      "type": "object"
+    },
+    "model_identity_refs": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "base_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "comparator_1_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "comparator_2_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "endpoint_model_sha256": {"$ref": "#/$defs/sha256"},
+        "equivalence_refs_hash": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "candidate_identity_sha256",
+        "adapter_tree_sha256",
+        "endpoint_model_sha256",
+        "base_identity_sha256",
+        "comparator_1_identity_sha256",
+        "comparator_2_identity_sha256",
+        "equivalence_refs_hash"
+      ],
+      "type": "object"
+    },
+    "gates": {
+      "additionalProperties": false,
+      "properties": {
+        "arms_exact": {"const": true},
+        "budget_gate_passed": {"const": true},
+        "candidate_lock_valid": {"const": true},
+        "chronology_lock_before_authorization": {"const": true},
+        "contamination_gate_passed": {"const": true},
+        "harness_tool_prompt_context_decoding_no_search_identical": {"const": true},
+        "license_gate_passed": {"const": true},
+        "model_identity_equivalence_refs_present": {"const": true},
+        "protocol_binding_valid": {"const": true},
+        "public_artifact_contains_no_local_paths": {"const": true},
+        "redaction_gate_passed": {"const": true},
+        "safety_gate_passed": {"const": true},
+        "sealed_source_hash_only": {"const": true},
+        "sealed_task_count_is_100": {"const": true},
+        "seeds_exact": {"const": true}
+      },
+      "required": [
+        "candidate_lock_valid",
+        "chronology_lock_before_authorization",
+        "protocol_binding_valid",
+        "sealed_source_hash_only",
+        "sealed_task_count_is_100",
+        "seeds_exact",
+        "arms_exact",
+        "harness_tool_prompt_context_decoding_no_search_identical",
+        "model_identity_equivalence_refs_present",
+        "contamination_gate_passed",
+        "redaction_gate_passed",
+        "license_gate_passed",
+        "safety_gate_passed",
+        "budget_gate_passed",
+        "public_artifact_contains_no_local_paths"
+      ],
+      "type": "object"
+    },
+    "budget": {
+      "additionalProperties": false,
+      "properties": {
+        "declared": {"const": true},
+        "passed": {"const": true},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["sha256", "declared", "passed"],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "authorized",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "candidate_lock",
+    "protocol",
+    "sealed_source",
+    "frozen_contract",
+    "model_identity_refs",
+    "gates",
+    "budget"
+  ],
+  "title": "Tau-3 Sealed Authorization",
+  "type": "object",
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

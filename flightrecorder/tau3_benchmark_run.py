@@ -13,11 +13,12 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from urllib.parse import urlparse
 
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
 
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
 TAU3_PROTOCOL_CONFIG_SCHEMA_VERSION = "hfr.tau3_protocol_config.v1"
@@ -55,6 +56,8 @@ class Tau3BenchmarkConfig:
     domains: tuple[str, ...] = DOMAINS
     source_split: Path | None = None
     sealed_task_count_manifest: Path | None = None
+    sealed_authorization: Path | None = None
+    sealed_authorization_sha256: str | None = None
     candidate_identity: Path | None = None
     candidate_identity_sha256: str | None = None
     candidate_lock: Path | None = None
@@ -128,6 +131,11 @@ def run_tau3_benchmark_arm(
         if config.mode == "sealed" and config.sealed_task_count_manifest is not None
         else None
     )
+    sealed_authorization_ref = (
+        _stage_input_file(config.sealed_authorization, out, "inputs/sealed_authorization.json", "sealed authorization")
+        if config.mode == "sealed" and config.sealed_authorization is not None
+        else None
+    )
     candidate_identity_ref = (
         _stage_input_file(config.candidate_identity, out, "inputs/candidate_identity.json", "candidate identity")
         if config.mode == "development" and config.arm_id == "adapter" and config.candidate_identity is not None
@@ -139,6 +147,11 @@ def run_tau3_benchmark_arm(
         else None
     )
     candidate_lock = _candidate_lock_record(config, candidate_lock_ref) if config.mode == "sealed" else None
+    sealed_authorization = (
+        _sealed_authorization_binding(config, sealed_authorization_ref, out=out, expected_tau_revision=expected_tau_revision)
+        if config.mode == "sealed"
+        else None
+    )
     candidate_identity = _candidate_identity_record(config, candidate_identity_ref) if config.mode == "development" and config.arm_id == "adapter" else None
     adapter_binding = _adapter_binding(agent, config)
     arm_identity = _arm_identity_record(
@@ -164,6 +177,7 @@ def run_tau3_benchmark_arm(
         "config": _config_record(config),
         "source": source_ref,
         "sealed_task_count_manifest": _sealed_task_count_binding(sealed_task_count_ref, sealed_task_count_manifest),
+        "sealed_authorization": sealed_authorization,
         "candidate_identity": candidate_identity,
         "candidate_lock": candidate_lock,
         "task_selection": _task_selection_record(
@@ -339,6 +353,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--source-split", type=Path)
     parser.add_argument("--sealed-task-count-manifest", type=Path)
+    parser.add_argument("--sealed-authorization", type=Path)
+    parser.add_argument("--sealed-authorization-sha256")
     parser.add_argument("--candidate-identity", type=Path)
     parser.add_argument("--candidate-identity-sha256")
     parser.add_argument("--candidate-lock", type=Path)
@@ -376,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
                 protocol_path=args.protocol_path,
                 source_split=args.source_split,
                 sealed_task_count_manifest=args.sealed_task_count_manifest,
+                sealed_authorization=args.sealed_authorization,
+                sealed_authorization_sha256=args.sealed_authorization_sha256,
                 candidate_identity=args.candidate_identity,
                 candidate_identity_sha256=args.candidate_identity_sha256,
                 candidate_lock=args.candidate_lock,
@@ -883,6 +901,42 @@ def _candidate_lock_record(config: Tau3BenchmarkConfig, staged_ref: dict[str, An
     return dict(staged_ref)
 
 
+def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[str, Any] | None, *, out: Path, expected_tau_revision: str) -> dict[str, Any]:
+    if config.sealed_authorization is None:
+        raise Tau3BenchmarkRunError("sealed mode requires --sealed-authorization")
+    if config.candidate_lock is None or config.sealed_task_count_manifest is None:
+        raise Tau3BenchmarkRunError("sealed authorization requires candidate lock and sealed task-count manifest")
+    if staged_ref is None:
+        raise Tau3BenchmarkRunError("sealed mode requires a staged sealed authorization")
+    staged_path_value = staged_ref.get("path")
+    if not isinstance(staged_path_value, str):
+        raise Tau3BenchmarkRunError("staged sealed authorization path is missing")
+    staged_authorization_path = _resolve_output_relative_path(staged_path_value, out)
+    if not staged_authorization_path.is_file():
+        raise Tau3BenchmarkRunError("staged sealed authorization is missing")
+    if staged_ref.get("sha256") != _sha256(staged_authorization_path) or staged_ref.get("size") != staged_authorization_path.stat().st_size:
+        raise Tau3BenchmarkRunError("staged sealed authorization drifted before replay")
+    if config.sealed_authorization_sha256 is not None and config.sealed_authorization_sha256 != staged_ref.get("sha256"):
+        raise Tau3BenchmarkRunError("sealed authorization sha256 mismatch")
+    try:
+        record = validate_tau3_sealed_authorization(
+            authorization_path=staged_authorization_path,
+            candidate_lock_path=config.candidate_lock,
+            protocol_path=config.protocol_path,
+            sealed_source_manifest_path=config.sealed_task_count_manifest,
+            arm_id=config.arm_id,
+            seeds=config.seeds,
+            expected_tau_revision=expected_tau_revision,
+            expected_authorization_sha256=str(staged_ref["sha256"]),
+        )
+    except Tau3SealedAuthorizationError as exc:
+        raise Tau3BenchmarkRunError(str(exc)) from exc
+    result = dict(staged_ref)
+    for key in ("authorized", "candidate_lock_sha256", "protocol_sha256", "sealed_source_sha256", "task_count", "arms", "seeds"):
+        result[key] = record[key]
+    return result
+
+
 def _candidate_identity_record(config: Tau3BenchmarkConfig, staged_ref: dict[str, Any] | None) -> dict[str, Any]:
     if config.candidate_identity is None:
         raise Tau3BenchmarkRunError("development adapter mode requires --candidate-identity")
@@ -1046,7 +1100,7 @@ def _prompt_token_ceiling_exceeded(values: list[int]) -> bool:
     return False
 
 
-def _iter_prompt_tokens(value: Any):
+def _iter_prompt_tokens(value: Any) -> Iterator[int]:
     if isinstance(value, dict):
         for key, nested in value.items():
             if key == "prompt_tokens" and isinstance(nested, int) and not isinstance(nested, bool):
@@ -1077,10 +1131,14 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         raise Tau3BenchmarkRunError("development mode must not receive a candidate lock")
     if config.mode == "development" and config.sealed_task_count_manifest is not None:
         raise Tau3BenchmarkRunError("development mode must not receive a sealed task-count manifest")
+    if config.mode == "development" and config.sealed_authorization is not None:
+        raise Tau3BenchmarkRunError("development mode must not receive a sealed authorization")
     if config.mode == "sealed" and config.source_split is not None:
         raise Tau3BenchmarkRunError("sealed mode must not receive a source split")
     if config.mode == "sealed" and config.sealed_task_count_manifest is None:
         raise Tau3BenchmarkRunError("sealed mode requires --sealed-task-count-manifest")
+    if config.mode == "sealed" and config.sealed_authorization is None:
+        raise Tau3BenchmarkRunError("sealed mode requires --sealed-authorization")
     if config.mode == "sealed" and config.candidate_identity is not None:
         raise Tau3BenchmarkRunError("sealed mode must not receive a candidate identity")
     if config.mode == "development" and config.arm_id != "adapter" and config.candidate_identity is not None:
