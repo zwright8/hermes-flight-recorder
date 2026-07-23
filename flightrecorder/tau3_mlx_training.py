@@ -418,7 +418,9 @@ def _require_local_venv_python(root: Path) -> Path:
         raise Tau3MlxTrainingError(f"local Python symlink could not be resolved safely: {python}") from exc
     if not resolved.is_file() or not os.access(resolved, os.X_OK):
         raise Tau3MlxTrainingError(f"resolved local Python is not executable: {resolved}")
-    return resolved
+    # Invoke through the virtual-environment entry point. Executing the resolved
+    # base interpreter bypasses pyvenv.cfg and drops the environment's packages.
+    return python
 
 
 def _load_required_payloads(bundle: Path) -> dict[str, Any]:

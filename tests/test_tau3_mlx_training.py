@@ -737,7 +737,7 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                     resume_adapter_file=root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz",
                 )
 
-    def test_normal_venv_python_leaf_symlink_is_allowed(self) -> None:
+    def test_normal_venv_python_leaf_symlink_is_preserved_for_activation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _install_fake_python(root, "success")
@@ -756,7 +756,7 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                 workspace_root=root,
                 config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
             )
-            self.assertEqual(receipt["command"][0], str(target.resolve()))
+            self.assertEqual(receipt["command"][0], str(root.resolve() / ".venv" / "bin" / "python"))
             self.assertTrue(receipt["weights_updated"])
 
     def test_mixture_semantic_scan_rejects_invented_tau_tool_even_with_manifest_pass(self) -> None:
