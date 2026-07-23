@@ -266,7 +266,7 @@ def _action_upweighted_rows(
     allowed_action_total = math.floor(len(non_action) * max_action_to_non_action_ratio)
     target_action_total = min(len(action) * max_action_repeat, allowed_action_total)
     extras_needed = max(0, target_action_total - len(action))
-    extras = []
+    extras: list[dict[str, Any]] = []
     for repetition_index in range(1, max_action_repeat):
         for row in action:
             if len(extras) >= extras_needed:
@@ -415,7 +415,7 @@ def _tokenizer_stats(
 
 def _load_tokenizer(path: Path) -> Any:
     try:
-        from transformers import AutoTokenizer
+        from transformers import AutoTokenizer  # type: ignore[import-not-found]
     except Exception as exc:  # pragma: no cover - exercised by integration environments.
         raise Tau3TrainingMixtureError("transformers is required to render with the pinned tokenizer") from exc
     try:
@@ -478,8 +478,35 @@ def _episode_split(episode_id: str) -> str:
 
 
 def _source_binding(source: Path) -> dict[str, Any]:
+    manifest_path = source / "manifest.json"
+    _require_source_file(manifest_path, "source corpus manifest")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise Tau3TrainingMixtureError(f"source corpus manifest is invalid JSON: {exc.msg}") from exc
+    if not isinstance(manifest, dict):
+        raise Tau3TrainingMixtureError("source corpus manifest must be an object")
+    if manifest.get("schema_version") != "hfr.tau3_conversation_import.v1" or manifest.get("passed") is not True:
+        raise Tau3TrainingMixtureError("source corpus manifest is not a passed Tau-3 conversation import")
+    provenance = manifest.get("generation_provenance")
+    if not isinstance(provenance, dict):
+        raise Tau3TrainingMixtureError("source corpus manifest is missing generation provenance")
+    protocol_sha256 = provenance.get("protocol_sha256")
+    if not isinstance(protocol_sha256, str) or len(protocol_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in protocol_sha256
+    ):
+        raise Tau3TrainingMixtureError("source corpus manifest is missing a valid frozen protocol SHA")
+    declared_files = manifest.get("files")
+    if not isinstance(declared_files, dict):
+        raise Tau3TrainingMixtureError("source corpus manifest is missing file bindings")
+    for split in ("train", "valid"):
+        record = declared_files.get(split)
+        if not isinstance(record, dict) or record.get("sha256") != _sha256(source / f"{split}.jsonl"):
+            raise Tau3TrainingMixtureError(f"source corpus manifest {split} hash does not replay")
     return {
         "source_dir": str(source),
+        "source_manifest": {"path": "manifest.json", "sha256": _sha256(manifest_path)},
+        "protocol_sha256": protocol_sha256,
         "train": {"path": "train.jsonl", "sha256": _sha256(source / "train.jsonl")},
         "valid": {"path": "valid.jsonl", "sha256": _sha256(source / "valid.jsonl")},
     }
@@ -515,7 +542,8 @@ def _tools(value: Any, label: str) -> list[dict[str, Any]]:
 
 
 def _tool_name(tool: dict[str, Any]) -> str:
-    function = tool.get("function") if isinstance(tool.get("function"), dict) else {}
+    raw_function = tool.get("function")
+    function = raw_function if isinstance(raw_function, dict) else {}
     return str(tool.get("name") or function.get("name") or "")
 
 

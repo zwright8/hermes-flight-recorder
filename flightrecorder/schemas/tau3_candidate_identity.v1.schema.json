@@ -1,0 +1,127 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_identity.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public-safe hash-only identity binding one governed Tau-3 development candidate to final MLX training output and endpoint model string.",
+  "properties": {
+    "adapter_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "adapter_weight_file_count": {"minimum": 1, "type": "integer"},
+        "declared_file_set_sha256": {"$ref": "#/$defs/sha256"},
+        "file_count": {"minimum": 1, "type": "integer"},
+        "replayed_file_set_sha256": {"$ref": "#/$defs/sha256"},
+        "tree_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "adapter_tree_sha256",
+        "tree_sha256",
+        "file_count",
+        "adapter_weight_file_count",
+        "declared_file_set_sha256",
+        "replayed_file_set_sha256"
+      ],
+      "type": "object"
+    },
+    "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
+    "candidate_id": {
+      "description": "Public-safe candidate slug, not a path, endpoint string, or free-form private label.",
+      "maxLength": 128,
+      "pattern": "^(?!sk-)(?!hf_)[a-z0-9][a-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "created_at": {"minLength": 1, "type": "string"},
+    "endpoint_model_sha256": {"$ref": "#/$defs/sha256"},
+    "final_training_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "governance": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_paths_included": {"const": false},
+        "adapter_files_replayed": {"const": true},
+        "endpoint_model_hash_only": {"const": true},
+        "hashes_only": {"const": true},
+        "local_paths_included": {"const": false},
+        "private_material_included": {"const": false},
+        "public_safe": {"const": true},
+        "raw_endpoint_model_included": {"const": false},
+        "raw_training_receipt_included": {"const": false},
+        "sealed_access_authorized": {"const": false},
+        "training_receipt_final": {"const": true},
+        "training_receipt_schema_checked": {"const": true},
+        "training_receipt_success": {"const": true},
+        "training_weights_updated": {"const": true}
+      },
+      "required": [
+        "training_receipt_schema_checked",
+        "training_receipt_final",
+        "training_receipt_success",
+        "training_weights_updated",
+        "adapter_files_replayed",
+        "endpoint_model_hash_only",
+        "hashes_only",
+        "local_paths_included",
+        "absolute_paths_included",
+        "raw_endpoint_model_included",
+        "raw_training_receipt_included",
+        "public_safe",
+        "private_material_included",
+        "sealed_access_authorized"
+      ],
+      "type": "object"
+    },
+    "read_only": {"const": true},
+    "schema_checked": {"const": true},
+    "schema_version": {"const": "hfr.tau3_candidate_identity.v1"},
+    "training_binding": {
+      "additionalProperties": false,
+      "properties": {
+        "base_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "base_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "dataset_files_sha256": {"$ref": "#/$defs/sha256"},
+        "dataset_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "mlx_qlora_plan_sha256": {"$ref": "#/$defs/sha256"},
+        "model_freeze_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_signature": {"$ref": "#/$defs/sha256"},
+        "recipe_sha256": {"$ref": "#/$defs/sha256"},
+        "recipe_space_sha256": {"$ref": "#/$defs/sha256"},
+        "source_binding_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "protocol_sha256",
+        "protocol_signature",
+        "model_freeze_sha256",
+        "recipe_space_sha256",
+        "mlx_qlora_plan_sha256",
+        "base_identity_sha256",
+        "base_tree_sha256",
+        "dataset_manifest_sha256",
+        "dataset_files_sha256",
+        "source_binding_sha256",
+        "recipe_sha256"
+      ],
+      "type": "object"
+    },
+    "training_receipt_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "candidate_id",
+    "training_receipt_sha256",
+    "final_training_receipt_sha256",
+    "adapter_tree_sha256",
+    "endpoint_model_sha256",
+    "training_binding",
+    "adapter_identity",
+    "governance",
+    "schema_checked",
+    "read_only"
+  ],
+  "title": "Tau-3 Candidate Identity",
+  "type": "object",
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

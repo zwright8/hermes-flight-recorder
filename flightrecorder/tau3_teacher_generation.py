@@ -112,7 +112,7 @@ def run_tau3_teacher_generation(
         existing_prelaunch = _read_json(prelaunch_path)
         if any(
             existing_prelaunch.get(key) != prelaunch.get(key)
-            for key in ("tau_revision", "source", "teacher", "user_simulator", "config", "task_count")
+            for key in ("tau_revision", "source", "teacher", "user_simulator", "protocol", "config", "task_count")
         ):
             raise Tau3TeacherGenerationError("existing prelaunch receipt does not match this generation run")
     else:
@@ -337,8 +337,10 @@ def _load_tasks(path: Path, expected_revision: str) -> list[dict[str, str]]:
         task_id = str(task.get("id") or "")
         if not task_id:
             raise Tau3TeacherGenerationError(f"{path}:{line_number}: missing task id")
-        evaluation = task.get("evaluation_criteria") if isinstance(task.get("evaluation_criteria"), dict) else {}
-        actions = evaluation.get("actions") if isinstance(evaluation.get("actions"), list) else []
+        raw_evaluation = task.get("evaluation_criteria")
+        evaluation = raw_evaluation if isinstance(raw_evaluation, dict) else {}
+        raw_actions = evaluation.get("actions")
+        actions = raw_actions if isinstance(raw_actions, list) else []
         rows.append({
             "domain": domain,
             "split": split,

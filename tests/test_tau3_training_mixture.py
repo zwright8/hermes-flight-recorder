@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import tempfile
 import types
@@ -20,6 +21,22 @@ from flightrecorder.tau3_training_mixture import (
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_source_manifest(source: Path, *, protocol_sha256: str = "c" * 64) -> None:
+    (source / "manifest.json").write_text(json.dumps({
+        "schema_version": "hfr.tau3_conversation_import.v1",
+        "passed": True,
+        "files": {
+            "train": {"path": "train.jsonl", "sha256": _sha256(source / "train.jsonl")},
+            "valid": {"path": "valid.jsonl", "sha256": _sha256(source / "valid.jsonl")},
+        },
+        "generation_provenance": {"protocol_sha256": protocol_sha256},
+    }, sort_keys=True), encoding="utf-8")
 
 
 def _tool(name: str = "lookup") -> dict[str, Any]:
@@ -105,11 +122,13 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             source = root / "input_export"
             _write_jsonl(source / "train.jsonl", [_row("tau3-train-retail-success-001", "family-train")])
             _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            _write_source_manifest(source)
 
             with _install_fake_transformers(_Tokenizer()):
                 manifest = build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
 
             self.assertTrue(manifest["passed"])
+            self.assertEqual(manifest["source_binding"]["protocol_sha256"], "c" * 64)
             self.assertEqual([item["name"] for item in manifest["variants"]], [
                 "full_trajectories",
                 "assistant_turn_targets",
@@ -145,6 +164,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
                 _row("tau3-train-airline-clarification-001", "family-train", assistant_text="Check that Agent does not offer partial cabin changes.")
             ])
             _write_jsonl(source / "valid.jsonl", [_row("tau3-development-airline-success-002", "family-valid")])
+            _write_source_manifest(source)
             with _install_fake_transformers(_Tokenizer()):
                 with self.assertRaisesRegex(Tau3TrainingMixtureError, "evaluator-criteria leakage"):
                     build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
@@ -155,6 +175,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             source = root / "input_export"
             _write_jsonl(source / "train.jsonl", [_row("tau3-test-retail-success-001", "family-train")])
             _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            _write_source_manifest(source)
             with _install_fake_transformers(_Tokenizer()):
                 with self.assertRaisesRegex(Tau3TrainingMixtureError, "split mismatch"):
                     build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
@@ -167,6 +188,7 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             bad["tools"] = [_tool("different")]
             _write_jsonl(source / "train.jsonl", [bad])
             _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            _write_source_manifest(source)
             with _install_fake_transformers(_Tokenizer()):
                 with self.assertRaisesRegex(Tau3TrainingMixtureError, "missing tool schema"):
                     build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
@@ -179,11 +201,13 @@ class Tau3TrainingMixtureTests(unittest.TestCase):
             tampered["metadata"]["source_fingerprint_status"] = "unverified"
             _write_jsonl(source / "train.jsonl", [tampered])
             _write_jsonl(source / "valid.jsonl", [_row("tau3-development-retail-success-002", "family-valid")])
+            _write_source_manifest(source)
             with _install_fake_transformers(_Tokenizer()):
                 with self.assertRaisesRegex(Tau3TrainingMixtureError, "unverified source fingerprint"):
                     build_tau3_training_mixtures(source, root / "mixtures", tokenizer_path=root / "tokenizer")
 
             _write_jsonl(source / "train.jsonl", [_row("tau3-train-retail-success-001", "family-train")])
+            _write_source_manifest(source)
             occupied = root / "occupied"
             occupied.mkdir()
             (occupied / "keep").write_text("x", encoding="utf-8")

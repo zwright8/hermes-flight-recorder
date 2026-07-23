@@ -5,6 +5,14 @@
   "description": "Prelaunch or final receipt for a local MLX-LM QLoRA Tau-3 training run.",
   "properties": {
     "adapter": {
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/outputRelativePath"
+        }
+      },
+      "required": [
+        "path"
+      ],
       "type": "object"
     },
     "adapter_weight_file_count": {
@@ -50,11 +58,10 @@
       "type": "object"
     },
     "mlx_lora_config": {
-      "type": "object"
+      "$ref": "#/$defs/outputFileRecord"
     },
     "output_dir": {
-      "minLength": 1,
-      "type": "string"
+      "const": "."
     },
     "peak_child_rss_kb": {
       "minimum": 0,
@@ -67,7 +74,7 @@
       ]
     },
     "prelaunch_receipt": {
-      "type": "object"
+      "$ref": "#/$defs/outputFileRecord"
     },
     "schema_checked": {
       "type": "boolean"
@@ -76,7 +83,23 @@
       "const": "hfr.tau3_mlx_training_run.v1"
     },
     "telemetry": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/outputRelativePath"
+        }
+      },
+      "required": [
+        "path"
+      ],
       "type": "object"
+    },
+    "training_binding": {
+      "description": "Cryptographic binding for mixture training protocol, local base model identity, dataset provenance, and deterministic recipe.",
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "terminal_status": {
       "enum": [
@@ -131,6 +154,44 @@
         "expected"
       ],
       "type": "object"
+    },
+    "outputFileRecord": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/outputRelativePath"
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "read_only",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "outputRelativePath": {
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^/"
+          },
+          {
+            "pattern": "^[A-Za-z]:"
+          },
+          {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
+        ]
+      },
+      "type": "string"
     }
   }
 }

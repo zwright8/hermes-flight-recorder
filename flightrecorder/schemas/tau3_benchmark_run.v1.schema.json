@@ -13,6 +13,13 @@
       "pattern": "^[0-9a-f]{40}$",
       "type": "string"
     },
+    "protocol": {
+      "$ref": "#/$defs/output_file_ref"
+    },
+    "protocol_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
     "mode": {
       "enum": ["development", "sealed"]
     },
@@ -21,6 +28,9 @@
     },
     "agent": {
       "$ref": "#/$defs/endpoint"
+    },
+    "arm_identity": {
+      "type": "object"
     },
     "user_simulator": {
       "$ref": "#/$defs/endpoint"
@@ -71,10 +81,25 @@
       "type": "object"
     },
     "source": {
-      "type": ["object", "null"]
+      "anyOf": [
+        {"$ref": "#/$defs/output_file_ref"},
+        {"type": "null"}
+      ]
     },
     "candidate_lock": {
-      "type": ["object", "null"]
+      "anyOf": [
+        {"$ref": "#/$defs/output_file_ref"},
+        {"type": "null"}
+      ]
+    },
+    "candidate_identity": {
+      "anyOf": [
+        {"$ref": "#/$defs/candidate_identity_ref"},
+        {"type": "null"}
+      ]
+    },
+    "prelaunch_receipt": {
+      "$ref": "#/$defs/output_file_ref"
     },
     "task_selection": {
       "type": "object"
@@ -96,6 +121,15 @@
       "minItems": 12,
       "type": "array"
     },
+    "result_path": {
+      "type": ["string", "null"]
+    },
+    "result_sha256": {
+      "type": ["string", "null"]
+    },
+    "result_summary": {
+      "type": ["object", "null"]
+    },
     "loopback_only": {
       "const": true
     },
@@ -113,13 +147,17 @@
     "schema_version",
     "phase",
     "tau_revision",
+    "protocol",
+    "protocol_sha256",
     "mode",
     "arm_id",
+    "arm_identity",
     "agent",
     "user_simulator",
     "reviewer",
     "config",
     "task_selection",
+    "candidate_identity",
     "sealed_payload_accessed",
     "sealed_task_ids_materialized",
     "training_started"
@@ -128,7 +166,24 @@
     {
       "if": {"properties": {"phase": {"const": "final"}}},
       "then": {
-        "required": ["run_count", "success_count", "failure_count", "run_receipts", "loopback_only"]
+        "required": ["run_count", "success_count", "failure_count", "run_receipts", "loopback_only", "prelaunch_receipt"]
+      }
+    },
+    {
+      "if": {"properties": {"phase": {"const": "domain_seed"}}},
+      "then": {
+        "properties": {
+          "result_path": {
+            "anyOf": [
+              {"$ref": "#/$defs/copied_result_path"},
+              {"type": "null"}
+            ]
+          },
+          "result_sha256": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["result_path", "result_sha256"]
       }
     },
     {
@@ -169,14 +224,58 @@
       "required": ["context_window", "endpoint_hash", "loopback", "max_tokens", "model_sha256", "temperature", "top_p"],
       "type": "object"
     },
+    "output_file_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {"$ref": "#/$defs/output_relative_path"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size"],
+      "type": "object"
+    },
+    "candidate_identity_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_id": {"minLength": 1, "type": "string"},
+        "path": {"$ref": "#/$defs/output_relative_path"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size"],
+      "type": "object"
+    },
+    "output_relative_path": {
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          {"pattern": "^/"},
+          {"pattern": "^[A-Za-z]:"},
+          {"pattern": "(^|/)\\.\\.(/|$)"}
+        ]
+      },
+      "type": "string"
+    },
     "result_summary": {
       "additionalProperties": false,
       "properties": {
+        "prompt_token_ceiling": {"const": 16384},
+        "prompt_token_ceiling_checked": {"const": true},
+        "prompt_token_ceiling_exceeded": {"const": false},
+        "prompt_token_observation_count": {"minimum": 1, "type": "integer"},
         "reward_sum": {"type": "number"},
         "simulation_count": {"minimum": 1, "type": "integer"},
         "success_count": {"minimum": 0, "type": "integer"}
       },
-      "required": ["reward_sum", "simulation_count", "success_count"],
+      "required": [
+        "prompt_token_ceiling",
+        "prompt_token_ceiling_checked",
+        "prompt_token_ceiling_exceeded",
+        "prompt_token_observation_count",
+        "reward_sum",
+        "simulation_count",
+        "success_count"
+      ],
       "type": "object"
     },
     "run_receipt_ref": {
@@ -187,6 +286,7 @@
           "then": {
             "properties": {
               "result_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+              "result_path": {"$ref": "#/$defs/copied_result_path"},
               "result_summary": {"$ref": "#/$defs/result_summary"}
             }
           }
@@ -195,13 +295,24 @@
       "properties": {
         "domain": {"enum": ["airline", "retail", "telecom"]},
         "path": {"pattern": "^run-(airline|retail|telecom)-seed(101|202|303|404)\\.json$", "type": "string"},
+        "receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "result_path": {
+          "anyOf": [
+            {"$ref": "#/$defs/copied_result_path"},
+            {"type": "null"}
+          ]
+        },
         "result_sha256": {"type": ["string", "null"]},
         "result_summary": {"type": ["object", "null"]},
         "seed": {"enum": [101, 202, 303, 404]},
         "terminal_status": {"enum": ["completed", "failed", "timeout"]}
       },
-      "required": ["domain", "path", "result_sha256", "result_summary", "seed", "terminal_status"],
+      "required": ["domain", "path", "receipt_sha256", "result_path", "result_sha256", "result_summary", "seed", "terminal_status"],
       "type": "object"
+    },
+    "copied_result_path": {
+      "pattern": "^results/(airline|retail|telecom)/seed-(101|202|303|404)/results\\.json$",
+      "type": "string"
     }
   }
 }

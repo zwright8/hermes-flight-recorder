@@ -11,8 +11,10 @@
     "passed": {"const": true},
     "source_binding": {
       "type": "object",
-      "required": ["train", "valid"],
+      "required": ["source_manifest", "protocol_sha256", "train", "valid"],
       "properties": {
+        "source_manifest": {"$ref": "#/$defs/sourceManifest"},
+        "protocol_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "train": {"$ref": "#/$defs/sourceFile"},
         "valid": {"$ref": "#/$defs/sourceFile"}
       }
@@ -53,6 +55,14 @@
     "training_started": {"const": false}
   },
   "$defs": {
+    "sourceManifest": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "manifest.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "sourceFile": {
       "type": "object",
       "required": ["path", "sha256"],

@@ -20,7 +20,7 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from .schema_registry import check_schema_contract
 from .tau3_capture import canonical_sha256
@@ -67,7 +67,18 @@ FORBIDDEN_TEXT_PATTERNS = (
     "reward_basis",
     "<think>",
     "</think>",
+    "###stop###",
+    "###transfer###",
 )
+TAU_USER_CONTROL_MARKER_RE = re.compile(r"\s*(###(?:STOP|TRANSFER)###)$")
+HIDDEN_PROSE_MIN_CHARS = 24
+HIDDEN_PROSE_MIN_WORDS = 4
+ERRORED_TOOL_RESULT_REJECTION_CODE = "errored_tool_result"
+ERRORED_TOOL_RESULT_REJECTION_REASON = "generated result contains an errored assistant tool result"
+THINKING_TAG_REJECTION_CODE = "thinking_tag"
+THINKING_TAG_REJECTION_REASON = "generated result contains a forbidden thinking tag"
+GENERATOR_FAILURE_REJECTION_CODE = "generator_terminal_failure"
+GENERATOR_FAILURE_REJECTION_REASON = "generator terminal status was not success"
 
 
 class Tau3ConversationIngestError(ValueError):
@@ -98,11 +109,13 @@ class SourceTask:
 
 
 def import_tau3_conversations(
-    results_paths: list[str | Path],
+    results_paths: Sequence[str | Path],
     out_dir: str | Path,
     *,
     source_dir: str | Path,
     tool_schema_path: str | Path,
+    generation_manifest_paths: list[str | Path] | None = None,
+    expected_tau_revision: str | None = None,
     sealed_manifest_path: str | Path | None = None,
     allow_teacher_protocol_normalization: bool = False,
     teacher_id: str = "tau3-official-simulation",
@@ -115,8 +128,18 @@ def import_tau3_conversations(
     import so partial or mixed-quality corpora cannot silently enter training.
     """
 
+    generation_records: list[dict[str, Any]] = []
+    generation_protocol: dict[str, Any] | None = None
+    if generation_manifest_paths:
+        derived_results, generation_records, generation_protocol = _derive_results_from_generation_manifests(
+            [Path(path) for path in generation_manifest_paths],
+            expected_tau_revision=expected_tau_revision,
+        )
+        if results_paths:
+            _require_explicit_results_match_derived(results_paths, derived_results)
+        results_paths = derived_results
     if not results_paths:
-        raise Tau3ConversationIngestError("at least one Tau results.json path is required")
+        raise Tau3ConversationIngestError("at least one Tau results.json path or --generation-manifest is required")
     out = Path(out_dir)
     _require_new_output_dir(out)
     source_root = Path(source_dir)
@@ -127,9 +150,15 @@ def import_tau3_conversations(
     source_revision_set = {task.source_revision for task in source_tasks.values()}
     if len(source_revision_set) != 1:
         raise Tau3ConversationIngestError("training sources must bind exactly one Tau revision")
+    if expected_tau_revision is not None and expected_tau_revision not in source_revision_set:
+        raise Tau3ConversationIngestError("expected Tau revision does not match training sources")
     tool_revision = tool_schema_artifact.get("tau_revision") if isinstance(tool_schema_artifact, dict) else None
     if tool_revision is not None and tool_revision not in source_revision_set:
         raise Tau3ConversationIngestError("tool schema artifact Tau revision mismatch")
+    if generation_records:
+        generation_revisions = {record["tau_revision"] for record in generation_records}
+        if generation_revisions != source_revision_set:
+            raise Tau3ConversationIngestError("generation manifest Tau revision mismatch")
     sealed_hashes = _load_sealed_hashes(Path(sealed_manifest_path)) if sealed_manifest_path else set()
 
     rows_by_split: dict[str, list[dict[str, Any]]] = {"train": [], "valid": []}
@@ -137,6 +166,9 @@ def import_tau3_conversations(
     seen_simulations: set[str] = set()
     seen_tau_simulation_identities: set[tuple[str, str, str]] = set()
     normalization_count = 0
+    tau_control_marker_row_count = 0
+    tau_control_marker_count = 0
+    tau_control_marker_only_drop_count = 0
     rejection_count = 0
     source_revisions: set[str] = set()
     domains: set[str] = set()
@@ -176,7 +208,7 @@ def import_tau3_conversations(
         )
         for sim_index, simulation in enumerate(simulations):
             try:
-                row, normalized = _convert_simulation(
+                row, normalization = _convert_simulation(
                     simulation,
                     sim_index=sim_index,
                     results_path=results_path,
@@ -211,7 +243,10 @@ def import_tau3_conversations(
             seen_episode_ids.add(episode_id)
             seen_simulations.add(sim_key)
             seen_tau_simulation_identities.add(tau_identity)
-            normalization_count += 1 if normalized else 0
+            normalization_count += 1 if normalization["mixed_content_tool_call"] else 0
+            tau_control_marker_row_count += 1 if normalization["tau_control_markers_stripped"] else 0
+            tau_control_marker_count += normalization["tau_control_markers_stripped"]
+            tau_control_marker_only_drop_count += normalization["tau_control_marker_only_messages_dropped"]
             rows_by_split["train" if row["metadata"]["split"] == "train" else "valid"].append(row)
 
     if not rows_by_split["train"]:
@@ -240,10 +275,15 @@ def import_tau3_conversations(
         source_revisions=source_revisions,
         domains=domains,
         normalization_count=normalization_count,
+        tau_control_marker_row_count=tau_control_marker_row_count,
+        tau_control_marker_count=tau_control_marker_count,
+        tau_control_marker_only_drop_count=tau_control_marker_only_drop_count,
         rejection_count=rejection_count,
         allow_teacher_protocol_normalization=allow_teacher_protocol_normalization,
         teacher_id=teacher_id,
         license_id=license_id,
+        generation_records=generation_records,
+        generation_protocol=generation_protocol,
     )
     check = check_schema_contract(manifest, name_or_id=TAU3_CONVERSATION_CORPUS_SCHEMA_VERSION)
     if check.get("passed") is not True:
@@ -329,6 +369,7 @@ print(json.dumps({"domains": domains}, sort_keys=True, separators=(",", ":"), en
 def build_arg_parser() -> ArgumentParser:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--result", dest="results", action="append", type=Path)
+    parser.add_argument("--generation-manifest", dest="generation_manifests", action="append", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--source-dir", type=Path)
     parser.add_argument("--tool-schemas", type=Path)
@@ -355,16 +396,18 @@ def main(argv: list[str] | None = None) -> int:
                 out_path=args.export_tool_schemas,
                 expected_tau_revision=args.expected_tau_revision,
             )
-            if not args.results and args.out is None and args.source_dir is None and args.tool_schemas is None:
+            if not args.results and not args.generation_manifests and args.out is None and args.source_dir is None and args.tool_schemas is None:
                 print(json.dumps({"tool_schemas": str(args.export_tool_schemas), "domains": sorted(payload["domains"])}, indent=2, sort_keys=True))
                 return 0
-        if not args.results or args.out is None or args.source_dir is None or args.tool_schemas is None:
-            raise Tau3ConversationIngestError("conversation import requires --result, --out, --source-dir, and --tool-schemas")
+        if (not args.results and not args.generation_manifests) or args.out is None or args.source_dir is None or args.tool_schemas is None:
+            raise Tau3ConversationIngestError("conversation import requires --result or --generation-manifest, plus --out, --source-dir, and --tool-schemas")
         manifest = import_tau3_conversations(
-            args.results,
+            args.results or [],
             args.out,
             source_dir=args.source_dir,
             tool_schema_path=args.tool_schemas,
+            generation_manifest_paths=args.generation_manifests,
+            expected_tau_revision=args.expected_tau_revision,
             sealed_manifest_path=args.sealed_manifest,
             allow_teacher_protocol_normalization=args.allow_teacher_protocol_normalization,
             teacher_id=args.teacher_id,
@@ -391,7 +434,7 @@ def _convert_simulation(
     allow_teacher_protocol_normalization: bool,
     teacher_id: str,
     license_id: str,
-) -> tuple[dict[str, Any], bool]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     sim_id = _nonempty_str(simulation.get("id") or f"simulation-{sim_index}", f"{results_path}: simulations[{sim_index}].id")
     task_id = _nonempty_str(simulation.get("task_id"), f"{results_path}: {sim_id}.task_id")
     source = source_tasks.get((domain, task_id))
@@ -408,7 +451,7 @@ def _convert_simulation(
     if termination not in NORMAL_TERMINATIONS:
         raise Tau3ConversationIngestError(f"{results_path}: {sim_id}: non-normal termination {termination!r}")
     _reject_error_markers(simulation, results_path, sim_id)
-    messages, normalized = _messages_to_training_rows(
+    messages, normalization = _messages_to_training_rows(
         _list(simulation.get("messages"), f"{results_path}: {sim_id}.messages"),
         tools,
         system_prompt=system_prompt,
@@ -441,8 +484,16 @@ def _convert_simulation(
         "teacher": {"id": teacher_id, "license": license_id, "harness": "official-tau-text-mode"},
         "system_prompt_sha256": canonical_sha256(system_prompt),
         "normalization": {
-            "teacher_protocol_normalized": normalized,
+            "teacher_protocol_normalized": bool(
+                normalization["mixed_content_tool_call"]
+                or normalization["tau_control_markers_stripped"]
+            ),
             "allow_teacher_protocol_normalization": allow_teacher_protocol_normalization,
+            "mixed_content_tool_call_normalized": normalization["mixed_content_tool_call"],
+            "tau_control_markers_stripped": normalization["tau_control_markers_stripped"],
+            "tau_control_marker_only_user_messages_dropped": normalization[
+                "tau_control_marker_only_messages_dropped"
+            ],
         },
         "privacy": {
             "sealed_payload_read": False,
@@ -459,7 +510,7 @@ def _convert_simulation(
             "metadata_without_row_hash": {k: v for k, v in metadata.items() if k != "row_sha256"},
         }
     )
-    return row, normalized
+    return row, normalization
 
 
 def _messages_to_training_rows(
@@ -469,11 +520,15 @@ def _messages_to_training_rows(
     system_prompt: str,
     allow_teacher_protocol_normalization: bool,
     where: str,
-) -> tuple[list[dict[str, Any]], bool]:
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     tool_names = {_tool_name(tool) for tool in tools}
     converted: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     pending_tool_call_ids: set[str] = set()
-    normalized_any = False
+    normalization = {
+        "mixed_content_tool_call": False,
+        "tau_control_markers_stripped": 0,
+        "tau_control_marker_only_messages_dropped": 0,
+    }
     for index, raw in enumerate(raw_messages):
         msg = _object(raw, f"{where}.messages[{index}]")
         role = str(msg.get("role") or "")
@@ -486,6 +541,15 @@ def _messages_to_training_rows(
                 # not assistant targets and should never be learned as actions.
                 continue
             content = _clean_text(msg.get("content"), f"{where}.messages[{index}].content")
+            content, marker_stripped = _strip_tau_user_control_marker(
+                content,
+                allow_teacher_protocol_normalization=allow_teacher_protocol_normalization,
+                where=f"{where}.messages[{index}].content",
+            )
+            if marker_stripped:
+                normalization["tau_control_markers_stripped"] += 1
+                if not content:
+                    normalization["tau_control_marker_only_messages_dropped"] += 1
             if content:
                 converted.append({"role": "user", "content": content})
             continue
@@ -497,7 +561,7 @@ def _messages_to_training_rows(
                     raise Tau3ConversationIngestError(
                         f"{where}.messages[{index}]: assistant mixed content+tool call requires --allow-teacher-protocol-normalization"
                     )
-                normalized_any = True
+                normalization["mixed_content_tool_call"] = True
                 content = ""
             if tool_calls:
                 converted.append({"role": "assistant", "tool_calls": tool_calls})
@@ -523,7 +587,23 @@ def _messages_to_training_rows(
         raise Tau3ConversationIngestError(f"{where}.messages[{index}]: unsupported role {role!r}")
     if pending_tool_call_ids:
         raise Tau3ConversationIngestError(f"{where}: unpaired tool call id: {sorted(pending_tool_call_ids)[0]}")
-    return converted, normalized_any
+    return converted, normalization
+
+
+def _strip_tau_user_control_marker(
+    content: str,
+    *,
+    allow_teacher_protocol_normalization: bool,
+    where: str,
+) -> tuple[str, bool]:
+    marker = TAU_USER_CONTROL_MARKER_RE.search(content)
+    if marker is None:
+        return content, False
+    if not allow_teacher_protocol_normalization:
+        raise Tau3ConversationIngestError(
+            f"{where}: trailing Tau control marker requires --allow-teacher-protocol-normalization"
+        )
+    return content[: marker.start()].rstrip(), True
 
 
 def _assistant_tool_calls(raw_calls: list[Any], tool_names: set[str], where: str) -> list[dict[str, Any]]:
@@ -654,6 +734,256 @@ def _load_tool_schemas(path: Path) -> dict[str, dict[str, Any]]:
     return schemas
 
 
+def _derive_results_from_generation_manifests(
+    manifest_paths: list[Path],
+    *,
+    expected_tau_revision: str | None,
+) -> tuple[list[Path], list[dict[str, Any]], dict[str, Any]]:
+    derived_results: list[Path] = []
+    generation_records: list[dict[str, Any]] = []
+    protocol_records: list[dict[str, Any]] = []
+    for manifest_path in manifest_paths:
+        manifest = _object(_read_json(manifest_path), f"{manifest_path}: manifest")
+        check = check_schema_contract(manifest, name_or_id="tau3_teacher_generation_run")
+        if check.get("passed") is not True:
+            raise Tau3ConversationIngestError(
+                f"{manifest_path}: generation manifest schema failed: " + "; ".join(check.get("errors", []))
+            )
+        if manifest.get("phase") != "final":
+            raise Tau3ConversationIngestError(f"{manifest_path}: generation manifest phase must be final")
+        tau_revision = _nonempty_str(manifest.get("tau_revision"), f"{manifest_path}: tau_revision")
+        if expected_tau_revision is not None and tau_revision != expected_tau_revision:
+            raise Tau3ConversationIngestError(f"{manifest_path}: generation manifest Tau revision mismatch")
+        protocol = _object(manifest.get("protocol"), f"{manifest_path}: protocol")
+        protocol_sha256 = _nonempty_str(protocol.get("sha256"), f"{manifest_path}: protocol.sha256")
+        if not _is_sha256(protocol_sha256):
+            raise Tau3ConversationIngestError(f"{manifest_path}: protocol.sha256 must be a SHA-256 string")
+        _replay_protocol_record(manifest_path.parent, protocol, tau_revision, f"{manifest_path}: protocol")
+        protocol_records.append(protocol)
+        prelaunch = _object(manifest.get("prelaunch_receipt"), f"{manifest_path}: prelaunch_receipt")
+        _replay_file_record(manifest_path.parent, prelaunch, f"{manifest_path}: prelaunch_receipt")
+        receipts = _list(manifest.get("task_receipts"), f"{manifest_path}: task_receipts")
+        success_count = 0
+        failure_count = 0
+        admitted_success_count = 0
+        excluded_success_count = 0
+        result_refs = []
+        for index, receipt_ref_raw in enumerate(receipts):
+            receipt_ref = _object(receipt_ref_raw, f"{manifest_path}: task_receipts[{index}]")
+            receipt_path = _resolve_generation_ref(manifest_path.parent, receipt_ref.get("path"), f"{manifest_path}: task_receipts[{index}].path")
+            receipt = _object(_read_json(receipt_path), f"{receipt_path}: receipt")
+            receipt_sha256 = _file_sha256(receipt_path)
+            if receipt.get("phase") != "task":
+                raise Tau3ConversationIngestError(f"{receipt_path}: generation task receipt phase must be task")
+            if receipt.get("terminal_status") != receipt_ref.get("terminal_status"):
+                raise Tau3ConversationIngestError(f"{receipt_path}: task receipt status mismatch")
+            if receipt.get("result_sha256") != receipt_ref.get("result_sha256"):
+                raise Tau3ConversationIngestError(f"{receipt_path}: task receipt result hash mismatch")
+            status = receipt_ref.get("terminal_status")
+            if status == "success":
+                success_count += 1
+                if float(_receipt_reward(receipt, receipt_path)) != 1.0:
+                    raise Tau3ConversationIngestError(f"{receipt_path}: successful task receipt reward must be 1")
+                result_sha256 = _nonempty_str(receipt.get("result_sha256"), f"{receipt_path}: result_sha256")
+                if not _is_sha256(result_sha256):
+                    raise Tau3ConversationIngestError(f"{receipt_path}: result_sha256 must be a SHA-256 string")
+                result_path = _receipt_result_path(receipt, receipt_path)
+                if not result_path.is_file() or _file_sha256(result_path) != result_sha256:
+                    raise Tau3ConversationIngestError(f"{receipt_path}: generated result hash mismatch")
+                simulation = _require_normal_result_evidence(result_path)
+                exclusion = _training_exclusion_for_result(simulation, result_path)
+                result_ref = {
+                    "path": str(result_path),
+                    "sha256": result_sha256,
+                    "terminal_status": status,
+                    "task_receipt_path": str(receipt_path),
+                    "task_receipt_sha256": receipt_sha256,
+                }
+                if exclusion is None:
+                    admitted_success_count += 1
+                    derived_results.append(result_path)
+                    result_ref.update(
+                        {
+                            "training_admitted": True,
+                            "training_rejection_code": None,
+                            "training_rejection_reason": None,
+                        }
+                    )
+                else:
+                    excluded_success_count += 1
+                    result_ref.update(
+                        {
+                            "training_admitted": False,
+                            "training_rejection_code": exclusion[0],
+                            "training_rejection_reason": exclusion[1],
+                        }
+                    )
+                result_refs.append(result_ref)
+            else:
+                failure_count += 1
+                result_refs.append({
+                    "path": str(receipt.get("result_path") or ""),
+                    "sha256": receipt.get("result_sha256"),
+                    "training_admitted": False,
+                    "terminal_status": status,
+                    "task_receipt_path": str(receipt_path),
+                    "task_receipt_sha256": receipt_sha256,
+                    "training_rejection_code": GENERATOR_FAILURE_REJECTION_CODE,
+                    "training_rejection_reason": GENERATOR_FAILURE_REJECTION_REASON,
+                })
+        if manifest.get("success_count") != success_count or manifest.get("failure_count") != failure_count:
+            raise Tau3ConversationIngestError(f"{manifest_path}: generation manifest success/failure counts do not replay")
+        if admitted_success_count + excluded_success_count != success_count:
+            raise Tau3ConversationIngestError(f"{manifest_path}: training admission counts do not replay")
+        generation_records.append(
+            {
+                "path": str(manifest_path),
+                "sha256": _file_sha256(manifest_path),
+                "tau_revision": tau_revision,
+                "protocol_sha256": protocol_sha256,
+                "task_receipt_count": len(receipts),
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "admitted_success_count": admitted_success_count,
+                "excluded_success_count": excluded_success_count,
+                "results": result_refs,
+            }
+        )
+    if not derived_results:
+        raise Tau3ConversationIngestError(
+            "generation manifests contain no training-admitted successful reward-1 results"
+        )
+    protocol_hashes = {record["sha256"] for record in protocol_records}
+    if len(protocol_hashes) != 1:
+        raise Tau3ConversationIngestError("generation manifests must share one protocol SHA")
+    return derived_results, generation_records, protocol_records[0]
+
+
+def _require_explicit_results_match_derived(
+    explicit_results: Sequence[str | Path],
+    derived_results: list[Path],
+) -> None:
+    explicit = [str(Path(path).resolve()) for path in explicit_results]
+    derived = [str(path.resolve()) for path in derived_results]
+    if explicit != derived:
+        raise Tau3ConversationIngestError("explicit --result paths do not exactly match generation-derived success results")
+
+
+def _replay_file_record(base: Path, record: dict[str, Any], where: str) -> None:
+    path = _resolve_generation_ref(base, record.get("path"), f"{where}.path")
+    expected_sha256 = _nonempty_str(record.get("sha256"), f"{where}.sha256")
+    if not _is_sha256(expected_sha256):
+        raise Tau3ConversationIngestError(f"{where}.sha256 must be a SHA-256 string")
+    if not path.is_file() or _file_sha256(path) != expected_sha256:
+        raise Tau3ConversationIngestError(f"{where}: file hash mismatch")
+
+
+def _replay_protocol_record(base: Path, record: dict[str, Any], tau_revision: str, where: str) -> None:
+    path = _resolve_generation_ref_with_cwd_fallback(base, record.get("path"), f"{where}.path")
+    expected_sha256 = _nonempty_str(record.get("sha256"), f"{where}.sha256")
+    if not _is_sha256(expected_sha256):
+        raise Tau3ConversationIngestError(f"{where}.sha256 must be a SHA-256 string")
+    if not path.is_file() or _file_sha256(path) != expected_sha256:
+        raise Tau3ConversationIngestError(f"{where}: file hash mismatch")
+    payload = _object(_read_json(path), f"{path}: protocol")
+    check = check_schema_contract(payload, name_or_id="tau3_protocol_config")
+    if check.get("passed") is not True:
+        raise Tau3ConversationIngestError(
+            f"{path}: protocol schema failed: " + "; ".join(check.get("errors", []))
+        )
+    revision_record = _object(payload.get("tau_revision"), f"{path}: tau_revision")
+    if revision_record.get("revision") != tau_revision:
+        raise Tau3ConversationIngestError(f"{path}: protocol Tau revision mismatch")
+
+
+def _resolve_generation_ref(base: Path, value: Any, where: str) -> Path:
+    text = _nonempty_str(value, where)
+    path = Path(text)
+    if path.is_absolute():
+        return path
+    if any(part == ".." for part in path.parts):
+        raise Tau3ConversationIngestError(f"{where} must not escape the generation directory")
+    return base / path
+
+
+def _resolve_generation_ref_with_cwd_fallback(base: Path, value: Any, where: str) -> Path:
+    text = _nonempty_str(value, where)
+    path = Path(text)
+    if path.is_absolute():
+        return path
+    if any(part == ".." for part in path.parts):
+        raise Tau3ConversationIngestError(f"{where} must not escape the generation directory")
+    cwd_relative = Path.cwd() / path
+    return cwd_relative if cwd_relative.is_file() else base / path
+
+
+def _receipt_reward(receipt: dict[str, Any], receipt_path: Path) -> float:
+    reward = receipt.get("reward")
+    if isinstance(reward, bool) or not isinstance(reward, (int, float)):
+        raise Tau3ConversationIngestError(f"{receipt_path}: reward must be numeric")
+    return float(reward)
+
+
+def _receipt_result_path(receipt: dict[str, Any], receipt_path: Path) -> Path:
+    raw_path = _nonempty_str(receipt.get("result_path"), f"{receipt_path}: result_path")
+    return Path(raw_path)
+
+
+def _require_normal_result_evidence(result_path: Path) -> dict[str, Any]:
+    results = _object(_read_json(result_path), f"{result_path}: result")
+    simulations = _simulations(results, result_path)
+    if len(simulations) != 1:
+        raise Tau3ConversationIngestError(f"{result_path}: generated result must contain exactly one simulation")
+    sim_id = str(simulations[0].get("id") or "simulation-0")
+    if float(_reward(simulations[0], sim_id)) != 1.0:
+        raise Tau3ConversationIngestError(f"{result_path}: generated result reward must be 1")
+    termination = str(simulations[0].get("termination_reason") or "")
+    if termination not in NORMAL_TERMINATIONS:
+        raise Tau3ConversationIngestError(f"{result_path}: generated result has non-normal termination {termination!r}")
+    _reject_error_markers(simulations[0], result_path, sim_id)
+    return simulations[0]
+
+
+def _training_exclusion_for_result(
+    simulation: dict[str, Any],
+    result_path: Path,
+) -> tuple[str, str] | None:
+    messages = _list(simulation.get("messages"), f"{result_path}: generated result messages")
+    for index, raw_message in enumerate(messages):
+        message = _object(raw_message, f"{result_path}: generated result messages[{index}]")
+        content = message.get("content")
+        if isinstance(content, str) and re.search(r"</?think>", content, flags=re.IGNORECASE):
+            return THINKING_TAG_REJECTION_CODE, THINKING_TAG_REJECTION_REASON
+        if message.get("role") != "tool" or str(message.get("requestor") or "assistant") != "assistant":
+            continue
+        tool_messages = message.get("tool_messages")
+        if tool_messages:
+            nested_messages = _list(
+                tool_messages,
+                f"{result_path}: generated result messages[{index}].tool_messages",
+            )
+            for nested_index, raw_nested in enumerate(nested_messages):
+                nested = _object(
+                    raw_nested,
+                    f"{result_path}: generated result messages[{index}].tool_messages[{nested_index}]",
+                )
+                if (
+                    str(nested.get("requestor") or "assistant") == "assistant"
+                    and nested.get("error") is True
+                ):
+                    return ERRORED_TOOL_RESULT_REJECTION_CODE, ERRORED_TOOL_RESULT_REJECTION_REASON
+                nested_content = nested.get("content")
+                if isinstance(nested_content, str) and re.search(
+                    r"</?think>",
+                    nested_content,
+                    flags=re.IGNORECASE,
+                ):
+                    return THINKING_TAG_REJECTION_CODE, THINKING_TAG_REJECTION_REASON
+        elif message.get("error") is True:
+            return ERRORED_TOOL_RESULT_REJECTION_CODE, ERRORED_TOOL_RESULT_REJECTION_REASON
+    return None
+
+
 def _tool_name(tool: dict[str, Any]) -> str:
     if isinstance(tool.get("function"), dict):
         return str(tool["function"].get("name") or "")
@@ -706,7 +1036,10 @@ def _domain_from_results(results: dict[str, Any], path: Path) -> str:
 def _policy_from_results(results: dict[str, Any], path: Path) -> str:
     info = _object(results.get("info"), f"{path}: info")
     env = _object(info.get("environment_info"), f"{path}: info.environment_info")
-    return _nonempty_str(env.get("policy"), f"{path}: info.environment_info.policy")
+    policy = env.get("policy")
+    if not isinstance(policy, str) or not policy.strip():
+        raise Tau3ConversationIngestError(f"{path}: info.environment_info.policy must be a non-empty string")
+    return policy
 
 
 def _simulations(results: dict[str, Any], path: Path) -> list[dict[str, Any]]:
@@ -745,8 +1078,9 @@ def _reject_hidden_payloads(messages: list[dict[str, Any]], source: SourceTask) 
     for pattern in FORBIDDEN_TEXT_PATTERNS:
         if pattern in lowered:
             raise Tau3ConversationIngestError(f"hidden/evaluator marker leaked into messages: {pattern}")
+    message_strings = _strings(messages)
     for needle in hidden_needles:
-        if needle and needle in serialized:
+        if any(needle in value for value in message_strings):
             raise Tau3ConversationIngestError("source hidden/evaluator text leaked into messages")
     if re.search(r"<think>.*?</think>", serialized, flags=re.IGNORECASE | re.DOTALL):
         raise Tau3ConversationIngestError("thinking tags leaked into messages")
@@ -756,26 +1090,40 @@ def _source_hidden_needles(task: dict[str, Any]) -> list[str]:
     needles: list[str] = []
     user_scenario = task.get("user_scenario")
     if isinstance(user_scenario, dict):
-        needles.extend(_strings(user_scenario))
+        instructions = user_scenario.get("instructions")
+        if isinstance(instructions, dict):
+            for key in ("known_info", "unknown_info", "reason_for_call", "task_instructions"):
+                needles.extend(_strings(instructions.get(key)))
+        else:
+            needles.extend(_strings(instructions))
+        needles.extend(_strings(user_scenario.get("persona")))
     evaluation_criteria = task.get("evaluation_criteria")
     if isinstance(evaluation_criteria, dict):
-        needles.extend(_strings(evaluation_criteria))
-    return [needle for needle in needles if len(needle.strip()) >= 8]
+        needles.extend(_strings(evaluation_criteria.get("nl_assertions")))
+    return list(dict.fromkeys(needle.strip() for needle in needles if _looks_like_hidden_prose(needle)))
+
+
+def _looks_like_hidden_prose(value: str) -> bool:
+    text = value.strip()
+    if len(text) < HIDDEN_PROSE_MIN_CHARS:
+        return False
+    words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", text)
+    return len(words) >= HIDDEN_PROSE_MIN_WORDS
 
 
 def _strings(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
-        out: list[str] = []
+        list_strings: list[str] = []
         for item in value:
-            out.extend(_strings(item))
-        return out
+            list_strings.extend(_strings(item))
+        return list_strings
     if isinstance(value, dict):
-        out: list[str] = []
+        dict_strings: list[str] = []
         for item in value.values():
-            out.extend(_strings(item))
-        return out
+            dict_strings.extend(_strings(item))
+        return dict_strings
     return []
 
 
@@ -786,7 +1134,9 @@ def _clean_text(value: Any, where: str, *, allow_empty: bool = False) -> str:
         raise Tau3ConversationIngestError(f"{where} must be a string")
     if not isinstance(value, str):
         raise Tau3ConversationIngestError(f"{where} must be a string")
-    cleaned = re.sub(r"<think>.*?</think>", "", value, flags=re.IGNORECASE | re.DOTALL).strip()
+    if re.search(r"</?think>", value, flags=re.IGNORECASE):
+        raise Tau3ConversationIngestError(f"{where}: thinking tags are forbidden")
+    cleaned = value.strip()
     if not cleaned and not allow_empty:
         raise Tau3ConversationIngestError(f"{where} must be non-empty")
     return cleaned
@@ -803,10 +1153,15 @@ def _manifest(
     source_revisions: set[str],
     domains: set[str],
     normalization_count: int,
+    tau_control_marker_row_count: int,
+    tau_control_marker_count: int,
+    tau_control_marker_only_drop_count: int,
     rejection_count: int,
     allow_teacher_protocol_normalization: bool,
     teacher_id: str,
     license_id: str,
+    generation_records: list[dict[str, Any]] | None = None,
+    generation_protocol: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     counts = {"train": len(rows_by_split["train"]), "valid": len(rows_by_split["valid"])}
     files = {
@@ -818,6 +1173,8 @@ def _manifest(
         for split, rows in rows_by_split.items()
     }
     tau_revision = sorted(source_revisions)[0] if len(source_revisions) == 1 else "mixed"
+    generation_records = generation_records or []
+    generation_protocol_hash = generation_protocol.get("sha256") if generation_protocol else None
     return {
         "schema_version": TAU3_CONVERSATION_CORPUS_SCHEMA_VERSION,
         "tau_revision": tau_revision,
@@ -828,6 +1185,8 @@ def _manifest(
         "source_revisions": sorted(source_revisions),
         "inputs": {
             "results": result_records,
+            "generation_manifests": generation_records,
+            "generation_protocol": generation_protocol,
             "source_dir": {"path": str(source_dir), "sha256": _dir_listing_hash(source_dir)},
             "tool_schema": {"path": str(tool_schema_path), "sha256": _file_sha256(tool_schema_path)},
             "sealed_manifest": (
@@ -837,6 +1196,17 @@ def _manifest(
             ),
         },
         "source_results": result_records,
+        "source_generation_manifests": generation_records,
+        "generation_provenance": {
+            "manifest_count": len(generation_records),
+            "task_receipt_count": sum(record["task_receipt_count"] for record in generation_records),
+            "success_count": sum(record["success_count"] for record in generation_records),
+            "failure_count": sum(record["failure_count"] for record in generation_records),
+            "admitted_success_count": sum(record["admitted_success_count"] for record in generation_records),
+            "excluded_success_count": sum(record["excluded_success_count"] for record in generation_records),
+            "protocol_sha256": generation_protocol_hash,
+            "protocol": generation_protocol,
+        },
         "tool_schema_artifact": {"path": str(tool_schema_path), "sha256": _file_sha256(tool_schema_path)},
         "files": files,
         "row_hashes": row_hashes,
@@ -858,6 +1228,9 @@ def _manifest(
         "normalization": {
             "allow_teacher_protocol_normalization": allow_teacher_protocol_normalization,
             "normalized_mixed_content_tool_call_rows": normalization_count,
+            "normalized_tau_control_marker_rows": tau_control_marker_row_count,
+            "stripped_tau_control_markers": tau_control_marker_count,
+            "dropped_tau_control_marker_only_user_messages": tau_control_marker_only_drop_count,
         },
         "rejected_before_abort": rejection_count,
         "training_started": False,

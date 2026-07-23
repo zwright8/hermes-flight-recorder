@@ -42,6 +42,30 @@
       "name": "tau3_evaluation"
     },
     {
+      "artifact": "tau3_candidate_selection",
+      "artifact_schema_version": "hfr.tau3_candidate_selection.v1",
+      "description": "Private governed Tau-3 development candidate-selection report.",
+      "filename": "tau3_candidate_selection.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_selection.v1.schema.json",
+      "name": "tau3_candidate_selection"
+    },
+    {
+      "artifact": "tau3_candidate_identity",
+      "artifact_schema_version": "hfr.tau3_candidate_identity.v1",
+      "description": "Public-safe hash-only identity binding one governed Tau-3 development candidate to final MLX training output and endpoint model string.",
+      "filename": "tau3_candidate_identity.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_identity.v1.schema.json",
+      "name": "tau3_candidate_identity"
+    },
+    {
+      "artifact": "tau3_candidate_lock",
+      "artifact_schema_version": "hfr.tau3_candidate_lock.v1",
+      "description": "Public-safe hash-only lock for the single development-selected Tau-3 candidate.",
+      "filename": "tau3_candidate_lock.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_lock.v1.schema.json",
+      "name": "tau3_candidate_lock"
+    },
+    {
       "artifact": "scenario",
       "artifact_schema_version": "hfr.scenario.contract.v1",
       "description": "Scenario contract accepted by run, score, and run-suite.",

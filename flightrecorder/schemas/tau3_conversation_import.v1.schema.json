@@ -13,6 +13,30 @@
     "evaluation_criteria_exposure": {
       "const": false
     },
+    "generation_provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest_count": {"minimum": 0, "type": "integer"},
+        "task_receipt_count": {"minimum": 0, "type": "integer"},
+        "success_count": {"minimum": 0, "type": "integer"},
+        "failure_count": {"minimum": 0, "type": "integer"},
+        "admitted_success_count": {"minimum": 0, "type": "integer"},
+        "excluded_success_count": {"minimum": 0, "type": "integer"},
+        "protocol_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "protocol": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]}
+      },
+      "required": [
+        "manifest_count",
+        "task_receipt_count",
+        "success_count",
+        "failure_count",
+        "admitted_success_count",
+        "excluded_success_count",
+        "protocol_sha256",
+        "protocol"
+      ],
+      "type": "object"
+    },
     "hidden_instruction_exposure": {
       "const": false
     },
@@ -21,6 +45,10 @@
     },
     "schema_version": {
       "const": "hfr.tau3_conversation_import.v1"
+    },
+    "source_generation_manifests": {
+      "items": {"$ref": "#/$defs/generationManifest"},
+      "type": "array"
     },
     "sealed_rows": {
       "const": 0
@@ -43,6 +71,7 @@
     "counts",
     "files",
     "source_results",
+    "generation_provenance",
     "tool_schema_artifact",
     "sealed_rows",
     "test_rows",
@@ -50,6 +79,113 @@
     "evaluation_criteria_exposure",
     "training_started"
   ],
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "file": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["path", "sha256"],
+      "type": "object"
+    },
+    "generationManifest": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "tau_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "task_receipt_count": {"minimum": 0, "type": "integer"},
+        "success_count": {"minimum": 0, "type": "integer"},
+        "failure_count": {"minimum": 0, "type": "integer"},
+        "admitted_success_count": {"minimum": 0, "type": "integer"},
+        "excluded_success_count": {"minimum": 0, "type": "integer"},
+        "results": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "path": {"type": "string"},
+              "sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+              "training_admitted": {"type": "boolean"},
+              "training_rejection_code": {
+                "anyOf": [
+                  {"enum": ["errored_tool_result", "generator_terminal_failure", "thinking_tag"]},
+                  {"type": "null"}
+                ]
+              },
+              "training_rejection_reason": {
+                "anyOf": [
+                  {"minLength": 1, "type": "string"},
+                  {"type": "null"}
+                ]
+              },
+              "terminal_status": {"type": "string", "minLength": 1},
+              "task_receipt_path": {"type": "string", "minLength": 1},
+              "task_receipt_sha256": {"$ref": "#/$defs/sha256"}
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {"training_admitted": {"const": true}},
+                  "required": ["training_admitted"]
+                },
+                "then": {
+                  "properties": {
+                    "training_rejection_code": {"type": "null"},
+                    "training_rejection_reason": {"type": "null"}
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {"training_admitted": {"const": false}},
+                  "required": ["training_admitted"]
+                },
+                "then": {
+                  "properties": {
+                    "training_rejection_code": {
+                      "enum": ["errored_tool_result", "generator_terminal_failure", "thinking_tag"]
+                    },
+                    "training_rejection_reason": {"minLength": 1, "type": "string"}
+                  }
+                }
+              }
+            ],
+            "required": [
+              "path",
+              "sha256",
+              "training_admitted",
+              "training_rejection_code",
+              "training_rejection_reason",
+              "terminal_status",
+              "task_receipt_path",
+              "task_receipt_sha256"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "tau_revision",
+        "protocol_sha256",
+        "task_receipt_count",
+        "success_count",
+        "failure_count",
+        "admitted_success_count",
+        "excluded_success_count",
+        "results"
+      ],
+      "type": "object"
+    }
+  },
   "title": "Tau-3 Conversation Import Manifest",
   "type": "object"
 }

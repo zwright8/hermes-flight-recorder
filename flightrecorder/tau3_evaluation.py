@@ -16,7 +16,7 @@ import random
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .repeated_eval import canonical_sha256, paired_bootstrap
 from .schema_registry import check_schema_contract
@@ -49,7 +49,7 @@ class Tau3EvaluationError(ValueError):
 
 def analyze_tau3_evaluation(
     *,
-    arm_result_paths: dict[str, Iterable[str | Path]],
+    arm_result_paths: Mapping[str, Iterable[str | Path]],
     out_path: str | Path | None = None,
     mode: str = "development",
     expected_tau_revision: str,
@@ -156,7 +156,7 @@ def analyze_tau3_evaluation(
         effects=effects,
     )
     failed = [check for check in checks if not check["passed"]]
-    report = {
+    report: dict[str, Any] = {
         "schema_version": TAU3_EVALUATION_SCHEMA_VERSION,
         "created_at": created_at or _now_utc(),
         "mode": mode,
@@ -289,12 +289,15 @@ def _extract_result_rows(
     expected_tau_revision: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
     errors: list[str] = []
-    info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+    info_raw = payload.get("info")
+    info: dict[str, Any] = dict(info_raw) if isinstance(info_raw, dict) else {}
     if info.get("git_commit") != expected_tau_revision:
         errors.append(f"{arm}:{path}: git revision mismatch")
     harness = _normalized_harness(info)
     _validate_harness(harness, arm=arm, path=path, errors=errors)
-    domain = str((info.get("environment_info") or {}).get("domain_name") or "")
+    env_info_raw = info.get("environment_info")
+    env_info: dict[str, Any] = dict(env_info_raw) if isinstance(env_info_raw, dict) else {}
+    domain = str(env_info.get("domain_name") or "")
     if domain not in DOMAINS:
         errors.append(f"{arm}:{path}: unsupported domain {domain!r}")
     task_by_id = {
@@ -312,17 +315,21 @@ def _extract_result_rows(
         if task is None:
             errors.append(f"{arm}:{path}: simulation {index} has no matching task")
             continue
-        reward_info = sim.get("reward_info") if isinstance(sim.get("reward_info"), dict) else {}
+        reward_info_raw = sim.get("reward_info")
+        reward_info: dict[str, Any] = dict(reward_info_raw) if isinstance(reward_info_raw, dict) else {}
         reward = _number(reward_info.get("reward"))
         trial = sim.get("trial")
         seed = sim.get("seed")
         if not isinstance(trial, int) or not isinstance(seed, int):
             errors.append(f"{arm}:{path}: simulation {index} missing integer trial/seed")
-        db_check = reward_info.get("db_check") if isinstance(reward_info.get("db_check"), dict) else {}
+        db_check_raw = reward_info.get("db_check")
+        db_check: dict[str, Any] = dict(db_check_raw) if isinstance(db_check_raw, dict) else {}
         db_match = db_check.get("db_match")
-        review = sim.get("review") if isinstance(sim.get("review"), dict) else None
-        review_errors = review.get("errors") if isinstance(review, dict) else None
-        policy_provable = isinstance(review_errors, list)
+        review_raw = sim.get("review")
+        review: dict[str, Any] = dict(review_raw) if isinstance(review_raw, dict) else {}
+        review_errors_raw = review.get("errors")
+        review_errors: list[Any] = list(review_errors_raw) if isinstance(review_errors_raw, list) else []
+        policy_provable = isinstance(review_errors_raw, list)
         policy_violation = _policy_violation(review_errors) if policy_provable else None
         reward_basis = _reward_basis(reward_info.get("reward_basis"))
         db_evaluated = "DB" in reward_basis
@@ -355,9 +362,12 @@ def _extract_result_rows(
 
 
 def _normalized_harness(info: dict[str, Any]) -> dict[str, Any]:
-    user = info.get("user_info") if isinstance(info.get("user_info"), dict) else {}
-    agent = info.get("agent_info") if isinstance(info.get("agent_info"), dict) else {}
-    env = info.get("environment_info") if isinstance(info.get("environment_info"), dict) else {}
+    user_raw = info.get("user_info")
+    agent_raw = info.get("agent_info")
+    env_raw = info.get("environment_info")
+    user: dict[str, Any] = dict(user_raw) if isinstance(user_raw, dict) else {}
+    agent: dict[str, Any] = dict(agent_raw) if isinstance(agent_raw, dict) else {}
+    env: dict[str, Any] = dict(env_raw) if isinstance(env_raw, dict) else {}
     return {
         "git_commit": info.get("git_commit"),
         "max_steps": info.get("max_steps"),
@@ -497,11 +507,11 @@ def _domain_stratified_macro_bootstrap(
     rng = random.Random(seed)
     boot: list[float] = []
     for _ in range(samples):
-        domain_means = []
+        resampled_domain_means = []
         for domain in DOMAINS:
             values = by_domain[domain]
-            domain_means.append(statistics.fmean(values[rng.randrange(len(values))] for _ in range(len(values))))
-        boot.append(statistics.fmean(domain_means))
+            resampled_domain_means.append(statistics.fmean(values[rng.randrange(len(values))] for _ in range(len(values))))
+        boot.append(statistics.fmean(resampled_domain_means))
     boot.sort()
     lower_index = max(0, min(samples - 1, math.floor(0.025 * (samples - 1))))
     upper_index = max(0, min(samples - 1, math.ceil(0.975 * (samples - 1))))
@@ -695,11 +705,12 @@ def _reward_basis(value: Any) -> list[str]:
     return []
 
 
-def _policy_violation(errors: list[Any]) -> bool:
+def _policy_violation(errors: Iterable[Any]) -> bool:
     for error in errors:
         if not isinstance(error, dict) or error.get("source") != "agent":
             continue
-        tags = error.get("error_tags") if isinstance(error.get("error_tags"), list) else []
+        tags_raw = error.get("error_tags")
+        tags: list[Any] = list(tags_raw) if isinstance(tags_raw, list) else []
         if any(str(tag).lower() == "guideline_violation" for tag in tags):
             return True
     return False

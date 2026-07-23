@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import textwrap
 import unittest
@@ -12,6 +13,7 @@ from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
+    main as tau3_mlx_training_main,
     run_tau3_mlx_training,
 )
 from flightrecorder.tau3_model_identity import build_tau3_model_identity
@@ -140,7 +142,77 @@ def _fake_model(root: Path) -> tuple[Path, Path]:
     return model, identity_path
 
 
-def _mixture_variant(root: Path, *, contaminated: bool = False) -> Path:
+def _protocol_config(root: Path, identity_path: Path) -> Path:
+    identity = _read_json(identity_path)
+    protocol = {
+        "schema_version": "hfr.tau3_protocol_config.v1",
+        "protocol_manifest": {
+            "schema_version": "hfr.tau3_protocol_manifest.v1",
+            "title": "Tau-3 MLX mixture training fixture",
+            "signature": "a" * 64,
+        },
+        "tau_revision": {"schema_version": "hfr.tau3_revision.v1", "revision": "tau-fixture-rev"},
+        "split_manifest": {"schema_version": "hfr.tau3_split_manifest.v1", "splits": {}},
+        "harness_contract": {"schema_version": "hfr.tau3_harness_contract.v1", "fixed": True, "no_test_time_search": True},
+        "model_freeze": {
+            "schema_version": "hfr.tau3_model_freeze.v1",
+            "base_model": {
+                "name": identity["model_id"],
+                "revision": identity["revision"],
+                "local_identity_sha256": _sha256(identity_path),
+                "local_tree_sha256": identity["tree_sha256"],
+                "quantization": "4-bit",
+            },
+        },
+        "budget": {"schema_version": "hfr.tau3_budget.v1", "max_seconds": 604800, "local_only": True, "network": False},
+        "sealed_manifest": {"schema_version": "hfr.tau3_sealed_manifest.v1", "quarantine_predates_generation": True},
+        "mlx_qlora_plan": {
+            "schema_version": "hfr.tau3_mlx_qlora_plan.v1",
+            "passed": True,
+            "backend": "mlx-lm",
+            "method": "4-bit QLoRA LoRA adapter",
+            "quantization": "4-bit",
+            "local_only": True,
+            "network": False,
+            "output_contract": {"adapter_only": True, "base_revision_required": True, "quantization_identity_required": True},
+            "command_argv": ["python", "-m", "mlx_lm", "lora", "--fine-tune-type", "lora"],
+        },
+        "recipe_space": {
+            "schema_version": "hfr.tau3_recipe_space.v1",
+            "bounded": True,
+            "max_trials": 12,
+            "sealed_used": False,
+            "development_only": True,
+            "bounds": {
+                "rank": [8, 16, 32],
+                "alpha": [16, 20, 32],
+                "learning_rate": [0.000001, 0.0002],
+                "sequence_length": [2048, 8192],
+                "steps": [1, 2000],
+            },
+        },
+        "candidate_selection_contract": {
+            "schema_version": "hfr.tau3_candidate_selection.v1",
+            "passed": True,
+            "development_only": True,
+            "sealed_used": False,
+        },
+        "contamination_attestation": {"passed": True},
+        "redaction_attestation": {"passed": True},
+        "licenses": [
+            {"id": "base", "training_allowed": True},
+            {"id": "data", "training_allowed": True},
+            {"id": "tools", "training_allowed": True},
+            {"id": "harness", "training_allowed": True},
+        ],
+        "environment_manifest": {"schema_version": "hfr.tau3_environment.v1", "network_allowed": False},
+    }
+    path = root / "protocol.json"
+    _write_json(path, protocol)
+    return path
+
+
+def _mixture_variant(root: Path, *, protocol_path: Path | None = None, contaminated: bool = False) -> Path:
     source = root / "clean_source"
     source.mkdir()
     train_source = {
@@ -155,9 +227,20 @@ def _mixture_variant(root: Path, *, contaminated: bool = False) -> Path:
     }
     _write_jsonl(source / "train.jsonl", [train_source])
     _write_jsonl(source / "valid.jsonl", [valid_source])
+    protocol_sha256 = _sha256(protocol_path) if protocol_path is not None else None
+    source_manifest = {
+        "schema_version": "hfr.tau3_conversation_import.v1",
+        "passed": True,
+        "files": {
+            "train": {"path": "train.jsonl", "sha256": _sha256(source / "train.jsonl")},
+            "valid": {"path": "valid.jsonl", "sha256": _sha256(source / "valid.jsonl")},
+        },
+        "generation_provenance": {"protocol_sha256": protocol_sha256},
+    }
+    _write_json(source / "manifest.json", source_manifest)
     variant = root / "mixtures" / "assistant_turn_targets"
     variant.mkdir(parents=True)
-    train_row = {"messages": train_source["messages"], "metadata": {"source_row_sha256": _sha256(source / "train.jsonl")}}
+    train_row: dict[str, Any] = {"messages": train_source["messages"], "metadata": {"source_row_sha256": _sha256(source / "train.jsonl")}}
     if contaminated:
         train_row["metadata"]["invented_tau_tool"] = True
     valid_row = {"messages": valid_source["messages"], "metadata": {"source_row_sha256": _sha256(source / "valid.jsonl")}}
@@ -172,6 +255,7 @@ def _mixture_variant(root: Path, *, contaminated: bool = False) -> Path:
             "passed": True,
             "source_binding": {
                 "source_dir": str(source),
+                "source_manifest": {"path": "manifest.json", "sha256": _sha256(source / "manifest.json")},
                 "train": {"path": "train.jsonl", "sha256": _sha256(source / "train.jsonl")},
                 "valid": {"path": "valid.jsonl", "sha256": _sha256(source / "valid.jsonl")},
             },
@@ -196,6 +280,11 @@ def _mixture_variant(root: Path, *, contaminated: bool = False) -> Path:
             "training_started": False,
         },
     )
+    if protocol_path is not None:
+        _mutate_json(
+            variant / "manifest.json",
+            lambda payload: payload["source_binding"].__setitem__("protocol_sha256", protocol_sha256),
+        )
     return variant
 
 
@@ -357,8 +446,10 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             root = Path(tmp)
             _install_fake_python(root, "success")
             model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
             receipt = run_tau3_mlx_training(
-                mixture_dir=_mixture_variant(root),
+                mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                protocol_path=protocol,
                 model_path=model,
                 model_identity_path=identity,
                 output_dir=root / "out",
@@ -375,8 +466,185 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertNotIn("--lora-scale", command)
             self.assertTrue(receipt["mlx_lora_config"]["read_only"])
             cfg = _read_json(root / "out" / "mlx_lora_config.json")
+            self.assertEqual(cfg["adapter_path"], "adapter")
+            self.assertIn(str((root / "out" / "adapter").resolve()), command)
             self.assertEqual(cfg["lora_parameters"], {"rank": 16, "scale": 20.0, "dropout": 0.0})
+            self.assertEqual(receipt["training_binding"]["model"]["identity_sha256"], _sha256(identity))
+            self.assertEqual(receipt["training_binding"]["protocol"]["sha256"], _sha256(protocol))
+            self.assertRegex(receipt["training_binding"]["recipe"]["recipe_id"], r"^tau3-mlx-recipe-[0-9a-f]{16}$")
             self.assertTrue(receipt["weights_updated"])
+
+    def test_mixture_resume_cli_adds_resume_adapter_file_and_records_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd = Path.cwd()
+            os.chdir(root)
+            try:
+                _install_fake_python(root, "success")
+                model, identity = _fake_model(root)
+                protocol = _protocol_config(root, identity)
+                mixture = _mixture_variant(root, protocol_path=protocol)
+                prior = run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "prior",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                    created_at="2026-07-22T00:00:00Z",
+                )
+                self.assertTrue(prior["weights_updated"])
+                prior_receipt = root / "prior" / "training_receipt.json"
+                resume_file = root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz"
+                code = tau3_mlx_training_main(
+                    [
+                        "--mixture-dir",
+                        str(mixture),
+                        "--protocol",
+                        str(protocol),
+                        "--model-path",
+                        str(model),
+                        "--model-identity",
+                        str(identity),
+                        "--out",
+                        str(root / "resumed"),
+                        "--iters",
+                        "3",
+                        "--timeout-seconds",
+                        "5",
+                        "--resume-receipt",
+                        str(prior_receipt),
+                        "--resume-adapter-file",
+                        str(resume_file),
+                    ]
+                )
+            finally:
+                os.chdir(cwd)
+            self.assertEqual(code, 0)
+            receipt = _read_json(root / "resumed" / "training_receipt.json")
+            self.assertIn("--resume-adapter-file", receipt["command"])
+            self.assertIn(str(resume_file.resolve()), receipt["command"])
+            self.assertEqual(receipt["config"]["resume"]["receipt"]["sha256"], _sha256(prior_receipt))
+            self.assertEqual(receipt["training_binding"]["resume"]["adapter_file"]["sha256"], _sha256(resume_file))
+            self.assertEqual(receipt["training_binding"]["resume"]["adapter_file"]["relative_path"], "checkpoint-0001/weights.npz")
+            prelaunch = _read_json(root / "resumed" / "prelaunch_receipt.json")
+            self.assertEqual(prelaunch["config"]["resume"], receipt["config"]["resume"])
+            self.assertEqual(prelaunch["training_binding"]["resume"], receipt["training_binding"]["resume"])
+
+    def test_portable_receipt_paths_replay_after_output_relocation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture = _mixture_variant(root, protocol_path=protocol)
+            prior = run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "prior",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                created_at="2026-07-22T00:00:00Z",
+            )
+            self.assertEqual(prior["output_dir"], ".")
+            self.assertEqual(prior["prelaunch_receipt"]["path"], "prelaunch_receipt.json")
+            self.assertEqual(prior["telemetry"]["path"], "telemetry.jsonl")
+            self.assertEqual(prior["mlx_lora_config"]["path"], "mlx_lora_config.json")
+            self.assertEqual(prior["adapter"]["path"], "adapter")
+
+            relocated = root / "relocated" / "prior"
+            shutil.copytree(root / "prior", relocated)
+            resumed = run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "resumed",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=3, timeout_seconds=5),
+                resume_receipt_path=relocated / "training_receipt.json",
+                resume_adapter_file=relocated / "adapter" / "checkpoint-0001" / "weights.npz",
+            )
+            self.assertTrue(resumed["weights_updated"])
+
+            tampered = root / "tampered" / "prior"
+            shutil.copytree(root / "prior", tampered)
+            (tampered / "adapter" / "checkpoint-0001" / "weights.npz").write_bytes(b"tampered")
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "tampered-resume",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=3, timeout_seconds=5),
+                    resume_receipt_path=tampered / "training_receipt.json",
+                    resume_adapter_file=tampered / "adapter" / "checkpoint-0001" / "weights.npz",
+                )
+
+    def test_resume_tampered_adapter_file_fails_closed_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture = _mixture_variant(root, protocol_path=protocol)
+            run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "prior",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            resume_file = root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz"
+            resume_file.write_bytes(b"tampered-checkpoint")
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "resumed",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=3, timeout_seconds=5),
+                    resume_receipt_path=root / "prior" / "training_receipt.json",
+                    resume_adapter_file=resume_file,
+                )
+
+    def test_resume_hyperparameter_mismatch_fails_closed_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture = _mixture_variant(root, protocol_path=protocol)
+            run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "prior",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "resumed",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=3, rank=32, timeout_seconds=5),
+                    resume_receipt_path=root / "prior" / "training_receipt.json",
+                    resume_adapter_file=root / "prior" / "adapter" / "checkpoint-0001" / "weights.npz",
+                )
 
     def test_normal_venv_python_leaf_symlink_is_allowed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -387,8 +655,10 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             python.replace(target)
             python.symlink_to(target)
             model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
             receipt = run_tau3_mlx_training(
-                mixture_dir=_mixture_variant(root),
+                mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                protocol_path=protocol,
                 model_path=model,
                 model_identity_path=identity,
                 output_dir=root / "out",
@@ -403,9 +673,82 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             root = Path(tmp)
             _install_fake_python(root, "success")
             model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
             with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
                 run_tau3_mlx_training(
-                    mixture_dir=_mixture_variant(root, contaminated=True),
+                    mixture_dir=_mixture_variant(root, protocol_path=protocol, contaminated=True),
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(timeout_seconds=5),
+                )
+
+    def test_mixture_protocol_drift_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture = _mixture_variant(root, protocol_path=protocol)
+            _mutate_json(protocol, lambda payload: payload["harness_contract"].__setitem__("turn_limit", 99))
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(timeout_seconds=5),
+                )
+
+    def test_mixture_base_identity_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            _mutate_json(protocol, lambda payload: payload["model_freeze"]["base_model"].__setitem__("revision", "different-revision"))
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(timeout_seconds=5),
+                )
+
+    def test_mixture_out_of_space_recipe_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(rank=64, timeout_seconds=5),
+                )
+
+    def test_mixture_missing_protocol_provenance_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root),
+                    protocol_path=protocol,
                     model_path=model,
                     model_identity_path=identity,
                     output_dir=root / "out",

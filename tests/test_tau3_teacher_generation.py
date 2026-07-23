@@ -52,6 +52,23 @@ class Tau3TeacherGenerationTests(unittest.TestCase):
             )
             self.assertEqual(manifest["protocol"]["sha256"], hashlib.sha256(protocol.read_bytes()).hexdigest())
 
+            (root / "out" / "manifest.json").unlink()
+            protocol_payload = json.loads(protocol.read_text(encoding="utf-8"))
+            protocol_payload["model_freeze"]["teachers"][0]["name"] = "changed-teacher-pin"
+            protocol.write_text(json.dumps(protocol_payload) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(Tau3TeacherGenerationError, "prelaunch receipt does not match"):
+                run_tau3_teacher_generation(
+                    source_jsonl=source,
+                    out_dir=root / "out",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    teacher=endpoint,
+                    user=endpoint,
+                    protocol_path=protocol,
+                    config=Tau3TeacherGenerationConfig(max_tasks=1, timeout_seconds=2),
+                )
+
             bad = root / "bad-protocol.json"
             bad.write_text(
                 json.dumps(
