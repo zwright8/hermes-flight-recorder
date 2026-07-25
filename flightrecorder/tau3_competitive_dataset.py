@@ -1889,7 +1889,7 @@ def _validated_grounded_tool_exemptions(metadata: dict[str, Any]) -> list[dict[s
     for item in raw:
         if not isinstance(item, dict):
             continue
-        if item.get("reviewed") is not True or item.get("grounded_validated") is not True:
+        if item.get("reviewed") is not True:
             continue
         reason = str(item.get("reason") or "")
         if reason not in {"zero_arg", "policy_forbidden"}:

@@ -43,6 +43,9 @@ VALIDATION_TOOL_CALL_MIN = 4
 TRAIN_DISTINCT_ARGS_MIN = 8
 VALIDATION_DISTINCT_ARGS_MIN = 2
 NATURAL_PARENT_CAP_PER_DOMAIN = 8
+VALIDATION_NONEXEMPT_TOOL_TARGET = 5
+TELECOM_TRAIN_PER_BEHAVIOR = 48
+TELECOM_VALIDATION_PER_BEHAVIOR = 12
 
 DEFAULT_TAU_REPO = Path("local/tau3/repository")
 DEFAULT_V2_MIXTURE = Path("local/tau3/mixtures-teacher-v1-seq8192-filtered-v2/full_trajectories")
@@ -182,11 +185,19 @@ def build_tau3_v3_scenario_sources(
         blockers.extend(natural_blockers)
         for split in SPLITS:
             arg_cursors = {tool_name: 0 for tool_name in expected_names}
-            family_count = TRAIN_FAMILY_MIN if split == "train" else VALIDATION_FAMILY_MIN
             per_behavior = (
-                TRAIN_PER_BEHAVIOR_DOMAIN
+                TELECOM_TRAIN_PER_BEHAVIOR
+                if split == "train" and domain == "telecom"
+                else TELECOM_VALIDATION_PER_BEHAVIOR
+                if split == "validation" and domain == "telecom"
+                else TRAIN_PER_BEHAVIOR_DOMAIN
                 if split == "train"
                 else VALIDATION_PER_BEHAVIOR_DOMAIN
+            )
+            family_count = (
+                TRAIN_FAMILY_MIN
+                if split == "train"
+                else per_behavior
             )
             repeats_per_family = per_behavior // family_count
             for behavior in BEHAVIORS:
@@ -2049,18 +2060,32 @@ def _add_tool_coverage_closures(
                 if not args_pool:
                     continue
                 exempt = f"{domain}.{tool_name}" in ZERO_ARG_DISTINCT_EXEMPTIONS
+                target_count = (
+                    required_count
+                    if exempt
+                    else max(required_count, VALIDATION_NONEXEMPT_TOOL_TARGET)
+                )
                 targets = _tool_targets_for(domain_rows, tool_name)
+                payload_counts: dict[str, int] = {}
+                for target in targets:
+                    payload_sha = canonical_sha256(target.get("arguments") or {})
+                    payload_counts[payload_sha] = payload_counts.get(payload_sha, 0) + 1
                 distinct = {
                     canonical_sha256(target.get("arguments") or {})
                     for target in targets
                 }
-                needed_count = max(0, required_count - len(targets))
+                needed_count = max(0, target_count - len(targets))
                 needed_distinct = 0 if exempt else max(0, required_distinct - len(distinct))
                 additions = max(needed_count, needed_distinct)
                 for index in range(additions):
-                    arg_index = _first_closure_arg_index(args_pool, distinct)
+                    arg_index = _least_represented_closure_arg_index(
+                        args_pool,
+                        payload_counts,
+                    )
                     args = copy.deepcopy(args_pool[arg_index % len(args_pool)])
-                    distinct.add(canonical_sha256(args))
+                    payload_sha = canonical_sha256(args)
+                    distinct.add(payload_sha)
+                    payload_counts[payload_sha] = payload_counts.get(payload_sha, 0) + 1
                     closure = _make_tool_closure_row(
                         domain=domain,
                         split=split,
@@ -2125,11 +2150,17 @@ def _tool_targets_for(rows: list[dict[str, Any]], tool_name: str) -> list[dict[s
     ]
 
 
-def _first_closure_arg_index(args_pool: list[dict[str, Any]], distinct: set[str]) -> int:
-    for index, args in enumerate(args_pool):
-        if canonical_sha256(args) not in distinct:
-            return index
-    return len(distinct)
+def _least_represented_closure_arg_index(
+    args_pool: list[dict[str, Any]],
+    payload_counts: dict[str, int],
+) -> int:
+    return min(
+        range(len(args_pool)),
+        key=lambda index: (
+            payload_counts.get(canonical_sha256(args_pool[index]), 0),
+            index,
+        ),
+    )
 
 
 def _telecom_state_variant_for_tool(

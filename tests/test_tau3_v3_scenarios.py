@@ -11,6 +11,7 @@ from flightrecorder.tau3_v3_scenarios import (
     TAU3_V3_SCENARIO_SUMMARY_SCHEMA_VERSION,
     Tau3V3ScenarioError,
     _coverage_summary,
+    _least_represented_closure_arg_index,
     _telecom_state_variant_for_tool,
     build_tau3_v3_scenario_sources,
 )
@@ -166,6 +167,20 @@ def _fake_runtime(payload: dict[str, Any]) -> _FakeRuntime:
 
 
 class Tau3V3ScenarioSourceTests(unittest.TestCase):
+    def test_closure_arguments_fill_the_least_represented_payload(self) -> None:
+        pool = [{"id": f"record-{index}"} for index in range(4)]
+        counts = {
+            canonical_sha256(pool[0]): 5,
+            canonical_sha256(pool[1]): 2,
+            canonical_sha256(pool[2]): 2,
+            canonical_sha256(pool[3]): 0,
+        }
+
+        self.assertEqual(
+            _least_represented_closure_arg_index(pool, counts),
+            3,
+        )
+
     def test_dry_run_builds_chronological_rows_without_writing_private_output(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:
             paths = _fixture_inputs(Path(temp))
@@ -272,6 +287,12 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                     "successful_completion"
                 ],
                 24,
+            )
+            self.assertEqual(
+                result.summary["coverage"]["behavior_counts"]["train"]["telecom"][
+                    "successful_completion"
+                ],
+                48,
             )
 
     def test_writes_source_and_sibling_contamination_report_when_not_dry_run(self) -> None:

@@ -23,6 +23,7 @@ from flightrecorder.tau3_competitive_dataset import (
     _contamination_report_payload_errors,
     _contamination_summary,
     _load_token_counter,
+    _validated_grounded_tool_exemptions,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger, validate_tau3_exposure_ledger
 from flightrecorder.tau3_objective_validity import build_tau3_objective_validity_report
@@ -589,6 +590,30 @@ def _grounded_validation_patch() -> mock._patch:
 
 
 class Tau3CompetitiveDatasetTests(unittest.TestCase):
+    def test_promotes_strict_grounded_zero_arg_exemption(self) -> None:
+        self.assertEqual(
+            _validated_grounded_tool_exemptions(
+                {
+                    "tool_exemptions": [
+                        {
+                            "tool_name": "list_all_airports",
+                            "reason": "zero_arg",
+                            "reviewed": True,
+                            "reviewer": "grounded-validator",
+                        }
+                    ]
+                }
+            ),
+            [
+                {
+                    "tool_name": "list_all_airports",
+                    "reason": "zero_arg",
+                    "reviewed": True,
+                    "grounded_validated": True,
+                }
+            ],
+        )
+
     def test_accepts_exact_v3_scenario_contamination_report(self) -> None:
         report = _scenario_contamination_report()
 
