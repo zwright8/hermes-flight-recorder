@@ -137,6 +137,7 @@ def build_tau3_v3_scenario_sources(
 
     rows: list[dict[str, Any]] = []
     replayed_argument_pools: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    mutating_argument_pools: dict[str, dict[str, list[dict[str, Any]]]] = {}
     blockers: list[str] = []
     for domain in DOMAINS:
         expected_names = [tool["function"]["name"] for tool in official_catalog[domain]]
@@ -152,7 +153,7 @@ def build_tau3_v3_scenario_sources(
             blockers.append(
                 f"{domain} runtime tool catalog name set mismatch with immutable v2 catalog"
             )
-        pools, pool_blockers = _build_replayed_argument_pools(
+        pools, mutating_pools, pool_blockers = _build_replayed_argument_pools(
             domain=domain,
             state=base_states[domain],
             tool_names=expected_names,
@@ -162,6 +163,7 @@ def build_tau3_v3_scenario_sources(
             runtime_factory=runtime,
         )
         replayed_argument_pools[domain] = pools
+        mutating_argument_pools[domain] = mutating_pools
         blockers.extend(pool_blockers)
         natural_rows, natural_update, natural_blockers = _build_replay_exact_natural_rows(
             corpus=corpus_path,
@@ -216,6 +218,7 @@ def build_tau3_v3_scenario_sources(
                         v2_tool_catalog=official_catalog[domain],
                         initial_state=base_states[domain],
                         pools=pools,
+                        mutating_pools=mutating_pools,
                         tool_names=expected_names,
                     )
                     _replay_source_row(row, runtime)
@@ -1218,9 +1221,16 @@ def _build_replayed_argument_pools(
     runtime_family: str,
     tau_repo: Path,
     runtime_factory: RuntimeFactory,
-) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+) -> tuple[
+    dict[str, list[dict[str, Any]]],
+    dict[str, list[dict[str, Any]]],
+    list[str],
+]:
     candidates = _candidate_arguments(domain, state, tool_names)
     pools: dict[str, list[dict[str, Any]]] = {tool: [] for tool in tool_names}
+    mutating_pools: dict[str, list[dict[str, Any]]] = {
+        tool: [] for tool in tool_names
+    }
     blockers: list[str] = []
     for tool_name in tool_names:
         seen: set[str] = set()
@@ -1232,16 +1242,22 @@ def _build_replayed_argument_pools(
             runtime = runtime_factory(
                 _runtime_payload(domain, revision, runtime_family, state, tau_repo)
             )
+            pre_state_sha256 = canonical_sha256(runtime.state)
             try:
                 runtime.call(tool_name, copy.deepcopy(args))
             except Exception:
                 continue
             pools[tool_name].append(copy.deepcopy(args))
+            if (
+                _is_mutation_tool(tool_name)
+                and canonical_sha256(runtime.state) != pre_state_sha256
+            ):
+                mutating_pools[tool_name].append(copy.deepcopy(args))
             if len(pools[tool_name]) >= TRAIN_DISTINCT_ARGS_MIN:
                 break
         if not pools[tool_name]:
             blockers.append(f"{domain}.{tool_name} has no successful replayed argument pool")
-    return pools, blockers
+    return pools, mutating_pools, blockers
 
 
 def _candidate_arguments(
@@ -1651,6 +1667,7 @@ def _make_source_row(
     v2_tool_catalog: list[dict[str, Any]],
     initial_state: dict[str, Any],
     pools: dict[str, list[dict[str, Any]]],
+    mutating_pools: dict[str, list[dict[str, Any]]],
     tool_names: list[str],
 ) -> dict[str, Any]:
     source_id = f"v3-{split}-{domain}-{behavior}-{ordinal:03d}"
@@ -1658,20 +1675,54 @@ def _make_source_row(
     decision_ordinal = 0
     for offset in range(repeat_count):
         target_ordinal = ordinal + offset
+        target_pools = mutating_pools if behavior == "successful_completion" else pools
+        target_tool_names = [
+            name for name in tool_names if target_pools.get(name)
+        ]
+        if not target_tool_names:
+            raise Tau3V3ScenarioError(
+                f"{domain} has no state-changing tool arguments for successful_completion"
+            )
         tool_name = _select_tool_for_behavior(
             behavior,
             selection_base + target_ordinal,
-            tool_names,
+            target_tool_names,
         )
-        if not pools.get(tool_name):
-            tool_name = next((name for name in tool_names if pools.get(name)), tool_names[0])
-        args_pool = pools.get(tool_name) or [{}]
+        args_pool = target_pools[tool_name]
         args_index = arg_cursors.get(tool_name, 0)
         arg_cursors[tool_name] = args_index + 1
         args = copy.deepcopy(args_pool[args_index % len(args_pool)])
         tool_calls = [{"tool_name": tool_name, "arguments": args}]
         if behavior == "repeated_call_recovery":
             tool_calls.append({"tool_name": tool_name, "arguments": copy.deepcopy(args)})
+        if behavior == "successful_completion":
+            turns.append(
+                {
+                    "user": {"content": _user_prompt(domain, split, behavior, target_ordinal, args)},
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": tool_calls,
+                        "safe_corrected_target": _tool_target(
+                            tool_name,
+                            args,
+                            behavior="later_task_completion_actions",
+                        ),
+                    },
+                }
+            )
+            decision_ordinal += 1
+            turns.append(
+                {
+                    "user": {"content": "The tool result confirms the requested state change."},
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": [],
+                        "safe_corrected_target": _safe_target("successful_completion"),
+                    },
+                }
+            )
+            decision_ordinal += 1
+            continue
         if behavior in NEGATIVE_CORRECTION_BEHAVIORS:
             negative_tool_name, negative_arguments = _negative_action_tool(
                 behavior=behavior,

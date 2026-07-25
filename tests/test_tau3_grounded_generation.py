@@ -75,7 +75,13 @@ def _scenario(
                     "arguments": {"id": record_id, "patch": {"status": "updated"}},
                 }
             ]
-            target["text"] = "Completed the account update successfully."
+            target = {
+                "behavior": "later_task_completion_actions",
+                "kind": "tool_call",
+                "text": "",
+                "tool_name": "update_record",
+                "arguments": {"id": record_id, "patch": {"status": "updated"}},
+            }
     elif behavior == "empty_result_recovery":
         tool_calls = [{"tool_name": "empty_search", "arguments": {}}]
     elif behavior == "error_result_recovery":
@@ -140,6 +146,21 @@ def _scenario(
                         "behavior": behavior,
                         "kind": "assistant_message",
                         "text": f"Safely corrected {behavior} for {domain}.",
+                    },
+                },
+            }
+        )
+    elif behavior == "successful_completion" and not fabricated_success:
+        turns.append(
+            {
+                "user": {"content": "The tool confirmed the requested state change."},
+                "assistant": {
+                    "decision_ordinal": 1,
+                    "tool_calls": [],
+                    "safe_corrected_target": {
+                        "behavior": "successful_completion",
+                        "kind": "assistant_message",
+                        "text": "Completed the account update successfully.",
                     },
                 },
             }
@@ -563,6 +584,34 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 Tau3GroundedGenerationError,
                 "fabricates completion",
+            ):
+                build_tau3_grounded_generation_dataset(
+                    source=source,
+                    out_dir=root / "out",
+                    strict_coverage=False,
+                )
+
+    def test_completion_requires_mutation_on_an_earlier_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.jsonl"
+            row = _scenario(
+                split="train",
+                domain="airline",
+                family_index=0,
+                behavior="successful_completion",
+            )
+            row["turns"] = row["turns"][:1]
+            row["turns"][0]["assistant"]["safe_corrected_target"] = {
+                "behavior": "successful_completion",
+                "kind": "assistant_message",
+                "text": "Completed the account update successfully.",
+            }
+            _write_jsonl(source, [row])
+
+            with self.assertRaisesRegex(
+                Tau3GroundedGenerationError,
+                "without prior replayed post-state mutation",
             ):
                 build_tau3_grounded_generation_dataset(
                     source=source,

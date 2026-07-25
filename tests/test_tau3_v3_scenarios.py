@@ -254,6 +254,25 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                     ],
                     24,
                 )
+            success = next(
+                item
+                for item in result.rows
+                if item["domain"] == "airline"
+                and item["split"] == "train"
+                and "-successful_completion-" in item["source_id"]
+            )
+            action = success["turns"][0]["assistant"]["safe_corrected_target"]
+            completion = success["turns"][1]["assistant"]["safe_corrected_target"]
+            self.assertEqual(action["behavior"], "later_task_completion_actions")
+            self.assertEqual(action["kind"], "tool_call")
+            self.assertEqual(completion["behavior"], "successful_completion")
+            self.assertEqual(completion["kind"], "assistant_message")
+            self.assertEqual(
+                result.summary["coverage"]["behavior_counts"]["train"]["airline"][
+                    "successful_completion"
+                ],
+                24,
+            )
 
     def test_writes_source_and_sibling_contamination_report_when_not_dry_run(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:

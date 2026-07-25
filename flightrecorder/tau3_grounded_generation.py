@@ -938,22 +938,26 @@ def _completion_claim_errors(row: dict[str, Any], context: str) -> list[str]:
     errors: list[str] = []
     replay = row.get("tool_replay") if isinstance(row.get("tool_replay"), list) else []
     targets = row.get("training_targets") if isinstance(row.get("training_targets"), list) else []
-    mutation_replayed = any(
-        call.get("evidence_replayed") is True
-        and call.get("pre_state_sha256") != call.get("post_state_sha256")
-        and _dict(call.get("state_diff")).get("change_count", 0) > 0
-        for call in replay
-        if isinstance(call, dict)
-    )
     for index, target in enumerate(targets):
         if not isinstance(target, dict) or target.get("masked") is True:
             continue
         canonical = target.get("canonical_target")
         text = str(_dict(canonical).get("text") or "").lower()
         if target.get("behavior") == "successful_completion" or "completed" in text or "success" in text:
-            if not mutation_replayed:
+            decision = target.get("parent_assistant_decision_ordinal")
+            prior_mutation_replayed = any(
+                isinstance(call, dict)
+                and call.get("evidence_replayed") is True
+                and type(decision) is int
+                and type(call.get("parent_assistant_decision_ordinal")) is int
+                and call.get("parent_assistant_decision_ordinal") < decision
+                and call.get("pre_state_sha256") != call.get("post_state_sha256")
+                and _dict(call.get("state_diff")).get("change_count", 0) > 0
+                for call in replay
+            )
+            if not prior_mutation_replayed:
                 errors.append(
-                    f"{context}.training_targets[{index}] fabricates completion without replayed post-state mutation"
+                    f"{context}.training_targets[{index}] fabricates completion without prior replayed post-state mutation"
                 )
     return errors
 
