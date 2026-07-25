@@ -4,6 +4,7 @@ import hashlib
 import json
 import copy
 import sys
+import subprocess
 import tempfile
 import types
 import unittest
@@ -14,6 +15,7 @@ from unittest import mock
 from flightrecorder.tau3_competitive_dataset import (
     BEHAVIORS,
     CONTEXT_WINDOW_TOKENS,
+    GROUNDED_VALIDATOR_TIMEOUT_SECONDS,
     LINEAGE_ID,
     SOURCE_LINEAGE_ID,
     TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION,
@@ -1612,6 +1614,31 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
             env = kwargs["env"]
             self.assertEqual(env["PYTHONNOUSERSITE"], "1")
             self.assertIn(str(Path(__file__).resolve().parents[1]), env["PYTHONPATH"].split(":"))
+            self.assertEqual(kwargs["timeout"], GROUNDED_VALIDATOR_TIMEOUT_SECONDS)
+
+    def test_external_grounded_validator_timeout_rejects_build(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _write_source_dataset(root)
+            grounded = _write_grounded_bundle(root)
+            tokenizer_config = _write_tokenizer_config(root)
+            timeout = subprocess.TimeoutExpired(
+                cmd=[sys.executable, "validate_tau3_grounded_generation.py"],
+                timeout=GROUNDED_VALIDATOR_TIMEOUT_SECONDS,
+            )
+
+            with _install_fake_transformers(_FakeTokenizer()), mock.patch(
+                "flightrecorder.tau3_competitive_dataset.subprocess.run",
+                side_effect=timeout,
+            ):
+                with self.assertRaisesRegex(Exception, "grounded validator subprocess failed"):
+                    build_tau3_competitive_dataset(
+                        source_dataset_dir=source,
+                        out_dir=root / "v3",
+                        tokenizer_config_path=tokenizer_config,
+                        grounded_generation_bundle=grounded,
+                        grounded_validator_python=sys.executable,
+                    )
 
     def test_external_grounded_validator_failure_rejects_build(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

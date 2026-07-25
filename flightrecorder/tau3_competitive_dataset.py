@@ -77,6 +77,7 @@ VALID_TOOL_ARG_MIN = 2
 MAX_DUPLICATE_SHARE = 0.20
 MAX_DOMINANCE_SHARE = 0.20
 CONTEXT_WINDOW_TOKENS = 16_384
+GROUNDED_VALIDATOR_TIMEOUT_SECONDS = 20 * 60
 DOMAIN_TOKEN_SHARE_MIN = 0.25
 DOMAIN_TOKEN_SHARE_MAX = 0.40
 TELECOM_SHARE_MIN = 0.25
@@ -925,7 +926,7 @@ def _validate_grounded_generation_bundle_external(
             capture_output=True,
             text=True,
             env=env,
-            timeout=300,
+            timeout=GROUNDED_VALIDATOR_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {
