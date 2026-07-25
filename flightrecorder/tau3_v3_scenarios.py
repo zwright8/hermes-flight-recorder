@@ -266,6 +266,31 @@ def build_tau3_v3_scenario_sources(
         tau_repo=repo,
         runtime_factory=runtime,
     )
+    _add_target_tool_dominance_closures(
+        rows=rows,
+        blockers=blockers,
+        pools=replayed_argument_pools,
+        prompts=prompts,
+        official_catalog=official_catalog,
+        base_states=base_states,
+        revision=revision,
+        runtime_family=runtime_family,
+        tau_repo=repo,
+        runtime_factory=runtime,
+    )
+    _add_tool_argument_dominance_closures(
+        rows=rows,
+        blockers=blockers,
+        pools=replayed_argument_pools,
+        prompts=prompts,
+        official_catalog=official_catalog,
+        base_states=base_states,
+        revision=revision,
+        runtime_family=runtime_family,
+        tau_repo=repo,
+        runtime_factory=runtime,
+    )
+    _add_source_dominance_blockers(rows, blockers)
     rows.sort(key=lambda row: (row["split"], row["domain"], row["source_id"]))
     contamination_report = _contamination_report(
         rows=rows,
@@ -2350,6 +2375,147 @@ def _next_tool_closure_index(
         for row in rows
         if str(row.get("source_id") or "").startswith(prefix)
     )
+
+
+def _add_target_tool_dominance_closures(
+    *,
+    rows: list[dict[str, Any]],
+    blockers: list[str],
+    pools: dict[str, dict[str, list[dict[str, Any]]]],
+    prompts: dict[str, str],
+    official_catalog: dict[str, list[dict[str, Any]]],
+    base_states: dict[str, dict[str, Any]],
+    revision: str,
+    runtime_family: str,
+    tau_repo: Path,
+    runtime_factory: RuntimeFactory,
+) -> None:
+    for split in SPLITS:
+        for domain in DOMAINS:
+            eligible_tools = [
+                tool_name
+                for tool_name, args_pool in pools.get(domain, {}).items()
+                if args_pool
+                and f"{domain}.{tool_name}" not in ZERO_ARG_DISTINCT_EXEMPTIONS
+            ]
+            if len(eligible_tools) < int(1 / MAX_TOOL_ARGUMENT_SHARE):
+                blockers.append(
+                    f"{split}:{domain} has only {len(eligible_tools)} eligible tools "
+                    f"for target-tool dominance <= {MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                )
+                continue
+            domain_rows = [
+                row
+                for row in rows
+                if row["split"] == split and row["domain"] == domain
+            ]
+            next_indices = {
+                tool_name: _next_tool_closure_index(
+                    domain_rows,
+                    split=split,
+                    domain=domain,
+                    tool_name=tool_name,
+                )
+                for tool_name in eligible_tools
+            }
+            for addition_index in range(512):
+                counts = {
+                    tool_name: len(_tool_targets_for(domain_rows, tool_name))
+                    for tool_name in eligible_tools
+                }
+                total = sum(counts.values())
+                if total and max(counts.values()) / total <= MAX_TOOL_ARGUMENT_SHARE:
+                    break
+                max_count = max(counts.values(), default=0)
+                candidates = [
+                    tool_name
+                    for tool_name in eligible_tools
+                    if counts[tool_name] < max_count
+                ] or eligible_tools
+                tool_name = min(candidates, key=lambda name: (counts[name], name))
+                targets = _tool_targets_for(domain_rows, tool_name)
+                payload_counts: dict[str, int] = {}
+                for target in targets:
+                    payload_sha = canonical_sha256(target.get("arguments") or {})
+                    payload_counts[payload_sha] = payload_counts.get(payload_sha, 0) + 1
+                args_pool = pools[domain][tool_name]
+                args = copy.deepcopy(
+                    args_pool[
+                        _least_represented_closure_arg_index(
+                            args_pool,
+                            payload_counts,
+                        )
+                    ]
+                )
+                index = next_indices[tool_name]
+                closure = _make_tool_closure_row(
+                    domain=domain,
+                    split=split,
+                    tool_name=tool_name,
+                    args=args,
+                    index=index,
+                    revision=revision,
+                    runtime_family=runtime_family,
+                    tau_repo=tau_repo,
+                    system_prompt=prompts[domain],
+                    v2_tool_catalog=official_catalog[domain],
+                    initial_state=base_states[domain],
+                    family_shard=addition_index % DOMINANCE_FAMILY_SHARDS,
+                )
+                _replay_source_row(closure, runtime_factory)
+                rows.append(closure)
+                domain_rows.append(closure)
+                next_indices[tool_name] = index + 1
+            else:
+                blockers.append(
+                    f"{split}:{domain} could not satisfy target-tool dominance "
+                    f"<= {MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                )
+
+
+def _add_source_dominance_blockers(
+    rows: list[dict[str, Any]],
+    blockers: list[str],
+) -> None:
+    for split in SPLITS:
+        for domain in DOMAINS:
+            domain_rows = [
+                row
+                for row in rows
+                if row["split"] == split and row["domain"] == domain
+            ]
+            by_tool: dict[str, list[str]] = {}
+            for row in domain_rows:
+                for target in _targets(row):
+                    tool_name = str(target.get("tool_name") or "")
+                    if (
+                        target.get("masked") is True
+                        or target.get("kind") != "tool_call"
+                        or f"{domain}.{tool_name}" in ZERO_ARG_DISTINCT_EXEMPTIONS
+                    ):
+                        continue
+                    by_tool.setdefault(tool_name, []).append(
+                        canonical_sha256(target.get("arguments") or {})
+                    )
+            total = sum(len(payloads) for payloads in by_tool.values())
+            if total and max(len(payloads) for payloads in by_tool.values()) / total > MAX_TOOL_ARGUMENT_SHARE:
+                blockers.append(
+                    f"{split}:{domain}:target_tool_share remains above "
+                    f"{MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                )
+            for tool_name, payloads in sorted(by_tool.items()):
+                payload_counts: dict[str, int] = {}
+                for payload in payloads:
+                    payload_counts[payload] = payload_counts.get(payload, 0) + 1
+                if (
+                    payloads
+                    and max(payload_counts.values()) / len(payloads)
+                    > MAX_TOOL_ARGUMENT_SHARE
+                ):
+                    blockers.append(
+                        f"{split}:{domain}:{tool_name}:argument_payload_share "
+                        f"remains above {MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                    )
 
 
 def _telecom_state_variant_for_tool(

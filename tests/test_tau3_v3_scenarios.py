@@ -419,6 +419,17 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                     0.20,
                     key,
                 )
+            by_domain: dict[tuple[str, str], list[int]] = {}
+            for (split, domain, _tool_name), payloads in by_tool.items():
+                by_domain.setdefault((split, domain), []).append(len(payloads))
+            for key, tool_counts in by_domain.items():
+                if len(tool_counts) < 5:
+                    continue
+                self.assertLessEqual(
+                    max(tool_counts) / sum(tool_counts),
+                    0.20,
+                    key,
+                )
 
     def test_strict_mode_fails_closed_on_incomplete_coverage(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:
