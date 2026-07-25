@@ -430,8 +430,8 @@ def _target_shape_errors(canonical: dict[str, Any], context: str) -> list[str]:
     if kind == "tool_call":
         if not isinstance(tool_name, str) or not tool_name:
             errors.append(f"{context}.tool_call must carry non-empty tool_name")
-        if not isinstance(arguments, dict) or not arguments:
-            errors.append(f"{context}.tool_call must carry non-empty arguments")
+        if not isinstance(arguments, dict):
+            errors.append(f"{context}.tool_call arguments must be an object")
     return errors
 
 
@@ -457,13 +457,18 @@ def _target_binding_errors(
             errors.append(f"{context}.training_targets[{index}] tool_name must be a non-empty string")
             continue
         try:
-            _find_tool(tool_catalog, tool_name)
+            tool_def = _find_tool(tool_catalog, tool_name)
         except Tau3GroundedGenerationError as exc:
             errors.append(f"{context}.training_targets[{index}] target tool is absent from exact catalog: {exc}")
             continue
         args = canonical.get("arguments")
         if not isinstance(args, dict):
             errors.append(f"{context}.training_targets[{index}] target arguments must be an object")
+            continue
+        if not args and _required_arg_count(tool_def) > 0:
+            errors.append(
+                f"{context}.training_targets[{index}] empty target arguments require a zero-argument catalog tool"
+            )
             continue
         bound = any(
             isinstance(call, dict)

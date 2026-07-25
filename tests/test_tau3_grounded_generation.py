@@ -778,6 +778,49 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                         strict_coverage=False,
                     )
 
+    def test_zero_argument_tool_target_is_grounded_by_exact_catalog_and_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.jsonl"
+            row = _scenario(
+                split="train",
+                domain="airline",
+                family_index=0,
+                behavior="empty_result_recovery",
+            )
+            row["turns"][0]["assistant"]["safe_corrected_target"].update(
+                {
+                    "kind": "tool_call",
+                    "tool_name": "empty_search",
+                    "arguments": {},
+                }
+            )
+            _write_jsonl(source, [row])
+
+            build_tau3_grounded_generation_dataset(
+                source=source,
+                out_dir=root / "out",
+                strict_coverage=False,
+            )
+
+            result = validate_tau3_grounded_generation_bundle(
+                root / "out",
+                strict=False,
+            )
+            self.assertFalse(
+                any("empty target arguments" in error for error in result["errors"]),
+                result["errors"],
+            )
+            exported = json.loads(
+                (root / "out" / "train.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            self.assertEqual(
+                exported["training_targets"][0]["canonical_target"]["arguments"],
+                {},
+            )
+
     def test_tool_exemptions_export_and_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
