@@ -396,6 +396,29 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                 {target["behavior"] for target in closure_targets},
                 {"later_task_completion_actions"},
             )
+            by_tool: dict[tuple[str, str, str], list[str]] = {}
+            for row in rows:
+                for turn in row["turns"]:
+                    target = turn["assistant"]["safe_corrected_target"]
+                    if (
+                        target.get("kind") != "tool_call"
+                        or target["tool_name"]
+                        in {"list_all_airports", "list_all_product_types"}
+                    ):
+                        continue
+                    key = (row["split"], row["domain"], target["tool_name"])
+                    by_tool.setdefault(key, []).append(
+                        canonical_sha256(target.get("arguments") or {})
+                    )
+            for key, payloads in by_tool.items():
+                if len(set(payloads)) < 5:
+                    continue
+                max_count = max(payloads.count(payload) for payload in set(payloads))
+                self.assertLessEqual(
+                    max_count / len(payloads),
+                    0.20,
+                    key,
+                )
 
     def test_strict_mode_fails_closed_on_incomplete_coverage(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:

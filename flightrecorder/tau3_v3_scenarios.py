@@ -46,6 +46,14 @@ NATURAL_PARENT_CAP_PER_DOMAIN = 8
 VALIDATION_NONEXEMPT_TOOL_TARGET = 5
 TELECOM_TRAIN_PER_BEHAVIOR = 48
 TELECOM_VALIDATION_PER_BEHAVIOR = 12
+MAX_TOOL_ARGUMENT_SHARE = 0.20
+DOMINANCE_FAMILY_SHARDS = 8
+TELECOM_STATE_VARIANT_TOOLS = {
+    "get_customer_by_id",
+    "get_customer_by_name",
+    "resume_line",
+    "send_payment_request",
+}
 
 DEFAULT_TAU_REPO = Path("local/tau3/repository")
 DEFAULT_V2_MIXTURE = Path("local/tau3/mixtures-teacher-v1-seq8192-filtered-v2/full_trajectories")
@@ -237,6 +245,18 @@ def build_tau3_v3_scenario_sources(
 
     _add_tool_coverage_closures(
         rows=rows,
+        pools=replayed_argument_pools,
+        prompts=prompts,
+        official_catalog=official_catalog,
+        base_states=base_states,
+        revision=revision,
+        runtime_family=runtime_family,
+        tau_repo=repo,
+        runtime_factory=runtime,
+    )
+    _add_tool_argument_dominance_closures(
+        rows=rows,
+        blockers=blockers,
         pools=replayed_argument_pools,
         prompts=prompts,
         official_catalog=official_catalog,
@@ -2205,18 +2225,140 @@ def _least_represented_closure_arg_index(
     )
 
 
+def _add_tool_argument_dominance_closures(
+    *,
+    rows: list[dict[str, Any]],
+    blockers: list[str],
+    pools: dict[str, dict[str, list[dict[str, Any]]]],
+    prompts: dict[str, str],
+    official_catalog: dict[str, list[dict[str, Any]]],
+    base_states: dict[str, dict[str, Any]],
+    revision: str,
+    runtime_family: str,
+    tau_repo: Path,
+    runtime_factory: RuntimeFactory,
+) -> None:
+    for split in SPLITS:
+        for domain in DOMAINS:
+            domain_rows = [
+                row
+                for row in rows
+                if row["split"] == split and row["domain"] == domain
+            ]
+            for tool_name, args_pool in pools.get(domain, {}).items():
+                if (
+                    not args_pool
+                    or f"{domain}.{tool_name}" in ZERO_ARG_DISTINCT_EXEMPTIONS
+                ):
+                    continue
+                pool_cardinality = len(
+                    {
+                        canonical_sha256(args)
+                        for args in args_pool
+                    }
+                )
+                if (
+                    pool_cardinality < int(1 / MAX_TOOL_ARGUMENT_SHARE)
+                    and not (
+                        domain == "telecom"
+                        and tool_name in TELECOM_STATE_VARIANT_TOOLS
+                    )
+                ):
+                    blockers.append(
+                        f"{split}:{domain}:{tool_name} has only "
+                        f"{pool_cardinality} replayable argument payloads for "
+                        f"dominance <= {MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                    )
+                    continue
+                next_index = _next_tool_closure_index(
+                    domain_rows,
+                    split=split,
+                    domain=domain,
+                    tool_name=tool_name,
+                )
+                for addition_index in range(512):
+                    targets = _tool_targets_for(domain_rows, tool_name)
+                    payload_counts: dict[str, int] = {}
+                    for target in targets:
+                        payload_sha = canonical_sha256(target.get("arguments") or {})
+                        payload_counts[payload_sha] = payload_counts.get(payload_sha, 0) + 1
+                    if (
+                        targets
+                        and max(payload_counts.values()) / len(targets)
+                        <= MAX_TOOL_ARGUMENT_SHARE
+                    ):
+                        break
+                    distinct = set(payload_counts)
+                    variant = (
+                        _telecom_state_variant_for_tool(
+                            base_states[domain],
+                            tool_name,
+                            next_index + addition_index,
+                            distinct,
+                        )
+                        if domain == "telecom"
+                        else None
+                    )
+                    if variant is None:
+                        state = base_states[domain]
+                        args = copy.deepcopy(
+                            args_pool[
+                                _least_represented_closure_arg_index(
+                                    args_pool,
+                                    payload_counts,
+                                )
+                            ]
+                        )
+                        derivation = None
+                    else:
+                        state, args, derivation = variant
+                    closure = _make_tool_closure_row(
+                        domain=domain,
+                        split=split,
+                        tool_name=tool_name,
+                        args=args,
+                        index=next_index + addition_index,
+                        revision=revision,
+                        runtime_family=runtime_family,
+                        tau_repo=tau_repo,
+                        system_prompt=prompts[domain],
+                        v2_tool_catalog=official_catalog[domain],
+                        initial_state=state,
+                        state_derivation=derivation,
+                        family_shard=addition_index % DOMINANCE_FAMILY_SHARDS,
+                    )
+                    _replay_source_row(closure, runtime_factory)
+                    rows.append(closure)
+                    domain_rows.append(closure)
+                else:
+                    blockers.append(
+                        f"{split}:{domain}:{tool_name} could not satisfy "
+                        f"argument dominance <= {MAX_TOOL_ARGUMENT_SHARE:.2f}"
+                    )
+
+
+def _next_tool_closure_index(
+    rows: list[dict[str, Any]],
+    *,
+    split: str,
+    domain: str,
+    tool_name: str,
+) -> int:
+    prefix = f"v3-{split}-{domain}-tool-closure-{tool_name}-"
+    return sum(
+        1
+        for row in rows
+        if str(row.get("source_id") or "").startswith(prefix)
+    )
+
+
 def _telecom_state_variant_for_tool(
     base_state: dict[str, Any],
     tool_name: str,
     variant_index: int,
     distinct: set[str],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None:
-    if tool_name not in {
-        "get_customer_by_id",
-        "get_customer_by_name",
-        "resume_line",
-        "send_payment_request",
-    }:
+    if tool_name not in TELECOM_STATE_VARIANT_TOOLS:
         return None
     for offset in range(64):
         ordinal = variant_index + offset
@@ -2332,8 +2474,12 @@ def _make_tool_closure_row(
     v2_tool_catalog: list[dict[str, Any]],
     initial_state: dict[str, Any],
     state_derivation: dict[str, Any] | None = None,
+    family_shard: int | None = None,
 ) -> dict[str, Any]:
     source_id = f"v3-{split}-{domain}-tool-closure-{tool_name}-{index:03d}"
+    family_id = f"v3-{split}-{domain}-tool-closure-{tool_name}"
+    if family_shard is not None:
+        family_id += f"-dominance-{family_shard:02d}"
     prompt = (
         f"{domain} {split} reviewed tool coverage closure for {tool_name}. "
         f"Relevant user-provided details: {', '.join(str(value) for value in _scalar_values(args))}."
@@ -2349,7 +2495,7 @@ def _make_tool_closure_row(
         "dev_or_sealed_payload_access_count": 0,
         "natural_train_corpus_seeded": False,
         "source_identity_sha256": canonical_sha256(source_id),
-        "source_family_sha256": canonical_sha256(f"v3-{split}-{domain}-tool-closure-{tool_name}"),
+        "source_family_sha256": canonical_sha256(family_id),
         "source_prompt_sha256": canonical_sha256(prompt),
     }
     if state_derivation is not None:
@@ -2360,7 +2506,7 @@ def _make_tool_closure_row(
         "domain": domain,
         "split": split,
         "source_family": "reviewed_synthetic",
-        "source_family_id": f"v3-{split}-{domain}-tool-closure-{tool_name}",
+        "source_family_id": family_id,
         "source_id": source_id,
         "tau_revision": revision,
         "runtime_family": runtime_family,
