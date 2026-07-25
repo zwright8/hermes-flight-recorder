@@ -615,6 +615,52 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
         self.assertIn("contamination_report.development_checks_passed must be true", errors)
         self.assertIn("contamination_report.sealed_checks_passed must be true", errors)
 
+    def test_projects_grounded_unicode_prompt_with_grounded_hash_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _write_source_dataset(root)
+            grounded = _write_grounded_bundle(root)
+            train_path = grounded / "train.jsonl"
+            rows = [
+                json.loads(line)
+                for line in train_path.read_text(encoding="utf-8").splitlines()
+            ]
+            row = next(
+                item for item in rows if item["metadata"]["domain"] == "telecom"
+            )
+            prompt = row["trajectory"]["system_prompt"] + " Prices include €."
+            row["trajectory"]["system_prompt"] = prompt
+            row["metadata"]["system_prompt_sha256"] = _canonical_sha256(prompt)
+            row["metadata"]["row_sha256"] = _canonical_sha256(
+                {key: value for key, value in row.items() if key != "metadata"}
+                | {
+                    "metadata": {
+                        key: value
+                        for key, value in row["metadata"].items()
+                        if key != "row_sha256"
+                    }
+                }
+            )
+            _write_jsonl(train_path, rows)
+            manifest_path = grounded / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["files"]["train"]["sha256"] = _sha256(train_path)
+            manifest["files"]["train"]["bytes"] = train_path.stat().st_size
+            _rewrite_manifest(manifest_path, manifest)
+            contamination = _write_contamination_report(root)
+            tokenizer_config = _write_tokenizer_config(root)
+
+            with _install_fake_transformers(_FakeTokenizer()), _grounded_validation_patch():
+                built = build_tau3_competitive_dataset(
+                    source_dataset_dir=source,
+                    out_dir=root / "v3",
+                    tokenizer_config_path=tokenizer_config,
+                    grounded_generation_bundle=grounded,
+                    contamination_report_path=contamination,
+                )
+
+            self.assertTrue(built["passed"])
+
     def test_builds_and_validates_threshold_complete_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -27,6 +27,7 @@ from .tau3_grounded_generation import (
     LINEAGE_ID as GROUNDED_LINEAGE_ID,
     TAU3_GROUNDED_DATASET_SCHEMA_VERSION,
     TAU3_GROUNDED_ROW_SCHEMA_VERSION,
+    canonical_sha256 as grounded_canonical_sha256,
     validate_tau3_grounded_generation_bundle,
 )
 from .tau3_objective_validity import build_tau3_objective_validity_report
@@ -1513,7 +1514,9 @@ def _project_grounded_target(
     runtime_tool_catalog_hash = _canonical_sha256(runtime_tool_catalog)
     if runtime_tool_catalog_hash != metadata.get("tool_catalog_sha256"):
         raise Tau3CompetitiveDatasetError("grounded row runtime tool catalog hash mismatch")
-    if _canonical_sha256(str(trajectory.get("system_prompt") or "")) != metadata.get("system_prompt_sha256"):
+    if grounded_canonical_sha256(
+        str(trajectory.get("system_prompt") or "")
+    ) != metadata.get("system_prompt_sha256"):
         raise Tau3CompetitiveDatasetError("grounded row system prompt hash mismatch")
     _validate_grounded_tool_compatibility(canonical, runtime_tool_catalog, tool_catalog)
     target_shape = _target_from_messages(messages)
