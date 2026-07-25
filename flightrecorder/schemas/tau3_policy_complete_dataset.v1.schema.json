@@ -1,0 +1,241 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_policy_complete_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Policy-Complete Dataset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lineage_id",
+    "format",
+    "passed",
+    "parent_protocol",
+    "inputs",
+    "counts",
+    "exclusions",
+    "files",
+    "partition",
+    "balance",
+    "supervision",
+    "context_projection",
+    "tokenizer",
+    "coverage",
+    "contamination",
+    "sealed",
+    "training_started",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_policy_complete_dataset.v1"},
+    "lineage_id": {"const": "tau3-core-agent-mixture-v2-policy-complete"},
+    "format": {"const": "mlx-chat-jsonl"},
+    "passed": {"const": true},
+    "parent_protocol": {"$ref": "#/$defs/file"},
+    "inputs": {
+      "type": "object",
+      "minProperties": 8,
+      "additionalProperties": {"$ref": "#/$defs/file"}
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0},
+      "required": ["train", "valid", "capture_training_rows", "capture_development_rows_excluded"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 1},
+        "valid": {"type": "integer", "minimum": 1},
+        "teacher_training_rows": {"type": "integer", "minimum": 1},
+        "teacher_development_rows_excluded": {"type": "integer", "minimum": 1},
+        "capture_training_rows": {"type": "integer", "minimum": 1},
+        "capture_development_rows_excluded": {"type": "integer", "minimum": 1}
+      }
+    },
+    "exclusions": {
+      "type": "object",
+      "required": ["reason_coded", "count", "records_sha256", "reason_counts", "records"],
+      "properties": {
+        "reason_coded": {"const": true},
+        "count": {"type": "integer", "minimum": 0},
+        "records_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reason_counts": {"type": "object"},
+        "records": {"type": "array"}
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "valid"],
+      "properties": {
+        "train": {"$ref": "#/$defs/file"},
+        "valid": {"$ref": "#/$defs/file"}
+      }
+    },
+    "partition": {
+      "type": "object",
+      "required": ["algorithm", "family_overlap_count", "by_domain"],
+      "properties": {
+        "algorithm": {"const": "sha256_ranked_domain_stratified_task_or_scenario_family_holdout_v2"},
+        "family_overlap_count": {"const": 0},
+        "by_domain": {
+          "type": "object",
+          "required": ["airline", "retail", "telecom"]
+        }
+      }
+    },
+    "balance": {
+      "type": "object",
+      "required": [
+        "passed",
+        "max_domain_row_share",
+        "max_domain_rendered_token_share",
+        "duplicates_added",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "passed": {"const": true},
+        "max_domain_row_share": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "max_domain_rendered_token_share": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "duplicates_added": {"const": 0},
+        "before": {"$ref": "#/$defs/domainBalance"},
+        "after": {"$ref": "#/$defs/domainBalance"}
+      }
+    },
+    "supervision": {
+      "type": "object",
+      "required": [
+        "mask_prompt_required",
+        "last_assistant_message_only",
+        "negative_actions_are_context_only",
+        "negative_prefix_unmasked_target_count"
+      ],
+      "properties": {
+        "mask_prompt_required": {"const": true},
+        "last_assistant_message_only": {"const": true},
+        "negative_actions_are_context_only": {"const": true},
+        "negative_prefix_unmasked_target_count": {"const": 0}
+      }
+    },
+    "context_projection": {
+      "type": "object",
+      "required": [
+        "full_tool_catalog_required",
+        "exact_system_prompt_required",
+        "content_truncation_allowed",
+        "complete_interaction_group_removal_only"
+      ],
+      "properties": {
+        "full_tool_catalog_required": {"const": true},
+        "exact_system_prompt_required": {"const": true},
+        "content_truncation_allowed": {"const": false},
+        "complete_interaction_group_removal_only": {"const": true}
+      }
+    },
+    "tokenizer": {
+      "type": "object",
+      "required": [
+        "checked",
+        "method",
+        "row_count",
+        "max_rendered_tokens",
+        "max_seq_length",
+        "context_window",
+        "over_max_seq_length_count",
+        "over_context_window_count",
+        "chat_template_sha256"
+      ],
+      "properties": {
+        "checked": {"const": true},
+        "method": {"const": "pinned_base_apply_chat_template"},
+        "row_count": {"type": "integer", "minimum": 1},
+        "max_rendered_tokens": {"type": "integer", "minimum": 1},
+        "max_seq_length": {"type": "integer", "minimum": 1},
+        "context_window": {"type": "integer", "minimum": 1},
+        "over_max_seq_length_count": {"const": 0},
+        "over_context_window_count": {"const": 0},
+        "chat_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["passed", "checks", "by_split"],
+      "properties": {
+        "passed": {"const": true},
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "passed"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "passed": {"const": true}
+            }
+          }
+        }
+      }
+    },
+    "contamination": {
+      "type": "object",
+      "required": ["passed", "checks", "development_use", "sealed_use"],
+      "properties": {
+        "passed": {"const": true},
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "passed"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "passed": {"const": true}
+            }
+          }
+        }
+      }
+    },
+    "sealed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_hash_only", "access_count", "payload_accessed", "task_ids_materialized"],
+      "properties": {
+        "manifest_hash_only": {"const": true},
+        "access_count": {"const": 0},
+        "payload_accessed": {"const": false},
+        "task_ids_materialized": {"const": false}
+      }
+    },
+    "training_started": {"const": false},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "domainBalance": {
+      "type": "object",
+      "required": ["airline", "retail", "telecom"],
+      "properties": {
+        "airline": {"$ref": "#/$defs/domainBalanceRecord"},
+        "retail": {"$ref": "#/$defs/domainBalanceRecord"},
+        "telecom": {"$ref": "#/$defs/domainBalanceRecord"}
+      }
+    },
+    "domainBalanceRecord": {
+      "type": "object",
+      "required": ["row_count", "rendered_tokens", "row_share", "rendered_token_share"],
+      "properties": {
+        "row_count": {"type": "integer", "minimum": 0},
+        "rendered_tokens": {"type": "integer", "minimum": 0},
+        "row_share": {"type": "number", "minimum": 0, "maximum": 1},
+        "rendered_token_share": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

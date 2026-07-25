@@ -20,6 +20,11 @@ from typing import Any
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
 from .tau3_model_identity import validate_tau3_model_identity
+from .tau3_policy_complete_dataset import (
+    TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION,
+    TAU3_POLICY_COMPLETE_ROW_SCHEMA_VERSION,
+    USER_SIMULATOR_PRIVATE_MARKERS,
+)
 from .tau3_training_artifacts import REQUIRED_ARTIFACT_MAP, validate_tau3_training_bundle
 from .tau3_training_mixture import TAU3_TRAINING_MIXTURE_SCHEMA_VERSION
 
@@ -93,6 +98,8 @@ class Tau3MlxTrainingConfig:
     mask_prompt: bool = True
     grad_checkpoint: bool = True
     disable_compile: bool = False
+    fixed_shape_padding: bool = False
+    prefix_cache_training: bool = False
     clear_cache_threshold: int = 0
     timeout_seconds: int = 172_800
 
@@ -306,6 +313,37 @@ def build_arg_parser() -> argparse.ArgumentParser:
     compile_mode = parser.add_mutually_exclusive_group()
     compile_mode.add_argument("--disable-compile", dest="disable_compile", action="store_true", default=False)
     compile_mode.add_argument("--enable-compile", dest="disable_compile", action="store_false")
+    padding_mode = parser.add_mutually_exclusive_group()
+    padding_mode.add_argument(
+        "--fixed-shape-padding",
+        dest="fixed_shape_padding",
+        action="store_true",
+        default=False,
+        help="Pad every batch to max-seq-length so MLX can reuse one compiled graph.",
+    )
+    padding_mode.add_argument(
+        "--dynamic-shape-padding",
+        dest="fixed_shape_padding",
+        action="store_false",
+        help="Pad each batch only to its longest sequence (MLX-LM default).",
+    )
+    training_objective = parser.add_mutually_exclusive_group()
+    training_objective.add_argument(
+        "--prefix-cache-training",
+        dest="prefix_cache_training",
+        action="store_true",
+        default=False,
+        help=(
+            "Materialize the complete masked prompt into a detached cache and "
+            "backpropagate only through the supervised assistant suffix."
+        ),
+    )
+    training_objective.add_argument(
+        "--full-sequence-training",
+        dest="prefix_cache_training",
+        action="store_false",
+        help="Backpropagate through the complete sequence (MLX-LM default).",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=Tau3MlxTrainingConfig.timeout_seconds)
     mask = parser.add_mutually_exclusive_group()
     mask.add_argument("--mask-prompt", dest="mask_prompt", action="store_true", default=True)
@@ -332,6 +370,8 @@ def config_from_args(args: argparse.Namespace) -> Tau3MlxTrainingConfig:
         mask_prompt=args.mask_prompt,
         grad_checkpoint=args.grad_checkpoint,
         disable_compile=args.disable_compile,
+        fixed_shape_padding=args.fixed_shape_padding,
+        prefix_cache_training=args.prefix_cache_training,
         clear_cache_threshold=args.clear_cache_threshold,
         timeout_seconds=args.timeout_seconds,
     )
@@ -496,6 +536,10 @@ def _check_mixture_launch_readiness(
         _add_check(checks, "mixture_manifest_present", False, str(manifest_path), "manifest.json")
         return _empty_mixture_binding(protocol_path, identity_path, cfg)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    policy_complete = (
+        manifest.get("schema_version")
+        == TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION
+    )
     protocol_sha256 = _sha256_file(protocol_path)
     identity_sha256 = _sha256_file(identity_path)
     protocol_schema = check_schema_contract(protocol, name_or_id="tau3_protocol_config")
@@ -550,15 +594,108 @@ def _check_mixture_launch_readiness(
     _add_check(checks, "recipe_within_protocol_recipe_space", recipe_check["passed"], recipe_check, "recipe inside frozen recipe_space")
     plan_check = _protocol_mlx_plan_allows_local_adapter_4bit(protocol)
     _add_check(checks, "protocol_mlx_plan_local_4bit_adapter_only", plan_check["passed"], plan_check, "local-only 4-bit adapter-only MLX plan")
-    schema = check_schema_contract(manifest, name_or_id=TAU3_TRAINING_MIXTURE_SCHEMA_VERSION)
+    schema_name = (
+        TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION
+        if policy_complete
+        else TAU3_TRAINING_MIXTURE_SCHEMA_VERSION
+    )
+    schema = check_schema_contract(manifest, name_or_id=schema_name)
     _add_check(checks, "mixture_manifest_schema_passed", schema.get("passed") is True, schema.get("errors"), "passed")
-    _add_check(checks, "mixture_variant_not_root_set", manifest.get("variant") != "mixture_set", manifest.get("variant"), "single trainable variant")
+    _add_check(
+        checks,
+        "mixture_variant_not_root_set",
+        policy_complete or manifest.get("variant") != "mixture_set",
+        manifest.get("lineage_id") if policy_complete else manifest.get("variant"),
+        "single trainable dataset",
+    )
     _add_check(checks, "mixture_passed", manifest.get("passed") is True, manifest.get("passed"), True)
-    _add_check(checks, "mixture_no_sealed_or_test_rows", manifest.get("sealed_rows") == 0 and manifest.get("test_rows") == 0, {"sealed": manifest.get("sealed_rows"), "test": manifest.get("test_rows")}, {"sealed": 0, "test": 0})
+    sealed_record = (
+        manifest.get("sealed")
+        if isinstance(manifest.get("sealed"), dict)
+        else {}
+    )
+    sealed_ok = (
+        sealed_record.get("access_count") == 0
+        and sealed_record.get("payload_accessed") is False
+        and not (mixture / "test.jsonl").exists()
+        if policy_complete
+        else manifest.get("sealed_rows") == 0 and manifest.get("test_rows") == 0
+    )
+    _add_check(
+        checks,
+        "mixture_no_sealed_or_test_rows",
+        sealed_ok,
+        sealed_record
+        if policy_complete
+        else {
+            "sealed": manifest.get("sealed_rows"),
+            "test": manifest.get("test_rows"),
+        },
+        {"sealed_access": 0, "test_file": False}
+        if policy_complete
+        else {"sealed": 0, "test": 0},
+    )
     _add_check(checks, "mixture_not_already_training_started", manifest.get("training_started") is False, manifest.get("training_started"), False)
     _add_check(checks, "mixture_files_replay", _mixture_files_replay(mixture, manifest), _summary(manifest.get("files")), "current train/valid hashes")
-    _add_check(checks, "mixture_source_hashes_replay", _mixture_source_hashes_replay(mixture, manifest), _summary(manifest.get("source_binding")), "current source hashes")
-    direct_scan = _scan_mlx_data_dir(mixture)
+    source_hashes_replay = (
+        _policy_complete_manifest_replays(
+            manifest,
+            protocol_sha256=protocol_sha256,
+        )
+        if policy_complete
+        else _mixture_source_hashes_replay(mixture, manifest)
+    )
+    _add_check(
+        checks,
+        "mixture_source_hashes_replay",
+        source_hashes_replay,
+        _summary(manifest.get("inputs"))
+        if policy_complete
+        else _summary(manifest.get("source_binding")),
+        "current policy-complete seal and parent protocol"
+        if policy_complete
+        else "current source hashes",
+    )
+    if policy_complete:
+        tokenizer_record = (
+            manifest.get("tokenizer")
+            if isinstance(manifest.get("tokenizer"), dict)
+            else {}
+        )
+        supervision = (
+            manifest.get("supervision")
+            if isinstance(manifest.get("supervision"), dict)
+            else {}
+        )
+        _add_check(
+            checks,
+            "policy_complete_mask_prompt_enforced",
+            supervision.get("mask_prompt_required") is True and cfg.mask_prompt,
+            {
+                "manifest_required": supervision.get("mask_prompt_required"),
+                "recipe_mask_prompt": cfg.mask_prompt,
+            },
+            {"manifest_required": True, "recipe_mask_prompt": True},
+        )
+        _add_check(
+            checks,
+            "policy_complete_sequence_budget_matches",
+            tokenizer_record.get("max_seq_length") == cfg.max_seq_length
+            and int(tokenizer_record.get("max_rendered_tokens") or 0)
+            <= cfg.max_seq_length,
+            {
+                "dataset_max_seq_length": tokenizer_record.get("max_seq_length"),
+                "dataset_max_rendered_tokens": tokenizer_record.get(
+                    "max_rendered_tokens"
+                ),
+                "recipe_max_seq_length": cfg.max_seq_length,
+            },
+            "recipe max_seq_length equals the tokenizer-audited dataset budget",
+        )
+    direct_scan = _scan_mlx_data_dir(
+        mixture,
+        policy_complete=policy_complete,
+    )
     _add_check(checks, "training_target_quality_direct_semantic_scan", direct_scan["passed"], direct_scan, "no evaluator/meta/tool leakage in train/valid rows")
     identity_errors = validate_tau3_model_identity(identity, model_dir, expected_model_id=frozen_model_id, expected_revision=frozen_revision)
     _add_check(checks, "model_identity_replays", not identity_errors, {"path": str(identity_path), "errors": identity_errors, "model_id": frozen_model_id, "revision": frozen_revision}, "identity fully replays local model tree")
@@ -596,7 +733,16 @@ def _check_mixture_launch_readiness(
             "manifest_path": str(manifest_path),
             "manifest_sha256": _sha256_file(manifest_path),
             "files_sha256": _canonical_sha256(manifest.get("files")),
-            "source_binding_sha256": _canonical_sha256(manifest.get("source_binding")),
+            "source_binding_sha256": _canonical_sha256(
+                {
+                    "inputs": manifest.get("inputs"),
+                    "partition": manifest.get("partition"),
+                    "balance": manifest.get("balance"),
+                    "supervision": manifest.get("supervision"),
+                }
+                if policy_complete
+                else manifest.get("source_binding")
+            ),
             "declared_protocol_sha256": manifest_protocol_sha,
         },
         "recipe": {
@@ -649,6 +795,46 @@ def _mixture_source_hashes_replay(mixture: Path, manifest: dict[str, Any]) -> bo
         if record.get("sha256") != _sha256_file(path):
             return False
     return True
+
+
+def _policy_complete_manifest_replays(
+    manifest: dict[str, Any],
+    *,
+    protocol_sha256: str,
+) -> bool:
+    declared_seal = manifest.get("manifest_sha256")
+    replayed_seal = _canonical_sha256(
+        {
+            key: value
+            for key, value in manifest.items()
+            if key != "manifest_sha256"
+        }
+    )
+    parent = manifest.get("parent_protocol")
+    coverage = manifest.get("coverage")
+    contamination = manifest.get("contamination")
+    balance = manifest.get("balance")
+    supervision = manifest.get("supervision")
+    sealed = manifest.get("sealed")
+    return (
+        isinstance(declared_seal, str)
+        and declared_seal == replayed_seal
+        and isinstance(parent, dict)
+        and parent.get("sha256") == protocol_sha256
+        and isinstance(coverage, dict)
+        and coverage.get("passed") is True
+        and isinstance(contamination, dict)
+        and contamination.get("passed") is True
+        and isinstance(balance, dict)
+        and balance.get("passed") is True
+        and isinstance(supervision, dict)
+        and supervision.get("mask_prompt_required") is True
+        and supervision.get("negative_actions_are_context_only") is True
+        and isinstance(sealed, dict)
+        and sealed.get("access_count") == 0
+        and sealed.get("payload_accessed") is False
+        and manifest.get("training_started") is False
+    )
 
 
 def _empty_mixture_binding(protocol_path: Path, identity_path: Path, cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
@@ -917,6 +1103,8 @@ def _recipe_record(cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
         "disable_compile": cfg.disable_compile,
+        "fixed_shape_padding": cfg.fixed_shape_padding,
+        "prefix_cache_training": cfg.prefix_cache_training,
     }
 
 
@@ -1006,7 +1194,11 @@ def _protocol_mlx_plan_allows_local_adapter_4bit(protocol: dict[str, Any]) -> di
     return {"passed": not failures, "failures": failures, "plan": _summary(plan)}
 
 
-def _scan_mlx_data_dir(data_dir: Path) -> dict[str, Any]:
+def _scan_mlx_data_dir(
+    data_dir: Path,
+    *,
+    policy_complete: bool = False,
+) -> dict[str, Any]:
     findings: list[dict[str, Any]] = []
     row_count = 0
     for split in ("train", "valid"):
@@ -1023,29 +1215,188 @@ def _scan_mlx_data_dir(data_dir: Path) -> dict[str, Any]:
             except json.JSONDecodeError as exc:
                 findings.append({"split": split, "line": line_number, "reason": f"invalid JSON: {exc.msg}"})
                 continue
-            for hit in _semantic_leak_hits(row):
+            ignored = (
+                frozenset({"invented_tau_tool"})
+                if policy_complete
+                else frozenset()
+            )
+            for hit in _semantic_leak_hits(row, ignored_fragments=ignored):
                 findings.append({"split": split, "line": line_number, **hit})
+            if policy_complete:
+                for hit in _policy_complete_row_hits(row, split=split):
+                    findings.append(
+                        {"split": split, "line": line_number, **hit}
+                    )
     return {"passed": not findings and row_count > 0, "row_count": row_count, "finding_count": len(findings), "findings": findings[:25]}
 
 
-def _semantic_leak_hits(value: Any, path: str = "$") -> list[dict[str, str]]:
+def _semantic_leak_hits(
+    value: Any,
+    path: str = "$",
+    *,
+    ignored_fragments: frozenset[str] = frozenset(),
+) -> list[dict[str, str]]:
     hits: list[dict[str, str]] = []
     if isinstance(value, dict):
         for key, item in value.items():
             key_text = str(key)
             lowered_key = key_text.lower()
             for fragment in FORBIDDEN_DATA_FRAGMENTS:
+                if fragment in ignored_fragments:
+                    continue
                 if fragment in lowered_key:
                     hits.append({"path": f"{path}.{key_text}", "reason": f"forbidden key fragment: {fragment}"})
-            hits.extend(_semantic_leak_hits(item, f"{path}.{key_text}"))
+            hits.extend(
+                _semantic_leak_hits(
+                    item,
+                    f"{path}.{key_text}",
+                    ignored_fragments=ignored_fragments,
+                )
+            )
     elif isinstance(value, list):
         for index, item in enumerate(value):
-            hits.extend(_semantic_leak_hits(item, f"{path}[{index}]"))
+            hits.extend(
+                _semantic_leak_hits(
+                    item,
+                    f"{path}[{index}]",
+                    ignored_fragments=ignored_fragments,
+                )
+            )
     elif isinstance(value, str):
         lowered = value.lower()
         for fragment in FORBIDDEN_DATA_FRAGMENTS:
+            if fragment in ignored_fragments:
+                continue
             if fragment in lowered:
                 hits.append({"path": path, "reason": f"forbidden text fragment: {fragment}"})
+    return hits
+
+
+def _policy_complete_row_hits(
+    row: Any,
+    *,
+    split: str,
+) -> list[dict[str, str]]:
+    if not isinstance(row, dict):
+        return [{"path": "$", "reason": "policy-complete row must be an object"}]
+    messages = row.get("messages")
+    tools = row.get("tools")
+    metadata = row.get("metadata")
+    if not isinstance(messages, list) or not messages:
+        return [{"path": "$.messages", "reason": "missing policy-complete messages"}]
+    if not isinstance(tools, list) or not tools:
+        return [{"path": "$.tools", "reason": "missing full ordered tool catalog"}]
+    if not isinstance(metadata, dict):
+        return [{"path": "$.metadata", "reason": "missing policy-complete metadata"}]
+    hits: list[dict[str, str]] = []
+    if metadata.get("schema_version") != TAU3_POLICY_COMPLETE_ROW_SCHEMA_VERSION:
+        hits.append(
+            {
+                "path": "$.metadata.schema_version",
+                "reason": "invalid policy-complete row schema",
+            }
+        )
+    if metadata.get("split") != split:
+        hits.append(
+            {
+                "path": "$.metadata.split",
+                "reason": "row split does not match source file",
+            }
+        )
+    if metadata.get("mask_prompt_required") is not True:
+        hits.append(
+            {
+                "path": "$.metadata.mask_prompt_required",
+                "reason": "policy-complete row must require prompt masking",
+            }
+        )
+    if messages[0].get("role") != "system":
+        hits.append(
+            {
+                "path": "$.messages[0]",
+                "reason": "policy-complete row must begin with system prompt",
+            }
+        )
+    if messages[-1].get("role") != "assistant":
+        hits.append(
+            {
+                "path": f"$.messages[{len(messages) - 1}]",
+                "reason": "policy-complete supervised target must be assistant",
+            }
+        )
+    tool_names = {
+        str((tool.get("function") or {}).get("name") or tool.get("name") or "")
+        for tool in tools
+        if isinstance(tool, dict)
+    }
+    invented_indices: list[int] = []
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            hits.append(
+                {
+                    "path": f"$.messages[{index}]",
+                    "reason": "message must be an object",
+                }
+            )
+            continue
+        content = str(message.get("content") or "").lower()
+        if index > 0:
+            for marker in USER_SIMULATOR_PRIVATE_MARKERS:
+                if marker in content:
+                    hits.append(
+                        {
+                            "path": f"$.messages[{index}].content",
+                            "reason": f"user-simulator private marker: {marker}",
+                        }
+                    )
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") if isinstance(call, dict) else None
+            name = (
+                str(function.get("name") or "")
+                if isinstance(function, dict)
+                else ""
+            )
+            if name == "invented_tau_tool":
+                invented_indices.append(index)
+            elif name not in tool_names:
+                hits.append(
+                    {
+                        "path": f"$.messages[{index}].tool_calls",
+                        "reason": f"tool call is absent from ordered catalog: {name}",
+                    }
+                )
+    if invented_indices:
+        if metadata.get("negative_prefix") is not True:
+            hits.append(
+                {
+                    "path": "$.metadata.negative_prefix",
+                    "reason": "invented tool requires masked negative-prefix evidence",
+                }
+            )
+        for index in invented_indices:
+            if index >= len(messages) - 1:
+                hits.append(
+                    {
+                        "path": f"$.messages[{index}].tool_calls",
+                        "reason": "invented tool cannot be the supervised target",
+                    }
+                )
+                continue
+            call_id = str(
+                (messages[index].get("tool_calls") or [{}])[0].get("id") or ""
+            )
+            result = messages[index + 1] if index + 1 < len(messages) else {}
+            if (
+                result.get("role") != "tool"
+                or result.get("tool_call_id") != call_id
+                or "error" not in str(result.get("content") or "").lower()
+            ):
+                hits.append(
+                    {
+                        "path": f"$.messages[{index}]",
+                        "reason": "invented tool prefix must be followed by bound error evidence",
+                    }
+                )
     return hits
 
 
@@ -1298,6 +1649,8 @@ def _mlx_lora_config(model: str, data_dir: Path, adapter_path: str, cfg: Tau3Mlx
         "seed": cfg.seed,
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
+        "fixed_shape_padding": cfg.fixed_shape_padding,
+        "prefix_cache_training": cfg.prefix_cache_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
         "report_to": None,
         "test": False,
@@ -1319,11 +1672,21 @@ def _build_command(
     *,
     resume_adapter_file: Path | None = None,
 ) -> list[str]:
+    if cfg.prefix_cache_training:
+        module = "flightrecorder.mlx_prefix_cache_lora"
+    elif cfg.fixed_shape_padding:
+        module = "flightrecorder.mlx_fixed_shape_lora"
+    else:
+        module = "mlx_lm"
     command = [
         str(python),
         "-m",
-        "mlx_lm",
-        "lora",
+        module,
+    ]
+    if not (cfg.fixed_shape_padding or cfg.prefix_cache_training):
+        command.append("lora")
+    command.extend(
+        [
         "--config",
         str(config_path),
         "--model",
@@ -1359,7 +1722,8 @@ def _build_command(
         str(cfg.save_every),
         "--clear-cache-threshold",
         str(cfg.clear_cache_threshold),
-    ]
+        ]
+    )
     if cfg.mask_prompt:
         command.append("--mask-prompt")
     if cfg.grad_checkpoint:
@@ -1556,6 +1920,17 @@ def _config_within_bounds(cfg: Tau3MlxTrainingConfig) -> bool:
         and (-1 <= cfg.val_batches <= MAX_ITERS)
         and cfg.clear_cache_threshold >= 0
         and 1 <= cfg.timeout_seconds <= MAX_TIMEOUT_SECONDS
+        and (
+            not cfg.prefix_cache_training
+            or (
+                cfg.batch_size == 1
+                and cfg.grad_accumulation == 1
+                and cfg.mask_prompt
+                and not cfg.grad_checkpoint
+                and cfg.disable_compile
+                and not cfg.fixed_shape_padding
+            )
+        )
     )
 
 
@@ -1578,6 +1953,8 @@ def _config_record(cfg: Tau3MlxTrainingConfig, *, resume: dict[str, Any] | None 
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
         "disable_compile": cfg.disable_compile,
+        "fixed_shape_padding": cfg.fixed_shape_padding,
+        "prefix_cache_training": cfg.prefix_cache_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
         "timeout_seconds": cfg.timeout_seconds,
     }

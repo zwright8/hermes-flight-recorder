@@ -116,6 +116,32 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
                     bootstrap_samples=200,
                 )
 
+    def test_rejects_candidate_prompt_token_ceiling_overflow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(root, "base", reward=0.0, db_match=False)
+            candidate = _candidate_entry(root, "candidate-a", reward=1.0, db_match=True)
+            manifest = _read(candidate.development_manifest_path)
+            first_ref = manifest["run_receipts"][0]
+            receipt_path = candidate.development_manifest_path.parent / first_ref["path"]
+            receipt = _read(receipt_path)
+            receipt["result_summary"]["prompt_token_ceiling_exceeded"] = True
+            _write(receipt_path, receipt)
+            first_ref["receipt_sha256"] = _sha256(receipt_path)
+            _write(candidate.development_manifest_path, manifest)
+
+            with self.assertRaisesRegex(Tau3CandidateSelectionError, "prompt token ceiling exceeded"):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "selection.json",
+                    lock_path=root / "candidate-lock.json",
+                    bootstrap_samples=200,
+                )
+
+            self.assertFalse((root / "selection.json").exists())
+            self.assertFalse((root / "candidate-lock.json").exists())
+
     def test_rejects_rewritten_prelaunch_source_and_receipt_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -675,7 +701,7 @@ def _training_receipt(root: Path, candidate_id: str, *, protocol_sha: str) -> Pa
     telemetry.write_text(
         "\n".join(
             [
-                json.dumps({"stream": "stdout", "text": "iter 1 train loss 1.25"}),
+                json.dumps({"stream": "stdout", "text": "iter 1 train loss 1.250"}),
                 json.dumps({"stream": "stdout", "text": "iter 1 validation loss 0.75"}),
             ]
         )
@@ -760,12 +786,7 @@ def _result(domain: str, seed: int, *, reward: float, db_match: bool) -> dict[st
             "num_trials": 1,
             "max_steps": 30,
             "max_errors": 10,
-            "max_retries": 0,
-            "auto_resume": False,
-            "auto_review": True,
-            "review_mode": "full",
             "review_model": "fixed-reviewer",
-            "hallucination_retries": 0,
             "text_streaming_config": {"chunk_by": "words", "chunk_size": 1},
             "retrieval_config": None,
             "user_info": {"implementation": "user_simulator", "llm": "fixed-user", "llm_args": _llm_args()},

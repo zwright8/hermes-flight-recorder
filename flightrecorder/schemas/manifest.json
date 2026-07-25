@@ -2,6 +2,22 @@
   "schema_version": "hfr.schema_catalog.v1",
   "schemas": [
     {
+      "artifact": "tau3_promotion_publication_preflight",
+      "artifact_schema_version": "hfr.tau3_promotion_publication_preflight.v1",
+      "description": "Hash-bound fail-closed Tau-3 promotion decision and publication preflight artifact.",
+      "filename": "tau3_promotion_publication_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_promotion_publication_preflight.v1.schema.json",
+      "name": "tau3_promotion_publication_preflight"
+    },
+    {
+      "artifact": "tau3_post_publication_record",
+      "artifact_schema_version": "hfr.tau3_post_publication_record.v1",
+      "description": "Create-once Tau-3 post-publication record binding an allowed preflight to a Hugging Face revision.",
+      "filename": "tau3_post_publication_record.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_post_publication_record.v1.schema.json",
+      "name": "tau3_post_publication_record"
+    },
+    {
       "artifact": "tau3_sealed_grid_completeness",
       "artifact_schema_version": "hfr.tau3_sealed_grid_completeness.v1",
       "description": "Public-safe hash-only completeness proof for the final Tau-3 sealed benchmark grid.",
@@ -40,6 +56,14 @@
       "filename": "tau3_conversation_import.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/tau3_conversation_import.v1.schema.json",
       "name": "tau3_conversation_import"
+    },
+    {
+      "artifact": "tau3_policy_complete_dataset",
+      "artifact_schema_version": "hfr.tau3_policy_complete_dataset.v1",
+      "description": "Family-split Tau-3 MLX dataset retaining exact system prompts, full tool catalogs, recovery, corrections, and masked negative prefixes.",
+      "filename": "tau3_policy_complete_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_policy_complete_dataset.v1.schema.json",
+      "name": "tau3_policy_complete_dataset"
     },
     {
       "artifact": "tau3_mlx_training_run",

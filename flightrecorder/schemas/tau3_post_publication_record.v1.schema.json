@@ -1,0 +1,107 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_post_publication_record.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Create-once Tau-3 post-publication record binding an allowed preflight to a Hugging Face revision.",
+  "properties": {
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "hashes_only": {
+      "const": true
+    },
+    "huggingface": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "type": "string"
+        },
+        "revision_format": {
+          "const": "hex_40_to_64"
+        },
+        "revision_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "revision",
+        "revision_sha256",
+        "revision_format"
+      ],
+      "type": "object"
+    },
+    "local_paths_included": {
+      "const": false
+    },
+    "preflight": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "const": true
+        },
+        "decision_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "publication_status": {
+          "const": "ready_for_publication"
+        },
+        "schema_version": {
+          "const": "hfr.tau3_promotion_publication_preflight.v1"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sha256",
+        "size",
+        "schema_version",
+        "allowed",
+        "publication_status",
+        "decision_sha256"
+      ],
+      "type": "object"
+    },
+    "private_identifiers_included": {
+      "const": false
+    },
+    "raw_payload_included": {
+      "const": false
+    },
+    "record_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_post_publication_record.v1"
+    },
+    "status": {
+      "const": "published"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "status",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "private_identifiers_included",
+    "preflight",
+    "huggingface",
+    "record_sha256"
+  ],
+  "title": "Tau-3 Post Publication Record",
+  "type": "object",
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

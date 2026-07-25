@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -14,9 +15,16 @@ from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
+    _policy_complete_manifest_replays,
+    _scan_mlx_data_dir,
     _write_telemetry,
     main as tau3_mlx_training_main,
     run_tau3_mlx_training,
+)
+from flightrecorder.mlx_prefix_cache_lora import (
+    PrefixCacheTrainingError,
+    _validation_indices,
+    split_supervised_tokens,
 )
 from flightrecorder.tau3_model_identity import build_tau3_model_identity
 from tests.test_tau3_training_artifacts import _base_bundle, _rewrite_manifest, _write_json, _write_jsonl
@@ -319,6 +327,126 @@ def _refresh_protocol_signature(bundle: Path) -> None:
 
 
 class Tau3MlxTrainingRunnerTests(unittest.TestCase):
+    def test_policy_complete_scan_allows_only_masked_failed_invented_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            tool = {
+                "type": "function",
+                "function": {
+                    "name": "update_record",
+                    "description": "Update a fixture record.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+            for split in ("train", "valid"):
+                row = {
+                    "messages": [
+                        {"role": "system", "content": "Exact policy."},
+                        {"role": "user", "content": "Please update my record."},
+                        {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "bad-call",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "invented_tau_tool",
+                                        "arguments": {},
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "role": "tool",
+                            "name": "invented_tau_tool",
+                            "tool_call_id": "bad-call",
+                            "content": "{\"error\":\"unknown_tool\"}",
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "safe-call",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "update_record",
+                                        "arguments": {},
+                                    },
+                                }
+                            ],
+                        },
+                    ],
+                    "tools": [tool],
+                    "metadata": {
+                        "schema_version": "hfr.tau3_policy_complete_row.v1",
+                        "split": split,
+                        "mask_prompt_required": True,
+                        "negative_prefix": True,
+                    },
+                }
+                _write_jsonl(data / f"{split}.jsonl", [row])
+
+            passed = _scan_mlx_data_dir(data, policy_complete=True)
+            self.assertTrue(passed["passed"], passed)
+
+            train = json.loads(
+                (data / "train.jsonl").read_text(encoding="utf-8")
+            )
+            train["messages"][-1]["tool_calls"][0]["function"][
+                "name"
+            ] = "invented_tau_tool"
+            _write_jsonl(data / "train.jsonl", [train])
+            failed = _scan_mlx_data_dir(data, policy_complete=True)
+            self.assertFalse(failed["passed"])
+            self.assertTrue(
+                any(
+                    "supervised target" in finding["reason"]
+                    for finding in failed["findings"]
+                )
+            )
+
+    def test_policy_complete_manifest_seal_binds_protocol_and_fail_closed_gates(
+        self,
+    ) -> None:
+        protocol_sha256 = "a" * 64
+        manifest = {
+            "schema_version": "hfr.tau3_policy_complete_dataset.v1",
+            "parent_protocol": {"sha256": protocol_sha256},
+            "coverage": {"passed": True},
+            "contamination": {"passed": True},
+            "balance": {"passed": True},
+            "supervision": {
+                "mask_prompt_required": True,
+                "negative_actions_are_context_only": True,
+            },
+            "sealed": {"access_count": 0, "payload_accessed": False},
+            "training_started": False,
+        }
+        manifest["manifest_sha256"] = hashlib.sha256(
+            json.dumps(
+                manifest,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+
+        self.assertTrue(
+            _policy_complete_manifest_replays(
+                manifest,
+                protocol_sha256=protocol_sha256,
+            )
+        )
+        manifest["coverage"]["passed"] = False
+        self.assertFalse(
+            _policy_complete_manifest_replays(
+                manifest,
+                protocol_sha256=protocol_sha256,
+            )
+        )
+
     def test_compile_mode_is_explicit_and_overrides_parent_environment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -339,6 +467,156 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                     telemetry = (root / f"out-{disabled}" / "telemetry.jsonl").read_text(encoding="utf-8")
                     self.assertIn(f"MLX_DISABLE_COMPILE={expected}", telemetry)
                     self.assertIs(receipt["config"]["disable_compile"], disabled)
+
+    def test_fixed_shape_padding_uses_governed_mlx_driver_and_is_receipted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            receipt = run_tau3_mlx_training(
+                mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(
+                    iters=2,
+                    fixed_shape_padding=True,
+                    timeout_seconds=5,
+                ),
+            )
+
+            command = receipt["command"]
+            self.assertIn("flightrecorder.mlx_fixed_shape_lora", command)
+            self.assertNotIn("mlx_lm", command)
+            self.assertTrue(receipt["config"]["fixed_shape_padding"])
+            self.assertTrue(
+                receipt["training_binding"]["recipe"]["fixed_shape_padding"]
+            )
+            self.assertTrue(
+                _read_json(root / "out" / "mlx_lora_config.json")[
+                    "fixed_shape_padding"
+                ]
+            )
+
+    def test_prefix_cache_training_uses_governed_driver_and_is_receipted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            receipt = run_tau3_mlx_training(
+                mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(
+                    iters=2,
+                    grad_checkpoint=False,
+                    disable_compile=True,
+                    prefix_cache_training=True,
+                    timeout_seconds=5,
+                ),
+            )
+
+            self.assertIn("flightrecorder.mlx_prefix_cache_lora", receipt["command"])
+            self.assertNotIn("mlx_lm", receipt["command"])
+            self.assertTrue(receipt["config"]["prefix_cache_training"])
+            self.assertTrue(
+                receipt["training_binding"]["recipe"]["prefix_cache_training"]
+            )
+            self.assertTrue(
+                _read_json(root / "out" / "mlx_lora_config.json")[
+                    "prefix_cache_training"
+                ]
+            )
+
+    def test_prefix_cache_training_requires_memory_safe_recipe_controls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            invalid = {
+                "compile": Tau3MlxTrainingConfig(
+                    prefix_cache_training=True,
+                    grad_checkpoint=False,
+                ),
+                "checkpoint": Tau3MlxTrainingConfig(
+                    prefix_cache_training=True,
+                    disable_compile=True,
+                ),
+                "accumulation": Tau3MlxTrainingConfig(
+                    prefix_cache_training=True,
+                    grad_checkpoint=False,
+                    disable_compile=True,
+                    grad_accumulation=2,
+                ),
+                "fixed-padding": Tau3MlxTrainingConfig(
+                    prefix_cache_training=True,
+                    grad_checkpoint=False,
+                    disable_compile=True,
+                    fixed_shape_padding=True,
+                ),
+            }
+            for label, config in invalid.items():
+                with self.subTest(label=label), self.assertRaisesRegex(
+                    Tau3MlxTrainingError,
+                    "prelaunch checks failed",
+                ):
+                    run_tau3_mlx_training(
+                        bundle_dir=bundle,
+                        output_dir=root / f"out-{label}",
+                        workspace_root=root,
+                        config=config,
+                    )
+
+    def test_prefix_cache_split_preserves_first_target_prediction(self) -> None:
+        prefix, suffix_inputs, targets = split_supervised_tokens(
+            [10, 11, 12, 20, 21, 22],
+            prompt_offset=3,
+            max_seq_length=8,
+        )
+        self.assertEqual(prefix, [10, 11])
+        self.assertEqual(suffix_inputs, [12, 20, 21])
+        self.assertEqual(targets, [20, 21, 22])
+        with self.assertRaisesRegex(PrefixCacheTrainingError, "truncation"):
+            split_supervised_tokens(
+                [10, 11, 12, 20, 21, 22],
+                prompt_offset=3,
+                max_seq_length=5,
+            )
+
+    def test_prefix_cache_validation_slice_is_domain_balanced(self) -> None:
+        class RawDataset:
+            _data = [
+                {"metadata": {"domain": domain}}
+                for domain in (
+                    "airline",
+                    "airline",
+                    "retail",
+                    "retail",
+                    "telecom",
+                    "telecom",
+                )
+            ]
+
+        class CachedDataset:
+            _data = RawDataset()
+
+            def __len__(self) -> int:
+                return len(self._data._data)
+
+        dataset = CachedDataset()
+        selected = _validation_indices(dataset, 6)
+        domains = [dataset._data._data[index]["metadata"]["domain"] for index in selected]
+        self.assertEqual(
+            domains,
+            ["airline", "retail", "telecom", "airline", "retail", "telecom"],
+        )
 
     def test_telemetry_event_is_flushed_for_live_observation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -786,6 +1064,14 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             mismatches = {
                 "rank": Tau3MlxTrainingConfig(iters=3, rank=32, timeout_seconds=5),
                 "compile-mode": Tau3MlxTrainingConfig(iters=3, disable_compile=True, timeout_seconds=5),
+                "padding-mode": Tau3MlxTrainingConfig(iters=3, fixed_shape_padding=True, timeout_seconds=5),
+                "training-objective": Tau3MlxTrainingConfig(
+                    iters=3,
+                    grad_checkpoint=False,
+                    disable_compile=True,
+                    prefix_cache_training=True,
+                    timeout_seconds=5,
+                ),
             }
             for label, config in mismatches.items():
                 with self.subTest(label=label), self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):

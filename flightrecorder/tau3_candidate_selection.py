@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -379,6 +381,13 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
             raise Tau3CandidateSelectionError(f"{receipt_path}: sealed access flags are present")
         if receipt.get("terminal_status") != "completed" or ref.get("terminal_status") != "completed":
             raise Tau3CandidateSelectionError(f"{receipt_path}: benchmark run is not completed")
+        _validate_prompt_token_ceiling(
+            manifest_path=path,
+            receipt_path=receipt_path,
+            manifest=manifest,
+            receipt=receipt,
+            ref=ref,
+        )
         result_path_value = receipt.get("result_path")
         if not isinstance(result_path_value, str) or not result_path_value:
             raise Tau3CandidateSelectionError(f"{receipt_path}: missing raw result_path")
@@ -396,6 +405,7 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
         if copied_result_sha256 != result_sha256:
             raise Tau3CandidateSelectionError(f"{path}: copied result_path sha256 does not replay")
         raw = _load_json_object(result_path)
+        raw = _with_bound_harness_controls(raw, manifest.get("config"))
         extracted, harness, extraction_errors = _extract_result_rows(
             raw,
             path=result_path,
@@ -426,6 +436,59 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
         "rows": rows,
         "harness_by_domain": harness_by_domain,
     }
+
+
+def _validate_prompt_token_ceiling(
+    *,
+    manifest_path: Path,
+    receipt_path: Path,
+    manifest: dict[str, Any],
+    receipt: dict[str, Any],
+    ref: dict[str, Any],
+) -> None:
+    receipt_summary = receipt.get("result_summary")
+    ref_summary = ref.get("result_summary")
+    if not isinstance(receipt_summary, dict) or not isinstance(ref_summary, dict):
+        raise Tau3CandidateSelectionError(f"{receipt_path}: missing result_summary")
+    config = manifest.get("config")
+    expected_ceiling = config.get("context_window") if isinstance(config, dict) else None
+    if not isinstance(expected_ceiling, int) or expected_ceiling <= 0:
+        raise Tau3CandidateSelectionError(f"{manifest_path}: invalid configured context_window")
+    if receipt_summary.get("prompt_token_ceiling_checked") is not True:
+        raise Tau3CandidateSelectionError(f"{receipt_path}: prompt token ceiling was not checked")
+    if receipt_summary.get("prompt_token_ceiling") != expected_ceiling:
+        raise Tau3CandidateSelectionError(
+            f"{receipt_path}: prompt token ceiling does not match configured context_window"
+        )
+    if receipt_summary.get("prompt_token_ceiling_exceeded") is not False:
+        raise Tau3CandidateSelectionError(f"{receipt_path}: prompt token ceiling exceeded")
+    if ref_summary != receipt_summary:
+        raise Tau3CandidateSelectionError(f"{receipt_path}: run receipt result_summary does not match manifest reference")
+
+
+def _with_bound_harness_controls(payload: dict[str, Any], config_raw: Any) -> dict[str, Any]:
+    """Fill Tau metadata omissions from the hash-bound benchmark launch config."""
+
+    config: dict[str, Any] = dict(config_raw) if isinstance(config_raw, dict) else {}
+    info_raw = payload.get("info")
+    info: dict[str, Any] = dict(info_raw) if isinstance(info_raw, dict) else {}
+    controls = {
+        "max_retries": config.get("max_retries"),
+        "auto_resume": config.get("resume"),
+        "auto_review": config.get("auto_review"),
+        "review_mode": config.get("review_mode"),
+        "hallucination_retries": config.get("hallucination_retries"),
+    }
+    changed = False
+    for key, value in controls.items():
+        if key not in info and value is not None:
+            info[key] = value
+            changed = True
+    if not changed:
+        return payload
+    augmented = dict(payload)
+    augmented["info"] = info
+    return augmented
 
 
 def _load_training_receipt(path: Path) -> dict[str, Any]:
@@ -674,7 +737,7 @@ def _replay_training_telemetry(receipt_path: Path, receipt: dict[str, Any]) -> l
 
 
 def _telemetry_contains_train_losses(lines: list[str], train_losses: list[Any]) -> bool:
-    texts: list[str] = []
+    observed: list[float] = []
     for line in lines:
         try:
             event = json.loads(line)
@@ -682,32 +745,22 @@ def _telemetry_contains_train_losses(lines: list[str], train_losses: list[Any]) 
             continue
         text = event.get("text") if isinstance(event, dict) else None
         if isinstance(text, str):
-            texts.append(text)
-    joined = "\n".join(texts)
+            match = re.search(
+                r"\btrain\s+loss\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)",
+                text,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                observed.append(float(match.group(1)))
+    expected: list[float] = []
     for value in train_losses:
-        if not isinstance(value, int | float):
+        if isinstance(value, bool) or not isinstance(value, int | float):
             return False
-        if _float_tokens(float(value)).isdisjoint(_numeric_tokens(joined)):
+        number = float(value)
+        if not math.isfinite(number):
             return False
-    return True
-
-
-def _float_tokens(value: float) -> set[str]:
-    return {format(value, "g"), str(value)}
-
-
-def _numeric_tokens(text: str) -> set[str]:
-    tokens: set[str] = set()
-    current = []
-    for char in text:
-        if char.isdigit() or char in ".-+eE":
-            current.append(char)
-        elif current:
-            tokens.add("".join(current))
-            current = []
-    if current:
-        tokens.add("".join(current))
-    return tokens
+        expected.append(number)
+    return observed == expected
 
 
 def _required_training_proof_checks(receipt: dict[str, Any]) -> tuple[str, ...]:

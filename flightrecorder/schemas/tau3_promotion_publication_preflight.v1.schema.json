@@ -1,0 +1,227 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_promotion_publication_preflight.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "allowed": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocking_reasons": {
+            "maxItems": 0
+          },
+          "failed_predicate_count": {
+            "const": 0
+          },
+          "hf_revision": {
+            "type": "null"
+          },
+          "negative_result_withheld_honestly": {
+            "const": false
+          },
+          "publication_status": {
+            "const": "ready_for_publication"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "negative_result_withheld_honestly": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "allowed": {
+            "const": false
+          },
+          "hf_revision": {
+            "type": "null"
+          },
+          "publication_status": {
+            "const": "withheld_negative_result"
+          }
+        }
+      }
+    }
+  ],
+  "description": "Hash-bound fail-closed Tau-3 promotion decision and publication preflight artifact.",
+  "properties": {
+    "allowed": {
+      "type": "boolean"
+    },
+    "blocking_reasons": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "decision_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "evidence_bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_evidence": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "candidate_lock": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "contamination_evidence": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "license_evidence": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "postlock_attempt_ledger": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "protocol_lineage_attestation": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "readiness_validation": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "redaction_evidence": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "sealed_authorization": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "sealed_grid_completeness": {
+          "$ref": "#/$defs/artifactBinding"
+        },
+        "sealed_public_evaluation_report": {
+          "$ref": "#/$defs/artifactBinding"
+        }
+      },
+      "required": [
+        "sealed_public_evaluation_report",
+        "sealed_grid_completeness",
+        "sealed_authorization",
+        "candidate_lock",
+        "postlock_attempt_ledger",
+        "protocol_lineage_attestation",
+        "readiness_validation",
+        "budget_evidence",
+        "license_evidence",
+        "contamination_evidence",
+        "redaction_evidence"
+      ],
+      "type": "object"
+    },
+    "failed_predicate_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "hashes_only": {
+      "const": true
+    },
+    "hf_revision": {
+      "type": "null"
+    },
+    "local_paths_included": {
+      "const": false
+    },
+    "negative_result_withheld_honestly": {
+      "type": "boolean"
+    },
+    "notes": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "private_identifiers_included": {
+      "const": false
+    },
+    "promotion_predicates": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "minProperties": 1,
+      "type": "object"
+    },
+    "publication_status": {
+      "enum": [
+        "ready_for_publication",
+        "withheld_negative_result",
+        "blocked"
+      ]
+    },
+    "raw_payload_included": {
+      "const": false
+    },
+    "schema_version": {
+      "const": "hfr.tau3_promotion_publication_preflight.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "allowed",
+    "publication_status",
+    "hf_revision",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "private_identifiers_included",
+    "evidence_bindings",
+    "promotion_predicates",
+    "failed_predicate_count",
+    "blocking_reasons",
+    "negative_result_withheld_honestly",
+    "notes",
+    "decision_sha256"
+  ],
+  "title": "Tau-3 Promotion Publication Preflight",
+  "type": "object",
+  "$defs": {
+    "artifactBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_passed": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sha256",
+        "size",
+        "schema_version",
+        "schema_passed"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}
