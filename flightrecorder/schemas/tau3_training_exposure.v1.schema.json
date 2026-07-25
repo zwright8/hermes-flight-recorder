@@ -1,0 +1,112 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_training_exposure.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Training Exposure Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_training_exposure.v1"},
+    "artifact_type": {"const": "tau3_training_exposure_receipt"},
+    "passed": {"type": "boolean"},
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "row_count", "content_sha256", "file_sha256"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1},
+        "row_count": {"type": "integer", "minimum": 1},
+        "content_sha256": {"$ref": "#/$defs/sha256"},
+        "file_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "sampler_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sampler_name", "split", "seed", "epochs", "batch_size", "gradient_accumulation_steps", "effective_batch_size"],
+      "properties": {
+        "sampler_name": {"const": "deterministic_stratified_round_robin_v1"},
+        "split": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer", "minimum": 1},
+        "epochs": {"type": "integer", "minimum": 1},
+        "batch_size": {"type": "integer", "minimum": 1},
+        "gradient_accumulation_steps": {"type": "integer", "minimum": 1},
+        "effective_batch_size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "sampler_config_sha256": {"$ref": "#/$defs/sha256"},
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger"],
+      "properties": {
+        "ledger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "step_count"],
+          "properties": {
+            "path": {"const": "training_exposure_ledger.jsonl"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "step_count": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["row_count", "total_row_exposures", "effective_epochs", "min_row_exposure", "max_row_exposure", "all_rows_seen", "full_epoch_replay", "complete_optimizer_steps", "complete_optimizer_step_count", "optimizer_step_count", "domains", "behaviors", "domain_exposure_counts", "behavior_exposure_counts", "row_schema_versions", "required_recovery_exposures", "required_stopping_exposures", "required_clarification_exposures", "required_telecom_exposures", "required_state_mutation_exposures"],
+      "properties": {
+        "row_count": {"type": "integer", "minimum": 1},
+        "total_row_exposures": {"type": "integer", "minimum": 1},
+        "effective_epochs": {"type": "number", "minimum": 0},
+        "min_row_exposure": {"type": "integer", "minimum": 0},
+        "max_row_exposure": {"type": "integer", "minimum": 0},
+        "all_rows_seen": {"type": "boolean"},
+        "full_epoch_replay": {"type": "boolean"},
+        "complete_optimizer_steps": {"type": "boolean"},
+        "complete_optimizer_step_count": {"type": "integer", "minimum": 0},
+        "optimizer_step_count": {"type": "integer", "minimum": 1},
+        "domains": {"type": "array", "items": {"type": "string"}},
+        "behaviors": {"type": "array", "items": {"type": "string"}},
+        "domain_exposure_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "behavior_exposure_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "row_schema_versions": {"type": "array", "items": {"type": "string"}},
+        "required_recovery_exposures": {"type": "integer", "minimum": 0},
+        "required_stopping_exposures": {"type": "integer", "minimum": 0},
+        "required_clarification_exposures": {"type": "integer", "minimum": 0},
+        "required_telecom_exposures": {"type": "integer", "minimum": 0},
+        "required_state_mutation_exposures": {"type": "integer", "minimum": 0}
+      }
+    },
+    "candidate_eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "checks"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id", "passed", "expected", "actual"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "passed": {"type": "boolean"},
+              "expected": {},
+              "actual": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": ["schema_version", "artifact_type", "passed", "dataset", "sampler_config", "sampler_config_sha256", "files", "coverage", "candidate_eligibility"]
+}

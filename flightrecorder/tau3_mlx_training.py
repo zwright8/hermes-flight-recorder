@@ -19,6 +19,13 @@ from typing import Any
 
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_competitive_dataset import (
+    TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION,
+    TOKENIZER_ASSET_FILENAMES,
+    _load_local_tokenizer,
+    validate_tau3_competitive_dataset_bundle,
+)
+from .tau3_exposure import Tau3ExposureError, validate_tau3_exposure_ledger
 from .tau3_model_identity import validate_tau3_model_identity
 from .tau3_policy_complete_dataset import (
     TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION,
@@ -100,6 +107,7 @@ class Tau3MlxTrainingConfig:
     disable_compile: bool = False
     fixed_shape_padding: bool = False
     prefix_cache_training: bool = False
+    exposure_ledger_training: bool = False
     clear_cache_threshold: int = 0
     timeout_seconds: int = 172_800
 
@@ -115,6 +123,10 @@ def run_tau3_mlx_training(
     config: Tau3MlxTrainingConfig | None = None,
     resume_receipt_path: str | Path | None = None,
     resume_adapter_file: str | Path | None = None,
+    exposure_dataset_path: str | Path | None = None,
+    exposure_receipt_path: str | Path | None = None,
+    exposure_ledger_path: str | Path | None = None,
+    grounded_validator_python: str | Path | None = None,
     workspace_root: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
@@ -147,6 +159,7 @@ def run_tau3_mlx_training(
 
     checks: list[dict[str, Any]] = []
     training_binding: dict[str, Any] | None = None
+    exposure_binding: dict[str, Any] | None = None
     if source_kind == "bundle":
         validation = validate_tau3_training_bundle(source_path, strict=True)
         _add_check(checks, "strict_bundle_validation_passed", validation.get("passed") is True, validation.get("summary"), "passed")
@@ -166,9 +179,40 @@ def run_tau3_mlx_training(
         identity = json.loads(identity_file.read_text(encoding="utf-8"))
         model_ref = str(model_dir)
         data_dir = source_path
-        training_binding = _check_mixture_launch_readiness(source_path, protocol_file, protocol, identity_file, identity, model_dir, cfg, root, checks)
+        exposure_binding = _validate_exposure_training_binding(
+            dataset_path=exposure_dataset_path,
+            receipt_path=exposure_receipt_path,
+            ledger_path=exposure_ledger_path,
+            training_data_dir=data_dir,
+            root=root,
+            cfg=cfg,
+            checks=checks,
+        )
+        training_binding = _check_mixture_launch_readiness(
+            source_path,
+            protocol_file,
+            protocol,
+            identity_file,
+            identity,
+            model_dir,
+            cfg,
+            root,
+            checks,
+            exposure_binding=exposure_binding,
+            grounded_validator_python=grounded_validator_python,
+        )
     if any(not check["passed"] for check in checks):
         raise Tau3MlxTrainingError("prelaunch checks failed: " + json.dumps([c["id"] for c in checks if not c["passed"]], sort_keys=True))
+    if exposure_binding is None:
+        exposure_binding = _validate_exposure_training_binding(
+            dataset_path=exposure_dataset_path,
+            receipt_path=exposure_receipt_path,
+            ledger_path=exposure_ledger_path,
+            training_data_dir=data_dir,
+            root=root,
+            cfg=cfg,
+            checks=checks,
+        )
     resume = _validate_resume_binding(
         resume_receipt_path=resume_receipt_path,
         resume_adapter_file=resume_adapter_file,
@@ -179,6 +223,8 @@ def run_tau3_mlx_training(
         training_binding=training_binding,
         checks=checks,
     )
+    if training_binding is not None and exposure_binding is not None:
+        training_binding = {**training_binding, "exposure": exposure_binding}
     if training_binding is not None and resume is not None:
         training_binding = {**training_binding, "resume": resume}
     if any(not check["passed"] for check in checks):
@@ -188,8 +234,17 @@ def run_tau3_mlx_training(
     _require_local_directory(data_dir, root, "mlx data")
     adapter_dir.mkdir()
     lora_config_path = output / "mlx_lora_config.json"
-    _write_new_json_readonly(lora_config_path, _mlx_lora_config(model_ref, data_dir, _relative_output_path(adapter_dir, output), cfg))
-    command = _build_command(python, model_ref, data_dir, adapter_dir, lora_config_path, cfg, resume_adapter_file=Path(resume["adapter_file"]["path"]) if resume else None)
+    _write_new_json_readonly(lora_config_path, _mlx_lora_config(model_ref, data_dir, _relative_output_path(adapter_dir, output), cfg, exposure_binding=exposure_binding))
+    command = _build_command(
+        python,
+        model_ref,
+        data_dir,
+        adapter_dir,
+        lora_config_path,
+        cfg,
+        resume_adapter_file=Path(resume["adapter_file"]["path"]) if resume else None,
+        exposure_binding=exposure_binding,
+    )
     _reject_forbidden_tokens(command)
 
     prelaunch = {
@@ -199,7 +254,7 @@ def run_tau3_mlx_training(
         "bundle": {"kind": source_kind, **_path_record(source_path)},
         "output_dir": ".",
         "command": _redact_command(command),
-        "config": _config_record(cfg, resume=resume),
+        "config": _config_record(cfg, resume=resume, exposure_binding=exposure_binding),
         "mlx_lora_config": _output_file_record(lora_config_path, output),
         "training_binding": training_binding,
         "checks": checks,
@@ -253,7 +308,7 @@ def run_tau3_mlx_training(
             "event_count": telemetry_count,
         },
         "command": _redact_command(command),
-        "config": _config_record(cfg, resume=resume),
+        "config": _config_record(cfg, resume=resume, exposure_binding=exposure_binding),
         "mlx_lora_config": _output_file_record(lora_config_path, output),
         "training_binding": training_binding,
         "checks": checks,
@@ -292,6 +347,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--resume-receipt", type=Path)
     parser.add_argument("--resume-adapter-file", type=Path)
+    parser.add_argument("--exposure-dataset", type=Path)
+    parser.add_argument("--exposure-receipt", type=Path)
+    parser.add_argument("--exposure-ledger", type=Path)
+    parser.add_argument(
+        "--grounded-validator-python",
+        type=Path,
+        help="Python executable used to replay v3 grounded-generation evidence before MLX training launch",
+    )
     parser.add_argument("--iters", type=int, default=Tau3MlxTrainingConfig.iters)
     parser.add_argument("--lr", type=float, default=Tau3MlxTrainingConfig.learning_rate)
     parser.add_argument("--rank", type=int, default=Tau3MlxTrainingConfig.rank)
@@ -344,6 +407,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Backpropagate through the complete sequence (MLX-LM default).",
     )
+    parser.add_argument(
+        "--exposure-ledger-training",
+        dest="exposure_ledger_training",
+        action="store_true",
+        default=False,
+        help="Replay full-gradient MLX-LM LoRA batches from a validated Tau-3 exposure ledger.",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=Tau3MlxTrainingConfig.timeout_seconds)
     mask = parser.add_mutually_exclusive_group()
     mask.add_argument("--mask-prompt", dest="mask_prompt", action="store_true", default=True)
@@ -372,6 +442,7 @@ def config_from_args(args: argparse.Namespace) -> Tau3MlxTrainingConfig:
         disable_compile=args.disable_compile,
         fixed_shape_padding=args.fixed_shape_padding,
         prefix_cache_training=args.prefix_cache_training,
+        exposure_ledger_training=args.exposure_ledger_training,
         clear_cache_threshold=args.clear_cache_threshold,
         timeout_seconds=args.timeout_seconds,
     )
@@ -391,6 +462,10 @@ def main(argv: list[str] | None = None) -> int:
             config=config_from_args(args),
             resume_receipt_path=args.resume_receipt,
             resume_adapter_file=args.resume_adapter_file,
+            exposure_dataset_path=args.exposure_dataset,
+            exposure_receipt_path=args.exposure_receipt,
+            exposure_ledger_path=args.exposure_ledger,
+            grounded_validator_python=args.grounded_validator_python,
         )
     except (OSError, Tau3MlxTrainingError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -530,6 +605,9 @@ def _check_mixture_launch_readiness(
     cfg: Tau3MlxTrainingConfig,
     root: Path,
     checks: list[dict[str, Any]],
+    *,
+    exposure_binding: dict[str, Any] | None = None,
+    grounded_validator_python: str | Path | None = None,
 ) -> dict[str, Any]:
     manifest_path = mixture / "manifest.json"
     if not manifest_path.is_file():
@@ -539,6 +617,10 @@ def _check_mixture_launch_readiness(
     policy_complete = (
         manifest.get("schema_version")
         == TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION
+    )
+    competitive_v3 = (
+        manifest.get("schema_version")
+        == TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION
     )
     protocol_sha256 = _sha256_file(protocol_path)
     identity_sha256 = _sha256_file(identity_path)
@@ -583,19 +665,50 @@ def _check_mixture_launch_readiness(
     _add_check(
         checks,
         "mixture_manifest_protocol_sha_matches",
-        manifest_protocol_sha == protocol_sha256,
+        manifest_protocol_sha == protocol_sha256
+        or (competitive_v3 and manifest_protocol_sha is None),
         manifest_protocol_sha or "missing protocol SHA provenance",
         protocol_sha256,
     )
-    recipe = _recipe_record(cfg)
+    recipe = _recipe_record(cfg, exposure_binding=exposure_binding)
     recipe_sha256 = _canonical_sha256(recipe)
     recipe_id = f"tau3-mlx-recipe-{recipe_sha256[:16]}"
-    recipe_check = _recipe_within_protocol(protocol, cfg, recipe)
+    recipe_check = _recipe_within_protocol(
+        protocol,
+        cfg,
+        recipe,
+        exposure_binding=exposure_binding,
+    )
     _add_check(checks, "recipe_within_protocol_recipe_space", recipe_check["passed"], recipe_check, "recipe inside frozen recipe_space")
     plan_check = _protocol_mlx_plan_allows_local_adapter_4bit(protocol)
     _add_check(checks, "protocol_mlx_plan_local_4bit_adapter_only", plan_check["passed"], plan_check, "local-only 4-bit adapter-only MLX plan")
+    if competitive_v3:
+        v3_validation = validate_tau3_competitive_dataset_bundle(
+            mixture,
+            strict=True,
+            grounded_validator_python=grounded_validator_python,
+        )
+        grounded_validation_binding = _grounded_validation_binding(
+            grounded_validator_python,
+            root,
+        )
+        _add_check(
+            checks,
+            "competitive_v3_dataset_validation_passed",
+            v3_validation.get("passed") is True,
+            {
+                "errors": v3_validation.get("errors"),
+                "coverage": v3_validation.get("coverage"),
+            },
+            "strict v3 dataset validation passed",
+        )
+    else:
+        v3_validation = None
+        grounded_validation_binding = None
     schema_name = (
-        TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION
+        TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION
+        if competitive_v3
+        else TAU3_POLICY_COMPLETE_DATASET_SCHEMA_VERSION
         if policy_complete
         else TAU3_TRAINING_MIXTURE_SCHEMA_VERSION
     )
@@ -604,21 +717,64 @@ def _check_mixture_launch_readiness(
     _add_check(
         checks,
         "mixture_variant_not_root_set",
-        policy_complete or manifest.get("variant") != "mixture_set",
-        manifest.get("lineage_id") if policy_complete else manifest.get("variant"),
+        policy_complete or competitive_v3 or manifest.get("variant") != "mixture_set",
+        manifest.get("lineage_id")
+        if policy_complete or competitive_v3
+        else manifest.get("variant"),
         "single trainable dataset",
     )
     _add_check(checks, "mixture_passed", manifest.get("passed") is True, manifest.get("passed"), True)
-    sealed_record = (
-        manifest.get("sealed")
-        if isinstance(manifest.get("sealed"), dict)
-        else {}
-    )
+    if competitive_v3:
+        tokenizer_record = manifest.get("tokenizer_config") if isinstance(manifest.get("tokenizer_config"), dict) else {}
+        _add_check(
+            checks,
+            "competitive_v3_manifest_status_passed",
+            manifest.get("status") == "passed",
+            manifest.get("status"),
+            "passed",
+        )
+        _add_check(
+            checks,
+            "competitive_v3_files_replay",
+            _competitive_v3_files_replay(mixture, manifest),
+            _summary(manifest.get("files")),
+            "current train/valid hashes and byte counts",
+        )
+        _add_check(
+            checks,
+            "competitive_v3_tokenizer_exact_recorded",
+            bool(
+                tokenizer_record.get("tokenizer_id")
+                and tokenizer_record.get("tokenizer_revision")
+                and tokenizer_record.get("chat_template_sha256")
+                and tokenizer_record.get("tokenizer_json_sha256")
+                and tokenizer_record.get("tokenizer_config_sha256")
+            ),
+            tokenizer_record,
+            "pinned tokenizer identity and chat-template hashes",
+        )
+        tokenizer_model_check = _competitive_v3_tokenizer_matches_model(
+            mixture,
+            tokenizer_record,
+            model_dir,
+        )
+        _add_check(
+            checks,
+            "competitive_v3_tokenizer_matches_model",
+            tokenizer_model_check["passed"],
+            tokenizer_model_check,
+            "dataset tokenizer assets and chat template equal local model tokenizer",
+        )
+    sealed_source = manifest.get("sealed_access") if competitive_v3 else manifest.get("sealed")
+    sealed_record = sealed_source if isinstance(sealed_source, dict) else {}
     sealed_ok = (
         sealed_record.get("access_count") == 0
-        and sealed_record.get("payload_accessed") is False
+        and (
+            sealed_record.get("payload_accessed") is False
+            or sealed_record.get("raw_sealed_payload_read") is False
+        )
         and not (mixture / "test.jsonl").exists()
-        if policy_complete
+        if policy_complete or competitive_v3
         else manifest.get("sealed_rows") == 0 and manifest.get("test_rows") == 0
     )
     _add_check(
@@ -626,23 +782,40 @@ def _check_mixture_launch_readiness(
         "mixture_no_sealed_or_test_rows",
         sealed_ok,
         sealed_record
-        if policy_complete
+        if policy_complete or competitive_v3
         else {
             "sealed": manifest.get("sealed_rows"),
             "test": manifest.get("test_rows"),
         },
         {"sealed_access": 0, "test_file": False}
-        if policy_complete
+        if policy_complete or competitive_v3
         else {"sealed": 0, "test": 0},
     )
-    _add_check(checks, "mixture_not_already_training_started", manifest.get("training_started") is False, manifest.get("training_started"), False)
-    _add_check(checks, "mixture_files_replay", _mixture_files_replay(mixture, manifest), _summary(manifest.get("files")), "current train/valid hashes")
+    _add_check(
+        checks,
+        "mixture_not_already_training_started",
+        manifest.get("training_started") is False
+        or (competitive_v3 and "training_started" not in manifest),
+        manifest.get("training_started"),
+        False,
+    )
+    _add_check(
+        checks,
+        "mixture_files_replay",
+        _competitive_v3_files_replay(mixture, manifest)
+        if competitive_v3
+        else _mixture_files_replay(mixture, manifest),
+        _summary(manifest.get("files")),
+        "current train/valid hashes",
+    )
     source_hashes_replay = (
         _policy_complete_manifest_replays(
             manifest,
             protocol_sha256=protocol_sha256,
         )
         if policy_complete
+        else v3_validation is not None and v3_validation.get("passed") is True
+        if competitive_v3
         else _mixture_source_hashes_replay(mixture, manifest)
     )
     _add_check(
@@ -651,9 +824,13 @@ def _check_mixture_launch_readiness(
         source_hashes_replay,
         _summary(manifest.get("inputs"))
         if policy_complete
+        else _summary(v3_validation)
+        if competitive_v3
         else _summary(manifest.get("source_binding")),
         "current policy-complete seal and parent protocol"
         if policy_complete
+        else "strict v3 dataset replay"
+        if competitive_v3
         else "current source hashes",
     )
     if policy_complete:
@@ -741,9 +918,21 @@ def _check_mixture_launch_readiness(
                     "supervision": manifest.get("supervision"),
                 }
                 if policy_complete
+                else {
+                    "files": manifest.get("files"),
+                    "source_dataset": manifest.get("source_dataset"),
+                    "tokenizer_config": manifest.get("tokenizer_config"),
+                    "manifest_sha256": manifest.get("manifest_sha256"),
+                }
+                if competitive_v3
                 else manifest.get("source_binding")
             ),
             "declared_protocol_sha256": manifest_protocol_sha,
+            **(
+                {"grounded_validation": grounded_validation_binding}
+                if grounded_validation_binding is not None
+                else {}
+            ),
         },
         "recipe": {
             **recipe,
@@ -751,6 +940,46 @@ def _check_mixture_launch_readiness(
             "recipe_id": recipe_id,
         },
     }
+
+
+def _grounded_validation_binding(
+    grounded_validator_python: str | Path | None,
+    root: Path,
+) -> dict[str, Any]:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "validate_tau3_grounded_generation.py"
+    binding: dict[str, Any] = {
+        "strict_dataset_validation": True,
+        "validator": "validate_tau3_competitive_dataset_bundle",
+        "grounded_replay": {
+            "mode": "direct_in_process"
+            if grounded_validator_python is None
+            else "external_subprocess",
+        },
+        "script": {
+            "path": str(script),
+            "sha256": _sha256_file(script) if script.is_file() else None,
+        },
+    }
+    if grounded_validator_python is None:
+        return binding
+    raw = Path(grounded_validator_python).expanduser()
+    resolved = raw.resolve(strict=False)
+    interpreter: dict[str, Any] = {
+        "path": str(resolved),
+        "provided_path": str(grounded_validator_python),
+    }
+    try:
+        if resolved.is_file() and resolved.resolve().is_relative_to(root.resolve()):
+            interpreter["sha256"] = _sha256_file(resolved)
+            interpreter["sha256_policy"] = "workspace_executable_content_hash"
+        else:
+            interpreter["sha256"] = None
+            interpreter["sha256_policy"] = "not_hashed_outside_workspace"
+    except OSError as exc:
+        interpreter["sha256"] = None
+        interpreter["sha256_policy"] = f"not_hashed_unresolved:{type(exc).__name__}"
+    binding["grounded_replay"]["interpreter"] = interpreter
+    return binding
 
 
 def _mixture_files_replay(mixture: Path, manifest: dict[str, Any]) -> bool:
@@ -767,6 +996,107 @@ def _mixture_files_replay(mixture: Path, manifest: dict[str, Any]) -> bool:
         if record.get("size") != path.stat().st_size or record.get("sha256") != _sha256_file(path):
             return False
     return True
+
+
+def _competitive_v3_files_replay(mixture: Path, manifest: dict[str, Any]) -> bool:
+    files = manifest.get("files")
+    if not isinstance(files, dict):
+        return False
+    for split in ("train", "valid"):
+        record = files.get(split)
+        if not isinstance(record, dict) or record.get("path") != f"{split}.jsonl":
+            return False
+        path = mixture / f"{split}.jsonl"
+        if not path.is_file() or path_has_symlink_component(path, include_leaf=True):
+            return False
+        if record.get("sha256") != _sha256_file(path):
+            return False
+        size = record.get("bytes", record.get("size"))
+        if size != path.stat().st_size:
+            return False
+    return True
+
+
+def _competitive_v3_tokenizer_matches_model(
+    mixture: Path,
+    record: dict[str, Any],
+    model_dir: Path,
+) -> dict[str, Any]:
+    errors: list[str] = []
+    copied: dict[str, Any] = {}
+    model: dict[str, Any] = {}
+    path_leaf = str(record.get("path_leaf") or "")
+    dataset_tokenizer = mixture / path_leaf
+    if (
+        not path_leaf
+        or Path(path_leaf).is_absolute()
+        or ".." in Path(path_leaf).parts
+        or path_has_symlink_component(dataset_tokenizer, include_leaf=True)
+        or not dataset_tokenizer.resolve().is_relative_to(mixture.resolve())
+        or not dataset_tokenizer.is_dir()
+    ):
+        errors.append("tokenizer_config.path_leaf is unsafe or missing")
+        return {"passed": False, "errors": errors, "dataset": copied, "model": model}
+
+    asset_records = record.get("copied_assets")
+    if not isinstance(asset_records, dict):
+        asset_records = {}
+    for filename in TOKENIZER_ASSET_FILENAMES:
+        dataset_asset = dataset_tokenizer / filename
+        model_asset = model_dir / filename
+        expected_hash = asset_records.get(filename)
+        dataset_hash = _sha256_file(dataset_asset) if dataset_asset.is_file() else None
+        model_hash = _sha256_file(model_asset) if model_asset.is_file() else None
+        copied[filename] = dataset_hash
+        model[filename] = model_hash
+        if filename in {"tokenizer.json", "tokenizer_config.json"}:
+            if dataset_hash is None:
+                errors.append(f"dataset tokenizer asset {filename} is missing")
+            if model_hash is None:
+                errors.append(f"model tokenizer asset {filename} is missing")
+            if dataset_hash is not None and expected_hash != dataset_hash:
+                errors.append(f"dataset copied asset {filename} hash does not replay")
+            if dataset_hash is not None and model_hash is not None and dataset_hash != model_hash:
+                errors.append(f"dataset tokenizer asset {filename} does not match model")
+        elif expected_hash is not None or dataset_hash is not None or model_hash is not None:
+            if dataset_hash is None:
+                errors.append(f"dataset tokenizer asset {filename} is missing")
+            if model_hash is None:
+                errors.append(f"model tokenizer asset {filename} is missing")
+            if dataset_hash is not None and expected_hash != dataset_hash:
+                errors.append(f"dataset copied asset {filename} hash does not replay")
+            if dataset_hash is not None and model_hash is not None and dataset_hash != model_hash:
+                errors.append(f"dataset tokenizer asset {filename} does not match model")
+
+    for field, filename in (
+        ("tokenizer_json_sha256", "tokenizer.json"),
+        ("tokenizer_config_sha256", "tokenizer_config.json"),
+        ("chat_template_file_sha256", "chat_template.jinja"),
+    ):
+        expected = record.get(field)
+        if expected and copied.get(filename) != expected:
+            errors.append(f"{field} does not match copied tokenizer asset")
+        if expected and model.get(filename) != expected:
+            errors.append(f"{field} does not match model tokenizer asset")
+
+    try:
+        tokenizer = _load_local_tokenizer(model_dir)
+        model_chat_template_sha = _canonical_sha256(str(getattr(tokenizer, "chat_template", "") or ""))
+    except Exception as exc:
+        model_chat_template_sha = None
+        errors.append(f"model chat_template cannot be replayed: {type(exc).__name__}")
+    copied["chat_template_sha256"] = record.get("chat_template_sha256")
+    model["chat_template_sha256"] = model_chat_template_sha
+    if record.get("chat_template_sha256") != model_chat_template_sha:
+        errors.append("chat_template_sha256 does not match model tokenizer")
+
+    return {
+        "passed": not errors,
+        "errors": errors,
+        "dataset": copied,
+        "model": model,
+        "path_leaf": path_leaf,
+    }
 
 
 def _mixture_source_hashes_replay(mixture: Path, manifest: dict[str, Any]) -> bool:
@@ -845,6 +1175,174 @@ def _empty_mixture_binding(protocol_path: Path, identity_path: Path, cfg: Tau3Ml
         "model": {"identity_path": str(identity_path), "identity_sha256": _sha256_file(identity_path) if identity_path.is_file() else None},
         "dataset": None,
         "recipe": {**recipe, "recipe_sha256": recipe_sha256, "recipe_id": f"tau3-mlx-recipe-{recipe_sha256[:16]}"},
+    }
+
+
+def _validate_exposure_training_binding(
+    *,
+    dataset_path: str | Path | None,
+    receipt_path: str | Path | None,
+    ledger_path: str | Path | None,
+    training_data_dir: Path,
+    root: Path,
+    cfg: Tau3MlxTrainingConfig,
+    checks: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    provided = [dataset_path is not None, receipt_path is not None, ledger_path is not None]
+    if not cfg.exposure_ledger_training:
+        _add_check(
+            checks,
+            "exposure_ledger_training_disabled_without_inputs",
+            not any(provided),
+            {
+                "exposure_dataset": dataset_path is not None,
+                "exposure_receipt": receipt_path is not None,
+                "exposure_ledger": ledger_path is not None,
+            },
+            "no exposure artifacts unless --exposure-ledger-training is enabled",
+        )
+        return None
+    if not all(provided):
+        _add_check(
+            checks,
+            "exposure_inputs_complete",
+            False,
+            {
+                "exposure_dataset": dataset_path is not None,
+                "exposure_receipt": receipt_path is not None,
+                "exposure_ledger": ledger_path is not None,
+            },
+            "dataset, receipt, and ledger",
+        )
+        return None
+    assert dataset_path is not None and receipt_path is not None and ledger_path is not None
+    dataset_file = _require_local_file(Path(dataset_path), root, "exposure dataset")
+    receipt_file = _require_local_file(Path(receipt_path), root, "exposure receipt")
+    ledger_file = _require_local_file(Path(ledger_path), root, "exposure ledger")
+    expected_dataset = _require_local_file(
+        training_data_dir / "train.jsonl",
+        root,
+        "training data train split",
+    )
+    try:
+        validation = validate_tau3_exposure_ledger(
+            dataset_file,
+            receipt_file,
+            ledger_file,
+        )
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError, Tau3ExposureError, json.JSONDecodeError) as exc:
+        _add_check(
+            checks,
+            "exposure_ledger_replays",
+            False,
+            str(exc),
+            "receipt and ledger replay from dataset",
+        )
+        return None
+    sampler = receipt.get("sampler_config") if isinstance(receipt.get("sampler_config"), dict) else {}
+    coverage = receipt.get("coverage") if isinstance(receipt.get("coverage"), dict) else {}
+    optimizer_steps = coverage.get("complete_optimizer_step_count")
+    microbatch_iterations = (
+        int(optimizer_steps) * cfg.grad_accumulation
+        if isinstance(optimizer_steps, int)
+        else None
+    )
+    _add_check(
+        checks,
+        "exposure_ledger_replays",
+        validation.get("passed") is True,
+        validation,
+        "receipt and ledger replay from dataset",
+    )
+    _add_check(
+        checks,
+        "exposure_dataset_matches_training_data",
+        dataset_file == expected_dataset
+        and _sha256_file(dataset_file) == _sha256_file(expected_dataset),
+        {
+            "exposure_dataset": str(dataset_file),
+            "training_dataset": str(expected_dataset),
+            "exposure_sha256": _sha256_file(dataset_file),
+            "training_sha256": _sha256_file(expected_dataset),
+        },
+        "exact resolved data_dir/train.jsonl path and content",
+    )
+    _add_check(
+        checks,
+        "exposure_recipe_matches_sampler",
+        sampler.get("batch_size") == cfg.batch_size
+        and sampler.get("gradient_accumulation_steps") == cfg.grad_accumulation
+        and microbatch_iterations == cfg.iters,
+        {
+            "recipe": {
+                "batch_size": cfg.batch_size,
+                "grad_accumulation": cfg.grad_accumulation,
+                "microbatch_iterations": cfg.iters,
+            },
+            "sampler": sampler,
+            "optimizer_steps": optimizer_steps,
+            "expected_microbatch_iterations": microbatch_iterations,
+        },
+        "batch_size, grad_accumulation, and microbatch iters equal exposure receipt",
+    )
+    _add_check(
+        checks,
+        "exposure_full_row_multi_epoch_complete",
+        receipt.get("passed") is True
+        and coverage.get("all_rows_seen") is True
+        and coverage.get("full_epoch_replay") is True
+        and coverage.get("complete_optimizer_steps") is True
+        and float(coverage.get("effective_epochs") or 0.0) >= 2.0,
+        {
+            "passed": receipt.get("passed"),
+            "all_rows_seen": coverage.get("all_rows_seen"),
+            "full_epoch_replay": coverage.get("full_epoch_replay"),
+            "complete_optimizer_steps": coverage.get("complete_optimizer_steps"),
+            "effective_epochs": coverage.get("effective_epochs"),
+        },
+        "candidate-eligible full-row multi-epoch exposure",
+    )
+    return {
+        "mode": "deterministic_exposure_ledger_full_gradient",
+        "dataset": {
+            "path": str(dataset_file),
+            "sha256": _sha256_file(dataset_file),
+            "content_sha256": (receipt.get("dataset") or {}).get("content_sha256")
+            if isinstance(receipt.get("dataset"), dict)
+            else None,
+            "row_count": (receipt.get("dataset") or {}).get("row_count")
+            if isinstance(receipt.get("dataset"), dict)
+            else None,
+        },
+        "receipt": {
+            "path": str(receipt_file),
+            "sha256": _sha256_file(receipt_file),
+            "schema_version": receipt.get("schema_version"),
+        },
+        "ledger": {
+            "path": str(ledger_file),
+            "sha256": _sha256_file(ledger_file),
+            "optimizer_steps": optimizer_steps,
+            "microbatch_iterations": microbatch_iterations,
+        },
+        "sampler_config": sampler,
+        "coverage": {
+            "all_rows_seen": coverage.get("all_rows_seen"),
+            "effective_epochs": coverage.get("effective_epochs"),
+            "complete_optimizer_steps": coverage.get("complete_optimizer_steps"),
+            "complete_optimizer_step_count": coverage.get("complete_optimizer_step_count"),
+            "optimizer_steps": optimizer_steps,
+            "microbatch_iterations": microbatch_iterations,
+        },
+        "objective": {
+            "trainer": "mlx_lm_standard_lora",
+            "iterator_patch_only": True,
+            "full_gradient": True,
+            "mask_prompt": cfg.mask_prompt,
+            "deterministic_exposure_replay": True,
+            "mlx_lm_iters_are_microbatches": True,
+        },
     }
 
 
@@ -1084,7 +1582,12 @@ def _extract_protocol_sha256(value: Any) -> str | None:
     return None
 
 
-def _recipe_record(cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
+def _recipe_record(
+    cfg: Tau3MlxTrainingConfig,
+    *,
+    exposure_binding: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    optimizer_steps = _exposure_optimizer_steps(exposure_binding)
     return {
         "backend": "mlx-lm",
         "fine_tune_type": "lora",
@@ -1099,16 +1602,27 @@ def _recipe_record(cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
         "batch_size": cfg.batch_size,
         "grad_accumulation": cfg.grad_accumulation,
         "iters": cfg.iters,
+        "microbatch_iterations": cfg.iters if cfg.exposure_ledger_training else None,
+        "optimizer_steps": optimizer_steps if cfg.exposure_ledger_training else None,
         "seed": cfg.seed,
         "mask_prompt": cfg.mask_prompt,
         "grad_checkpoint": cfg.grad_checkpoint,
         "disable_compile": cfg.disable_compile,
         "fixed_shape_padding": cfg.fixed_shape_padding,
         "prefix_cache_training": cfg.prefix_cache_training,
+        "exposure_ledger_training": cfg.exposure_ledger_training,
+        "full_gradient_objective": cfg.exposure_ledger_training
+        or not cfg.prefix_cache_training,
     }
 
 
-def _recipe_within_protocol(protocol: dict[str, Any], cfg: Tau3MlxTrainingConfig, recipe: dict[str, Any]) -> dict[str, Any]:
+def _recipe_within_protocol(
+    protocol: dict[str, Any],
+    cfg: Tau3MlxTrainingConfig,
+    recipe: dict[str, Any],
+    *,
+    exposure_binding: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     space = protocol.get("recipe_space")
     if not isinstance(space, dict):
         return {"passed": False, "reason": "missing recipe_space"}
@@ -1123,6 +1637,29 @@ def _recipe_within_protocol(protocol: dict[str, Any], cfg: Tau3MlxTrainingConfig
     if not isinstance(bounds, dict):
         failures.append({"field": "bounds", "actual": bounds, "expected": "object"})
         bounds = {}
+    if cfg.exposure_ledger_training:
+        optimizer_steps = _exposure_optimizer_steps(exposure_binding)
+        if optimizer_steps is None:
+            failures.append(
+                {
+                    "field": "steps",
+                    "actual": None,
+                    "expected": "validated exposure optimizer step count",
+                }
+            )
+        if cfg.grad_accumulation <= 0 or cfg.iters % cfg.grad_accumulation != 0:
+            failures.append(
+                {
+                    "field": "iters/grad_accumulation",
+                    "actual": {
+                        "iters": cfg.iters,
+                        "grad_accumulation": cfg.grad_accumulation,
+                    },
+                    "expected": "microbatch iterations divisible into complete optimizer steps",
+                }
+            )
+    else:
+        optimizer_steps = cfg.iters
     field_values = {
         "rank": cfg.rank,
         "alpha": cfg.scale,
@@ -1130,7 +1667,7 @@ def _recipe_within_protocol(protocol: dict[str, Any], cfg: Tau3MlxTrainingConfig
         "learning_rate": cfg.learning_rate,
         "sequence_length": cfg.max_seq_length,
         "max_seq_length": cfg.max_seq_length,
-        "steps": cfg.iters,
+        "steps": optimizer_steps,
         "iters": cfg.iters,
         "batch_size": cfg.batch_size,
         "grad_accumulation": cfg.grad_accumulation,
@@ -1138,6 +1675,8 @@ def _recipe_within_protocol(protocol: dict[str, Any], cfg: Tau3MlxTrainingConfig
         "dropout": cfg.dropout,
     }
     for field, value in field_values.items():
+        if value is None:
+            continue
         if field in bounds and not _value_allowed_by_bound(value, bounds[field]):
             failures.append({"field": field, "actual": value, "expected": bounds[field]})
     required_groups = (("rank",), ("learning_rate",), ("sequence_length", "max_seq_length"), ("steps", "iters"))
@@ -1145,6 +1684,18 @@ def _recipe_within_protocol(protocol: dict[str, Any], cfg: Tau3MlxTrainingConfig
         if not any(name in bounds for name in names):
             failures.append({"field": "/".join(names), "actual": "missing", "expected": "frozen bound"})
     return {"passed": not failures, "recipe": recipe, "bounds": bounds, "failures": failures}
+
+
+def _exposure_optimizer_steps(exposure_binding: dict[str, Any] | None) -> int | None:
+    if not isinstance(exposure_binding, dict):
+        return None
+    ledger = exposure_binding.get("ledger") if isinstance(exposure_binding.get("ledger"), dict) else {}
+    coverage = exposure_binding.get("coverage") if isinstance(exposure_binding.get("coverage"), dict) else {}
+    for source in (ledger, coverage):
+        value = source.get("optimizer_steps") or source.get("complete_optimizer_step_count")
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 
 def _value_allowed_by_bound(value: int | float, bound: Any) -> bool:
@@ -1629,14 +2180,22 @@ def _model_ref(payloads: dict[str, Any]) -> str:
     return str(model_manifest.get("model_id") or model_manifest.get("base_model") or "")
 
 
-def _mlx_lora_config(model: str, data_dir: Path, adapter_path: str, cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
-    return {
+def _mlx_lora_config(
+    model: str,
+    data_dir: Path,
+    adapter_path: str,
+    cfg: Tau3MlxTrainingConfig,
+    *,
+    exposure_binding: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
         "model": model,
         "train": True,
         "fine_tune_type": "lora",
         "data": str(data_dir),
         "adapter_path": adapter_path,
         "iters": cfg.iters,
+        "microbatch_iterations": cfg.iters if cfg.exposure_ledger_training else None,
         "learning_rate": cfg.learning_rate,
         "num_layers": cfg.num_layers,
         "batch_size": cfg.batch_size,
@@ -1651,6 +2210,7 @@ def _mlx_lora_config(model: str, data_dir: Path, adapter_path: str, cfg: Tau3Mlx
         "grad_checkpoint": cfg.grad_checkpoint,
         "fixed_shape_padding": cfg.fixed_shape_padding,
         "prefix_cache_training": cfg.prefix_cache_training,
+        "exposure_ledger_training": cfg.exposure_ledger_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
         "report_to": None,
         "test": False,
@@ -1660,6 +2220,9 @@ def _mlx_lora_config(model: str, data_dir: Path, adapter_path: str, cfg: Tau3Mlx
             "dropout": cfg.dropout,
         },
     }
+    if exposure_binding is not None:
+        payload["exposure"] = exposure_binding
+    return payload
 
 
 def _build_command(
@@ -1671,8 +2234,11 @@ def _build_command(
     cfg: Tau3MlxTrainingConfig,
     *,
     resume_adapter_file: Path | None = None,
+    exposure_binding: dict[str, Any] | None = None,
 ) -> list[str]:
-    if cfg.prefix_cache_training:
+    if cfg.exposure_ledger_training:
+        module = "flightrecorder.mlx_exposure_lora"
+    elif cfg.prefix_cache_training:
         module = "flightrecorder.mlx_prefix_cache_lora"
     elif cfg.fixed_shape_padding:
         module = "flightrecorder.mlx_fixed_shape_lora"
@@ -1683,7 +2249,7 @@ def _build_command(
         "-m",
         module,
     ]
-    if not (cfg.fixed_shape_padding or cfg.prefix_cache_training):
+    if not (cfg.fixed_shape_padding or cfg.prefix_cache_training or cfg.exposure_ledger_training):
         command.append("lora")
     command.extend(
         [
@@ -1730,6 +2296,17 @@ def _build_command(
         command.append("--grad-checkpoint")
     if resume_adapter_file is not None:
         command.extend(["--resume-adapter-file", str(resume_adapter_file)])
+    if exposure_binding is not None:
+        command.extend(
+            [
+                "--exposure-dataset",
+                str(exposure_binding["dataset"]["path"]),
+                "--exposure-receipt",
+                str(exposure_binding["receipt"]["path"]),
+                "--exposure-ledger",
+                str(exposure_binding["ledger"]["path"]),
+            ]
+        )
     return command
 
 
@@ -1931,10 +2508,18 @@ def _config_within_bounds(cfg: Tau3MlxTrainingConfig) -> bool:
                 and not cfg.fixed_shape_padding
             )
         )
+        and not (cfg.exposure_ledger_training and cfg.prefix_cache_training)
+        and not (cfg.exposure_ledger_training and cfg.fixed_shape_padding)
+        and not (cfg.exposure_ledger_training and not cfg.mask_prompt)
     )
 
 
-def _config_record(cfg: Tau3MlxTrainingConfig, *, resume: dict[str, Any] | None = None) -> dict[str, Any]:
+def _config_record(
+    cfg: Tau3MlxTrainingConfig,
+    *,
+    resume: dict[str, Any] | None = None,
+    exposure_binding: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     record: dict[str, Any] = {
         "iters": cfg.iters,
         "learning_rate": cfg.learning_rate,
@@ -1955,11 +2540,22 @@ def _config_record(cfg: Tau3MlxTrainingConfig, *, resume: dict[str, Any] | None 
         "disable_compile": cfg.disable_compile,
         "fixed_shape_padding": cfg.fixed_shape_padding,
         "prefix_cache_training": cfg.prefix_cache_training,
+        "exposure_ledger_training": cfg.exposure_ledger_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
         "timeout_seconds": cfg.timeout_seconds,
     }
     if resume is not None:
         record["resume"] = resume
+    if exposure_binding is not None:
+        ledger = exposure_binding.get("ledger") if isinstance(exposure_binding.get("ledger"), dict) else {}
+        coverage = exposure_binding.get("coverage") if isinstance(exposure_binding.get("coverage"), dict) else {}
+        record["exposure_schedule"] = {
+            "microbatch_iterations": ledger.get("microbatch_iterations"),
+            "optimizer_steps": ledger.get("optimizer_steps")
+            or coverage.get("optimizer_steps"),
+            "gradient_accumulation_steps": cfg.grad_accumulation,
+            "mlx_lm_iters_are_microbatches": True,
+        }
     return record
 
 

@@ -15,12 +15,14 @@ from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
+    _config_within_bounds,
     _policy_complete_manifest_replays,
     _scan_mlx_data_dir,
     _write_telemetry,
     main as tau3_mlx_training_main,
     run_tau3_mlx_training,
 )
+from flightrecorder.tau3_exposure import build_tau3_exposure_ledger
 from flightrecorder.mlx_prefix_cache_lora import (
     PrefixCacheTrainingError,
     _validation_indices,
@@ -28,6 +30,16 @@ from flightrecorder.mlx_prefix_cache_lora import (
 )
 from flightrecorder.tau3_model_identity import build_tau3_model_identity
 from tests.test_tau3_training_artifacts import _base_bundle, _rewrite_manifest, _write_json, _write_jsonl
+from tests.test_tau3_competitive_dataset import (
+    _FakeTokenizer as _V3FakeTokenizer,
+    _install_fake_transformers as _install_v3_fake_transformers,
+    _grounded_validation_patch as _v3_grounded_validation_patch,
+    _write_contamination_report as _write_v3_contamination_report,
+    _write_grounded_bundle as _write_v3_grounded_bundle,
+    _write_source_dataset as _write_v3_source_dataset,
+    _write_tokenizer_config as _write_v3_tokenizer_config,
+)
+from flightrecorder.tau3_competitive_dataset import build_tau3_competitive_dataset
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -159,6 +171,25 @@ def _fake_model(root: Path) -> tuple[Path, Path]:
     identity_path = root / "identity.json"
     _write_json(identity_path, identity)
     return model, identity_path
+
+
+def _sync_v3_tokenizer_assets_to_model(
+    model: Path,
+    identity_path: Path,
+    tokenizer_config_path: Path,
+) -> None:
+    tokenizer_config = _read_json(tokenizer_config_path)
+    tokenizer_dir = Path(str(tokenizer_config["tokenizer_path"]))
+    for filename in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
+        source = tokenizer_dir / filename
+        if source.is_file():
+            shutil.copy2(source, model / filename)
+    identity = build_tau3_model_identity(
+        model,
+        model_id="fake/base-9b",
+        revision="1234567890abcdef",
+    )
+    _write_json(identity_path, identity)
 
 
 def _protocol_config(root: Path, identity_path: Path) -> Path:
@@ -305,6 +336,97 @@ def _mixture_variant(root: Path, *, protocol_path: Path | None = None, contamina
             lambda payload: payload["source_binding"].__setitem__("protocol_sha256", protocol_sha256),
         )
     return variant
+
+
+def _exposure_row(index: int) -> dict[str, Any]:
+    domains = ("airline", "retail", "telecom")
+    behaviors = (
+        "successful_completion",
+        "clarification_refusal",
+        "authentication",
+        "confirmation_before_mutation",
+        "later_task_completion_actions",
+        "safe_stopping",
+        "transfer_handoff",
+        "empty_result_recovery",
+        "error_result_recovery",
+        "repeated_call_recovery",
+        "hallucinated_tool_correction",
+        "harmful_mutation_correction",
+        "premature_completion_correction",
+    )
+    domain = domains[index % len(domains)]
+    behavior = behaviors[index % len(behaviors)]
+    return {
+        "messages": [
+            {"role": "user", "content": f"{domain} task {index}"},
+            {"role": "assistant", "content": f"Handled {behavior}."},
+        ],
+        "metadata": {
+            "schema_version": "hfr.tau3_competitive_dataset_row.v1",
+            "domain": domain,
+            "behavior": behavior,
+            "target_tool_name": f"{domain}_tool_{index % 4}",
+            "target_action_class": "tool_call",
+            "preceding_result_class": "success" if index % 3 else "recoverable_error",
+            "length_bucket": "short",
+            "source_family_id": f"family_{index % 8}",
+            "source_provenance": {"method": "synthetic_governed_fixture"},
+            "token_counts": {
+                "method": "pinned_local_apply_chat_template",
+                "exact": True,
+                "chat_template_aware": True,
+                "prompt_tokens": 10 + (index % 128),
+                "supervised_tokens": 4 + (index % 5),
+            },
+        },
+        "tools": [],
+    }
+
+
+def _exposure_mixture_variant(
+    root: Path,
+    protocol_path: Path,
+    *,
+    row_count: int = 52,
+    epochs: int = 2,
+    batch_size: int = 2,
+    gradient_accumulation_steps: int = 2,
+    name: str = "exposure",
+) -> tuple[Path, Path, Path]:
+    variant = _mixture_variant(root, protocol_path=protocol_path)
+    rows = [_exposure_row(index) for index in range(row_count)]
+    _write_jsonl(variant / "train.jsonl", rows)
+    _write_jsonl(variant / "valid.jsonl", rows[:3])
+    manifest = _read_json(variant / "manifest.json")
+    manifest["counts"] = {"train": len(rows), "valid": 3}
+    manifest["files"] = {
+        "train": {
+            "path": "train.jsonl",
+            "size": (variant / "train.jsonl").stat().st_size,
+            "sha256": _sha256(variant / "train.jsonl"),
+        },
+        "valid": {
+            "path": "valid.jsonl",
+            "size": (variant / "valid.jsonl").stat().st_size,
+            "sha256": _sha256(variant / "valid.jsonl"),
+        },
+    }
+    _write_json(variant / "manifest.json", manifest)
+    exposure_dir = root / name
+    receipt = build_tau3_exposure_ledger(
+        variant / "train.jsonl",
+        exposure_dir,
+        seed=101,
+        epochs=epochs,
+        batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
+    return (
+        variant,
+        Path(receipt["receipt_path"]),
+        exposure_dir / "training_exposure_ledger.jsonl",
+    )
 
 
 def _refresh_protocol_signature(bundle: Path) -> None:
@@ -572,6 +694,435 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
                         output_dir=root / f"out-{label}",
                         workspace_root=root,
                         config=config,
+                    )
+
+    def test_exposure_ledger_training_uses_governed_full_gradient_driver_and_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+            )
+
+            receipt = run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(
+                    iters=52,
+                    batch_size=2,
+                    grad_accumulation=2,
+                    exposure_ledger_training=True,
+                    timeout_seconds=5,
+                ),
+                exposure_dataset_path=mixture / "train.jsonl",
+                exposure_receipt_path=exposure_receipt,
+                exposure_ledger_path=exposure_ledger,
+            )
+
+            self.assertIn("flightrecorder.mlx_exposure_lora", receipt["command"])
+            self.assertNotIn("mlx_lm", receipt["command"])
+            self.assertIn("--exposure-dataset", receipt["command"])
+            self.assertTrue(receipt["config"]["exposure_ledger_training"])
+            self.assertTrue(
+                receipt["training_binding"]["recipe"]["exposure_ledger_training"]
+            )
+            self.assertTrue(
+                receipt["training_binding"]["recipe"]["full_gradient_objective"]
+            )
+            self.assertEqual(receipt["training_binding"]["recipe"]["optimizer_steps"], 26)
+            self.assertEqual(receipt["training_binding"]["recipe"]["microbatch_iterations"], 52)
+            exposure = receipt["training_binding"]["exposure"]
+            self.assertEqual(exposure["receipt"]["sha256"], _sha256(exposure_receipt))
+            self.assertEqual(exposure["ledger"]["sha256"], _sha256(exposure_ledger))
+            self.assertEqual(exposure["ledger"]["optimizer_steps"], 26)
+            self.assertEqual(exposure["ledger"]["microbatch_iterations"], 52)
+            self.assertEqual(receipt["config"]["exposure_schedule"]["optimizer_steps"], 26)
+            self.assertEqual(receipt["config"]["exposure_schedule"]["microbatch_iterations"], 52)
+            self.assertTrue(exposure["objective"]["iterator_patch_only"])
+            self.assertTrue(exposure["objective"]["full_gradient"])
+            cfg = _read_json(root / "out" / "mlx_lora_config.json")
+            self.assertTrue(cfg["exposure_ledger_training"])
+            self.assertEqual(cfg["exposure"]["ledger"]["optimizer_steps"], 26)
+            self.assertEqual(cfg["exposure"]["ledger"]["microbatch_iterations"], 52)
+
+    def test_exposure_protocol_steps_bound_uses_optimizer_steps_not_microbatches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+                row_count=2002,
+                epochs=2,
+                batch_size=2,
+                gradient_accumulation_steps=2,
+            )
+
+            receipt = run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(
+                    iters=2002,
+                    batch_size=2,
+                    grad_accumulation=2,
+                    exposure_ledger_training=True,
+                    timeout_seconds=5,
+                ),
+                exposure_dataset_path=mixture / "train.jsonl",
+                exposure_receipt_path=exposure_receipt,
+                exposure_ledger_path=exposure_ledger,
+            )
+
+            recipe = receipt["training_binding"]["recipe"]
+            exposure = receipt["training_binding"]["exposure"]
+            self.assertEqual(recipe["optimizer_steps"], 1001)
+            self.assertEqual(recipe["microbatch_iterations"], 2002)
+            self.assertEqual(exposure["ledger"]["optimizer_steps"], 1001)
+            self.assertEqual(exposure["ledger"]["microbatch_iterations"], 2002)
+
+    def test_exposure_protocol_steps_bound_rejects_optimizer_steps_over_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+                row_count=4002,
+                epochs=2,
+                batch_size=2,
+                gradient_accumulation_steps=2,
+            )
+
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(
+                        iters=4002,
+                        batch_size=2,
+                        grad_accumulation=2,
+                        exposure_ledger_training=True,
+                        timeout_seconds=5,
+                    ),
+                    exposure_dataset_path=mixture / "train.jsonl",
+                    exposure_receipt_path=exposure_receipt,
+                    exposure_ledger_path=exposure_ledger,
+                )
+
+    def test_non_exposure_protocol_steps_bound_still_uses_iters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            _mutate_json(
+                protocol,
+                lambda payload: payload["recipe_space"]["bounds"].__setitem__(
+                    "steps",
+                    [1, 2],
+                ),
+            )
+
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=_mixture_variant(root, protocol_path=protocol),
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=3, timeout_seconds=5),
+                )
+
+    def test_exposure_ledger_training_fails_closed_on_recipe_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+            )
+
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(
+                        iters=25,
+                        batch_size=2,
+                        grad_accumulation=2,
+                        exposure_ledger_training=True,
+                        timeout_seconds=5,
+                    ),
+                    exposure_dataset_path=mixture / "train.jsonl",
+                    exposure_receipt_path=exposure_receipt,
+                    exposure_ledger_path=exposure_ledger,
+                )
+
+    def test_exposure_ledger_training_requires_exact_training_dataset_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, _exposure_receipt, _exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+            )
+            alternate = root / "alternate"
+            alternate.mkdir()
+            alternate_train = alternate / "train.jsonl"
+            alternate_rows = [_exposure_row(index) for index in range(52)]
+            for row in alternate_rows:
+                row["fixture_variant"] = "alternate"
+            _write_jsonl(alternate_train, alternate_rows)
+            alternate_receipt = build_tau3_exposure_ledger(
+                alternate_train,
+                alternate / "exposure",
+                seed=101,
+                epochs=2,
+                batch_size=2,
+                gradient_accumulation_steps=2,
+            )
+
+            with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(
+                        iters=52,
+                        batch_size=2,
+                        grad_accumulation=2,
+                        exposure_ledger_training=True,
+                        timeout_seconds=5,
+                    ),
+                    exposure_dataset_path=alternate_train,
+                    exposure_receipt_path=alternate_receipt["receipt_path"],
+                    exposure_ledger_path=alternate / "exposure" / "training_exposure_ledger.jsonl",
+                )
+
+    def test_exposure_ledger_training_requires_mask_prompt(self) -> None:
+        config = Tau3MlxTrainingConfig(
+            iters=52,
+            batch_size=2,
+            grad_accumulation=2,
+            exposure_ledger_training=True,
+            mask_prompt=False,
+        )
+        self.assertFalse(
+            _config_within_bounds(config)
+        )
+
+    def test_competitive_v3_dataset_bundle_is_validated_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            tokenizer_config_path = _write_v3_tokenizer_config(root)
+            _sync_v3_tokenizer_assets_to_model(model, identity, tokenizer_config_path)
+            protocol = _protocol_config(root, identity)
+            tokenizer = _V3FakeTokenizer()
+            with _install_v3_fake_transformers(tokenizer), _v3_grounded_validation_patch():
+                v3_dataset = root / "v3"
+                build_tau3_competitive_dataset(
+                    source_dataset_dir=_write_v3_source_dataset(root),
+                    out_dir=v3_dataset,
+                    tokenizer_config_path=tokenizer_config_path,
+                    grounded_generation_bundle=_write_v3_grounded_bundle(root),
+                    contamination_report_path=_write_v3_contamination_report(root),
+                )
+
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), _v3_grounded_validation_patch():
+                receipt = run_tau3_mlx_training(
+                    mixture_dir=v3_dataset,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                )
+
+            checks = {check["id"]: check for check in receipt["checks"]}
+            self.assertTrue(checks["competitive_v3_dataset_validation_passed"]["passed"])
+            self.assertTrue(checks["competitive_v3_files_replay"]["passed"])
+            self.assertTrue(checks["competitive_v3_tokenizer_exact_recorded"]["passed"])
+            self.assertTrue(checks["competitive_v3_tokenizer_matches_model"]["passed"])
+            self.assertTrue(checks["training_target_quality_direct_semantic_scan"]["passed"])
+            self.assertEqual(
+                receipt["training_binding"]["dataset"]["declared_protocol_sha256"],
+                None,
+            )
+            self.assertTrue(receipt["weights_updated"])
+
+    def test_competitive_v3_training_passes_external_grounded_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            grounded_python = root / "local" / "tau3" / "venv" / "bin" / "python"
+            grounded_python.parent.mkdir(parents=True)
+            grounded_python.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            grounded_python.chmod(0o755)
+            model, identity = _fake_model(root)
+            tokenizer_config_path = _write_v3_tokenizer_config(root)
+            _sync_v3_tokenizer_assets_to_model(model, identity, tokenizer_config_path)
+            protocol = _protocol_config(root, identity)
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), _v3_grounded_validation_patch():
+                v3_dataset = root / "v3"
+                build_tau3_competitive_dataset(
+                    source_dataset_dir=_write_v3_source_dataset(root),
+                    out_dir=v3_dataset,
+                    tokenizer_config_path=tokenizer_config_path,
+                    grounded_generation_bundle=_write_v3_grounded_bundle(root),
+                    contamination_report_path=_write_v3_contamination_report(root),
+                )
+
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), mock.patch(
+                "flightrecorder.tau3_mlx_training.validate_tau3_competitive_dataset_bundle",
+                return_value={"passed": True, "errors": [], "coverage": {"passed": True}},
+            ) as validate:
+                receipt = run_tau3_mlx_training(
+                    mixture_dir=v3_dataset,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                    grounded_validator_python=grounded_python,
+                )
+
+            validate.assert_called_once()
+            self.assertEqual(validate.call_args.kwargs["grounded_validator_python"], grounded_python)
+            self.assertTrue(validate.call_args.kwargs["strict"])
+            binding = receipt["training_binding"]["dataset"]["grounded_validation"]
+            self.assertEqual(binding["grounded_replay"]["mode"], "external_subprocess")
+            self.assertEqual(
+                binding["grounded_replay"]["interpreter"]["path"],
+                str(grounded_python.resolve()),
+            )
+            self.assertEqual(
+                binding["grounded_replay"]["interpreter"]["sha256"],
+                _sha256(grounded_python),
+            )
+            self.assertEqual(
+                binding["grounded_replay"]["interpreter"]["sha256_policy"],
+                "workspace_executable_content_hash",
+            )
+            self.assertEqual(
+                _read_json(root / "out" / "prelaunch_receipt.json")["training_binding"]["dataset"]["grounded_validation"],
+                binding,
+            )
+            self.assertTrue(receipt["weights_updated"])
+
+    def test_competitive_v3_training_fails_closed_when_external_grounded_replay_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            grounded_python = root / "local" / "tau3" / "venv" / "bin" / "python"
+            grounded_python.parent.mkdir(parents=True)
+            grounded_python.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            grounded_python.chmod(0o755)
+            model, identity = _fake_model(root)
+            tokenizer_config_path = _write_v3_tokenizer_config(root)
+            _sync_v3_tokenizer_assets_to_model(model, identity, tokenizer_config_path)
+            protocol = _protocol_config(root, identity)
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), _v3_grounded_validation_patch():
+                v3_dataset = root / "v3"
+                build_tau3_competitive_dataset(
+                    source_dataset_dir=_write_v3_source_dataset(root),
+                    out_dir=v3_dataset,
+                    tokenizer_config_path=tokenizer_config_path,
+                    grounded_generation_bundle=_write_v3_grounded_bundle(root),
+                    contamination_report_path=_write_v3_contamination_report(root),
+                )
+
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), mock.patch(
+                "flightrecorder.tau3_mlx_training.validate_tau3_competitive_dataset_bundle",
+                return_value={"passed": False, "errors": ["grounded_generation strict replay failed"], "coverage": {}},
+            ) as validate:
+                with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                    run_tau3_mlx_training(
+                        mixture_dir=v3_dataset,
+                        protocol_path=protocol,
+                        model_path=model,
+                        model_identity_path=identity,
+                        output_dir=root / "out",
+                        workspace_root=root,
+                        config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+                        grounded_validator_python=grounded_python,
+                    )
+
+            validate.assert_called_once()
+            self.assertEqual(validate.call_args.kwargs["grounded_validator_python"], grounded_python)
+            self.assertFalse((root / "out" / "prelaunch_receipt.json").exists())
+
+    def test_competitive_v3_dataset_tokenizer_must_match_model_tokenizer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            tokenizer_config_path = _write_v3_tokenizer_config(root)
+            _sync_v3_tokenizer_assets_to_model(model, identity, tokenizer_config_path)
+            (model / "tokenizer.json").write_text(
+                '{"fixture": "tampered-model-tokenizer"}\n',
+                encoding="utf-8",
+            )
+            identity_payload = build_tau3_model_identity(
+                model,
+                model_id="fake/base-9b",
+                revision="1234567890abcdef",
+            )
+            _write_json(identity, identity_payload)
+            protocol = _protocol_config(root, identity)
+            with _install_v3_fake_transformers(_V3FakeTokenizer()), _v3_grounded_validation_patch():
+                v3_dataset = root / "v3"
+                build_tau3_competitive_dataset(
+                    source_dataset_dir=_write_v3_source_dataset(root),
+                    out_dir=v3_dataset,
+                    tokenizer_config_path=tokenizer_config_path,
+                    grounded_generation_bundle=_write_v3_grounded_bundle(root),
+                    contamination_report_path=_write_v3_contamination_report(root),
+                )
+
+                with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
+                    run_tau3_mlx_training(
+                        mixture_dir=v3_dataset,
+                        protocol_path=protocol,
+                        model_path=model,
+                        model_identity_path=identity,
+                        output_dir=root / "out",
+                        workspace_root=root,
+                        config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
                     )
 
     def test_prefix_cache_split_preserves_first_target_prediction(self) -> None:

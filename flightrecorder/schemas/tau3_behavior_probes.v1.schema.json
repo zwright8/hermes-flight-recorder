@@ -1,0 +1,84 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_behavior_probes.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Behavior Probes",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_behavior_probes.v1"},
+    "passed": {"type": "boolean"},
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+        "harness_sha256",
+        "protocol_sha256",
+        "grid_sha256"
+      ],
+      "properties": {
+        "training_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "harness_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "grid_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url_sha256", "model_sha256", "configuration_sha256"],
+      "properties": {
+        "base_url_sha256": {"$ref": "#/$defs/sha256"},
+        "model_sha256": {"$ref": "#/$defs/sha256"},
+        "configuration_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "families": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "string",
+        "enum": [
+          "formatting",
+          "clarification",
+          "tool_choice",
+          "empty_recovery",
+          "error_recovery",
+          "repeated_recovery",
+          "mutation_confirmation",
+          "stopping"
+        ]
+      }
+    },
+    "probe_results": {
+      "type": "array",
+      "minItems": 8,
+      "items": {"$ref": "#/$defs/ref"}
+    },
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_probe_count", "failed_probe_count", "family_count"],
+      "properties": {
+        "total_probe_count": {"type": "integer", "minimum": 1},
+        "failed_probe_count": {"type": "integer", "minimum": 0},
+        "family_count": {"type": "integer", "minimum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "required": ["schema_version", "passed", "bindings", "endpoint", "families", "probe_results", "aggregate"]
+}

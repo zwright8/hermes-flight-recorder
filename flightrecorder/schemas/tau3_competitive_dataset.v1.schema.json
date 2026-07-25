@@ -1,0 +1,212 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_competitive_dataset.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Competitive Agent v3 Dataset",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "lineage_id",
+    "source_lineage_id",
+    "passed",
+    "status",
+    "blockers",
+    "source_dataset",
+    "files",
+    "counts",
+    "derivation",
+    "rubric_thresholds",
+    "coverage",
+    "sealed_access",
+    "contamination",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_competitive_dataset.v1"},
+    "lineage_id": {"const": "tau3-competitive-agent-v3"},
+    "source_lineage_id": {"const": "tau3-core-agent-mixture-v2-policy-complete"},
+    "passed": {"type": "boolean"},
+    "status": {"enum": ["passed", "blocked"]},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "source_dataset": {
+      "type": "object",
+      "required": [
+        "manifest",
+        "train",
+        "valid",
+        "immutable_negative_evidence_preserved",
+        "rewrites_v2"
+      ],
+      "properties": {
+        "manifest": {"$ref": "#/$defs/file"},
+        "train": {"$ref": "#/$defs/file"},
+        "valid": {"$ref": "#/$defs/file"},
+        "immutable_negative_evidence_preserved": {"const": true},
+        "rewrites_v2": {"const": false}
+      }
+    },
+    "plan": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/file"}]},
+    "tool_catalog": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/file"}]},
+    "tokenizer_config": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/tokenizer"}]},
+    "grounded_generation": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/grounded"}]},
+    "contamination_report": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/contamination_report"}]},
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "valid", "parent_trajectories", "objective_training_export"],
+      "properties": {
+        "train": {"$ref": "#/$defs/file"},
+        "valid": {"$ref": "#/$defs/file"},
+        "parent_trajectories": {"$ref": "#/$defs/file"},
+        "objective_training_export": {"$ref": "#/$defs/file"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["train", "valid", "source_train", "source_valid"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 0},
+        "valid": {"type": "integer", "minimum": 0},
+        "source_train": {"type": "integer", "minimum": 1},
+        "source_valid": {"type": "integer", "minimum": 1}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "training_side_only",
+        "preserves_parent_message_hashes",
+        "preserves_full_ordered_tool_catalogs",
+        "negative_actions_unmasked",
+        "fabricates_success_claims"
+      ],
+      "properties": {
+        "training_side_only": {"const": true},
+        "preserves_parent_message_hashes": {"const": true},
+        "preserves_full_ordered_tool_catalogs": {"const": true},
+        "negative_actions_unmasked": {"const": false},
+        "fabricates_success_claims": {"const": false}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["passed", "blockers", "by_split"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}},
+        "by_split": {"type": "object"}
+      }
+    },
+    "context_window": {
+      "type": "object",
+      "required": ["max_tokens", "excluded_rows"],
+      "properties": {
+        "max_tokens": {"const": 16384},
+        "excluded_rows": {"type": "array"}
+      }
+    },
+    "sealed_access": {
+      "type": "object",
+      "required": ["payload_accessed", "access_count", "materialized_sealed_fields"],
+      "properties": {
+        "payload_accessed": {"const": false},
+        "access_count": {"const": 0},
+        "materialized_sealed_fields": {"type": "array", "maxItems": 0}
+      }
+    },
+    "contamination": {
+      "type": "object",
+      "required": [
+        "development_hash_disjoint_check",
+        "sealed_hash_disjoint_check",
+        "raw_sealed_payload_read"
+      ],
+      "properties": {
+        "report": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/contamination_report"}]},
+        "development_hash_disjoint_check": {"enum": ["report_replayed", "missing"]},
+        "sealed_hash_disjoint_check": {"enum": ["report_replayed", "missing"]},
+        "raw_sealed_payload_read": {"const": false}
+      }
+    },
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tokenizer": {
+      "type": "object",
+      "required": [
+        "path_leaf",
+        "config_sha256",
+        "tokenizer_json_sha256",
+        "tokenizer_config_sha256",
+        "chat_template_sha256",
+        "chat_template_file_sha256",
+        "copied_assets",
+        "tokenizer_id",
+        "tokenizer_revision"
+      ],
+      "properties": {
+        "path_leaf": {"type": "string", "minLength": 1},
+        "config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "tokenizer_json_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "tokenizer_config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "chat_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "chat_template_file_sha256": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          ]
+        },
+        "copied_assets": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "tokenizer_id": {"type": "string", "minLength": 1},
+        "tokenizer_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "grounded": {
+      "type": "object",
+      "required": [
+        "path_leaf",
+        "manifest_sha256",
+        "declared_manifest_sha256",
+        "lineage_id",
+        "schema_version",
+        "status",
+        "strict_validation_passed",
+        "files"
+      ],
+      "properties": {
+        "path_leaf": {"type": "string", "minLength": 1},
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "declared_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "lineage_id": {"const": "tau3-grounded-generation-v1"},
+        "schema_version": {"const": "hfr.tau3_grounded_generation.v1"},
+        "status": {"const": "passed"},
+        "strict_validation_passed": {"const": true},
+        "files": {"type": "object"}
+      }
+    },
+    "contamination_report": {
+      "type": "object",
+      "required": ["path", "sha256", "bytes", "passed", "summary"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "passed": {"const": true},
+        "summary": {"type": "object"}
+      }
+    }
+  }
+}

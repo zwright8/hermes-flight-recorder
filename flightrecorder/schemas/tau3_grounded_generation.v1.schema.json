@@ -1,0 +1,117 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_grounded_generation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tau-3 Grounded Generation Dataset",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "lineage_id",
+    "passed",
+    "status",
+    "blockers",
+    "source",
+    "files",
+    "counts",
+    "derivation",
+    "coverage",
+    "sealed_access",
+    "contamination",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_grounded_generation.v1"},
+    "lineage_id": {"const": "tau3-grounded-generation-v1"},
+    "passed": {"type": "boolean"},
+    "status": {"enum": ["passed", "blocked"]},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "source": {
+      "type": "object",
+      "required": ["path_leaf", "sha256", "training_side_only", "accepted_source_families"],
+      "properties": {
+        "path_leaf": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "training_side_only": {"const": true},
+        "accepted_source_families": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "validation"],
+      "properties": {
+        "train": {"$ref": "#/$defs/file"},
+        "validation": {"$ref": "#/$defs/file"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["train", "validation"],
+      "properties": {
+        "train": {"type": "integer", "minimum": 0},
+        "validation": {"type": "integer", "minimum": 0}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "dependency_free",
+        "training_side_only",
+        "replays_tool_methods",
+        "fabricates_success_claims",
+        "negative_or_unsafe_targets_masked"
+      ],
+      "properties": {
+        "dependency_free": {"const": true},
+        "training_side_only": {"const": true},
+        "replays_tool_methods": {"const": true},
+        "fabricates_success_claims": {"const": false},
+        "negative_or_unsafe_targets_masked": {"const": true}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["passed", "blockers", "by_split"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}},
+        "by_split": {"type": "object"}
+      }
+    },
+    "sealed_access": {
+      "type": "object",
+      "required": ["payload_accessed", "access_count", "materialized_sealed_fields"],
+      "properties": {
+        "payload_accessed": {"const": false},
+        "access_count": {"const": 0},
+        "materialized_sealed_fields": {"type": "array", "maxItems": 0}
+      }
+    },
+    "contamination": {
+      "type": "object",
+      "required": [
+        "raw_sealed_payload_read",
+        "split_contamination_detected",
+        "train_validation_source_hash_disjoint"
+      ],
+      "properties": {
+        "raw_sealed_payload_read": {"const": false},
+        "split_contamination_detected": {"const": false},
+        "train_validation_source_hash_disjoint": {"const": true}
+      }
+    },
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

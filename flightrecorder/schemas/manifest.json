@@ -2,6 +2,54 @@
   "schema_version": "hfr.schema_catalog.v1",
   "schemas": [
     {
+      "artifact": "tau3_competitive_dataset",
+      "artifact_schema_version": "hfr.tau3_competitive_dataset.v1",
+      "description": "Coverage-gated Tau-3 competitive-agent dataset with immutable lineage, exact prompt and tool contracts, and grounded training-side trajectories.",
+      "filename": "tau3_competitive_dataset.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_competitive_dataset.v1.schema.json",
+      "name": "tau3_competitive_dataset"
+    },
+    {
+      "artifact": "tau3_grounded_generation",
+      "artifact_schema_version": "hfr.tau3_grounded_generation.v1",
+      "description": "Replayable training-side Tau-3 trajectories grounded in pinned vendored tool execution and content-addressed state transitions.",
+      "filename": "tau3_grounded_generation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_grounded_generation.v1.schema.json",
+      "name": "tau3_grounded_generation"
+    },
+    {
+      "artifact": "tau3_objective_validity",
+      "artifact_schema_version": "hfr.tau3_objective_validity.v1",
+      "description": "Fail-closed Tau-3 training-objective report proving complete decision supervision, masking, and per-domain prompt and tool parity.",
+      "filename": "tau3_objective_validity.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_objective_validity.v1.schema.json",
+      "name": "tau3_objective_validity"
+    },
+    {
+      "artifact": "tau3_training_exposure",
+      "artifact_schema_version": "hfr.tau3_training_exposure.v1",
+      "description": "Replayable deterministic Tau-3 optimizer-step exposure schedule and candidate-eligibility receipt.",
+      "filename": "tau3_training_exposure.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_training_exposure.v1.schema.json",
+      "name": "tau3_training_exposure"
+    },
+    {
+      "artifact": "tau3_behavior_probes",
+      "artifact_schema_version": "hfr.tau3_behavior_probes.v1",
+      "description": "Hash-bound deterministic Tau-3 behavior probe aggregate for candidate development qualification.",
+      "filename": "tau3_behavior_probes.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_behavior_probes.v1.schema.json",
+      "name": "tau3_behavior_probes"
+    },
+    {
+      "artifact": "tau3_behavior_probe_result",
+      "artifact_schema_version": "hfr.tau3_behavior_probe_result.v1",
+      "description": "Single replayable Tau-3 behavior probe result with sanitized prompt/output records and structured assertions.",
+      "filename": "tau3_behavior_probe_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_behavior_probe_result.v1.schema.json",
+      "name": "tau3_behavior_probe_result"
+    },
+    {
       "artifact": "tau3_promotion_publication_preflight",
       "artifact_schema_version": "hfr.tau3_promotion_publication_preflight.v1",
       "description": "Hash-bound fail-closed Tau-3 promotion decision and publication preflight artifact.",

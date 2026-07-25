@@ -1,0 +1,210 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_objective_validity.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "actual": true,
+          "detail": {
+            "type": "string"
+          },
+          "expected": true,
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "passed",
+          "actual",
+          "expected"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "complete_message_truncation_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "eligible_decision_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "negative_prefix_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ordered_tool_catalog_sha256_by_domain": {
+      "$ref": "#/$defs/domain_hashes"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_objective_validity.v1",
+      "type": "string"
+    },
+    "sources": {
+      "additionalProperties": false,
+      "properties": {
+        "parent_trajectories": {
+          "$ref": "#/$defs/source"
+        },
+        "training_export": {
+          "$ref": "#/$defs/source"
+        }
+      },
+      "required": [
+        "training_export",
+        "parent_trajectories"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "summary": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "supervised_row_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "supervision_index": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "decision_ordinal": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "negative_prefix": {
+            "type": "boolean"
+          },
+          "parent_trajectory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "row_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "target_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "trajectory_id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_id",
+          "trajectory_id",
+          "decision_ordinal",
+          "parent_trajectory_sha256",
+          "target_sha256",
+          "negative_prefix"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "system_prompt_sha256_by_domain": {
+      "$ref": "#/$defs/domain_hashes"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "status",
+    "summary",
+    "sources",
+    "system_prompt_sha256_by_domain",
+    "ordered_tool_catalog_sha256_by_domain",
+    "eligible_decision_count",
+    "supervised_row_count",
+    "negative_prefix_count",
+    "complete_message_truncation_count",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "supervision_index"
+  ],
+  "title": "Tau-3 Objective Validity Report",
+  "type": "object",
+  "$defs": {
+    "domain_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "retail": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "telecom": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "airline",
+        "retail",
+        "telecom"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256",
+        "row_count"
+      ],
+      "type": "object"
+    }
+  }
+}
