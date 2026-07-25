@@ -1126,6 +1126,97 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
             self.assertTrue(exposure_validation["passed"])
             self.assertIn("assistant_message", exposure["coverage"]["target_tools"])
 
+    def test_objective_export_preserves_full_long_assistant_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _write_source_dataset(root)
+            grounded = _write_grounded_bundle(root)
+            contamination = _write_contamination_report(root)
+            tokenizer_config = _write_tokenizer_config(root)
+            long_target = (
+                "I verified the complete tool result and can now report the requested "
+                "outcome without truncating the supervised assistant decision. "
+            ) * 3
+            train_path = grounded / "train.jsonl"
+            grounded_rows = [
+                json.loads(line)
+                for line in train_path.read_text(encoding="utf-8").splitlines()
+            ]
+            completion = next(
+                target
+                for target in grounded_rows[0]["training_targets"]
+                if target["behavior"] == "successful_completion"
+            )
+            completion["canonical_target"]["text"] = long_target
+            completion["canonical_target_sha256"] = _canonical_sha256(
+                completion["canonical_target"]
+            )
+            metadata = grounded_rows[0]["metadata"]
+            metadata["row_sha256"] = _canonical_sha256(
+                {key: value for key, value in grounded_rows[0].items() if key != "metadata"}
+                | {"metadata": {key: value for key, value in metadata.items() if key != "row_sha256"}}
+            )
+            _write_jsonl(train_path, grounded_rows)
+            grounded_manifest = json.loads(
+                (grounded / "manifest.json").read_text(encoding="utf-8")
+            )
+            grounded_manifest["files"]["train"]["sha256"] = _sha256(train_path)
+            grounded_manifest["files"]["train"]["bytes"] = train_path.stat().st_size
+            _rewrite_manifest(grounded / "manifest.json", grounded_manifest)
+            out = root / "v3"
+
+            with _install_fake_transformers(_FakeTokenizer()), _grounded_validation_patch():
+                manifest = build_tau3_competitive_dataset(
+                    source_dataset_dir=source,
+                    out_dir=out,
+                    tokenizer_config_path=tokenizer_config,
+                    grounded_generation_bundle=grounded,
+                    contamination_report_path=contamination,
+                )
+
+            objective_rows = [
+                json.loads(line)
+                for line in (out / "objective_training_export.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertTrue(manifest["passed"], manifest["blockers"][:5])
+            self.assertTrue(manifest["objective_validity"]["passed"])
+            self.assertIn(long_target, [row["target_text"] for row in objective_rows])
+
+    def test_objective_validity_failure_blocks_build_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _write_source_dataset(root)
+            grounded = _write_grounded_bundle(root)
+            contamination = _write_contamination_report(root)
+            tokenizer_config = _write_tokenizer_config(root)
+
+            with (
+                _install_fake_transformers(_FakeTokenizer()),
+                _grounded_validation_patch(),
+                mock.patch(
+                    "flightrecorder.tau3_competitive_dataset.build_tau3_objective_validity_report",
+                    return_value={
+                        "passed": False,
+                        "failed_check_count": 3,
+                        "eligible_decision_count": 1,
+                        "supervised_row_count": 1,
+                    },
+                ),
+            ):
+                manifest = build_tau3_competitive_dataset(
+                    source_dataset_dir=source,
+                    out_dir=root / "v3",
+                    tokenizer_config_path=tokenizer_config,
+                    grounded_generation_bundle=grounded,
+                    contamination_report_path=contamination,
+                )
+
+            self.assertFalse(manifest["passed"])
+            self.assertFalse(manifest["objective_validity"]["passed"])
+            self.assertIn("objective validity failed 3 checks", manifest["blockers"])
+
     def test_objective_export_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

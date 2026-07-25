@@ -30,7 +30,10 @@ from .tau3_grounded_generation import (
     canonical_sha256 as grounded_canonical_sha256,
     validate_tau3_grounded_generation_bundle,
 )
-from .tau3_objective_validity import build_tau3_objective_validity_report
+from .tau3_objective_validity import (
+    Tau3ObjectiveValidityError,
+    build_tau3_objective_validity_report,
+)
 
 TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION = "hfr.tau3_competitive_dataset.v1"
 TAU3_COMPETITIVE_ROW_SCHEMA_VERSION = "hfr.tau3_competitive_dataset_row.v1"
@@ -260,6 +263,20 @@ def build_tau3_competitive_dataset(
     objective_export = _objective_training_export(rows_by_split)
     _write_jsonl(out / "parent_trajectories.jsonl", parent_export)
     _write_jsonl(out / "objective_training_export.jsonl", objective_export)
+    try:
+        objective_validity = build_tau3_objective_validity_report(
+            training_export_path=out / "objective_training_export.jsonl",
+            parent_trajectories_path=out / "parent_trajectories.jsonl",
+            source_root=out,
+        )
+    except Tau3ObjectiveValidityError as exc:
+        objective_validity = {
+            "passed": False,
+            "failed_check_count": 1,
+            "eligible_decision_count": 0,
+            "supervised_row_count": 0,
+            "error": str(exc),
+        }
 
     coverage = _coverage_report(rows_by_split)
     candidate_only = _candidate_rows_only(rows_by_split)
@@ -271,7 +288,21 @@ def build_tau3_competitive_dataset(
         out,
     )
     blockers.extend(contamination_errors)
-    candidate_passed = coverage["passed"] and candidate_only and not contamination_errors
+    objective_errors = (
+        []
+        if objective_validity.get("passed") is True
+        else [
+            "objective validity failed "
+            f"{int(objective_validity.get('failed_check_count') or 0)} checks"
+        ]
+    )
+    blockers.extend(objective_errors)
+    candidate_passed = (
+        coverage["passed"]
+        and candidate_only
+        and not contamination_errors
+        and not objective_errors
+    )
     manifest: dict[str, Any] = {
         "schema_version": TAU3_COMPETITIVE_DATASET_SCHEMA_VERSION,
         "lineage_id": LINEAGE_ID,
@@ -327,6 +358,18 @@ def build_tau3_competitive_dataset(
         },
         "rubric_thresholds": _thresholds(),
         "coverage": coverage,
+        "objective_validity": {
+            "passed": objective_validity.get("passed") is True,
+            "eligible_decision_count": int(
+                objective_validity.get("eligible_decision_count") or 0
+            ),
+            "supervised_row_count": int(
+                objective_validity.get("supervised_row_count") or 0
+            ),
+            "failed_check_count": int(
+                objective_validity.get("failed_check_count") or 0
+            ),
+        },
         "sealed_access": {
             "payload_accessed": False,
             "access_count": 0,
@@ -470,6 +513,7 @@ def _objective_training_export(
             metadata = row["metadata"]
             if metadata.get("source_kind") != "grounded_generation_target":
                 continue
+            target_text = _target_text_for_objective_row(row)
             records.append(
                 {
                     "schema_version": "hfr.tau3_competitive_objective_decision.v1",
@@ -481,8 +525,8 @@ def _objective_training_export(
                     "export_index": metadata["source_provenance"]["grounded_target_export_ordinal"],
                     "parent_trajectory_sha256": metadata["source_provenance"]["parent_trajectory_export_sha256"],
                     "supervised_decision": True,
-                    "target_text": _target_text_for_objective(metadata["canonical_target"]),
-                    "target_sha256": _canonical_sha256(_target_text_for_objective(metadata["canonical_target"])),
+                    "target_text": target_text,
+                    "target_sha256": _canonical_sha256(target_text),
                     "target_kind": "safe_correction" if metadata["behavior"] in {
                         "hallucinated_tool_correction",
                         "harmful_mutation_correction",
@@ -507,6 +551,17 @@ def _objective_training_export(
                 }
             )
     return records
+
+
+def _target_text_for_objective_row(row: dict[str, Any]) -> str:
+    metadata = _dict(row.get("metadata"))
+    canonical = _dict(metadata.get("canonical_target"))
+    if canonical.get("kind") == "tool_call":
+        return _target_text_for_objective(canonical)
+    for message in reversed(row.get("messages") or []):
+        if isinstance(message, dict) and message.get("role") == "assistant":
+            return str(message.get("content") or "")
+    return _target_text_for_objective(canonical)
 
 
 def _target_text_for_objective(canonical: dict[str, Any]) -> str:
