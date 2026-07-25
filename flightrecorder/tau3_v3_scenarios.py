@@ -1690,6 +1690,11 @@ def _make_source_row(
         target_tool_names = [
             name for name in tool_names if target_pools.get(name)
         ]
+        if behavior == "successful_completion":
+            target_tool_names = _order_successful_completion_tools(
+                domain,
+                target_tool_names,
+            )
         if not target_tool_names:
             raise Tau3V3ScenarioError(
                 f"{domain} has no state-changing tool arguments for successful_completion"
@@ -1896,6 +1901,21 @@ def _select_tool_for_behavior(behavior: str, ordinal: int, tool_names: list[str]
     return tool_names[ordinal % len(tool_names)]
 
 
+def _order_successful_completion_tools(
+    domain: str,
+    tool_names: list[str],
+) -> list[str]:
+    ordered = list(tool_names)
+    if (
+        domain == "telecom"
+        and "refuel_data" in ordered
+        and "send_payment_request" in ordered
+    ):
+        ordered.remove("refuel_data")
+        ordered.insert(ordered.index("send_payment_request"), "refuel_data")
+    return ordered
+
+
 def _safe_target(behavior: str) -> dict[str, Any]:
     wording = {
         "successful_completion": "I completed the confirmed change after verifying the tool result.",
@@ -2033,10 +2053,32 @@ def _scalar_values(value: Any) -> list[Any]:
 
 
 def _replay_source_row(row: dict[str, Any], runtime_factory: RuntimeFactory) -> None:
-    runtime = runtime_factory(row)
-    for turn in row["turns"]:
-        for call in turn["assistant"]["tool_calls"]:
-            runtime.call(call["tool_name"], copy.deepcopy(call.get("arguments") or {}))
+    replay_hashes: list[str] = []
+    for _ in range(2):
+        runtime = runtime_factory(copy.deepcopy(row))
+        results: list[Any] = []
+        for turn in row["turns"]:
+            for call in turn["assistant"]["tool_calls"]:
+                results.append(
+                    _canonical_value(
+                        runtime.call(
+                            call["tool_name"],
+                            copy.deepcopy(call.get("arguments") or {}),
+                        )
+                    )
+                )
+        replay_hashes.append(
+            canonical_sha256(
+                {
+                    "results": results,
+                    "final_state": _canonical_value(runtime.state),
+                }
+            )
+        )
+    if len(set(replay_hashes)) != 1:
+        raise Tau3V3ScenarioError(
+            f"{row['source_id']} is not deterministic across isolated replays"
+        )
 
 
 def _add_tool_coverage_closures(

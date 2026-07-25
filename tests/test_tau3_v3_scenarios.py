@@ -12,6 +12,8 @@ from flightrecorder.tau3_v3_scenarios import (
     Tau3V3ScenarioError,
     _coverage_summary,
     _least_represented_closure_arg_index,
+    _order_successful_completion_tools,
+    _replay_source_row,
     _telecom_state_variant_for_tool,
     build_tau3_v3_scenario_sources,
 )
@@ -167,6 +169,51 @@ def _fake_runtime(payload: dict[str, Any]) -> _FakeRuntime:
 
 
 class Tau3V3ScenarioSourceTests(unittest.TestCase):
+    def test_telecom_refuel_precedes_payment_request_in_stateful_rows(self) -> None:
+        ordered = _order_successful_completion_tools(
+            "telecom",
+            [
+                "suspend_line",
+                "send_payment_request",
+                "enable_roaming",
+                "refuel_data",
+            ],
+        )
+
+        self.assertLess(
+            ordered.index("refuel_data"),
+            ordered.index("send_payment_request"),
+        )
+
+    def test_source_replay_rejects_nondeterministic_state(self) -> None:
+        counter = 0
+
+        class NondeterministicRuntime:
+            def __init__(self) -> None:
+                self.state: dict[str, Any] = {}
+
+            def call(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+                nonlocal counter
+                counter += 1
+                self.state["generated_id"] = counter
+                return {"ok": True}
+
+        row = {
+            "source_id": "nondeterministic-row",
+            "turns": [
+                {
+                    "assistant": {
+                        "tool_calls": [
+                            {"tool_name": "create_record", "arguments": {}}
+                        ]
+                    }
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(Tau3V3ScenarioError, "not deterministic"):
+            _replay_source_row(row, lambda payload: NondeterministicRuntime())
+
     def test_closure_arguments_fill_the_least_represented_payload(self) -> None:
         pool = [{"id": f"record-{index}"} for index in range(4)]
         counts = {

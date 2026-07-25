@@ -1696,7 +1696,7 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
                 )
 
             failed = types.SimpleNamespace(
-                returncode=0,
+                returncode=1,
                 stdout=json.dumps(
                     {
                         "schema_version": "hfr.validation.v1",
@@ -1706,7 +1706,7 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
                         "errors": ["grounded train file hash does not replay"],
                     }
                 ),
-                stderr="",
+                stderr="noisy dependency logs",
             )
             with _install_fake_transformers(_FakeTokenizer()), mock.patch(
                 "flightrecorder.tau3_competitive_dataset.subprocess.run",

@@ -933,15 +933,15 @@ def _validate_grounded_generation_bundle_external(
             "passed": False,
             "errors": [f"grounded validator subprocess failed: {exc}"],
         }
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
-        return {
-            "passed": False,
-            "errors": [f"grounded validator subprocess failed: {detail[:2000]}"],
-        }
     try:
         result = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            return {
+                "passed": False,
+                "errors": [f"grounded validator subprocess failed: {detail[:2000]}"],
+            }
         return {
             "passed": False,
             "errors": [f"grounded validator subprocess returned invalid JSON: {exc}"],
@@ -975,6 +975,13 @@ def _validate_grounded_generation_bundle_external(
         return {
             "passed": False,
             "errors": [str(error) for error in errors[:20]] if isinstance(errors, list) else ["grounded validator subprocess reported failed replay"],
+        }
+    if completed.returncode != 0:
+        return {
+            "passed": False,
+            "errors": [
+                f"grounded validator subprocess failed with exit {completed.returncode} despite a passing result"
+            ],
         }
     return result
 
