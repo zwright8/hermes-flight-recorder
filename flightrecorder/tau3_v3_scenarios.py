@@ -542,6 +542,7 @@ def _convert_natural_row(
     last_user_context: str | None = None
     pending_user: str | None = None
     decision_ordinal = 0
+    mutation_replayed = False
     index = 0
     while index < len(messages):
         message = messages[index]
@@ -577,7 +578,10 @@ def _convert_natural_row(
                 return None
             recorded_result = _parse_tool_result_content(tool_message.get("content"))
             try:
+                pre_state_sha256 = canonical_sha256(runtime.state)
                 replayed = runtime.call(tool_name, copy.deepcopy(arguments))
+                if canonical_sha256(runtime.state) != pre_state_sha256:
+                    mutation_replayed = True
                 result_class = "empty" if replayed in (None, [], {}) else "success"
             except Exception as exc:
                 replayed = {"error": exc.__class__.__name__, "message": str(exc)}
@@ -617,6 +621,12 @@ def _convert_natural_row(
             index += 2
             continue
         if content and last_user_context is not None:
+            content_lower = content.lower()
+            if (
+                ("completed" in content_lower or "success" in content_lower)
+                and not mutation_replayed
+            ):
+                return None
             turns.append(
                 {
                     **({"user": {"content": pending_user}} if pending_user is not None else {}),
@@ -2154,7 +2164,7 @@ def _make_tool_closure_row(
                     "safe_corrected_target": _tool_target(
                         tool_name,
                         args,
-                        behavior="successful_completion",
+                        behavior="later_task_completion_actions",
                     ),
                 },
             }

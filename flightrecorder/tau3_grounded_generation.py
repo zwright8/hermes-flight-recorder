@@ -305,6 +305,9 @@ def _build_row(scenario: _Scenario) -> dict[str, Any]:
         "training_targets": training_targets,
         "metadata": metadata,
     }
+    completion_errors = _completion_claim_errors(row, "source")
+    if completion_errors:
+        raise Tau3GroundedGenerationError("; ".join(completion_errors))
     metadata["row_sha256"] = canonical_sha256(_without_row_sha(row))
     return row
 

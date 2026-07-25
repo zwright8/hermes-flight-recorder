@@ -232,6 +232,17 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                     }
                 ],
             )
+            closure_targets = [
+                turn["assistant"]["safe_corrected_target"]
+                for row in rows
+                if "tool-closure" in row["source_id"]
+                for turn in row["turns"]
+            ]
+            self.assertTrue(closure_targets)
+            self.assertEqual(
+                {target["behavior"] for target in closure_targets},
+                {"later_task_completion_actions"},
+            )
 
     def test_strict_mode_fails_closed_on_incomplete_coverage(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:

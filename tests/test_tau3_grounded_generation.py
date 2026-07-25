@@ -505,7 +505,7 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                 result["errors"],
             )
 
-    def test_validation_rejects_fabricated_success_without_replayed_mutation(self) -> None:
+    def test_builder_rejects_fabricated_success_without_replayed_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source.jsonl"
@@ -521,20 +521,15 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                     )
                 ],
             )
-            out = root / "out"
-            build_tau3_grounded_generation_dataset(
-                source=source,
-                out_dir=out,
-                strict_coverage=False,
-            )
-
-            result = validate_tau3_grounded_generation_bundle(out, strict=False)
-
-            self.assertFalse(result["passed"])
-            self.assertTrue(
-                any("fabricates completion" in error for error in result["errors"]),
-                result["errors"],
-            )
+            with self.assertRaisesRegex(
+                Tau3GroundedGenerationError,
+                "fabricates completion",
+            ):
+                build_tau3_grounded_generation_dataset(
+                    source=source,
+                    out_dir=root / "out",
+                    strict_coverage=False,
+                )
 
     def test_validation_reports_split_contamination(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
