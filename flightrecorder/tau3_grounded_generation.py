@@ -374,13 +374,43 @@ def _target_for_decision(
     unsafe = target.get("unsafe") is True or target.get("mask") is True
     tool_name = target.get("tool_name")
     if unsafe:
+        if target.get("reviewed") is not True:
+            raise Tau3GroundedGenerationError(
+                f"turns[{turn_index}] masked negative target must be explicitly reviewed"
+            )
+        safe_decision = target.get("safe_correction_decision_ordinal")
+        if (
+            type(safe_decision) is not int
+            or safe_decision <= decision_ordinal
+        ):
+            raise Tau3GroundedGenerationError(
+                f"turns[{turn_index}] masked negative target must link to a later safe correction"
+            )
+        kind = str(target.get("kind") or "assistant_message")
+        canonical = {
+            "kind": kind,
+            "text": str(target.get("text") or ""),
+            "tool_name": tool_name if isinstance(tool_name, str) else None,
+            "arguments": _canonical_value(target.get("arguments") or {}),
+        }
+        _raise_target_shape_errors(
+            canonical,
+            f"turns[{turn_index}].assistant.safe_corrected_target",
+        )
+        if kind == "assistant_message" and not canonical["text"]:
+            raise Tau3GroundedGenerationError(
+                f"turns[{turn_index}] masked negative assistant target must carry explicit text"
+            )
         return {
             "parent_assistant_decision_ordinal": decision_ordinal,
             "behavior": behavior,
+            "negative_behavior": str(target.get("negative_behavior") or ""),
             "masked": True,
             "mask_reason": str(target.get("mask_reason") or "unsafe_or_negative_action"),
-            "canonical_target": None,
-            "canonical_target_sha256": None,
+            "reviewed": True,
+            "safe_correction_decision_ordinal": safe_decision,
+            "canonical_target": canonical,
+            "canonical_target_sha256": canonical_sha256(canonical),
         }
     if isinstance(tool_name, str) and _is_mutation_tool(tool_name) and target.get("requires_confirmation") is True:
         raise Tau3GroundedGenerationError(
@@ -410,7 +440,13 @@ def _assert_training_targets_grounded(
     tool_catalog: list[dict[str, Any]],
     tool_history: list[dict[str, Any]],
 ) -> None:
-    errors = _target_binding_errors(targets, tool_catalog, tool_history, "source")
+    errors = [
+        error
+        for index, target in enumerate(targets)
+        for error in _validate_target(target, f"source.training_targets[{index}]")
+    ]
+    errors.extend(_masked_correction_link_errors(targets, "source"))
+    errors.extend(_target_binding_errors(targets, tool_catalog, tool_history, "source"))
     if errors:
         raise Tau3GroundedGenerationError("; ".join(errors))
 
@@ -727,6 +763,7 @@ def _validate_row(row: Any, context: str, bundle: Path) -> list[str]:
     else:
         for index, target in enumerate(targets):
             errors.extend(_validate_target(target, f"{context}.training_targets[{index}]"))
+        errors.extend(_masked_correction_link_errors(targets, context))
 
     replay = row.get("tool_replay")
     if not isinstance(replay, list):
@@ -821,10 +858,42 @@ def _validate_target(target: Any, context: str) -> list[str]:
     if not isinstance(target.get("parent_assistant_decision_ordinal"), int):
         errors.append(f"{context}.parent_assistant_decision_ordinal must be an integer")
     if target.get("masked") is True:
-        if target.get("canonical_target") is not None or target.get("canonical_target_sha256") is not None:
-            errors.append(f"{context} masked target must not expose canonical target")
         if not target.get("mask_reason"):
             errors.append(f"{context}.mask_reason is required for masked targets")
+        if target.get("reviewed") is not True:
+            errors.append(f"{context}.reviewed must be true for masked targets")
+        decision = target.get("parent_assistant_decision_ordinal")
+        safe_decision = target.get("safe_correction_decision_ordinal")
+        if (
+            type(decision) is not int
+            or type(safe_decision) is not int
+            or safe_decision <= decision
+        ):
+            errors.append(
+                f"{context}.safe_correction_decision_ordinal must identify a later decision"
+            )
+        negative_behavior = target.get("negative_behavior")
+        expected_negative = {
+            "hallucinated_tool_correction": "hallucinated_tool",
+            "harmful_mutation_correction": "harmful_mutation",
+            "premature_completion_correction": "premature_completion",
+        }.get(target.get("behavior"))
+        if negative_behavior != expected_negative:
+            errors.append(f"{context}.negative_behavior does not match correction behavior")
+        canonical = target.get("canonical_target")
+        if not isinstance(canonical, dict):
+            errors.append(f"{context}.canonical_target must retain the reviewed negative action")
+        else:
+            errors.extend(_target_shape_errors(canonical, f"{context}.canonical_target"))
+            if (
+                canonical.get("kind") == "assistant_message"
+                and not str(canonical.get("text") or "")
+            ):
+                errors.append(
+                    f"{context}.canonical_target masked assistant action must carry explicit text"
+                )
+            if canonical_sha256(canonical) != target.get("canonical_target_sha256"):
+                errors.append(f"{context}.canonical_target_sha256 does not replay")
         return errors
     canonical = target.get("canonical_target")
     if not isinstance(canonical, dict):
@@ -838,6 +907,30 @@ def _validate_target(target: Any, context: str) -> list[str]:
         "premature_completion_correction",
     }:
         errors.append(f"{context} unsafe corrected mutation target must be masked")
+    return errors
+
+
+def _masked_correction_link_errors(targets: list[Any], context: str) -> list[str]:
+    errors: list[str] = []
+    by_decision: dict[int, list[dict[str, Any]]] = {}
+    for target in targets:
+        if isinstance(target, dict) and type(target.get("parent_assistant_decision_ordinal")) is int:
+            by_decision.setdefault(target["parent_assistant_decision_ordinal"], []).append(target)
+    for index, target in enumerate(targets):
+        if not isinstance(target, dict) or target.get("masked") is not True:
+            continue
+        safe_decision = target.get("safe_correction_decision_ordinal")
+        linked = by_decision.get(safe_decision, []) if type(safe_decision) is int else []
+        safe = [
+            item
+            for item in linked
+            if item.get("masked") is not True
+            and item.get("behavior") == target.get("behavior")
+        ]
+        if len(safe) != 1:
+            errors.append(
+                f"{context}.training_targets[{index}] must link to exactly one later unmasked correction"
+            )
     return errors
 
 

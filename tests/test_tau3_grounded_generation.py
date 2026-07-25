@@ -94,8 +94,56 @@ def _scenario(
             }
         )
         if unsafe:
-            target["unsafe"] = True
-            target["mask_reason"] = "unsafe_or_negative_action"
+            if behavior == "harmful_mutation_correction":
+                target = {
+                    "behavior": behavior,
+                    "negative_behavior": "harmful_mutation",
+                    "kind": "tool_call",
+                    "text": "",
+                    "tool_name": "update_record",
+                    "arguments": {"id": record_id, "patch": {"status": "unsafe"}},
+                    "unsafe": True,
+                    "mask_reason": "unsafe_or_negative_action",
+                    "reviewed": True,
+                    "safe_correction_decision_ordinal": 1,
+                }
+            else:
+                target = {
+                    "behavior": behavior,
+                    "negative_behavior": "premature_completion",
+                    "kind": "assistant_message",
+                    "text": "Done before verifying the required evidence.",
+                    "unsafe": True,
+                    "mask_reason": "unsafe_or_negative_action",
+                    "reviewed": True,
+                    "safe_correction_decision_ordinal": 1,
+                }
+            tool_calls = []
+    turns = [
+        {
+            "user": {"content": f"Please handle {behavior}."},
+            "assistant": {
+                "decision_ordinal": 0,
+                "tool_calls": tool_calls,
+                "safe_corrected_target": target,
+            },
+        }
+    ]
+    if unsafe:
+        turns.append(
+            {
+                "user": {"content": "Do not take that action; use the safe correction."},
+                "assistant": {
+                    "decision_ordinal": 1,
+                    "tool_calls": [],
+                    "safe_corrected_target": {
+                        "behavior": behavior,
+                        "kind": "assistant_message",
+                        "text": f"Safely corrected {behavior} for {domain}.",
+                    },
+                },
+            }
+        )
     return {
         "trajectory_id": f"traj-{row_id}",
         "domain": domain,
@@ -110,16 +158,7 @@ def _scenario(
             "records": {record_id: {"id": record_id, "status": "open"}},
             "notes": [],
         },
-        "turns": [
-            {
-                "user": {"content": f"Please handle {behavior}."},
-                "assistant": {
-                    "decision_ordinal": 0,
-                    "tool_calls": tool_calls,
-                    "safe_corrected_target": target,
-                },
-            }
-        ],
+        "turns": turns,
         "recipe": {"id": "unit-recipe", "sha256": canonical_sha256("recipe")},
         "teacher": {"id": "unit-teacher", "sha256": canonical_sha256("teacher")},
         "reviewer": {"id": "unit-reviewer", "sha256": canonical_sha256("reviewer")},
@@ -720,6 +759,65 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                     out_dir=root / "out",
                     strict_coverage=False,
                 )
+
+    def test_reviewed_negative_action_is_retained_and_linked_to_safe_correction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.jsonl"
+            _write_jsonl(
+                source,
+                [
+                    _scenario(
+                        split="train",
+                        domain="airline",
+                        family_index=0,
+                        behavior="harmful_mutation_correction",
+                        unsafe=True,
+                    )
+                ],
+            )
+            out = root / "out"
+
+            build_tau3_grounded_generation_dataset(
+                source=source,
+                out_dir=out,
+                strict_coverage=False,
+            )
+
+            exported = json.loads(
+                (out / "train.jsonl").read_text(encoding="utf-8").splitlines()[0]
+            )
+            negative, correction = exported["training_targets"]
+            self.assertTrue(negative["masked"])
+            self.assertTrue(negative["reviewed"])
+            self.assertEqual(negative["negative_behavior"], "harmful_mutation")
+            self.assertEqual(negative["safe_correction_decision_ordinal"], 1)
+            self.assertEqual(negative["canonical_target"]["kind"], "tool_call")
+            self.assertEqual(negative["canonical_target"]["tool_name"], "update_record")
+            self.assertFalse(correction["masked"])
+            self.assertEqual(correction["parent_assistant_decision_ordinal"], 1)
+
+    def test_masked_negative_requires_review_and_valid_forward_link(self) -> None:
+        for field in ("reviewed", "safe_correction_decision_ordinal"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                source = root / "source.jsonl"
+                row = _scenario(
+                    split="train",
+                    domain="airline",
+                    family_index=0,
+                    behavior="harmful_mutation_correction",
+                    unsafe=True,
+                )
+                row["turns"][0]["assistant"]["safe_corrected_target"].pop(field)
+                _write_jsonl(source, [row])
+
+                with self.assertRaises(Tau3GroundedGenerationError):
+                    build_tau3_grounded_generation_dataset(
+                        source=source,
+                        out_dir=root / "out",
+                        strict_coverage=False,
+                    )
 
     def test_builder_rejects_unbound_unmasked_tool_target(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

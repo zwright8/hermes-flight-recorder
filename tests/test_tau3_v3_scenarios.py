@@ -63,15 +63,22 @@ def _fixture_inputs(root: Path) -> dict[str, Path]:
                     "tools": [
                         {"function": {"name": "get_record"}},
                         {"function": {"name": "list_all_airports"}},
+                        {"function": {"name": "update_record"}},
                     ]
                 },
                 "retail": {
                     "tools": [
                         {"function": {"name": "get_record"}},
                         {"function": {"name": "list_all_product_types"}},
+                        {"function": {"name": "update_record"}},
                     ]
                 },
-                "telecom": {"tools": [{"function": {"name": "get_record"}}]},
+                "telecom": {
+                    "tools": [
+                        {"function": {"name": "get_record"}},
+                        {"function": {"name": "update_record"}},
+                    ]
+                },
             }
         },
     )
@@ -131,16 +138,26 @@ class _FakeRuntime:
 
     def tool_catalog(self) -> list[dict[str, Any]]:
         if self.domain == "airline":
-            return [{"name": "get_record"}, {"name": "list_all_airports"}]
+            return [
+                {"name": "get_record"},
+                {"name": "list_all_airports"},
+                {"name": "update_record"},
+            ]
         if self.domain == "retail":
-            return [{"name": "get_record"}, {"name": "list_all_product_types"}]
-        return [{"name": "get_record"}]
+            return [
+                {"name": "get_record"},
+                {"name": "list_all_product_types"},
+                {"name": "update_record"},
+            ]
+        return [{"name": "get_record"}, {"name": "update_record"}]
 
     def call(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         if tool_name in {"list_all_airports", "list_all_product_types"}:
             return {"ok": True}
         if args.get("id") not in self.state["records"]:
             raise ValueError("missing record")
+        if tool_name == "update_record":
+            self.state["records"][args["id"]]["status"] = "updated"
         return self.state["records"][args["id"]]
 
 
@@ -188,6 +205,55 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
                     "dev_payload_read": False,
                 },
             )
+
+    def test_negative_corrections_are_reviewed_context_before_safe_targets(self) -> None:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:
+            paths = _fixture_inputs(Path(temp))
+            result = build_tau3_v3_scenario_sources(
+                out=Path(temp) / "unused.jsonl",
+                tau_repo=paths["repo"],
+                v2_mixture_dir=paths["mixture"],
+                official_tool_catalog=paths["catalog"],
+                natural_corpus=paths["corpus"],
+                development_tasks=paths["development"],
+                protocol=paths["protocol"],
+                strict=False,
+                dry_run=True,
+                runtime_factory=_fake_runtime,
+                max_rows_per_domain_split=104,
+            )
+
+            expected_negative = {
+                "hallucinated_tool_correction": "hallucinated_tool",
+                "harmful_mutation_correction": "harmful_mutation",
+                "premature_completion_correction": "premature_completion",
+            }
+            for behavior, negative_behavior in expected_negative.items():
+                row = next(
+                    item
+                    for item in result.rows
+                    if item["domain"] == "airline"
+                    and item["split"] == "train"
+                    and f"-{behavior}-" in item["source_id"]
+                )
+                negative = row["turns"][0]["assistant"]["safe_corrected_target"]
+                correction = row["turns"][1]["assistant"]["safe_corrected_target"]
+                self.assertTrue(negative["masked"])
+                self.assertTrue(negative["reviewed"])
+                self.assertEqual(negative["negative_behavior"], negative_behavior)
+                self.assertEqual(negative["safe_correction_decision_ordinal"], 1)
+                self.assertEqual(correction["behavior"], behavior)
+                self.assertFalse(correction.get("masked", False))
+                self.assertEqual(
+                    result.summary["coverage"]["behavior_counts"]["train"]["airline"][behavior],
+                    24,
+                )
+                self.assertEqual(
+                    result.summary["coverage"]["negative_context_counts"]["train"]["airline"][
+                        negative_behavior
+                    ],
+                    24,
+                )
 
     def test_writes_source_and_sibling_contamination_report_when_not_dry_run(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:
@@ -278,6 +344,7 @@ class Tau3V3ScenarioSourceTests(unittest.TestCase):
             tools = [
                 {"function": {"name": "get_record"}},
                 {"function": {"name": "list_all_airports"}},
+                {"function": {"name": "update_record"}},
             ]
             _write_jsonl(
                 paths["corpus"],

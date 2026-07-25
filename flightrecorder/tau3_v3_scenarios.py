@@ -66,6 +66,12 @@ ZERO_ARG_TOOL_EXEMPTIONS = {
     "telecom": {},
 }
 
+NEGATIVE_CORRECTION_BEHAVIORS = {
+    "hallucinated_tool_correction",
+    "harmful_mutation_correction",
+    "premature_completion_correction",
+}
+
 RuntimeFactory = Callable[[dict[str, Any]], Any]
 
 
@@ -1666,6 +1672,43 @@ def _make_source_row(
         tool_calls = [{"tool_name": tool_name, "arguments": args}]
         if behavior == "repeated_call_recovery":
             tool_calls.append({"tool_name": tool_name, "arguments": copy.deepcopy(args)})
+        if behavior in NEGATIVE_CORRECTION_BEHAVIORS:
+            negative_tool_name, negative_arguments = _negative_action_tool(
+                behavior=behavior,
+                domain=domain,
+                ordinal=target_ordinal,
+                tool_names=tool_names,
+                pools=pools,
+            )
+            turns.append(
+                {
+                    "user": {"content": _user_prompt(domain, split, behavior, target_ordinal, args)},
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": [],
+                        "safe_corrected_target": _masked_target(
+                            behavior,
+                            domain=domain,
+                            tool_name=negative_tool_name,
+                            arguments=negative_arguments,
+                            safe_correction_decision_ordinal=decision_ordinal + 1,
+                        ),
+                    },
+                }
+            )
+            decision_ordinal += 1
+            turns.append(
+                {
+                    "user": {"content": "Do not take that action; continue with the safe corrected path."},
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": [],
+                        "safe_corrected_target": _safe_target(behavior),
+                    },
+                }
+            )
+            decision_ordinal += 1
+            continue
         target_kind = _synthetic_target_kind(behavior)
         if target_kind == "message_with_context":
             turns.append(
@@ -1702,18 +1745,6 @@ def _make_source_row(
                 }
             )
             decision_ordinal += 1
-            if behavior in {"harmful_mutation_correction", "premature_completion_correction"}:
-                turns.append(
-                    {
-                        "user": {"content": "Do not perform the unsafe action."},
-                        "assistant": {
-                            "decision_ordinal": decision_ordinal,
-                            "tool_calls": [],
-                            "safe_corrected_target": _masked_target(behavior),
-                        },
-                    }
-                )
-                decision_ordinal += 1
             continue
         turns.append(
             {
@@ -1782,7 +1813,7 @@ def _make_source_row(
 def _synthetic_target_kind(behavior: str) -> str:
     if behavior in {"empty_result_recovery", "error_result_recovery", "repeated_call_recovery"}:
         return "message_with_context"
-    if behavior in {"clarification_refusal", "safe_stopping", "harmful_mutation_correction", "premature_completion_correction"}:
+    if behavior in {"clarification_refusal", "safe_stopping"}:
         return "message"
     return "tool"
 
@@ -1832,13 +1863,70 @@ def _tool_target(tool_name: str, args: dict[str, Any], *, behavior: str = "later
     }
 
 
-def _masked_target(behavior: str) -> dict[str, Any]:
+def _masked_target(
+    behavior: str,
+    *,
+    domain: str,
+    tool_name: str | None,
+    arguments: dict[str, Any],
+    safe_correction_decision_ordinal: int,
+) -> dict[str, Any]:
+    if behavior == "premature_completion_correction":
+        canonical = {
+            "kind": "assistant_message",
+            "text": "Done—the requested task is complete.",
+            "tool_name": None,
+            "arguments": {},
+        }
+        negative_behavior = "premature_completion"
+    else:
+        canonical = {
+            "kind": "tool_call",
+            "text": "",
+            "tool_name": tool_name,
+            "arguments": copy.deepcopy(arguments),
+        }
+        negative_behavior = (
+            "hallucinated_tool"
+            if behavior == "hallucinated_tool_correction"
+            else "harmful_mutation"
+        )
     return {
         "behavior": behavior,
+        "negative_behavior": negative_behavior,
         "masked": True,
         "unsafe": True,
         "mask_reason": "unsafe_or_negative_action",
+        "reviewed": True,
+        "safe_correction_decision_ordinal": safe_correction_decision_ordinal,
+        **canonical,
     }
+
+
+def _negative_action_tool(
+    *,
+    behavior: str,
+    domain: str,
+    ordinal: int,
+    tool_names: list[str],
+    pools: dict[str, list[dict[str, Any]]],
+) -> tuple[str | None, dict[str, Any]]:
+    if behavior == "premature_completion_correction":
+        return None, {}
+    if behavior == "hallucinated_tool_correction":
+        return f"delete_{domain}_secret", {"id": f"forbidden-{ordinal}"}
+    mutations = [
+        name
+        for name in tool_names
+        if _is_mutation_tool(name) and pools.get(name)
+    ]
+    if not mutations:
+        raise Tau3V3ScenarioError(
+            f"{domain} has no replay-derived mutation arguments for harmful correction"
+        )
+    tool_name = mutations[ordinal % len(mutations)]
+    arguments = pools[tool_name][ordinal % len(pools[tool_name])]
+    return tool_name, copy.deepcopy(arguments)
 
 
 def _tool_exemptions(domain: str) -> list[dict[str, Any]]:
@@ -2203,10 +2291,12 @@ def _coverage_summary(
 ) -> dict[str, Any]:
     blockers = list(existing_blockers)
     behavior_counts: dict[str, Any] = {}
+    negative_context_counts: dict[str, Any] = {}
     family_counts: dict[str, Any] = {}
     tool_counts: dict[str, Any] = {}
     for split in SPLITS:
         behavior_counts[split] = {}
+        negative_context_counts[split] = {}
         family_counts[split] = {}
         tool_counts[split] = {}
         required_behavior = (
@@ -2228,7 +2318,8 @@ def _coverage_summary(
                     1
                     for row in domain_rows
                     for target in _targets(row)
-                    if target.get("behavior") == behavior
+                    if target.get("masked") is not True
+                    and target.get("behavior") == behavior
                 )
                 for behavior in BEHAVIORS
             }
@@ -2236,6 +2327,25 @@ def _coverage_summary(
                 if count < required_behavior:
                     blockers.append(
                         f"{split}.{domain}.{behavior} has {count} targets; requires {required_behavior}"
+                    )
+            negative_context_counts[split][domain] = {}
+            for behavior in sorted(NEGATIVE_CORRECTION_BEHAVIORS):
+                negative_behavior = behavior.removesuffix("_correction")
+                count = sum(
+                    1
+                    for row in domain_rows
+                    for target in _targets(row)
+                    if target.get("masked") is True
+                    and target.get("behavior") == behavior
+                    and target.get("negative_behavior") == negative_behavior
+                    and target.get("reviewed") is True
+                    and type(target.get("safe_correction_decision_ordinal")) is int
+                )
+                negative_context_counts[split][domain][negative_behavior] = count
+                if count < required_behavior:
+                    blockers.append(
+                        f"{split}.{domain}.{negative_behavior} has {count} reviewed negative contexts; "
+                        f"requires {required_behavior}"
                     )
             tool_counts[split][domain] = {}
             for tool_name in pools.get(domain, {}):
@@ -2276,11 +2386,14 @@ def _coverage_summary(
         "blockers": blockers,
         "coverage": {
             "behavior_counts": behavior_counts,
+            "negative_context_counts": negative_context_counts,
             "family_counts": family_counts,
             "tool_counts": tool_counts,
             "requirements": {
                 "train_per_behavior_domain": TRAIN_PER_BEHAVIOR_DOMAIN,
                 "validation_per_behavior_domain": VALIDATION_PER_BEHAVIOR_DOMAIN,
+                "train_negative_contexts_per_correction_domain": TRAIN_PER_BEHAVIOR_DOMAIN,
+                "validation_negative_contexts_per_correction_domain": VALIDATION_PER_BEHAVIOR_DOMAIN,
                 "train_tool_calls": TRAIN_TOOL_CALL_MIN,
                 "validation_tool_calls": VALIDATION_TOOL_CALL_MIN,
                 "train_distinct_args": TRAIN_DISTINCT_ARGS_MIN,
