@@ -20,6 +20,8 @@ from flightrecorder.tau3_competitive_dataset import (
     build_tau3_competitive_dataset,
     validate_tau3_competitive_dataset_bundle,
     _add_dominance_blockers,
+    _contamination_report_payload_errors,
+    _contamination_summary,
     _load_token_counter,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger, validate_tau3_exposure_ledger
@@ -546,6 +548,39 @@ def _write_contamination_report(root: Path, *, sealed_access_count: int = 0) -> 
     return path
 
 
+def _scenario_contamination_report() -> dict[str, Any]:
+    zero_overlap = {"overlap_count": 0, "overlaps": []}
+    return {
+        "schema_version": "hfr.tau3_v3_scenario_contamination_report.v1",
+        "passed": True,
+        "blockers": [],
+        "new_split_disjointness": {
+            "source_id_hashes": zero_overlap,
+            "family_hashes": zero_overlap,
+            "prompt_hashes": zero_overlap,
+        },
+        "development_comparison": {
+            "source_id_hashes": zero_overlap,
+            "family_hashes": zero_overlap,
+            "prompt_hashes": zero_overlap,
+        },
+        "development_hash_only_evidence": {
+            "row_count": 54,
+            "valid_row_count": 54,
+            "malformed_row_count": 0,
+            "missing_or_unreadable": False,
+        },
+        "sealed_hash_only_comparison": {
+            "sealed_payload_access_count": 0,
+            "malformed_identity_hash_count": 0,
+            "malformed_prompt_hash_count": 0,
+            "identity_overlap_count": 0,
+            "prompt_template_overlap_count": 3,
+            "prompt_template_overlap_resolved": True,
+        },
+    }
+
+
 def _grounded_validation_patch() -> mock._patch:
     return mock.patch(
         "flightrecorder.tau3_competitive_dataset.validate_tau3_grounded_generation_bundle",
@@ -554,6 +589,32 @@ def _grounded_validation_patch() -> mock._patch:
 
 
 class Tau3CompetitiveDatasetTests(unittest.TestCase):
+    def test_accepts_exact_v3_scenario_contamination_report(self) -> None:
+        report = _scenario_contamination_report()
+
+        self.assertEqual(_contamination_report_payload_errors(report), [])
+        self.assertEqual(
+            _contamination_summary(report),
+            {
+                "passed": True,
+                "blocker_count": 0,
+                "sealed_access_count": 0,
+                "train_validation_source_hash_disjoint": True,
+                "development_checks_passed": True,
+                "sealed_checks_passed": True,
+            },
+        )
+
+    def test_rejects_malformed_v3_scenario_contamination_evidence(self) -> None:
+        report = _scenario_contamination_report()
+        report["development_hash_only_evidence"]["valid_row_count"] = 53
+        report["sealed_hash_only_comparison"]["identity_overlap_count"] = 1
+
+        errors = _contamination_report_payload_errors(report)
+
+        self.assertIn("contamination_report.development_checks_passed must be true", errors)
+        self.assertIn("contamination_report.sealed_checks_passed must be true", errors)
+
     def test_builds_and_validates_threshold_complete_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

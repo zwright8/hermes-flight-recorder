@@ -721,7 +721,7 @@ def _contamination_report_payload_errors(report: dict[str, Any]) -> list[str]:
         errors.append("contamination_report sealed access count must be zero")
     if sealed.get("payload_accessed") is True:
         errors.append("contamination_report sealed payload_accessed must be false")
-    checks = _dict(report.get("checks"))
+    gates = _contamination_gate_values(report)
     for field in (
         "train_validation_source_hash_disjoint",
         "train_internal_family_disjoint",
@@ -730,8 +730,7 @@ def _contamination_report_payload_errors(report: dict[str, Any]) -> list[str]:
         "development_checks_passed",
         "sealed_checks_passed",
     ):
-        value = report.get(field, checks.get(field))
-        if value is not True:
+        if gates.get(field) is not True:
             errors.append(f"contamination_report.{field} must be true")
     contamination = _dict(report.get("contamination"))
     if contamination.get("raw_sealed_payload_read") is True:
@@ -745,22 +744,82 @@ def _contamination_report_payload_errors(report: dict[str, Any]) -> list[str]:
 
 def _contamination_summary(report: dict[str, Any]) -> dict[str, Any]:
     sealed = _dict(report.get("sealed_access"))
-    checks = _dict(report.get("checks"))
-    contamination = _dict(report.get("contamination"))
+    gates = _contamination_gate_values(report)
     return {
         "passed": report.get("passed") is True,
         "blocker_count": len(report.get("blockers") or []),
         "sealed_access_count": sealed.get("access_count", sealed.get("payload_access_count", sealed.get("dev_or_sealed_payload_access_count", 0))),
-        "train_validation_source_hash_disjoint": report.get(
-            "train_validation_source_hash_disjoint",
-            checks.get(
-                "train_validation_source_hash_disjoint",
-                contamination.get("train_validation_source_hash_disjoint"),
-            ),
+        "train_validation_source_hash_disjoint": gates.get(
+            "train_validation_source_hash_disjoint"
         ),
-        "development_checks_passed": report.get("development_checks_passed", checks.get("development_checks_passed")),
-        "sealed_checks_passed": report.get("sealed_checks_passed", checks.get("sealed_checks_passed")),
+        "development_checks_passed": gates.get("development_checks_passed"),
+        "sealed_checks_passed": gates.get("sealed_checks_passed"),
     }
+
+
+def _contamination_gate_values(report: dict[str, Any]) -> dict[str, Any]:
+    checks = _dict(report.get("checks"))
+    contamination = _dict(report.get("contamination"))
+    values = {
+        field: report.get(field, checks.get(field))
+        for field in (
+            "train_validation_source_hash_disjoint",
+            "train_internal_family_disjoint",
+            "train_internal_source_disjoint",
+            "train_internal_prompt_disjoint",
+            "development_checks_passed",
+            "sealed_checks_passed",
+        )
+    }
+    if values["train_validation_source_hash_disjoint"] is None:
+        values["train_validation_source_hash_disjoint"] = contamination.get(
+            "train_validation_source_hash_disjoint"
+        )
+    if report.get("schema_version") != "hfr.tau3_v3_scenario_contamination_report.v1":
+        return values
+
+    split = _dict(report.get("new_split_disjointness"))
+    split_source = _zero_overlap(split.get("source_id_hashes"))
+    values["train_validation_source_hash_disjoint"] = split_source
+    values["train_internal_source_disjoint"] = split_source
+    values["train_internal_family_disjoint"] = _zero_overlap(split.get("family_hashes"))
+    values["train_internal_prompt_disjoint"] = _zero_overlap(split.get("prompt_hashes"))
+
+    development = _dict(report.get("development_comparison"))
+    development_evidence = _dict(report.get("development_hash_only_evidence"))
+    values["development_checks_passed"] = (
+        all(
+            _zero_overlap(development.get(field)) is True
+            for field in ("source_id_hashes", "family_hashes", "prompt_hashes")
+        )
+        and development_evidence.get("missing_or_unreadable") is False
+        and development_evidence.get("malformed_row_count") == 0
+        and type(development_evidence.get("row_count")) is int
+        and development_evidence.get("row_count", 0) > 0
+        and development_evidence.get("valid_row_count")
+        == development_evidence.get("row_count")
+    )
+
+    sealed = _dict(report.get("sealed_hash_only_comparison"))
+    values["sealed_checks_passed"] = (
+        sealed.get("sealed_payload_access_count") == 0
+        and sealed.get("malformed_identity_hash_count") == 0
+        and sealed.get("malformed_prompt_hash_count") == 0
+        and sealed.get("identity_overlap_count") == 0
+        and sealed.get("prompt_template_overlap_resolved") is True
+    )
+    return values
+
+
+def _zero_overlap(value: Any) -> bool | None:
+    record = _dict(value)
+    if not record:
+        return None
+    overlap_count = record.get("overlap_count")
+    overlaps = record.get("overlaps")
+    if type(overlap_count) is not int or not isinstance(overlaps, list):
+        return None
+    return overlap_count == 0 and overlaps == []
 
 
 def _copy_grounded_bundle_into_output(grounded: dict[str, Any], out: Path) -> None:
