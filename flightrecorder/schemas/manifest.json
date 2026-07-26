@@ -122,6 +122,14 @@
       "name": "tau3_mlx_training_run"
     },
     {
+      "artifact": "tau3_prefix_equivalence",
+      "artifact_schema_version": "hfr.tau3_prefix_equivalence.v1",
+      "description": "Bounded same-sample qualification evidence for detached complete-prompt cache MLX LoRA against standard full-gradient MLX LoRA.",
+      "filename": "tau3_prefix_equivalence.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_prefix_equivalence.v1.schema.json",
+      "name": "tau3_prefix_equivalence"
+    },
+    {
       "artifact": "tau3_evaluation",
       "artifact_schema_version": "hfr.tau3_evaluation.v1",
       "description": "Public-safe paired Tau-3 evaluation, statistics, safety, and promotion evidence.",

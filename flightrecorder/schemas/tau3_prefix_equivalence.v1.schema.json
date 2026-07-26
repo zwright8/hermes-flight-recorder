@@ -1,0 +1,540 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_prefix_equivalence.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bounded same-sample qualification evidence for detached complete-prompt cache MLX LoRA against standard full-gradient MLX LoRA.",
+  "properties": {
+    "behavior_probes": {
+      "additionalProperties": false,
+      "properties": {
+        "family_results": {
+          "additionalProperties": {
+            "$ref": "#/$defs/familyResult"
+          },
+          "type": "object"
+        },
+        "required_families": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 5,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "required_families",
+        "family_results"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "model_identity_file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "protocol_file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "recipe": {
+          "$ref": "#/$defs/recipe"
+        }
+      },
+      "required": [
+        "dataset_file_sha256",
+        "protocol_file_sha256",
+        "model_identity_file_sha256",
+        "recipe"
+      ],
+      "type": "object"
+    },
+    "failures": {
+      "maxItems": 0,
+      "type": "array"
+    },
+    "gradient_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "detached_prefix": {
+          "$ref": "#/$defs/gradientArm"
+        },
+        "full_gradient": {
+          "$ref": "#/$defs/gradientArm"
+        },
+        "intended_modules": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "intended_modules_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "intended_modules",
+        "intended_modules_sha256",
+        "full_gradient",
+        "detached_prefix"
+      ],
+      "type": "object"
+    },
+    "method": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "const": "detached_complete_prompt_cache_mlx_lora"
+        },
+        "max_loss_replay_delta": {
+          "maximum": 0.0001,
+          "minimum": 0,
+          "type": "number"
+        },
+        "max_material_probe_drop": {
+          "maximum": 0.05,
+          "minimum": 0,
+          "type": "number"
+        },
+        "reference": {
+          "const": "standard_full_gradient_mlx_lora"
+        }
+      },
+      "required": [
+        "reference",
+        "candidate",
+        "max_material_probe_drop",
+        "max_loss_replay_delta"
+      ],
+      "type": "object"
+    },
+    "passed": {
+      "const": true
+    },
+    "sample": {
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "items": {
+            "enum": [
+              "airline",
+              "retail",
+              "telecom"
+            ]
+          },
+          "minItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "probe_families": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 5,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "row_hashes": {
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "row_hashes_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "stratified": {
+          "const": true
+        }
+      },
+      "required": [
+        "row_count",
+        "row_hashes",
+        "row_hashes_sha256",
+        "domains",
+        "probe_families",
+        "stratified"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_prefix_equivalence.v1"
+    },
+    "stability": {
+      "additionalProperties": false,
+      "properties": {
+        "detached_prefix": {
+          "$ref": "#/$defs/stabilityArm"
+        },
+        "full_gradient": {
+          "$ref": "#/$defs/stabilityArm"
+        }
+      },
+      "required": [
+        "full_gradient",
+        "detached_prefix"
+      ],
+      "type": "object"
+    },
+    "target_accounting": {
+      "additionalProperties": false,
+      "properties": {
+        "detached_prefix": {
+          "$ref": "#/$defs/targetAccounting"
+        },
+        "full_gradient": {
+          "$ref": "#/$defs/targetAccounting"
+        }
+      },
+      "required": [
+        "full_gradient",
+        "detached_prefix"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "method",
+    "bindings",
+    "sample",
+    "target_accounting",
+    "gradient_evidence",
+    "behavior_probes",
+    "stability",
+    "failures"
+  ],
+  "title": "Hermes Flight Recorder Tau-3 Prefix Equivalence",
+  "type": "object",
+  "$defs": {
+    "familyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "detached_prefix_pass_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "full_gradient_pass_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "trial_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "trials": {
+          "items": {
+            "$ref": "#/$defs/probeTrial"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "trial_count",
+        "full_gradient_pass_rate",
+        "detached_prefix_pass_rate",
+        "trials"
+      ],
+      "type": "object"
+    },
+    "gradientArm": {
+      "additionalProperties": false,
+      "properties": {
+        "finite": {
+          "const": true
+        },
+        "gradient_l2_norm": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "nonzero_module_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "modules": {
+          "items": {
+            "$ref": "#/$defs/gradientModule"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "nonzero_module_count",
+        "gradient_l2_norm",
+        "finite",
+        "modules"
+      ],
+      "type": "object"
+    },
+    "recipe": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_seeds": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "batch_size": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "grad_accumulation": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "learning_rate": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "mask_prompt": {
+          "const": true
+        },
+        "max_seq_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "num_layers": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rank": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "scale": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "rank",
+        "scale",
+        "learning_rate",
+        "num_layers",
+        "max_seq_length",
+        "batch_size",
+        "grad_accumulation",
+        "mask_prompt",
+        "allowed_seeds"
+      ],
+      "type": "object"
+    },
+    "gradientModule": {
+      "additionalProperties": false,
+      "properties": {
+        "l2_norm": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "l2_norm"
+      ],
+      "type": "object"
+    },
+    "probeTrial": {
+      "additionalProperties": false,
+      "properties": {
+        "detached_prefix_passed": {
+          "type": "boolean"
+        },
+        "full_gradient_passed": {
+          "type": "boolean"
+        },
+        "probe_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "probe_id",
+        "full_gradient_passed",
+        "detached_prefix_passed"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "stabilityArm": {
+      "additionalProperties": false,
+      "properties": {
+        "finite_loss_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "loss_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "loss_replay_max_abs_delta": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "numerical_failure_count": {
+          "const": 0
+        },
+        "peak_memory_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "replay_count": {
+          "minimum": 2,
+          "type": "integer"
+        },
+        "replay_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "replays": {
+          "items": {
+            "$ref": "#/$defs/stabilityReplay"
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "replay_count",
+        "loss_count",
+        "finite_loss_count",
+        "numerical_failure_count",
+        "peak_memory_bytes",
+        "loss_replay_max_abs_delta",
+        "replay_sha256",
+        "replays"
+      ],
+      "type": "object"
+    },
+    "stabilityReplay": {
+      "additionalProperties": false,
+      "properties": {
+        "losses": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "numerical_failure_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "peak_memory_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "losses",
+        "peak_memory_bytes",
+        "numerical_failure_count"
+      ],
+      "type": "object"
+    },
+    "targetAccounting": {
+      "additionalProperties": false,
+      "properties": {
+        "loss_mask_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sample_row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "supervised_token_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_boundaries_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "target_tokens_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/targetAccountingRow"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sample_row_count",
+        "supervised_token_count",
+        "target_boundaries_sha256",
+        "loss_mask_sha256",
+        "target_tokens_sha256",
+        "rows"
+      ],
+      "type": "object"
+    },
+    "targetAccountingRow": {
+      "additionalProperties": false,
+      "properties": {
+        "loss_mask_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "prompt_offset": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "row_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "supervised_token_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_end": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_start": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_tokens_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "row_sha256",
+        "prompt_offset",
+        "target_start",
+        "target_end",
+        "supervised_token_count",
+        "loss_mask_sha256",
+        "target_tokens_sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

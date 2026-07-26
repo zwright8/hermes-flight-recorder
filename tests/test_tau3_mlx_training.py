@@ -39,6 +39,7 @@ from tests.test_tau3_competitive_dataset import (
     _write_source_dataset as _write_v3_source_dataset,
     _write_tokenizer_config as _write_v3_tokenizer_config,
 )
+from tests.test_tau3_prefix_equivalence import equivalence_fixture
 from flightrecorder.tau3_competitive_dataset import build_tau3_competitive_dataset
 
 
@@ -429,6 +430,35 @@ def _exposure_mixture_variant(
     )
 
 
+def _write_prefix_equivalence(
+    root: Path,
+    *,
+    mixture: Path,
+    protocol: Path,
+    identity: Path,
+    config: Tau3MlxTrainingConfig,
+) -> Path:
+    artifact = equivalence_fixture()
+    bindings = artifact["bindings"]
+    bindings["dataset_file_sha256"] = _sha256(mixture / "train.jsonl")
+    bindings["protocol_file_sha256"] = _sha256(protocol)
+    bindings["model_identity_file_sha256"] = _sha256(identity)
+    bindings["recipe"] = {
+        "rank": config.rank,
+        "scale": config.scale,
+        "learning_rate": config.learning_rate,
+        "num_layers": config.num_layers,
+        "max_seq_length": config.max_seq_length,
+        "batch_size": config.batch_size,
+        "grad_accumulation": config.grad_accumulation,
+        "mask_prompt": config.mask_prompt,
+        "allowed_seeds": [config.seed],
+    }
+    path = root / "prefix-equivalence.json"
+    _write_json(path, artifact)
+    return path
+
+
 def _refresh_protocol_signature(bundle: Path) -> None:
     import hashlib
 
@@ -751,6 +781,160 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertTrue(cfg["exposure_ledger_training"])
             self.assertEqual(cfg["exposure"]["ledger"]["optimizer_steps"], 26)
             self.assertEqual(cfg["exposure"]["ledger"]["microbatch_iterations"], 52)
+
+    def test_exposure_prefix_training_requires_passing_bound_equivalence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+                batch_size=1,
+                gradient_accumulation_steps=4,
+            )
+            config = Tau3MlxTrainingConfig(
+                iters=104,
+                batch_size=1,
+                grad_accumulation=4,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                timeout_seconds=5,
+            )
+
+            with self.assertRaisesRegex(
+                Tau3MlxTrainingError,
+                "prefix equivalence",
+            ):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=config,
+                    exposure_dataset_path=mixture / "train.jsonl",
+                    exposure_receipt_path=exposure_receipt,
+                    exposure_ledger_path=exposure_ledger,
+                )
+
+    def test_exposure_prefix_training_uses_combined_driver_and_binds_equivalence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+                batch_size=1,
+                gradient_accumulation_steps=4,
+            )
+            config = Tau3MlxTrainingConfig(
+                iters=104,
+                batch_size=1,
+                grad_accumulation=4,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                timeout_seconds=5,
+            )
+            equivalence = _write_prefix_equivalence(
+                root,
+                mixture=mixture,
+                protocol=protocol,
+                identity=identity,
+                config=config,
+            )
+
+            receipt = run_tau3_mlx_training(
+                mixture_dir=mixture,
+                protocol_path=protocol,
+                model_path=model,
+                model_identity_path=identity,
+                output_dir=root / "out",
+                workspace_root=root,
+                config=config,
+                exposure_dataset_path=mixture / "train.jsonl",
+                exposure_receipt_path=exposure_receipt,
+                exposure_ledger_path=exposure_ledger,
+                prefix_equivalence_path=equivalence,
+            )
+
+            self.assertIn(
+                "flightrecorder.mlx_exposure_prefix_cache_lora",
+                receipt["command"],
+            )
+            self.assertIn("--prefix-equivalence", receipt["command"])
+            recipe = receipt["training_binding"]["recipe"]
+            self.assertFalse(recipe["full_gradient_objective"])
+            self.assertTrue(recipe["prefix_equivalence_passed"])
+            exposure = receipt["training_binding"]["exposure"]
+            self.assertFalse(exposure["objective"]["full_gradient"])
+            self.assertTrue(exposure["objective"]["detached_prefix"])
+            binding = receipt["training_binding"]["prefix_equivalence"]
+            self.assertEqual(binding["sha256"], _sha256(equivalence))
+            self.assertTrue(binding["validation_passed"])
+
+    def test_exposure_prefix_training_rejects_tampered_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = _exposure_mixture_variant(
+                root,
+                protocol,
+                batch_size=1,
+                gradient_accumulation_steps=4,
+            )
+            config = Tau3MlxTrainingConfig(
+                iters=104,
+                batch_size=1,
+                grad_accumulation=4,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                timeout_seconds=5,
+            )
+            equivalence = _write_prefix_equivalence(
+                root,
+                mixture=mixture,
+                protocol=protocol,
+                identity=identity,
+                config=config,
+            )
+            _mutate_json(
+                equivalence,
+                lambda payload: payload["bindings"].__setitem__(
+                    "dataset_file_sha256",
+                    "f" * 64,
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                Tau3MlxTrainingError,
+                "prelaunch checks failed",
+            ):
+                run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=config,
+                    exposure_dataset_path=mixture / "train.jsonl",
+                    exposure_receipt_path=exposure_receipt,
+                    exposure_ledger_path=exposure_ledger,
+                    prefix_equivalence_path=equivalence,
+                )
 
     def test_exposure_protocol_steps_bound_uses_optimizer_steps_not_microbatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -28,6 +28,7 @@ from .tau3_competitive_dataset import validate_tau3_competitive_dataset_bundle
 from .tau3_evaluation import validate_tau3_evaluation_report
 from .tau3_exposure import Tau3ExposureError, validate_tau3_exposure_ledger
 from .tau3_objective_validity import validate_tau3_objective_validity_report
+from .tau3_prefix_equivalence import validate_tau3_prefix_equivalence
 from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
@@ -551,7 +552,22 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
         if not isinstance(receipt_ref.payload, dict) or receipt_ref.path is None:
             continue
         candidate_ids.add(label)
-        _validate_training_receipt(target, receipt_ref.path, receipt_ref.payload, exposure_receipt_sha256=receipt.sha256, exposure_ledger_sha256=_sha256_file(ledger) if ledger else None)
+        equivalence_ref: _Loaded | None = None
+        if candidate.get("prefix_equivalence") is not None:
+            equivalence_ref = _load_json_artifact_ref(
+                root,
+                target,
+                candidate.get("prefix_equivalence"),
+                f"qualified_candidates.{label}.prefix_equivalence",
+            )
+        _validate_training_receipt(
+            target,
+            receipt_ref.path,
+            receipt_ref.payload,
+            exposure_receipt_sha256=receipt.sha256,
+            exposure_ledger_sha256=_sha256_file(ledger) if ledger else None,
+            prefix_equivalence=equivalence_ref,
+        )
         recipe_sha256 = _nested(receipt_ref.payload, "training_binding", "recipe", "recipe_sha256")
         adapter_sha256 = _nested(receipt_ref.payload, "adapter", "tree_sha256")
         if _validate_development_qualification(root, target, candidate, label, receipt_ref, adapter_sha256):
@@ -781,6 +797,7 @@ def _validate_training_receipt(
     *,
     exposure_receipt_sha256: str | None,
     exposure_ledger_sha256: str | None,
+    prefix_equivalence: _Loaded | None = None,
 ) -> None:
     _check_registered_schema(target, receipt, "tau3_mlx_training_run", "qualified training receipt")
     _require(target, receipt.get("phase") == "final", "qualified training receipt must be final")
@@ -794,14 +811,135 @@ def _validate_training_receipt(
     recipe = _dict(binding.get("recipe"))
     exposure = _dict(binding.get("exposure"))
     objective = _dict(exposure.get("objective"))
-    _require(target, recipe.get("full_gradient_objective") is True, "qualified training receipt must use full-gradient objective")
     _require(target, recipe.get("exposure_ledger_training") is True, "qualified training receipt must use exposure-ledger training")
-    _require(target, objective.get("full_gradient") is True, "qualified training receipt exposure objective must be full-gradient")
+    full_gradient = (
+        recipe.get("full_gradient_objective") is True
+        and objective.get("full_gradient") is True
+        and objective.get("detached_prefix") is not True
+    )
+    detached_prefix = (
+        recipe.get("full_gradient_objective") is False
+        and recipe.get("prefix_cache_training") is True
+        and recipe.get("prefix_equivalence_required") is True
+        and recipe.get("prefix_equivalence_passed") is True
+        and objective.get("full_gradient") is False
+        and objective.get("detached_prefix") is True
+    )
+    _require(
+        target,
+        full_gradient or detached_prefix,
+        "qualified training receipt must use full-gradient objective or "
+        "a passing bound detached-prefix equivalence",
+    )
+    if detached_prefix:
+        _require(
+            target,
+            prefix_equivalence is not None
+            and isinstance(prefix_equivalence.payload, dict)
+            and prefix_equivalence.path is not None,
+            "detached-prefix candidate must include a bundle-local prefix equivalence artifact",
+        )
+        if (
+            prefix_equivalence is not None
+            and isinstance(prefix_equivalence.payload, dict)
+            and prefix_equivalence.path is not None
+        ):
+            validation = validate_tau3_prefix_equivalence(
+                prefix_equivalence.path
+            )
+            _require(
+                target,
+                validation.get("passed") is True,
+                "detached-prefix equivalence artifact must independently replay",
+            )
+            prefix_binding = _dict(binding.get("prefix_equivalence"))
+            _require(
+                target,
+                prefix_binding.get("sha256") == prefix_equivalence.sha256,
+                "qualified training receipt must bind prefix equivalence sha256",
+            )
+            _require(
+                target,
+                prefix_binding.get("validation_passed") is True,
+                "qualified training receipt prefix equivalence validation must pass",
+            )
+            equivalence_bindings = _dict(
+                prefix_equivalence.payload.get("bindings")
+            )
+            _require(
+                target,
+                equivalence_bindings.get("dataset_file_sha256")
+                == _nested(
+                    receipt,
+                    "training_binding",
+                    "exposure",
+                    "dataset",
+                    "sha256",
+                ),
+                "prefix equivalence must bind the exact exposure dataset",
+            )
+            _require(
+                target,
+                equivalence_bindings.get("protocol_file_sha256")
+                == _nested(receipt, "training_binding", "protocol", "sha256"),
+                "prefix equivalence must bind the exact training protocol",
+            )
+            _require(
+                target,
+                equivalence_bindings.get("model_identity_file_sha256")
+                == _nested(
+                    receipt,
+                    "training_binding",
+                    "model",
+                    "identity_sha256",
+                ),
+                "prefix equivalence must bind the exact model identity",
+            )
+            _validate_equivalence_recipe_binding(
+                target,
+                _dict(equivalence_bindings.get("recipe")),
+                recipe,
+            )
+    elif prefix_equivalence is not None:
+        _require(
+            target,
+            False,
+            "full-gradient candidate must not claim detached-prefix equivalence",
+        )
     _require_sha(target, recipe.get("recipe_sha256"), "qualified training receipt recipe.recipe_sha256")
     if exposure_receipt_sha256 is not None:
         _require(target, _nested(receipt, "training_binding", "exposure", "receipt", "sha256") == exposure_receipt_sha256, "qualified training receipt must bind exposure receipt sha256")
     if exposure_ledger_sha256 is not None:
         _require(target, _nested(receipt, "training_binding", "exposure", "ledger", "sha256") == exposure_ledger_sha256, "qualified training receipt must bind exposure ledger sha256")
+
+
+def _validate_equivalence_recipe_binding(
+    target: _Target,
+    equivalence_recipe: dict[str, Any],
+    training_recipe: dict[str, Any],
+) -> None:
+    for field in (
+        "rank",
+        "scale",
+        "learning_rate",
+        "num_layers",
+        "max_seq_length",
+        "batch_size",
+        "grad_accumulation",
+        "mask_prompt",
+    ):
+        _require(
+            target,
+            equivalence_recipe.get(field) == training_recipe.get(field),
+            f"prefix equivalence recipe.{field} must match training recipe",
+        )
+    allowed_seeds = equivalence_recipe.get("allowed_seeds")
+    _require(
+        target,
+        isinstance(allowed_seeds, list)
+        and training_recipe.get("seed") in allowed_seeds,
+        "prefix equivalence allowed_seeds must include the training seed",
+    )
 
 
 def _validate_development_qualification(

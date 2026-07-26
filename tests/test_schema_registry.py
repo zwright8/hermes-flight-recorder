@@ -229,6 +229,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_model_identity",
             "tau3_objective_validity",
             "tau3_policy_complete_dataset",
+            "tau3_prefix_equivalence",
             "tau3_post_publication_record",
             "tau3_promotion_publication_preflight",
             "tau3_protocol_config",

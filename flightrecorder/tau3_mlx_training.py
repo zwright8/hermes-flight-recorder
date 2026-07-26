@@ -32,6 +32,7 @@ from .tau3_policy_complete_dataset import (
     TAU3_POLICY_COMPLETE_ROW_SCHEMA_VERSION,
     USER_SIMULATOR_PRIVATE_MARKERS,
 )
+from .tau3_prefix_equivalence import validate_tau3_prefix_equivalence
 from .tau3_training_artifacts import REQUIRED_ARTIFACT_MAP, validate_tau3_training_bundle
 from .tau3_training_mixture import TAU3_TRAINING_MIXTURE_SCHEMA_VERSION
 
@@ -126,6 +127,7 @@ def run_tau3_mlx_training(
     exposure_dataset_path: str | Path | None = None,
     exposure_receipt_path: str | Path | None = None,
     exposure_ledger_path: str | Path | None = None,
+    prefix_equivalence_path: str | Path | None = None,
     grounded_validator_python: str | Path | None = None,
     workspace_root: str | Path | None = None,
     created_at: str | None = None,
@@ -160,6 +162,7 @@ def run_tau3_mlx_training(
     checks: list[dict[str, Any]] = []
     training_binding: dict[str, Any] | None = None
     exposure_binding: dict[str, Any] | None = None
+    prefix_equivalence_binding: dict[str, Any] | None = None
     if source_kind == "bundle":
         validation = validate_tau3_training_bundle(source_path, strict=True)
         _add_check(checks, "strict_bundle_validation_passed", validation.get("passed") is True, validation.get("summary"), "passed")
@@ -188,6 +191,15 @@ def run_tau3_mlx_training(
             cfg=cfg,
             checks=checks,
         )
+        prefix_equivalence_binding = _validate_prefix_equivalence_binding(
+            equivalence_path=prefix_equivalence_path,
+            training_data_dir=data_dir,
+            protocol_path=protocol_file,
+            model_identity_path=identity_file,
+            root=root,
+            cfg=cfg,
+            checks=checks,
+        )
         training_binding = _check_mixture_launch_readiness(
             source_path,
             protocol_file,
@@ -203,6 +215,13 @@ def run_tau3_mlx_training(
         )
     if any(not check["passed"] for check in checks):
         raise Tau3MlxTrainingError("prelaunch checks failed: " + json.dumps([c["id"] for c in checks if not c["passed"]], sort_keys=True))
+    if source_kind == "bundle" and (
+        prefix_equivalence_path is not None
+        or (cfg.prefix_cache_training and cfg.exposure_ledger_training)
+    ):
+        raise Tau3MlxTrainingError(
+            "prefix equivalence is supported only for protocol-bound mixture training"
+        )
     if exposure_binding is None:
         exposure_binding = _validate_exposure_training_binding(
             dataset_path=exposure_dataset_path,
@@ -225,6 +244,11 @@ def run_tau3_mlx_training(
     )
     if training_binding is not None and exposure_binding is not None:
         training_binding = {**training_binding, "exposure": exposure_binding}
+    if training_binding is not None and prefix_equivalence_binding is not None:
+        training_binding = {
+            **training_binding,
+            "prefix_equivalence": prefix_equivalence_binding,
+        }
     if training_binding is not None and resume is not None:
         training_binding = {**training_binding, "resume": resume}
     if any(not check["passed"] for check in checks):
@@ -234,7 +258,17 @@ def run_tau3_mlx_training(
     _require_local_directory(data_dir, root, "mlx data")
     adapter_dir.mkdir()
     lora_config_path = output / "mlx_lora_config.json"
-    _write_new_json_readonly(lora_config_path, _mlx_lora_config(model_ref, data_dir, _relative_output_path(adapter_dir, output), cfg, exposure_binding=exposure_binding))
+    _write_new_json_readonly(
+        lora_config_path,
+        _mlx_lora_config(
+            model_ref,
+            data_dir,
+            _relative_output_path(adapter_dir, output),
+            cfg,
+            exposure_binding=exposure_binding,
+            prefix_equivalence_binding=prefix_equivalence_binding,
+        ),
+    )
     command = _build_command(
         python,
         model_ref,
@@ -244,6 +278,7 @@ def run_tau3_mlx_training(
         cfg,
         resume_adapter_file=Path(resume["adapter_file"]["path"]) if resume else None,
         exposure_binding=exposure_binding,
+        prefix_equivalence_binding=prefix_equivalence_binding,
     )
     _reject_forbidden_tokens(command)
 
@@ -254,7 +289,12 @@ def run_tau3_mlx_training(
         "bundle": {"kind": source_kind, **_path_record(source_path)},
         "output_dir": ".",
         "command": _redact_command(command),
-        "config": _config_record(cfg, resume=resume, exposure_binding=exposure_binding),
+        "config": _config_record(
+            cfg,
+            resume=resume,
+            exposure_binding=exposure_binding,
+            prefix_equivalence_binding=prefix_equivalence_binding,
+        ),
         "mlx_lora_config": _output_file_record(lora_config_path, output),
         "training_binding": training_binding,
         "checks": checks,
@@ -308,7 +348,12 @@ def run_tau3_mlx_training(
             "event_count": telemetry_count,
         },
         "command": _redact_command(command),
-        "config": _config_record(cfg, resume=resume, exposure_binding=exposure_binding),
+        "config": _config_record(
+            cfg,
+            resume=resume,
+            exposure_binding=exposure_binding,
+            prefix_equivalence_binding=prefix_equivalence_binding,
+        ),
         "mlx_lora_config": _output_file_record(lora_config_path, output),
         "training_binding": training_binding,
         "checks": checks,
@@ -350,6 +395,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exposure-dataset", type=Path)
     parser.add_argument("--exposure-receipt", type=Path)
     parser.add_argument("--exposure-ledger", type=Path)
+    parser.add_argument(
+        "--prefix-equivalence",
+        type=Path,
+        help=(
+            "Passing bounded full-gradient versus detached-prefix evidence; "
+            "required when prefix-cache and exposure-ledger training are combined"
+        ),
+    )
     parser.add_argument(
         "--grounded-validator-python",
         type=Path,
@@ -412,7 +465,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         dest="exposure_ledger_training",
         action="store_true",
         default=False,
-        help="Replay full-gradient MLX-LM LoRA batches from a validated Tau-3 exposure ledger.",
+        help=(
+            "Replay MLX-LM LoRA batches from a validated Tau-3 exposure "
+            "ledger; full-gradient by default, or qualified detached-prefix "
+            "when combined with --prefix-cache-training."
+        ),
     )
     parser.add_argument("--timeout-seconds", type=int, default=Tau3MlxTrainingConfig.timeout_seconds)
     mask = parser.add_mutually_exclusive_group()
@@ -465,6 +522,7 @@ def main(argv: list[str] | None = None) -> int:
             exposure_dataset_path=args.exposure_dataset,
             exposure_receipt_path=args.exposure_receipt,
             exposure_ledger_path=args.exposure_ledger,
+            prefix_equivalence_path=args.prefix_equivalence,
             grounded_validator_python=args.grounded_validator_python,
         )
     except (OSError, Tau3MlxTrainingError, ValueError) as exc:
@@ -1304,7 +1362,11 @@ def _validate_exposure_training_binding(
         "candidate-eligible full-row multi-epoch exposure",
     )
     return {
-        "mode": "deterministic_exposure_ledger_full_gradient",
+        "mode": (
+            "deterministic_exposure_ledger_detached_prefix"
+            if cfg.prefix_cache_training
+            else "deterministic_exposure_ledger_full_gradient"
+        ),
         "dataset": {
             "path": str(dataset_file),
             "sha256": _sha256_file(dataset_file),
@@ -1336,13 +1398,92 @@ def _validate_exposure_training_binding(
             "microbatch_iterations": microbatch_iterations,
         },
         "objective": {
-            "trainer": "mlx_lm_standard_lora",
-            "iterator_patch_only": True,
-            "full_gradient": True,
+            "trainer": (
+                "mlx_lm_detached_complete_prompt_cache_lora"
+                if cfg.prefix_cache_training
+                else "mlx_lm_standard_lora"
+            ),
+            "iterator_patch_only": not cfg.prefix_cache_training,
+            "full_gradient": not cfg.prefix_cache_training,
+            "detached_prefix": cfg.prefix_cache_training,
             "mask_prompt": cfg.mask_prompt,
             "deterministic_exposure_replay": True,
             "mlx_lm_iters_are_microbatches": True,
         },
+    }
+
+
+def _validate_prefix_equivalence_binding(
+    *,
+    equivalence_path: str | Path | None,
+    training_data_dir: Path,
+    protocol_path: Path,
+    model_identity_path: Path,
+    root: Path,
+    cfg: Tau3MlxTrainingConfig,
+    checks: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    required = cfg.prefix_cache_training and cfg.exposure_ledger_training
+    if not required:
+        _add_check(
+            checks,
+            "prefix_equivalence_absent_unless_exposure_prefix_training",
+            equivalence_path is None,
+            {"provided": equivalence_path is not None, "required": required},
+            "no equivalence artifact outside combined exposure-prefix training",
+        )
+        return None
+    if equivalence_path is None:
+        raise Tau3MlxTrainingError(
+            "prefix equivalence artifact is required for combined "
+            "exposure-ledger prefix-cache training"
+        )
+    artifact_path = _require_local_file(
+        Path(equivalence_path),
+        root,
+        "prefix equivalence",
+    )
+    dataset_path = _require_local_file(
+        training_data_dir / "train.jsonl",
+        root,
+        "training data train split",
+    )
+    expected_bindings = {
+        "dataset_file_sha256": _sha256_file(dataset_path),
+        "protocol_file_sha256": _sha256_file(protocol_path),
+        "model_identity_file_sha256": _sha256_file(model_identity_path),
+        "recipe": {
+            "rank": cfg.rank,
+            "scale": cfg.scale,
+            "learning_rate": cfg.learning_rate,
+            "num_layers": cfg.num_layers,
+            "max_seq_length": cfg.max_seq_length,
+            "batch_size": cfg.batch_size,
+            "grad_accumulation": cfg.grad_accumulation,
+            "mask_prompt": cfg.mask_prompt,
+            "seed": cfg.seed,
+        },
+    }
+    validation = validate_tau3_prefix_equivalence(
+        artifact_path,
+        expected_bindings=expected_bindings,
+    )
+    _add_check(
+        checks,
+        "prefix_equivalence_replays_and_matches_launch",
+        validation.get("passed") is True,
+        validation,
+        "passing full-gradient A/B bound to dataset, protocol, model, and recipe",
+    )
+    if validation.get("passed") is not True:
+        return None
+    return {
+        "path": str(artifact_path),
+        "sha256": _sha256_file(artifact_path),
+        "schema_version": "hfr.tau3_prefix_equivalence.v1",
+        "validation_passed": True,
+        "validation_schema_version": validation.get("schema_version"),
+        "bindings": expected_bindings,
     }
 
 
@@ -1611,8 +1752,13 @@ def _recipe_record(
         "fixed_shape_padding": cfg.fixed_shape_padding,
         "prefix_cache_training": cfg.prefix_cache_training,
         "exposure_ledger_training": cfg.exposure_ledger_training,
-        "full_gradient_objective": cfg.exposure_ledger_training
-        or not cfg.prefix_cache_training,
+        "full_gradient_objective": not cfg.prefix_cache_training,
+        "prefix_equivalence_required": (
+            cfg.prefix_cache_training and cfg.exposure_ledger_training
+        ),
+        "prefix_equivalence_passed": (
+            cfg.prefix_cache_training and cfg.exposure_ledger_training
+        ),
     }
 
 
@@ -2187,6 +2333,7 @@ def _mlx_lora_config(
     cfg: Tau3MlxTrainingConfig,
     *,
     exposure_binding: dict[str, Any] | None = None,
+    prefix_equivalence_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
         "model": model,
@@ -2222,6 +2369,8 @@ def _mlx_lora_config(
     }
     if exposure_binding is not None:
         payload["exposure"] = exposure_binding
+    if prefix_equivalence_binding is not None:
+        payload["prefix_equivalence"] = prefix_equivalence_binding
     return payload
 
 
@@ -2235,8 +2384,11 @@ def _build_command(
     *,
     resume_adapter_file: Path | None = None,
     exposure_binding: dict[str, Any] | None = None,
+    prefix_equivalence_binding: dict[str, Any] | None = None,
 ) -> list[str]:
-    if cfg.exposure_ledger_training:
+    if cfg.exposure_ledger_training and cfg.prefix_cache_training:
+        module = "flightrecorder.mlx_exposure_prefix_cache_lora"
+    elif cfg.exposure_ledger_training:
         module = "flightrecorder.mlx_exposure_lora"
     elif cfg.prefix_cache_training:
         module = "flightrecorder.mlx_prefix_cache_lora"
@@ -2305,6 +2457,13 @@ def _build_command(
                 str(exposure_binding["receipt"]["path"]),
                 "--exposure-ledger",
                 str(exposure_binding["ledger"]["path"]),
+            ]
+        )
+    if prefix_equivalence_binding is not None:
+        command.extend(
+            [
+                "--prefix-equivalence",
+                str(prefix_equivalence_binding["path"]),
             ]
         )
     return command
@@ -2501,14 +2660,16 @@ def _config_within_bounds(cfg: Tau3MlxTrainingConfig) -> bool:
             not cfg.prefix_cache_training
             or (
                 cfg.batch_size == 1
-                and cfg.grad_accumulation == 1
+                and (
+                    cfg.grad_accumulation == 1
+                    or cfg.exposure_ledger_training
+                )
                 and cfg.mask_prompt
                 and not cfg.grad_checkpoint
                 and cfg.disable_compile
                 and not cfg.fixed_shape_padding
             )
         )
-        and not (cfg.exposure_ledger_training and cfg.prefix_cache_training)
         and not (cfg.exposure_ledger_training and cfg.fixed_shape_padding)
         and not (cfg.exposure_ledger_training and not cfg.mask_prompt)
     )
@@ -2519,6 +2680,7 @@ def _config_record(
     *,
     resume: dict[str, Any] | None = None,
     exposure_binding: dict[str, Any] | None = None,
+    prefix_equivalence_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "iters": cfg.iters,
@@ -2555,6 +2717,13 @@ def _config_record(
             or coverage.get("optimizer_steps"),
             "gradient_accumulation_steps": cfg.grad_accumulation,
             "mlx_lm_iters_are_microbatches": True,
+        }
+    if prefix_equivalence_binding is not None:
+        record["prefix_equivalence"] = {
+            "sha256": prefix_equivalence_binding.get("sha256"),
+            "validation_passed": prefix_equivalence_binding.get(
+                "validation_passed"
+            ),
         }
     return record
 

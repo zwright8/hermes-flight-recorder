@@ -18,6 +18,9 @@ from flightrecorder.tau3_competitive_v3 import (
     PLAN_SCHEMA_VERSION,
     PUBLICATION_SCHEMA_VERSION,
     TRAINING_SCHEMA_VERSION,
+    _Loaded,
+    _Target,
+    _validate_training_receipt,
     validate_tau3_competitive_v3_bundle,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger, validate_tau3_exposure_ledger
@@ -35,6 +38,7 @@ from tests.test_tau3_competitive_dataset import (
 )
 from tests.test_tau3_exposure import _eligible_rows, _write_jsonl as write_exposure_jsonl
 from tests.test_tau3_objective_validity import _fixture as objective_fixture
+from tests.test_tau3_prefix_equivalence import equivalence_fixture
 
 
 class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
@@ -58,6 +62,104 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
 
             self.assertTrue(result["passed"], json.dumps(result, indent=2))
             self.assertEqual(result["schema_version"], "hfr.validation.v1")
+
+    def test_qualified_detached_prefix_receipt_requires_bound_equivalence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exposure_receipt = root / "exposure-receipt.json"
+            exposure_ledger = root / "exposure-ledger.jsonl"
+            write_json(exposure_receipt, {"passed": True})
+            exposure_ledger.write_text('{"step":1}\n', encoding="utf-8")
+            receipt_path = write_training_receipt(
+                root,
+                "candidate-prefix",
+                "a" * 64,
+                exposure_receipt,
+                exposure_ledger,
+            )
+            receipt = read_json(receipt_path)
+            recipe = receipt["training_binding"]["recipe"]
+            recipe.update(
+                {
+                    "full_gradient_objective": False,
+                    "prefix_cache_training": True,
+                    "prefix_equivalence_required": True,
+                    "prefix_equivalence_passed": True,
+                    "rank": 16,
+                    "scale": 32.0,
+                    "learning_rate": 1e-5,
+                    "num_layers": 8,
+                    "max_seq_length": 16384,
+                    "batch_size": 1,
+                    "grad_accumulation": 4,
+                    "mask_prompt": True,
+                    "seed": 101,
+                }
+            )
+            objective = receipt["training_binding"]["exposure"]["objective"]
+            objective.update({"full_gradient": False, "detached_prefix": True})
+            receipt["training_binding"]["exposure"]["dataset"] = {
+                "sha256": "1" * 64
+            }
+            receipt["training_binding"]["protocol"]["sha256"] = "2" * 64
+            receipt["training_binding"]["model"] = {
+                "identity_sha256": "3" * 64
+            }
+            equivalence = equivalence_fixture()
+            equivalence["bindings"]["recipe"].update(
+                {
+                    "rank": 16,
+                    "scale": 32.0,
+                    "learning_rate": 1e-5,
+                    "num_layers": 8,
+                    "max_seq_length": 16384,
+                    "batch_size": 1,
+                    "grad_accumulation": 4,
+                    "mask_prompt": True,
+                    "allowed_seeds": [101],
+                }
+            )
+            equivalence_path = root / "prefix-equivalence.json"
+            write_json(equivalence_path, equivalence)
+            receipt["training_binding"]["prefix_equivalence"] = {
+                "sha256": sha256_file(equivalence_path),
+                "validation_passed": True,
+            }
+            write_json(receipt_path, receipt)
+            target = _Target("training", str(receipt_path))
+            loaded = _Loaded(
+                _Target("prefix-equivalence", str(equivalence_path)),
+                payload=equivalence,
+                sha256=sha256_file(equivalence_path),
+            )
+
+            _validate_training_receipt(
+                target,
+                receipt_path,
+                receipt,
+                exposure_receipt_sha256=sha256_file(exposure_receipt),
+                exposure_ledger_sha256=sha256_file(exposure_ledger),
+                prefix_equivalence=loaded,
+            )
+
+            self.assertFalse(target.errors, target.errors)
+
+            receipt["training_binding"]["prefix_equivalence"]["sha256"] = (
+                "f" * 64
+            )
+            rejected = _Target("training", str(receipt_path))
+            _validate_training_receipt(
+                rejected,
+                receipt_path,
+                receipt,
+                exposure_receipt_sha256=sha256_file(exposure_receipt),
+                exposure_ledger_sha256=sha256_file(exposure_ledger),
+                prefix_equivalence=loaded,
+            )
+            self.assertIn(
+                "bind prefix equivalence sha256",
+                json.dumps(rejected.errors),
+            )
 
     def test_missing_or_forged_v2_evidence_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
