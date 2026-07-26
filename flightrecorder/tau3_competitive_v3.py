@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -38,9 +39,17 @@ DATASET_SCHEMA_VERSION = "hfr.tau3_competitive_v3_dataset_evidence.v1"
 TRAINING_SCHEMA_VERSION = "hfr.tau3_competitive_v3_training_evidence.v1"
 FINAL_SCHEMA_VERSION = "hfr.tau3_competitive_v3_final_evidence.v1"
 PUBLICATION_SCHEMA_VERSION = "hfr.tau3_competitive_v3_publication_preflight.v1"
+EVIDENCE_BINDING_SCHEMA_VERSION = "hfr.tau3_competitive_v3_evidence_binding.v1"
 
 PLAN_FILENAME = "competitive_v3_plan.json"
 STAGES = ("plan", "dataset", "training", "final")
+EVIDENCE_STAGES = ("dataset", "training", "final", "publication")
+EVIDENCE_SCHEMA_BY_STAGE = {
+    "dataset": DATASET_SCHEMA_VERSION,
+    "training": TRAINING_SCHEMA_VERSION,
+    "final": FINAL_SCHEMA_VERSION,
+    "publication": PUBLICATION_SCHEMA_VERSION,
+}
 DOMAINS = ("airline", "retail", "telecom")
 BEHAVIORS = (
     "successful_completion",
@@ -83,6 +92,10 @@ class _Target:
             "warnings": self.warnings,
             "details": self.details,
         }
+
+
+class Tau3CompetitiveV3BindingError(ValueError):
+    """Raised when an evidence artifact cannot be immutably bound to a plan."""
 
 
 @dataclass
@@ -172,6 +185,77 @@ def competitive_v3_plan_shape() -> dict[str, Any]:
             "final": {"path": "final-evidence.json", "sha256": "<64 lowercase hex>"},
             "publication": {"path": "publication-preflight.json", "sha256": "<64 lowercase hex>"},
         },
+    }
+
+
+def bind_tau3_competitive_v3_evidence(
+    bundle: str | Path,
+    *,
+    stage: str,
+    evidence_path: str | Path,
+) -> dict[str, Any]:
+    """Append one immutable, bundle-local stage artifact reference to the plan."""
+
+    if stage not in EVIDENCE_STAGES:
+        raise Tau3CompetitiveV3BindingError(
+            f"stage must be one of {', '.join(EVIDENCE_STAGES)}"
+        )
+    root = Path(bundle).resolve()
+    plan_path = root / PLAN_FILENAME
+    plan = _read_binding_json(plan_path, "competitive v3 plan")
+    if plan.get("schema_version") != PLAN_SCHEMA_VERSION:
+        raise Tau3CompetitiveV3BindingError(
+            f"competitive v3 plan schema_version must be {PLAN_SCHEMA_VERSION}"
+        )
+
+    artifact_path = Path(evidence_path).resolve()
+    try:
+        relative = artifact_path.relative_to(root)
+    except ValueError as exc:
+        raise Tau3CompetitiveV3BindingError(
+            "evidence artifact must resolve inside the bundle"
+        ) from exc
+    relative_text = relative.as_posix()
+    if _is_unsafe_relative_path(relative_text):
+        raise Tau3CompetitiveV3BindingError(
+            "evidence artifact path must be a safe bundle-relative path"
+        )
+    artifact = _read_binding_json(artifact_path, f"{stage} evidence artifact")
+    expected_schema = EVIDENCE_SCHEMA_BY_STAGE[stage]
+    if artifact.get("schema_version") != expected_schema:
+        raise Tau3CompetitiveV3BindingError(
+            f"{stage} evidence schema_version must be {expected_schema}"
+        )
+    ref = {"path": relative_text, "sha256": _sha256_file(artifact_path)}
+
+    raw_refs = plan.get("evidence_refs")
+    if raw_refs is None:
+        refs: dict[str, Any] = {}
+    elif isinstance(raw_refs, dict):
+        refs = dict(raw_refs)
+    else:
+        raise Tau3CompetitiveV3BindingError(
+            "competitive v3 plan evidence_refs must be an object"
+        )
+    existing = refs.get(stage)
+    if existing is not None and existing != ref:
+        raise Tau3CompetitiveV3BindingError(
+            f"refusing to replace immutable evidence_refs.{stage}"
+        )
+    changed = existing is None
+    if changed:
+        refs[stage] = ref
+        plan["evidence_refs"] = refs
+        _write_binding_json_atomic(plan_path, plan)
+
+    return {
+        "schema_version": EVIDENCE_BINDING_SCHEMA_VERSION,
+        "passed": True,
+        "changed": changed,
+        "stage": stage,
+        "evidence_ref": ref,
+        "plan_path": str(plan_path),
+        "plan_sha256": _sha256_file(plan_path),
     }
 
 
@@ -1445,6 +1529,50 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _read_binding_json(path: Path, label: str) -> dict[str, Any]:
+    if not path.is_file():
+        raise Tau3CompetitiveV3BindingError(f"{label} is missing: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise Tau3CompetitiveV3BindingError(
+            f"{label} must contain valid JSON: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise Tau3CompetitiveV3BindingError(f"{label} must be a JSON object")
+    return payload
+
+
+def _write_binding_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    encoded = json.dumps(
+        payload,
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+    ) + "\n"
+    original_mode = path.stat().st_mode & 0o777
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, original_mode)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _canonical_sha256(value: Any) -> str:
