@@ -501,6 +501,81 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
             self.assertIn("development_scorecard", json.dumps(result))
             self.assertIn("at least two candidates must pass development qualification gates", json.dumps(result))
 
+    def test_distinct_candidate_exposure_ledgers_qualify(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root, distinct_training_exposures=True)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertTrue(result["passed"], json.dumps(result, indent=2))
+
+    def test_candidate_exposure_cannot_be_omitted_without_shared_fallback(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root, distinct_training_exposures=True)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            training["qualified_candidates"][1].pop("exposure")
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "must include exposure evidence or use shared exposure",
+                json.dumps(result),
+            )
+
+    def test_candidate_exposure_saved_validation_must_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root, distinct_training_exposures=True)
+            validation_path = (
+                root / "exposure" / "candidate-b" / "validation.json"
+            )
+            validation = read_json(validation_path)
+            validation["ledger_sha256"] = "0" * 64
+            write_json(validation_path, validation)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            training["qualified_candidates"][1]["exposure"]["validation"][
+                "sha256"
+            ] = sha256_file(validation_path)
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "exposure.validation ledger_sha256 must replay",
+                json.dumps(result),
+            )
+
     def test_missing_internal_validation_does_not_qualify_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -801,10 +876,18 @@ def build_plan_only_bundle(root: Path) -> dict[str, Any]:
     return plan
 
 
-def build_complete_bundle(root: Path, *, include_auth_replay_inputs: bool = True) -> dict[str, Any]:
+def build_complete_bundle(
+    root: Path,
+    *,
+    include_auth_replay_inputs: bool = True,
+    distinct_training_exposures: bool = False,
+) -> dict[str, Any]:
     plan = build_plan_only_bundle(root)
     dataset_ref = build_dataset_evidence(root)
-    training_ref = build_training_evidence(root)
+    training_ref = build_training_evidence(
+        root,
+        distinct_exposures=distinct_training_exposures,
+    )
     final_ref = build_final_evidence(root, training_ref, include_auth_replay_inputs=include_auth_replay_inputs)
     publication_ref = build_publication_evidence(root)
     plan["evidence_refs"] = {"dataset": dataset_ref, "training": training_ref, "final": final_ref, "publication": publication_ref}
@@ -919,28 +1002,82 @@ def add_exact_objective_tokens(train_path: Path) -> None:
     write_jsonl(train_path, rows)
 
 
-def build_training_evidence(root: Path) -> dict[str, str]:
+def build_training_evidence(
+    root: Path,
+    *,
+    distinct_exposures: bool = False,
+) -> dict[str, str]:
     exposure_dataset = root / "exposure-dataset" / "train.jsonl"
     write_exposure_jsonl(exposure_dataset, _eligible_rows())
     build_tau3_exposure_ledger(
         exposure_dataset,
-        root / "exposure",
+        root / "exposure" / "candidate-a",
         seed=101,
         epochs=2,
         batch_size=2,
         gradient_accumulation_steps=2,
     )
-    exposure_receipt = root / "exposure" / "training_exposure_receipt.json"
-    exposure_ledger = root / "exposure" / "training_exposure_ledger.jsonl"
-    exposure_validation = validate_tau3_exposure_ledger(exposure_dataset, exposure_receipt, exposure_ledger)
-    write_json(root / "exposure-validation.json", exposure_validation)
+    exposure_a_receipt = (
+        root
+        / "exposure"
+        / "candidate-a"
+        / "training_exposure_receipt.json"
+    )
+    exposure_a_ledger = (
+        root
+        / "exposure"
+        / "candidate-a"
+        / "training_exposure_ledger.jsonl"
+    )
+    exposure_a_validation = validate_tau3_exposure_ledger(
+        exposure_dataset,
+        exposure_a_receipt,
+        exposure_a_ledger,
+    )
+    exposure_a_validation_path = (
+        root / "exposure" / "candidate-a" / "validation.json"
+    )
+    write_json(exposure_a_validation_path, exposure_a_validation)
+    exposure_b_receipt = exposure_a_receipt
+    exposure_b_ledger = exposure_a_ledger
+    exposure_b_validation_path = exposure_a_validation_path
+    if distinct_exposures:
+        build_tau3_exposure_ledger(
+            exposure_dataset,
+            root / "exposure" / "candidate-b",
+            seed=303,
+            epochs=2,
+            batch_size=2,
+            gradient_accumulation_steps=2,
+        )
+        exposure_b_receipt = (
+            root
+            / "exposure"
+            / "candidate-b"
+            / "training_exposure_receipt.json"
+        )
+        exposure_b_ledger = (
+            root
+            / "exposure"
+            / "candidate-b"
+            / "training_exposure_ledger.jsonl"
+        )
+        exposure_b_validation = validate_tau3_exposure_ledger(
+            exposure_dataset,
+            exposure_b_receipt,
+            exposure_b_ledger,
+        )
+        exposure_b_validation_path = (
+            root / "exposure" / "candidate-b" / "validation.json"
+        )
+        write_json(exposure_b_validation_path, exposure_b_validation)
     internal_sources = write_internal_validation_sources(root)
     candidate_a = write_training_receipt(
         root,
         "candidate-a",
         "a" * 64,
-        exposure_receipt,
-        exposure_ledger,
+        exposure_a_receipt,
+        exposure_a_ledger,
         protocol_sha256=sha256_file(internal_sources["protocol"]),
         model_identity_sha256=sha256_file(internal_sources["identity"]),
         dataset_manifest_sha256=sha256_file(internal_sources["manifest"]),
@@ -949,8 +1086,8 @@ def build_training_evidence(root: Path) -> dict[str, str]:
         root,
         "candidate-b",
         "b" * 64,
-        exposure_receipt,
-        exposure_ledger,
+        exposure_b_receipt,
+        exposure_b_ledger,
         protocol_sha256=sha256_file(internal_sources["protocol"]),
         model_identity_sha256=sha256_file(internal_sources["identity"]),
         dataset_manifest_sha256=sha256_file(internal_sources["manifest"]),
@@ -969,36 +1106,44 @@ def build_training_evidence(root: Path) -> dict[str, str]:
     )
     candidate_a_scorecard, candidate_a_probes = write_development_qualification(root, "candidate-a", candidate_a)
     candidate_b_scorecard, candidate_b_probes = write_development_qualification(root, "candidate-b", candidate_b)
-    return write_artifact(
-        root,
-        "training-evidence.json",
-        {
-            "schema_version": TRAINING_SCHEMA_VERSION,
-            "budgets": {"separate_candidate_and_infra_budgets": True},
-            "exposure": {
-                "dataset": ref_for(root, exposure_dataset),
-                "receipt": ref_for(root, exposure_receipt),
-                "ledger": ref_for(root, exposure_ledger),
-                "validation": ref_for(root, root / "exposure-validation.json"),
+    exposure_a = {
+        "dataset": ref_for(root, exposure_dataset),
+        "receipt": ref_for(root, exposure_a_receipt),
+        "ledger": ref_for(root, exposure_a_ledger),
+        "validation": ref_for(root, exposure_a_validation_path),
+    }
+    exposure_b = {
+        "dataset": ref_for(root, exposure_dataset),
+        "receipt": ref_for(root, exposure_b_receipt),
+        "ledger": ref_for(root, exposure_b_ledger),
+        "validation": ref_for(root, exposure_b_validation_path),
+    }
+    evidence: dict[str, Any] = {
+        "schema_version": TRAINING_SCHEMA_VERSION,
+        "budgets": {"separate_candidate_and_infra_budgets": True},
+        "qualified_candidates": [
+            {
+                "candidate_id": "candidate-a",
+                "training_receipt": ref_for(root, candidate_a),
+                "internal_validation": candidate_a_internal,
+                "development_scorecard": ref_for(root, candidate_a_scorecard),
+                "behavior_probes": ref_for(root, candidate_a_probes),
             },
-            "qualified_candidates": [
-                {
-                    "candidate_id": "candidate-a",
-                    "training_receipt": ref_for(root, candidate_a),
-                    "internal_validation": candidate_a_internal,
-                    "development_scorecard": ref_for(root, candidate_a_scorecard),
-                    "behavior_probes": ref_for(root, candidate_a_probes),
-                },
-                {
-                    "candidate_id": "candidate-b",
-                    "training_receipt": ref_for(root, candidate_b),
-                    "internal_validation": candidate_b_internal,
-                    "development_scorecard": ref_for(root, candidate_b_scorecard),
-                    "behavior_probes": ref_for(root, candidate_b_probes),
-                },
-            ],
-        },
-    )
+            {
+                "candidate_id": "candidate-b",
+                "training_receipt": ref_for(root, candidate_b),
+                "internal_validation": candidate_b_internal,
+                "development_scorecard": ref_for(root, candidate_b_scorecard),
+                "behavior_probes": ref_for(root, candidate_b_probes),
+            },
+        ],
+    }
+    if distinct_exposures:
+        evidence["qualified_candidates"][0]["exposure"] = exposure_a
+        evidence["qualified_candidates"][1]["exposure"] = exposure_b
+    else:
+        evidence["exposure"] = exposure_a
+    return write_artifact(root, "training-evidence.json", evidence)
 
 
 def write_training_receipt(

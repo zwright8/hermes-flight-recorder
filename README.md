@@ -348,6 +348,11 @@ Tau results through the governed selection validator, requires the exact
 task/seed grid, applies the v3 minimum macro, gain, per-domain, safety, harness,
 and evaluator gates, and emits only hash-safe trial evidence. Its scorecard
 provides the frozen harness and grid hashes consumed by behavior probes.
+The competitive-v3 training-evidence contract records deterministic exposure
+under each qualified candidate so distinct training seeds retain their own
+receipt, ledger, and saved replay validation. Legacy evidence may use one
+top-level shared exposure, but every candidate without that fallback must
+provide its own bundle-local exposure refs.
 
 ```bash
 .venv/bin/python scripts/build_tau3_development_evaluation.py \

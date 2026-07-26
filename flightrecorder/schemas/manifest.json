@@ -122,6 +122,14 @@
       "name": "tau3_mlx_training_run"
     },
     {
+      "artifact": "tau3_competitive_v3_training_evidence",
+      "artifact_schema_version": "hfr.tau3_competitive_v3_training_evidence.v1",
+      "description": "Private fail-closed evidence joining deterministic exposure, completed MLX receipts, internal validation, development qualification, and behavior probes for Tau-3 competitive v3 candidates.",
+      "filename": "tau3_competitive_v3_training_evidence.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_competitive_v3_training_evidence.v1.schema.json",
+      "name": "tau3_competitive_v3_training_evidence"
+    },
+    {
       "artifact": "tau3_competitive_v3_training_run_stage",
       "artifact_schema_version": "hfr.tau3_competitive_v3_training_run_stage.v1",
       "description": "Private fail-closed receipt for staging a completed governed Tau-3 v3 MLX training run without raw child logs.",

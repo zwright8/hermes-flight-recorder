@@ -1,0 +1,165 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_competitive_v3_training_evidence.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "exposure"
+      ]
+    },
+    {
+      "properties": {
+        "qualified_candidates": {
+          "items": {
+            "required": [
+              "exposure"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "description": "Private fail-closed evidence joining deterministic exposure, completed MLX receipts, internal validation, development qualification, and behavior probes for Tau-3 competitive v3 candidates.",
+  "properties": {
+    "budgets": {
+      "additionalProperties": false,
+      "properties": {
+        "separate_candidate_and_infra_budgets": {
+          "const": true
+        }
+      },
+      "required": [
+        "separate_candidate_and_infra_budgets"
+      ],
+      "type": "object"
+    },
+    "exposure": {
+      "$ref": "#/$defs/exposure"
+    },
+    "qualified_candidates": {
+      "items": {
+        "$ref": "#/$defs/candidate"
+      },
+      "minItems": 2,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_competitive_v3_training_evidence.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "budgets",
+    "qualified_candidates"
+  ],
+  "title": "Tau-3 Competitive v3 Training Evidence",
+  "type": "object",
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?!.*(^|[\\\\/])~([\\\\/]|$))(?!.*\\\\).+$",
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "behavior_probes": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "candidate_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "development_scorecard": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "exposure": {
+          "$ref": "#/$defs/exposure"
+        },
+        "internal_validation": {
+          "$ref": "#/$defs/internalValidation"
+        },
+        "prefix_equivalence": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "training_receipt": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "training_receipt",
+        "internal_validation",
+        "development_scorecard",
+        "behavior_probes"
+      ],
+      "type": "object"
+    },
+    "exposure": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "ledger": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "receipt": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "validation": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      },
+      "required": [
+        "dataset",
+        "receipt",
+        "ledger",
+        "validation"
+      ],
+      "type": "object"
+    },
+    "internalValidation": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "dataset": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "model_identity": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "protocol": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      },
+      "required": [
+        "artifact",
+        "dataset",
+        "protocol",
+        "model_identity"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

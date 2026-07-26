@@ -607,22 +607,20 @@ def _list_strings(value: Any) -> list[str]:
 
 def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str, Any]) -> None:
     _require(target, evidence.get("schema_version") == TRAINING_SCHEMA_VERSION, f"training evidence schema_version must be {TRAINING_SCHEMA_VERSION}")
-    exposure = _dict(evidence.get("exposure"))
-    dataset = _load_ref_path(root, target, exposure.get("dataset"), "exposure.dataset")
-    receipt = _load_json_artifact_ref(root, target, exposure.get("receipt"), "exposure.receipt")
-    ledger = _load_ref_path(root, target, exposure.get("ledger"), "exposure.ledger")
-    if dataset is not None and receipt.path is not None and ledger is not None:
-        try:
-            exposure_validation = validate_tau3_exposure_ledger(dataset, receipt.path, ledger)
-        except (Tau3ExposureError, OSError, ValueError, json.JSONDecodeError) as exc:
-            target.errors.append(f"training exposure ledger does not replay: {exc}")
-            exposure_validation = None
-        if exposure_validation is not None:
-            _require(target, exposure_validation.get("passed") is True, "training exposure validation must pass")
-            _require(target, exposure_validation.get("candidate_eligible") is True, "training exposure receipt must be candidate-eligible")
-            _require(target, exposure_validation.get("receipt_sha256") == receipt.sha256, "training exposure receipt hash must bind replayed validation")
-            _require(target, exposure_validation.get("ledger_sha256") == _sha256_file(ledger), "training exposure ledger hash must bind replayed validation")
-    _validate_saved_validation_receipt(root, target, exposure.get("validation"), "exposure.validation", expected_schema="hfr.tau3_training_exposure_validation.v1")
+    _check_registered_schema(
+        target,
+        evidence,
+        "tau3_competitive_v3_training_evidence",
+        "training evidence",
+    )
+    shared_exposure_hashes: tuple[str | None, str | None] | None = None
+    if evidence.get("exposure") is not None:
+        shared_exposure_hashes = _validate_training_exposure(
+            root,
+            target,
+            evidence.get("exposure"),
+            "exposure",
+        )
 
     _require(target, _dict(evidence.get("budgets")).get("separate_candidate_and_infra_budgets") is True, "candidate and infrastructure budgets must remain separate")
     candidates = _list_of_dicts(evidence.get("qualified_candidates"))
@@ -633,6 +631,28 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
     qualified_count = 0
     for candidate in candidates:
         label = str(candidate.get("candidate_id") or "candidate")
+        candidate_exposure = candidate.get("exposure")
+        if candidate_exposure is not None:
+            exposure_receipt_sha256, exposure_ledger_sha256 = (
+                _validate_training_exposure(
+                    root,
+                    target,
+                    candidate_exposure,
+                    f"qualified_candidates.{label}.exposure",
+                )
+            )
+        elif shared_exposure_hashes is not None:
+            (
+                exposure_receipt_sha256,
+                exposure_ledger_sha256,
+            ) = shared_exposure_hashes
+        else:
+            target.errors.append(
+                f"qualified_candidates.{label} must include exposure evidence "
+                "or use shared exposure"
+            )
+            exposure_receipt_sha256 = None
+            exposure_ledger_sha256 = None
         receipt_ref = _load_json_artifact_ref(root, target, candidate.get("training_receipt"), f"qualified_candidates.{label}.training_receipt")
         if not isinstance(receipt_ref.payload, dict) or receipt_ref.path is None:
             continue
@@ -649,8 +669,8 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
             target,
             receipt_ref.path,
             receipt_ref.payload,
-            exposure_receipt_sha256=receipt.sha256,
-            exposure_ledger_sha256=_sha256_file(ledger) if ledger else None,
+            exposure_receipt_sha256=exposure_receipt_sha256,
+            exposure_ledger_sha256=exposure_ledger_sha256,
             prefix_equivalence=equivalence_ref,
         )
         recipe_sha256 = _nested(receipt_ref.payload, "training_binding", "recipe", "recipe_sha256")
@@ -665,6 +685,112 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
     _require(target, qualified_count >= 2, "at least two candidates must pass development qualification gates")
     _require(target, len(recipe_hashes) >= 2, "qualified candidates must prove recipe diversity")
     _require(target, len(adapter_hashes) >= 2, "qualified candidates must bind distinct adapter fingerprints")
+
+
+def _validate_training_exposure(
+    root: Path,
+    target: _Target,
+    value: Any,
+    label: str,
+) -> tuple[str | None, str | None]:
+    exposure = _dict(value)
+    dataset = _load_ref_path(
+        root,
+        target,
+        exposure.get("dataset"),
+        f"{label}.dataset",
+    )
+    receipt = _load_json_artifact_ref(
+        root,
+        target,
+        exposure.get("receipt"),
+        f"{label}.receipt",
+    )
+    ledger = _load_ref_path(
+        root,
+        target,
+        exposure.get("ledger"),
+        f"{label}.ledger",
+    )
+    ledger_sha256 = (
+        _sha256_file(ledger)
+        if ledger is not None and ledger.is_file()
+        else None
+    )
+    replay: dict[str, Any] | None = None
+    if dataset is not None and receipt.path is not None and ledger is not None:
+        try:
+            replay = validate_tau3_exposure_ledger(
+                dataset,
+                receipt.path,
+                ledger,
+            )
+        except (
+            Tau3ExposureError,
+            OSError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+            target.errors.append(
+                f"{label} training exposure ledger does not replay: {exc}"
+            )
+        if replay is not None:
+            _require(
+                target,
+                replay.get("passed") is True,
+                f"{label} training exposure validation must pass",
+            )
+            _require(
+                target,
+                replay.get("candidate_eligible") is True,
+                f"{label} training exposure receipt must be candidate-eligible",
+            )
+            _require(
+                target,
+                replay.get("receipt_sha256") == receipt.sha256,
+                f"{label} training exposure receipt hash must bind replayed "
+                "validation",
+            )
+            _require(
+                target,
+                replay.get("ledger_sha256") == ledger_sha256,
+                f"{label} training exposure ledger hash must bind replayed "
+                "validation",
+            )
+    saved = _load_json_artifact_ref(
+        root,
+        target,
+        exposure.get("validation"),
+        f"{label}.validation",
+    )
+    if isinstance(saved.payload, dict):
+        _require(
+            target,
+            saved.payload.get("schema_version")
+            == "hfr.tau3_training_exposure_validation.v1",
+            f"{label}.validation schema_version must be "
+            "hfr.tau3_training_exposure_validation.v1",
+        )
+        _require(
+            target,
+            saved.payload.get("passed") is True,
+            f"{label}.validation must have passed=true from a saved "
+            "validator receipt",
+        )
+        if replay is not None:
+            for field in (
+                "candidate_eligible",
+                "ledger_sha256",
+                "receipt_sha256",
+                "row_count",
+                "step_count",
+            ):
+                _require(
+                    target,
+                    saved.payload.get(field) == replay.get(field),
+                    f"{label}.validation {field} must replay",
+                )
+    return receipt.sha256, ledger_sha256
 
 
 def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, Any]) -> None:
