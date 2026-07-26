@@ -369,7 +369,13 @@ def _batch_from_indices(
     batch_array = np.zeros((batch_size, width), dtype=np.int32)
     for row_index, row_tokens in enumerate(tokens):
         batch_array[row_index, : lengths[row_index]] = row_tokens[: lengths[row_index]]
-    return mx.array(batch_array), mx.array(list(zip(offsets, lengths)))
+    # MLX-LM's default loss interprets the second length value as the
+    # inclusive shifted-target step. A source row of N tokens therefore ends
+    # at step N - 1; passing N would supervise the synthetic padding token.
+    target_end_steps = [length - 1 for length in lengths]
+    return mx.array(batch_array), mx.array(
+        list(zip(offsets, target_end_steps))
+    )
 
 
 def _dataset_item(dataset: Any, index: int) -> Any:

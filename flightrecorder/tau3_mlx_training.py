@@ -1468,6 +1468,10 @@ def _validate_prefix_equivalence_binding(
         artifact_path,
         expected_bindings=expected_bindings,
     )
+    membership = _prefix_equivalence_sample_membership(
+        artifact_path,
+        dataset_path,
+    )
     _add_check(
         checks,
         "prefix_equivalence_replays_and_matches_launch",
@@ -1475,7 +1479,17 @@ def _validate_prefix_equivalence_binding(
         validation,
         "passing full-gradient A/B bound to dataset, protocol, model, and recipe",
     )
-    if validation.get("passed") is not True:
+    _add_check(
+        checks,
+        "prefix_equivalence_sample_is_candidate_dataset_subset",
+        membership.get("passed") is True,
+        membership,
+        "every bounded A/B source row belongs to the candidate training dataset",
+    )
+    if (
+        validation.get("passed") is not True
+        or membership.get("passed") is not True
+    ):
         return None
     return {
         "path": str(artifact_path),
@@ -1484,6 +1498,59 @@ def _validate_prefix_equivalence_binding(
         "validation_passed": True,
         "validation_schema_version": validation.get("schema_version"),
         "bindings": expected_bindings,
+        "sample_membership": membership,
+    }
+
+
+def _prefix_equivalence_sample_membership(
+    artifact_path: Path,
+    dataset_path: Path,
+) -> dict[str, Any]:
+    """Replay that every smoke source row is an exact candidate row."""
+
+    try:
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"passed": False, "error": str(exc)}
+    sample = artifact.get("sample") if isinstance(artifact, dict) else None
+    sample_hashes = (
+        sample.get("row_hashes") if isinstance(sample, dict) else None
+    )
+    if (
+        not isinstance(sample_hashes, list)
+        or not sample_hashes
+        or any(not isinstance(value, str) for value in sample_hashes)
+    ):
+        return {
+            "passed": False,
+            "error": "equivalence sample row hashes are unavailable",
+        }
+    candidate_hashes: set[str] = set()
+    try:
+        lines = dataset_path.read_text(encoding="utf-8").splitlines()
+        for line_number, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                return {
+                    "passed": False,
+                    "error": (
+                        f"candidate dataset line {line_number} "
+                        "must be an object"
+                    ),
+                }
+            candidate_hashes.add(_canonical_sha256(row))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"passed": False, "error": str(exc)}
+    missing = [
+        value for value in sample_hashes if value not in candidate_hashes
+    ]
+    return {
+        "passed": not missing,
+        "sample_row_count": len(sample_hashes),
+        "candidate_row_count": len(candidate_hashes),
+        "missing_row_hashes": missing,
     }
 
 

@@ -24,10 +24,186 @@ REQUIRED_EQUIVALENCE_PROBE_FAMILIES = (
 )
 REQUIRED_DOMAINS = ("airline", "retail", "telecom")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+BEHAVIOR_FAMILY_MAP = {
+    "clarification": "clarification",
+    "tool_choice": "tool_choice",
+    "empty_recovery": "recovery",
+    "error_recovery": "recovery",
+    "repeated_recovery": "recovery",
+    "mutation_confirmation": "state_transition",
+    "stopping": "stopping",
+}
 
 
 class Tau3PrefixEquivalenceError(ValueError):
     """Raised when prefix-equivalence evidence cannot be read safely."""
+
+
+def build_tau3_paired_behavior_trials(
+    *,
+    full_gradient_probe_path: str | Path,
+    detached_prefix_probe_path: str | Path,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Replay two probe bundles into paired equivalence trial outcomes."""
+
+    from .tau3_behavior_probes import validate_tau3_behavior_probes
+
+    probe_paths = {
+        "full_gradient": Path(full_gradient_probe_path),
+        "detached_prefix": Path(detached_prefix_probe_path),
+    }
+    aggregates: dict[str, dict[str, Any]] = {}
+    results_by_arm: dict[str, dict[str, dict[str, Any]]] = {}
+    source_refs: dict[str, dict[str, Any]] = {}
+    for arm, supplied_path in probe_paths.items():
+        aggregate_path = (
+            supplied_path / "behavior-probes.json"
+            if supplied_path.is_dir()
+            else supplied_path
+        )
+        validation = validate_tau3_behavior_probes(aggregate_path)
+        if validation.get("passed") is not True:
+            raise Tau3PrefixEquivalenceError(
+                f"{arm} behavior probes failed replay: "
+                + json.dumps(validation.get("errors"), sort_keys=True)
+            )
+        aggregate = _load_json_object(
+            aggregate_path,
+            f"{arm} behavior probes",
+        )
+        aggregates[arm] = aggregate
+        source_refs[arm] = {
+            "aggregate_sha256": _sha256_file(aggregate_path),
+            "validation_schema_version": validation.get(
+                "schema_version"
+            ),
+            "validation_passed": True,
+        }
+        results: dict[str, dict[str, Any]] = {}
+        for index, ref in enumerate(aggregate.get("probe_results", [])):
+            if not isinstance(ref, dict) or not isinstance(
+                ref.get("path"), str
+            ):
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe result ref {index} is invalid"
+                )
+            relative = Path(ref["path"])
+            if relative.is_absolute() or ".." in relative.parts:
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe result ref {index} escapes its bundle"
+                )
+            result_path = aggregate_path.parent / relative
+            if ref.get("sha256") != _sha256_file(result_path):
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe result ref {index} hash mismatch"
+                )
+            result = _load_json_object(
+                result_path,
+                f"{arm} probe result {index}",
+            )
+            probe_id = result.get("probe_id")
+            if not isinstance(probe_id, str) or not probe_id:
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe result {index} lacks probe_id"
+                )
+            results[probe_id] = result
+        results_by_arm[arm] = results
+
+    full_aggregate = aggregates["full_gradient"]
+    prefix_aggregate = aggregates["detached_prefix"]
+    for field in ("configuration_sha256",):
+        if (
+            _dict(full_aggregate.get("endpoint")).get(field)
+            != _dict(prefix_aggregate.get("endpoint")).get(field)
+        ):
+            raise Tau3PrefixEquivalenceError(
+                "paired behavior probes use different endpoint configurations"
+            )
+    for field in ("harness_sha256", "protocol_sha256", "grid_sha256"):
+        if (
+            _dict(full_aggregate.get("bindings")).get(field)
+            != _dict(prefix_aggregate.get("bindings")).get(field)
+        ):
+            raise Tau3PrefixEquivalenceError(
+                f"paired behavior probes differ on {field}"
+            )
+    full_results = results_by_arm["full_gradient"]
+    prefix_results = results_by_arm["detached_prefix"]
+    if set(full_results) != set(prefix_results):
+        raise Tau3PrefixEquivalenceError(
+            "paired behavior probes have different probe ids"
+        )
+
+    trials: list[dict[str, Any]] = []
+    for probe_id in sorted(full_results):
+        full_result = full_results[probe_id]
+        prefix_result = prefix_results[probe_id]
+        source_family = full_result.get("family")
+        if source_family != prefix_result.get("family"):
+            raise Tau3PrefixEquivalenceError(
+                f"paired probe {probe_id} has different source families"
+            )
+        family = BEHAVIOR_FAMILY_MAP.get(str(source_family))
+        if family is None:
+            continue
+        for field in ("prompt", "assertions", "expected_outcome"):
+            if full_result.get(field) != prefix_result.get(field):
+                raise Tau3PrefixEquivalenceError(
+                    f"paired probe {probe_id} differs on {field}"
+                )
+        for arm, result in (
+            ("full_gradient", full_result),
+            ("detached_prefix", prefix_result),
+        ):
+            observation = _dict(result.get("observation"))
+            if observation.get("transport_error") is not None:
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe {probe_id} has a transport error"
+                )
+            actual = _dict(result.get("actual_outcome"))
+            if not isinstance(actual.get("passed"), bool):
+                raise Tau3PrefixEquivalenceError(
+                    f"{arm} probe {probe_id} lacks a boolean outcome"
+                )
+        trials.append(
+            {
+                "family": family,
+                "probe_id": probe_id,
+                "full_gradient_passed": bool(
+                    _dict(full_result.get("actual_outcome")).get(
+                        "passed"
+                    )
+                ),
+                "detached_prefix_passed": bool(
+                    _dict(prefix_result.get("actual_outcome")).get(
+                        "passed"
+                    )
+                ),
+            }
+        )
+    if {trial["family"] for trial in trials} != set(
+        REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+    ):
+        raise Tau3PrefixEquivalenceError(
+            "paired behavior trials do not cover every equivalence family"
+        )
+    artifact = {
+        "schema_version": "hfr.tau3_paired_behavior_trials.v1",
+        "source_artifacts": source_refs,
+        "trials": trials,
+        "trial_count": len(trials),
+        "trials_sha256": _canonical_sha256(trials),
+    }
+    if output_path is not None:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(artifact, indent=2, sort_keys=True) + "\n"
+            )
+        path.chmod(0o444)
+    return artifact
 
 
 def build_tau3_prefix_equivalence(
@@ -60,6 +236,9 @@ def build_tau3_prefix_equivalence(
 
     all_runs = [*full_runs, *prefix_runs]
     seen_run_ids: set[str] = set()
+    reference_sample = (
+        _dict(all_runs[0].get("sample")) if all_runs else {}
+    )
     for expected_arm, runs in (
         ("full_gradient", full_runs),
         ("detached_prefix", prefix_runs),
@@ -81,6 +260,10 @@ def build_tau3_prefix_equivalence(
                 seen_run_ids.add(run_id)
             _measurement_matches_bindings(run, bindings, failures, label)
             sample = _dict(run.get("sample"))
+            if sample != reference_sample:
+                failures.append(
+                    f"{label} sample evidence differs across A/B replays"
+                )
             if set(_string_list(sample.get("domains"))) != set(REQUIRED_DOMAINS):
                 failures.append(f"{label} does not cover every Tau domain")
             if set(_string_list(sample.get("probe_families"))) != set(
@@ -89,6 +272,19 @@ def build_tau3_prefix_equivalence(
                 failures.append(f"{label} does not cover every probe family")
             if sample.get("stratified") is not True:
                 failures.append(f"{label} sample is not stratified")
+            execution = _dict(run.get("execution"))
+            expected_evidence_kind = (
+                "pre_optimizer_accumulated_gradient_l2"
+                if expected_arm == "full_gradient"
+                else "per_microbatch_gradient_l2"
+            )
+            if execution.get("gradient_evidence_kind") != (
+                expected_evidence_kind
+            ):
+                failures.append(
+                    f"{label} gradient evidence kind must be "
+                    f"{expected_evidence_kind}"
+                )
 
     full_target_rows = _measurement_target_rows(full_runs, failures, "full_gradient")
     prefix_target_rows = _measurement_target_rows(
@@ -180,6 +376,10 @@ def build_tau3_prefix_equivalence(
                 sample_source.get("probe_families")
             ),
             "stratified": sample_source.get("stratified") is True,
+            "source_sample_file_sha256": sample_source.get(
+                "source_sample_file_sha256"
+            ),
+            "derivation": _dict(sample_source.get("derivation")),
         },
         "target_accounting": {
             "full_gradient": target_full,
@@ -286,6 +486,30 @@ def validate_tau3_prefix_equivalence(
         errors.append("sample.row_hashes_sha256 does not replay")
     if sample.get("stratified") is not True:
         errors.append("sample.stratified must be true")
+    if not _is_sha256(sample.get("source_sample_file_sha256")):
+        errors.append(
+            "sample.source_sample_file_sha256 must be a sha256"
+        )
+    derivation = _dict(sample.get("derivation"))
+    if derivation.get("method") != (
+        "supervised_target_preserving_prompt_tail_v1"
+    ):
+        errors.append("sample.derivation.method is invalid")
+    prompt_tail_token_limit = derivation.get("prompt_tail_token_limit")
+    if (
+        not isinstance(prompt_tail_token_limit, int)
+        or isinstance(prompt_tail_token_limit, bool)
+        or prompt_tail_token_limit < 1
+    ):
+        errors.append(
+            "sample.derivation.prompt_tail_token_limit must be positive"
+        )
+    if derivation.get("proxy_only") is not True:
+        errors.append("sample.derivation.proxy_only must be true")
+    if derivation.get("candidate_training_uses_full_prompt") is not True:
+        errors.append(
+            "sample.derivation.candidate_training_uses_full_prompt must be true"
+        )
     if set(_string_list(sample.get("domains"))) != set(REQUIRED_DOMAINS):
         errors.append("sample.domains must include airline, retail, and telecom")
     if set(_string_list(sample.get("probe_families"))) != set(
@@ -355,6 +579,16 @@ def validate_tau3_prefix_equivalence(
         errors.append("gradient_evidence.intended_modules_sha256 does not replay")
     for arm_name in ("full_gradient", "detached_prefix"):
         arm = _dict(gradients.get(arm_name))
+        expected_evidence_kind = (
+            "pre_optimizer_accumulated_gradient_l2"
+            if arm_name == "full_gradient"
+            else "per_microbatch_gradient_l2"
+        )
+        if arm.get("evidence_kind") != expected_evidence_kind:
+            errors.append(
+                f"gradient_evidence.{arm_name}.evidence_kind must be "
+                f"{expected_evidence_kind}"
+            )
         module_records = arm.get("modules")
         if not isinstance(module_records, list):
             errors.append(f"gradient_evidence.{arm_name}.modules must be a list")
@@ -713,6 +947,20 @@ def _load_measurement(
     return payload
 
 
+def _load_json_object(path: Path, label: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Tau3PrefixEquivalenceError(
+            f"{label} is unreadable: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise Tau3PrefixEquivalenceError(
+            f"{label} must be a JSON object"
+        )
+    return payload
+
+
 def _measurement_matches_bindings(
     run: dict[str, Any],
     bindings: dict[str, Any],
@@ -777,22 +1025,40 @@ def _gradient_aggregate(
 ) -> dict[str, Any]:
     if not runs:
         return {
+            "evidence_kind": (
+                "pre_optimizer_accumulated_gradient_l2"
+                if arm_name == "full_gradient"
+                else "per_microbatch_gradient_l2"
+            ),
             "nonzero_module_count": 0,
             "gradient_l2_norm": 0.0,
             "finite": False,
             "modules": [],
         }
+    evidence_kinds = {
+        _dict(run.get("execution")).get("gradient_evidence_kind")
+        for run in runs
+    }
+    expected_evidence_kind = (
+        "pre_optimizer_accumulated_gradient_l2"
+        if arm_name == "full_gradient"
+        else "per_microbatch_gradient_l2"
+    )
+    if evidence_kinds != {expected_evidence_kind}:
+        failures.append(
+            f"{arm_name} replays have invalid gradient evidence kinds"
+        )
     first = runs[0].get("gradient_modules")
     if not isinstance(first, list) or not all(
         isinstance(item, dict) for item in first
     ):
         failures.append(f"{arm_name} gradient_modules must be a list of objects")
         first = []
-    names = [
+    names = sorted(
         str(item.get("name"))
         for item in first
         if isinstance(item.get("name"), str)
-    ]
+    )
     if len(names) != len(first) or len(set(names)) != len(names):
         failures.append(f"{arm_name} gradient module names must be unique")
     norms_by_run: list[dict[str, float]] = []
@@ -814,7 +1080,7 @@ def _gradient_aggregate(
                 and math.isfinite(float(norm))
             ):
                 current[name] = float(norm)
-        if list(current) != names:
+        if set(current) != set(names) or len(current) != len(names):
             failures.append(
                 f"{arm_name} gradient modules differ across replay {index}"
             )
@@ -835,6 +1101,7 @@ def _gradient_aggregate(
         sum(float(item["l2_norm"]) ** 2 for item in modules)
     )
     return {
+        "evidence_kind": expected_evidence_kind,
         "nonzero_module_count": sum(
             float(item["l2_norm"]) > 0 for item in modules
         ),

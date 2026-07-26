@@ -135,6 +135,9 @@
           "type": "array",
           "uniqueItems": true
         },
+        "derivation": {
+          "$ref": "#/$defs/sampleDerivation"
+        },
         "probe_families": {
           "items": {
             "type": "string"
@@ -158,6 +161,9 @@
         "row_hashes_sha256": {
           "$ref": "#/$defs/sha256"
         },
+        "source_sample_file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
         "stratified": {
           "const": true
         }
@@ -166,9 +172,11 @@
         "row_count",
         "row_hashes",
         "row_hashes_sha256",
+        "source_sample_file_sha256",
         "domains",
         "probe_families",
-        "stratified"
+        "stratified",
+        "derivation"
       ],
       "type": "object"
     },
@@ -259,6 +267,12 @@
     "gradientArm": {
       "additionalProperties": false,
       "properties": {
+        "evidence_kind": {
+          "enum": [
+            "pre_optimizer_accumulated_gradient_l2",
+            "per_microbatch_gradient_l2"
+          ]
+        },
         "finite": {
           "const": true
         },
@@ -279,10 +293,36 @@
         }
       },
       "required": [
+        "evidence_kind",
         "nonzero_module_count",
         "gradient_l2_norm",
         "finite",
         "modules"
+      ],
+      "type": "object"
+    },
+    "sampleDerivation": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_training_uses_full_prompt": {
+          "const": true
+        },
+        "method": {
+          "const": "supervised_target_preserving_prompt_tail_v1"
+        },
+        "prompt_tail_token_limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "proxy_only": {
+          "const": true
+        }
+      },
+      "required": [
+        "method",
+        "prompt_tail_token_limit",
+        "proxy_only",
+        "candidate_training_uses_full_prompt"
       ],
       "type": "object"
     },

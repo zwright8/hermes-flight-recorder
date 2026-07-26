@@ -9,12 +9,10 @@ from typing import Any
 
 SAMPLE_SCHEMA_VERSION = "hfr.tau3_prefix_equivalence_sample.v1"
 SAMPLE_STRATA = (
-    ("airline", "later_task_completion_actions"),
-    ("airline", "safe_stopping"),
+    ("airline", "confirmation_before_mutation"),
     ("retail", "clarification_refusal"),
-    ("retail", "confirmation_before_mutation"),
     ("telecom", "error_result_recovery"),
-    ("telecom", "successful_completion"),
+    ("telecom", "safe_stopping"),
 )
 
 

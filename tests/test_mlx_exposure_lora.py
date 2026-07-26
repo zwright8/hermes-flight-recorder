@@ -256,7 +256,7 @@ class MlxExposureLoraTests(unittest.TestCase):
                     / "training_exposure_ledger.jsonl",
                     batch_size=1,
                     grad_accumulation_steps=4,
-                    iters=12,
+                    iters=8,
                 )
 
             schedule = load_exposure_schedule(
@@ -267,12 +267,12 @@ class MlxExposureLoraTests(unittest.TestCase):
                 / "training_exposure_ledger.jsonl",
                 batch_size=1,
                 grad_accumulation_steps=4,
-                iters=12,
+                iters=8,
                 bounded_smoke=True,
             )
 
             self.assertFalse(schedule["receipt"]["passed"])
-            self.assertEqual(schedule["microbatch_iterations"], 12)
+            self.assertEqual(schedule["microbatch_iterations"], 8)
 
     def test_exposure_iterator_yields_every_ledger_microbatch_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -467,6 +467,14 @@ class MlxExposureLoraTests(unittest.TestCase):
                 batch_size=1,
                 max_seq_length=3,
             )
+
+        _, lengths = mlx_exposure_lora._batch_from_indices(
+            Dataset(([1, 2, 3, 4], 2)),
+            [0],
+            batch_size=1,
+            max_seq_length=4,
+        )
+        self.assertEqual(lengths.tolist(), [[2, 3]])
 
 
 if __name__ == "__main__":

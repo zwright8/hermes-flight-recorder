@@ -8,9 +8,14 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.tau3_behavior_probes import (
+    EndpointConfig,
+    build_tau3_behavior_probes,
+)
 from flightrecorder.mlx_prefix_equivalence_smoke import (
     PrefixEquivalenceSmokeError,
     _parse_smoke_args,
+    supervised_target_preserving_prompt_tail,
     target_accounting_row,
 )
 from flightrecorder.tau3_prefix_equivalence_sample import (
@@ -20,8 +25,13 @@ from flightrecorder.tau3_prefix_equivalence_sample import (
 from flightrecorder.tau3_prefix_equivalence import (
     REQUIRED_EQUIVALENCE_PROBE_FAMILIES,
     TAU3_PREFIX_EQUIVALENCE_SCHEMA_VERSION,
+    build_tau3_paired_behavior_trials,
     build_tau3_prefix_equivalence,
     validate_tau3_prefix_equivalence,
+)
+from tests.test_tau3_behavior_probes import (
+    _bindings as behavior_bindings,
+    _mock_openai_server,
 )
 
 
@@ -167,6 +177,15 @@ def equivalence_fixture() -> dict[str, object]:
             "domains": ["airline", "retail", "telecom"],
             "probe_families": list(REQUIRED_EQUIVALENCE_PROBE_FAMILIES),
             "stratified": True,
+            "source_sample_file_sha256": "4" * 64,
+            "derivation": {
+                "method": (
+                    "supervised_target_preserving_prompt_tail_v1"
+                ),
+                "prompt_tail_token_limit": 512,
+                "proxy_only": True,
+                "candidate_training_uses_full_prompt": True,
+            },
         },
         "target_accounting": {
             "full_gradient": copy.deepcopy(target),
@@ -176,12 +195,16 @@ def equivalence_fixture() -> dict[str, object]:
             "intended_modules": modules,
             "intended_modules_sha256": _sha(modules),
             "full_gradient": {
+                "evidence_kind": (
+                    "pre_optimizer_accumulated_gradient_l2"
+                ),
                 "nonzero_module_count": len(modules),
                 "gradient_l2_norm": 0.75,
                 "finite": True,
                 "modules": full_gradient_modules,
             },
             "detached_prefix": {
+                "evidence_kind": "per_microbatch_gradient_l2",
                 "nonzero_module_count": len(modules),
                 "gradient_l2_norm": 0.5,
                 "finite": True,
@@ -219,6 +242,47 @@ def equivalence_fixture() -> dict[str, object]:
 
 
 class Tau3PrefixEquivalenceTests(unittest.TestCase):
+    def test_paired_behavior_trials_replay_real_probe_bundles(self) -> None:
+        with _mock_openai_server() as server:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                full_bindings = behavior_bindings()
+                prefix_bindings = behavior_bindings()
+                prefix_bindings["training_receipt_sha256"] = "6" * 64
+                prefix_bindings["adapter_tree_sha256"] = "7" * 64
+                endpoint = EndpointConfig(
+                    base_url=server.base_url,
+                    model="local-agent",
+                )
+                build_tau3_behavior_probes(
+                    root / "full",
+                    endpoint=endpoint,
+                    bindings=full_bindings,
+                )
+                build_tau3_behavior_probes(
+                    root / "prefix",
+                    endpoint=endpoint,
+                    bindings=prefix_bindings,
+                )
+
+                artifact = build_tau3_paired_behavior_trials(
+                    full_gradient_probe_path=root / "full",
+                    detached_prefix_probe_path=root / "prefix",
+                )
+
+                self.assertEqual(artifact["trial_count"], 7)
+                self.assertEqual(
+                    {trial["family"] for trial in artifact["trials"]},
+                    set(REQUIRED_EQUIVALENCE_PROBE_FAMILIES),
+                )
+                self.assertTrue(
+                    all(
+                        trial["full_gradient_passed"]
+                        and trial["detached_prefix_passed"]
+                        for trial in artifact["trials"]
+                    )
+                )
+
     def test_equivalence_sample_selects_one_deterministic_row_per_stratum(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -286,6 +350,17 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
                 row_sha256="a" * 64,
             )
 
+    def test_prompt_tail_proxy_preserves_every_supervised_token(self) -> None:
+        tokens, prompt_offset = supervised_target_preserving_prompt_tail(
+            list(range(20)),
+            prompt_offset=16,
+            prompt_tail_token_limit=5,
+        )
+
+        self.assertEqual(tokens, list(range(11, 20)))
+        self.assertEqual(prompt_offset, 5)
+        self.assertEqual(tokens[prompt_offset:], list(range(16, 20)))
+
     def test_smoke_parser_strips_only_measurement_arguments(self) -> None:
         args, passthrough = _parse_smoke_args(
             [
@@ -297,6 +372,12 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
                 "protocol.json",
                 "--model-identity",
                 "identity.json",
+                "--candidate-dataset",
+                "candidate.jsonl",
+                "--prompt-tail-token-limit",
+                "512",
+                "--compiled-full-gradient",
+                "--standard-full-gradient",
                 "--sample-domains",
                 "airline,retail,telecom",
                 "--sample-probe-families",
@@ -319,9 +400,17 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
         )
 
         self.assertEqual(args.equivalence_arm, "full_gradient")
+        self.assertTrue(args.compiled_full_gradient)
+        self.assertTrue(args.standard_full_gradient)
         self.assertEqual(args.model_identity, Path("identity.json"))
+        self.assertEqual(args.candidate_dataset, Path("candidate.jsonl"))
+        self.assertEqual(args.prompt_tail_token_limit, 512)
         self.assertNotIn("--measurement-out", passthrough)
         self.assertNotIn("--protocol", passthrough)
+        self.assertNotIn("--compiled-full-gradient", passthrough)
+        self.assertNotIn("--standard-full-gradient", passthrough)
+        self.assertNotIn("--candidate-dataset", passthrough)
+        self.assertNotIn("--prompt-tail-token-limit", passthrough)
         self.assertIn("--batch-size", passthrough)
         self.assertIn("--iters", passthrough)
         self.assertIn("--model", passthrough)
@@ -442,6 +531,19 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
                         REQUIRED_EQUIVALENCE_PROBE_FAMILIES
                     ),
                     "stratified": True,
+                    "source_sample_file_sha256": fixture["sample"][
+                        "source_sample_file_sha256"
+                    ],
+                    "derivation": copy.deepcopy(
+                        fixture["sample"]["derivation"]
+                    ),
+                },
+                "execution": {
+                    "gradient_evidence_kind": (
+                        "pre_optimizer_accumulated_gradient_l2"
+                        if arm == "full_gradient"
+                        else "per_microbatch_gradient_l2"
+                    )
                 },
                 "target_rows": copy.deepcopy(target_rows),
                 "gradient_modules": copy.deepcopy(modules),
@@ -508,6 +610,19 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
                         REQUIRED_EQUIVALENCE_PROBE_FAMILIES
                     ),
                     "stratified": True,
+                    "source_sample_file_sha256": fixture["sample"][
+                        "source_sample_file_sha256"
+                    ],
+                    "derivation": copy.deepcopy(
+                        fixture["sample"]["derivation"]
+                    ),
+                },
+                "execution": {
+                    "gradient_evidence_kind": (
+                        "pre_optimizer_accumulated_gradient_l2"
+                        if arm == "full_gradient"
+                        else "per_microbatch_gradient_l2"
+                    )
                 },
                 "target_rows": copy.deepcopy(target_rows),
                 "gradient_modules": [

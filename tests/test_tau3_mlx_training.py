@@ -16,6 +16,7 @@ from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
     _config_within_bounds,
+    _prefix_equivalence_sample_membership,
     _policy_complete_manifest_replays,
     _scan_mlx_data_dir,
     _write_telemetry,
@@ -40,6 +41,9 @@ from tests.test_tau3_competitive_dataset import (
     _write_tokenizer_config as _write_v3_tokenizer_config,
 )
 from tests.test_tau3_prefix_equivalence import equivalence_fixture
+from flightrecorder.tau3_prefix_equivalence import (
+    _target_accounting_from_rows,
+)
 from flightrecorder.tau3_competitive_dataset import build_tau3_competitive_dataset
 
 
@@ -454,6 +458,42 @@ def _write_prefix_equivalence(
         "mask_prompt": config.mask_prompt,
         "allowed_seeds": [config.seed],
     }
+    candidate_rows = [
+        json.loads(line)
+        for line in (mixture / "train.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
+    target_rows = artifact["target_accounting"]["full_gradient"]["rows"]
+    sample_hashes = [
+        hashlib.sha256(
+            json.dumps(
+                row,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        for row in candidate_rows[: len(target_rows)]
+    ]
+    for arm in ("full_gradient", "detached_prefix"):
+        rows = artifact["target_accounting"][arm]["rows"]
+        for row, row_sha256 in zip(rows, sample_hashes, strict=True):
+            row["row_sha256"] = row_sha256
+        artifact["target_accounting"][arm] = (
+            _target_accounting_from_rows(rows)
+        )
+    artifact["sample"]["row_hashes"] = sample_hashes
+    artifact["sample"]["row_count"] = len(sample_hashes)
+    artifact["sample"]["row_hashes_sha256"] = hashlib.sha256(
+        json.dumps(
+            sample_hashes,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
     path = root / "prefix-equivalence.json"
     _write_json(path, artifact)
     return path
@@ -880,6 +920,24 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             binding = receipt["training_binding"]["prefix_equivalence"]
             self.assertEqual(binding["sha256"], _sha256(equivalence))
             self.assertTrue(binding["validation_passed"])
+            self.assertTrue(binding["sample_membership"]["passed"])
+
+    def test_prefix_equivalence_membership_rejects_non_candidate_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "train.jsonl"
+            _write_jsonl(dataset, [{"messages": [], "metadata": {}}])
+            artifact = equivalence_fixture()
+            path = root / "equivalence.json"
+            _write_json(path, artifact)
+
+            result = _prefix_equivalence_sample_membership(path, dataset)
+
+            self.assertFalse(result["passed"])
+            self.assertEqual(
+                len(result["missing_row_hashes"]),
+                artifact["sample"]["row_count"],
+            )
 
     def test_exposure_prefix_training_rejects_tampered_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
