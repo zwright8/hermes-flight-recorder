@@ -49,6 +49,12 @@ RAW_LOCK_FORBIDDEN_KEYS = {
     "initial_state",
     "evaluation_criteria",
 }
+FROZEN_BENCHMARK_ARMS = (
+    "adapter",
+    "base",
+    "comparator_1",
+    "comparator_2",
+)
 
 
 class Tau3CandidateSelectionError(ValueError):
@@ -249,6 +255,12 @@ def _evaluate_candidate(
         errors.append("tau_revision_mismatch")
     if _nested(training["payload"], "training_binding", "protocol", "sha256") != base["manifest"].get("protocol_sha256"):
         errors.append("training_protocol_sha256_mismatch")
+    identical_evaluator = (
+        candidate["evaluator_model_contract"]
+        == base["evaluator_model_contract"]
+    )
+    if not identical_evaluator:
+        errors.append("evaluator_model_contract_mismatch")
 
     maps_errors: list[str] = []
     maps = {
@@ -330,6 +342,10 @@ def _evaluate_candidate(
             "passed": identical_harness,
             "normalized_sha256": canonical_sha256(base["harness_by_domain"]) if identical_harness else None,
         },
+        "evaluator_model_contract": {
+            "passed": identical_evaluator,
+            **candidate["evaluator_model_contract"],
+        },
         "endpoint_model_sha256": _nested(candidate["manifest"], "arm_identity", "endpoint_model_sha256"),
         "metrics": metrics,
         "effects": effects,
@@ -355,6 +371,10 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
     if not isinstance(run_refs, list) or not run_refs:
         raise Tau3CandidateSelectionError(f"{path}: missing run receipts")
     protocol = _load_protocol_record(path, manifest)
+    evaluator_model_contract = _load_evaluator_model_contract_record(
+        path,
+        manifest,
+    )
     source = _load_development_source_record(path, manifest, protocol=protocol)
     prelaunch = _load_prelaunch_record(path, manifest)
     run_receipts = []
@@ -375,6 +395,13 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
             raise Tau3CandidateSelectionError(f"{receipt_path}: run receipt mode/arm mismatch")
         if receipt.get("protocol_sha256") != manifest.get("protocol_sha256"):
             raise Tau3CandidateSelectionError(f"{receipt_path}: run receipt protocol_sha256 mismatch")
+        if (
+            receipt.get("evaluator_model_contract_sha256")
+            != evaluator_model_contract["sha256"]
+        ):
+            raise Tau3CandidateSelectionError(
+                f"{receipt_path}: run receipt evaluator model contract mismatch"
+            )
         if ref.get("domain") != receipt.get("domain") or ref.get("seed") != receipt.get("seed"):
             raise Tau3CandidateSelectionError(f"{receipt_path}: run receipt ref domain/seed mismatch")
         if _sealed_flags_present(receipt):
@@ -430,6 +457,7 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
         "sha256": _sha256_file(path),
         "manifest": manifest,
         "protocol": protocol,
+        "evaluator_model_contract": evaluator_model_contract,
         "source": source,
         "prelaunch_receipt": prelaunch,
         "run_receipts": run_receipts,
@@ -510,7 +538,18 @@ def _load_prelaunch_record(manifest_path: Path, manifest: dict[str, Any]) -> dic
     payload = _load_json_object(path)
     if payload.get("schema_version") != manifest.get("schema_version") or payload.get("phase") != "prelaunch":
         raise Tau3CandidateSelectionError(f"{manifest_path}: prelaunch receipt phase/schema mismatch")
-    for key in ("protocol_sha256", "mode", "arm_id", "config", "task_selection", "candidate_identity"):
+    for key in (
+        "protocol_sha256",
+        "evaluator_model_contract",
+        "mode",
+        "arm_id",
+        "agent",
+        "user_simulator",
+        "reviewer",
+        "config",
+        "task_selection",
+        "candidate_identity",
+    ):
         if payload.get(key) != manifest.get(key):
             raise Tau3CandidateSelectionError(f"{manifest_path}: prelaunch receipt {key} mismatch")
     if _sealed_flags_present(payload):
@@ -531,6 +570,129 @@ def _load_protocol_record(manifest_path: Path, manifest: dict[str, Any]) -> dict
     if schema["passed"] is not True:
         raise Tau3CandidateSelectionError(f"{manifest_path}: protocol schema failed: " + "; ".join(schema["errors"]))
     return {"path": str(path), "sha256": digest, "payload": payload}
+
+
+def _load_evaluator_model_contract_record(
+    manifest_path: Path,
+    manifest: dict[str, Any],
+) -> dict[str, str]:
+    record = manifest.get("evaluator_model_contract")
+    if not isinstance(record, dict):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: missing evaluator model contract"
+        )
+    path = _resolve_manifest_file_ref(
+        manifest_path,
+        record,
+        label="evaluator model contract",
+    )
+    digest = _sha256_file(path)
+    if (
+        record.get("sha256") != digest
+        or record.get("size") != path.stat().st_size
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator model contract reference does not replay"
+        )
+    payload = _load_json_object(path)
+    if payload.get("schema_version") != "hfr.tau3_evaluator_model_contract.v1":
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator model contract schema_version mismatch"
+        )
+    for key, expected in (
+        ("roles_share_exact_model", True),
+        ("identical_for_all_arms", True),
+        ("local_only", True),
+        ("network", False),
+        ("no_comparator_specific_prompting", True),
+        ("excluded_from_gradient_data", True),
+    ):
+        if payload.get(key) is not expected:
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: evaluator model contract must set "
+                f"{key}={str(expected).lower()}"
+            )
+    if sorted(str(value) for value in payload.get("applies_to_arms") or []) != list(
+        FROZEN_BENCHMARK_ARMS
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator model contract does not cover all arms"
+        )
+    roles = payload.get("roles")
+    role_map: dict[str, Any] = roles if isinstance(roles, dict) else {}
+    user = role_map.get("user_simulator")
+    reviewer = role_map.get("reviewer")
+    user_role: dict[str, Any] = user if isinstance(user, dict) else {}
+    reviewer_role: dict[str, Any] = (
+        reviewer if isinstance(reviewer, dict) else {}
+    )
+    identity = user_role.get("model_identity")
+    identity_map: dict[str, Any] = (
+        identity if isinstance(identity, dict) else {}
+    )
+    identity_sha256 = user_role.get("model_identity_sha256")
+    if (
+        not identity_map
+        or identity_map != reviewer_role.get("model_identity")
+        or identity_sha256 != reviewer_role.get("model_identity_sha256")
+        or identity_sha256 != canonical_sha256(identity_map)
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator roles do not share one canonical identity"
+        )
+    model_id = identity_map.get("model_id")
+    revision = identity_map.get("revision")
+    if (
+        not isinstance(model_id, str)
+        or not model_id
+        or not isinstance(revision, str)
+        or not re.fullmatch(r"[0-9a-f]{40,64}", revision)
+        or not _sha256_value(identity_map.get("local_identity_sha256"))
+        or not _sha256_value(identity_map.get("local_tree_sha256"))
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator model identity is not content-addressed"
+        )
+    for role, label in (
+        (user_role, "user_simulator"),
+        (reviewer_role, "reviewer"),
+    ):
+        if (
+            role.get("role") != label
+            or role.get("local_only") is not True
+            or role.get("network") is not False
+            or role.get("temperature") != 0.0
+            or role.get("top_p") != 1.0
+        ):
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: evaluator {label} role is not frozen local deterministic"
+            )
+    endpoint_model_sha256 = hashlib.sha256(
+        model_id.encode("utf-8")
+    ).hexdigest()
+    if (
+        record.get("model_identity_sha256") != identity_sha256
+        or record.get("endpoint_model_sha256") != endpoint_model_sha256
+        or record.get("roles_share_exact_model") is not True
+        or record.get("identical_for_all_arms") is not True
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: evaluator model contract binding does not replay"
+        )
+    for key in ("user_simulator", "reviewer"):
+        endpoint = manifest.get(key)
+        endpoint_map: dict[str, Any] = (
+            endpoint if isinstance(endpoint, dict) else {}
+        )
+        if endpoint_map.get("model_sha256") != endpoint_model_sha256:
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: {key} endpoint does not use the frozen evaluator"
+            )
+    return {
+        "sha256": digest,
+        "model_identity_sha256": str(identity_sha256),
+        "endpoint_model_sha256": endpoint_model_sha256,
+    }
 
 
 def _load_development_source_record(manifest_path: Path, manifest: dict[str, Any], *, protocol: dict[str, Any]) -> dict[str, Any]:
@@ -877,6 +1039,9 @@ def _candidate_lock(selected: dict[str, Any], *, report_sha256: str, created_at:
         "development_benchmark_manifest_sha256": selected["artifacts"]["development_manifest"]["sha256"],
         "training_receipt_sha256": selected["artifacts"]["training_receipt"]["sha256"],
         "endpoint_model_sha256": selected["candidate_identity"]["endpoint_model_sha256"],
+        "evaluator_model_contract_sha256": selected[
+            "evaluator_model_contract"
+        ]["sha256"],
         "adapter_tree_sha256": summary.get("adapter_tree_sha256"),
         "recipe_sha256": summary.get("recipe_sha256"),
         "base_identity_sha256": summary.get("base_identity_sha256"),
@@ -905,6 +1070,9 @@ def _private_source_record(source: dict[str, Any]) -> dict[str, Any]:
         "mode": manifest.get("mode"),
         "arm_id": manifest.get("arm_id"),
         "protocol_sha256": manifest.get("protocol_sha256"),
+        "evaluator_model_contract": source.get(
+            "evaluator_model_contract"
+        ),
         "tau_revision": manifest.get("tau_revision"),
         "run_count": manifest.get("run_count"),
         "success_count": manifest.get("success_count"),
@@ -938,6 +1106,10 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise Tau3CandidateSelectionError(f"expected JSON object: {path}")
     return payload
+
+
+def _sha256_value(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
 
 
 def _sealed_flags_present(value: dict[str, Any]) -> bool:

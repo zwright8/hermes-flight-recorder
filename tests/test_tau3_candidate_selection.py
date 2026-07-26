@@ -47,6 +47,10 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             self.assertEqual(lock["schema_version"], TAU3_CANDIDATE_LOCK_SCHEMA_VERSION)
             self.assertEqual(lock["development_selection_report_sha256"], _sha256(root / "selection.json"))
             self.assertEqual(lock["endpoint_model_sha256"], _hash("candidate-a-endpoint-model"))
+            self.assertEqual(
+                lock["evaluator_model_contract_sha256"],
+                _sha256(root / "evaluator-model-contract.json"),
+            )
             self.assertEqual(lock["candidate_identity_sha256"], _sha256(better_tie.candidate_identity_path))
             self.assertNotEqual(lock["candidate_identity_sha256"], report["selection"]["candidate_identity_canonical_sha256"])
             self.assertEqual(report["selection"]["candidate_identity_sha256"], _sha256(better_tie.candidate_identity_path))
@@ -131,6 +135,41 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             _write(candidate.development_manifest_path, manifest)
 
             with self.assertRaisesRegex(Tau3CandidateSelectionError, "prompt token ceiling exceeded"):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "selection.json",
+                    lock_path=root / "candidate-lock.json",
+                    bootstrap_samples=200,
+                )
+
+            self.assertFalse((root / "selection.json").exists())
+            self.assertFalse((root / "candidate-lock.json").exists())
+
+    def test_rejects_coherent_evaluator_model_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(
+                root,
+                "base",
+                reward=0.0,
+                db_match=False,
+            )
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            _replace_evaluator_model(
+                candidate.development_manifest_path,
+                "local/substituted-evaluator",
+            )
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "evaluator_model_contract_mismatch",
+            ):
                 select_tau3_candidate(
                     base_manifest_path=base,
                     candidates=[candidate],
@@ -550,8 +589,26 @@ def _benchmark_manifest(
     protocol_sha = _ensure_protocol(root)
     staged_protocol = out / "protocol.json"
     staged_source = out / "development.json"
+    staged_evaluator = out / "evaluator-model-contract.json"
     _write(staged_protocol, _read(root / "protocol.json"))
     _write(staged_source, _read(root / "development.json"))
+    evaluator = _ensure_evaluator_contract(root)
+    _write(staged_evaluator, evaluator)
+    evaluator_identity = evaluator["roles"]["user_simulator"]
+    evaluator_model_id = evaluator_identity["model_identity"]["model_id"]
+    evaluator_model_sha256 = _hash(evaluator_model_id)
+    evaluator_ref = {
+        **_file_ref(
+            staged_evaluator,
+            "evaluator-model-contract.json",
+        ),
+        "model_identity_sha256": evaluator_identity[
+            "model_identity_sha256"
+        ],
+        "endpoint_model_sha256": evaluator_model_sha256,
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+    }
     receipts = []
     for domain in ("airline", "retail", "telecom"):
         for seed in (101, 202, 303, 404):
@@ -571,6 +628,7 @@ def _benchmark_manifest(
                 "phase": "domain_seed",
                 "created_at": "2026-07-23T00:00:00+00:00",
                 "protocol_sha256": protocol_sha,
+                "evaluator_model_contract_sha256": evaluator_ref["sha256"],
                 "arm_identity": {"arm": arm},
                 "mode": "development",
                 "arm_id": arm,
@@ -612,13 +670,20 @@ def _benchmark_manifest(
         "created_at": "2026-07-23T00:00:00+00:00",
         "protocol": _file_ref(staged_protocol, "protocol.json"),
         "protocol_sha256": protocol_sha,
+        "evaluator_model_contract": evaluator_ref,
         "tau_revision": REV,
         "mode": "development",
         "arm_id": arm,
         "arm_identity": arm_identity,
         "agent": _endpoint("agent"),
-        "user_simulator": _endpoint("user"),
-        "reviewer": _endpoint("reviewer"),
+        "user_simulator": _evaluator_endpoint(
+            "user",
+            evaluator_model_sha256,
+        ),
+        "reviewer": _evaluator_endpoint(
+            "reviewer",
+            evaluator_model_sha256,
+        ),
         "config": {
             "agent": "llm_agent",
             "auto_review": True,
@@ -659,6 +724,7 @@ def _benchmark_manifest(
             "created_at",
             "protocol",
             "protocol_sha256",
+            "evaluator_model_contract",
             "tau_revision",
             "mode",
             "arm_id",
@@ -820,6 +886,121 @@ def _endpoint(label: str) -> dict[str, Any]:
         "temperature": 0.0,
         "top_p": 1.0,
     }
+
+
+def _evaluator_endpoint(
+    label: str,
+    model_sha256: str,
+) -> dict[str, Any]:
+    return {
+        **_endpoint(label),
+        "model_sha256": model_sha256,
+    }
+
+
+def _ensure_evaluator_contract(root: Path) -> dict[str, Any]:
+    path = root / "evaluator-model-contract.json"
+    if path.exists():
+        return _read(path)
+    identity = {
+        "model_id": "local/frozen-evaluator",
+        "revision": "4" * 40,
+        "local_identity_sha256": "5" * 64,
+        "local_tree_sha256": "6" * 64,
+    }
+    identity_sha256 = _canonical_sha256(identity)
+    payload = {
+        "schema_version": "hfr.tau3_evaluator_model_contract.v1",
+        "applies_to_arms": [
+            "adapter",
+            "base",
+            "comparator_1",
+            "comparator_2",
+        ],
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+        "local_only": True,
+        "network": False,
+        "no_comparator_specific_prompting": True,
+        "excluded_from_gradient_data": True,
+        "roles": {
+            role: {
+                "role": role,
+                "model_identity": identity,
+                "model_identity_sha256": identity_sha256,
+                "local_only": True,
+                "network": False,
+                "temperature": 0.0,
+                "top_p": 1.0,
+            }
+            for role in ("user_simulator", "reviewer")
+        },
+    }
+    _write(path, payload)
+    return payload
+
+
+def _replace_evaluator_model(
+    manifest_path: Path,
+    model_id: str,
+) -> None:
+    manifest = _read(manifest_path)
+    evaluator_path = manifest_path.parent / "evaluator-model-contract.json"
+    evaluator = _read(evaluator_path)
+    identity = dict(
+        evaluator["roles"]["user_simulator"]["model_identity"]
+    )
+    identity["model_id"] = model_id
+    identity["revision"] = "7" * 40
+    identity["local_identity_sha256"] = "8" * 64
+    identity["local_tree_sha256"] = "9" * 64
+    identity_sha256 = _canonical_sha256(identity)
+    for role in ("user_simulator", "reviewer"):
+        evaluator["roles"][role]["model_identity"] = identity
+        evaluator["roles"][role]["model_identity_sha256"] = identity_sha256
+    _write(evaluator_path, evaluator)
+    model_sha256 = _hash(model_id)
+    binding = {
+        **_file_ref(
+            evaluator_path,
+            "evaluator-model-contract.json",
+        ),
+        "model_identity_sha256": identity_sha256,
+        "endpoint_model_sha256": model_sha256,
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+    }
+    manifest["evaluator_model_contract"] = binding
+    for endpoint in ("user_simulator", "reviewer"):
+        manifest[endpoint]["model_sha256"] = model_sha256
+    for record in manifest["run_receipts"]:
+        receipt_path = manifest_path.parent / record["path"]
+        receipt = _read(receipt_path)
+        receipt["evaluator_model_contract_sha256"] = binding["sha256"]
+        _write(receipt_path, receipt)
+        record["receipt_sha256"] = _sha256(receipt_path)
+    prelaunch_path = manifest_path.parent / manifest["prelaunch_receipt"]["path"]
+    prelaunch = _read(prelaunch_path)
+    prelaunch["evaluator_model_contract"] = binding
+    for endpoint in ("user_simulator", "reviewer"):
+        prelaunch[endpoint]["model_sha256"] = model_sha256
+    _write(prelaunch_path, prelaunch)
+    manifest["prelaunch_receipt"] = _file_ref(
+        prelaunch_path,
+        prelaunch_path.name,
+    )
+    _write(manifest_path, manifest)
+
+
+def _canonical_sha256(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _llm_args() -> dict[str, Any]:

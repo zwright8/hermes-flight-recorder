@@ -407,6 +407,71 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 )
             self.assertNotEqual(self._sha256(authorization), self._sha256(source_auth_mutated / "inputs" / "sealed_authorization.json"))
 
+    def test_sealed_rejects_evaluator_not_bound_by_candidate_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            adapter = self._adapter(root)
+            sealed_manifest = self._sealed_source_manifest(
+                root,
+                task_count=100,
+            )
+            protocol = self._protocol(
+                root,
+                sealed_manifest=sealed_manifest,
+            )
+            locked_evaluator = self._evaluator_contract(root)
+            lock = self._candidate_lock(
+                root,
+                adapter=adapter,
+                protocol=protocol,
+                evaluator_contract=locked_evaluator,
+            )
+            authorization = self._sealed_authorization(
+                root,
+                lock=lock,
+                protocol=protocol,
+                sealed_manifest=sealed_manifest,
+            )
+            substituted = self._evaluator_contract(
+                root,
+                model_id="local/substituted-evaluator",
+                filename="substituted-evaluator-contract.json",
+            )
+            substituted_endpoint = self._endpoint(
+                "local/substituted-evaluator",
+                18081,
+            )
+
+            with self.assertRaisesRegex(
+                Tau3BenchmarkRunError,
+                "candidate lock evaluator model contract",
+            ):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-substituted",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=self._endpoint(
+                        "local/adapter",
+                        18080,
+                        adapter_path=adapter,
+                    ),
+                    user=substituted_endpoint,
+                    reviewer=substituted_endpoint,
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        evaluator_model_contract=substituted,
+                        sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        candidate_lock=lock,
+                        timeout_seconds=2,
+                    ),
+                )
+
     def test_development_adapter_uses_candidate_identity_without_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1271,11 +1336,17 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
 
-    def _evaluator_contract(self, root: Path) -> Path:
-        path = root / "evaluator-model-contract.json"
+    def _evaluator_contract(
+        self,
+        root: Path,
+        *,
+        model_id: str = "local/evaluator",
+        filename: str = "evaluator-model-contract.json",
+    ) -> Path:
+        path = root / filename
         identity = {
-            "model_id": "local/evaluator",
-            "local_path": "local/evaluator",
+            "model_id": model_id,
+            "local_path": model_id,
             "local_identity_sha256": "1" * 64,
             "local_tree_sha256": "2" * 64,
             "revision": "3" * 40,
@@ -1361,7 +1432,15 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
 
-    def _candidate_lock(self, root: Path, *, adapter: Path, protocol: Path, created_at: str = "2026-07-22T00:00:00+00:00") -> Path:
+    def _candidate_lock(
+        self,
+        root: Path,
+        *,
+        adapter: Path,
+        protocol: Path,
+        created_at: str = "2026-07-22T00:00:00+00:00",
+        evaluator_contract: Path | None = None,
+    ) -> Path:
         path = root / f"candidate-lock-{len(list(root.glob('candidate-lock-*.json')))}.json"
         endpoint = self._endpoint("local/adapter", 18080, adapter_path=adapter)
         payload = {
@@ -1387,6 +1466,10 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             "local_paths_included": False,
             "raw_payload_included": False,
         }
+        if evaluator_contract is not None:
+            payload["evaluator_model_contract_sha256"] = self._sha256(
+                evaluator_contract
+            )
         path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
         return path
 

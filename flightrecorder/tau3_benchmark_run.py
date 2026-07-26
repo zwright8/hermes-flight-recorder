@@ -169,6 +169,20 @@ def run_tau3_benchmark_arm(
         else None
     )
     candidate_lock = _candidate_lock_record(config, candidate_lock_ref) if config.mode == "sealed" else None
+    if (
+        config.mode == "sealed"
+        and config.candidate_lock is not None
+        and evaluator_contract_ref is not None
+    ):
+        lock_payload = _read_json(config.candidate_lock)
+        if (
+            lock_payload.get("evaluator_model_contract_sha256")
+            != evaluator_contract_ref["sha256"]
+        ):
+            raise Tau3BenchmarkRunError(
+                "candidate lock evaluator model contract does not match "
+                "the sealed benchmark evaluator"
+            )
     sealed_authorization = (
         _sealed_authorization_binding(config, sealed_authorization_ref, out=out, expected_tau_revision=expected_tau_revision)
         if config.mode == "sealed"

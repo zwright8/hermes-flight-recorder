@@ -14,6 +14,7 @@
     "development_benchmark_manifest_sha256": {"$ref": "#/$defs/sha256"},
     "development_selection_report_sha256": {"$ref": "#/$defs/sha256"},
     "endpoint_model_sha256": {"$ref": "#/$defs/sha256"},
+    "evaluator_model_contract_sha256": {"$ref": "#/$defs/sha256"},
     "hashes_only": {"const": true},
     "local_paths_included": {"const": false},
     "protocol_sha256": {"$ref": "#/$defs/sha256"},

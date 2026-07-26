@@ -338,7 +338,9 @@ domain/seed receipts. Strict benchmark-result validation independently replays
 the canonical evaluator identity and requires the same binding across every
 arm. `build_tau3_execution_bundle.py` requires the same
 `--evaluator-model-contract` input and copies it into the portable private
-bundle.
+bundle. Development selection records its digest in the candidate lock, so a
+sealed arm fails before task access if its evaluator contract differs from the
+one used to choose the candidate.
 
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and

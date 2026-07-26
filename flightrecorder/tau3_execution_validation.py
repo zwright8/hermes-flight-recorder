@@ -43,6 +43,7 @@ top-level selected receipt reference to ``training_receipt_sha256``.
   "development_selection_report_sha256": "...",
   "development_benchmark_manifest_sha256": "...",
   "endpoint_model_sha256": "...",
+  "evaluator_model_contract_sha256": "...",
   "protocol_sha256": "...",
   "protocol_signature": "...",
   "adapter_tree_sha256": "...",
@@ -242,6 +243,13 @@ def validate_tau3_benchmark_result_bundle(bundle: str | Path, *, strict: bool = 
     selected_lock = _selected_lock(root, manifest)
     targets.append(selected_lock.target)
     lock_payload = selected_lock.payload if isinstance(selected_lock.payload, dict) else {}
+    _require(
+        selected_lock.target,
+        lock_payload.get("evaluator_model_contract_sha256")
+        == evaluator_contract.sha256,
+        "candidate lock evaluator_model_contract_sha256 does not match "
+        "the execution bundle evaluator contract",
+    )
     dev_manifests = _load_arm_manifests(
         root,
         benchmark.get("development_arms"),

@@ -513,6 +513,9 @@ def build_candidate_lock(
         "development_benchmark_manifest_sha256": development_adapter_ref["sha256"],
         "training_receipt_sha256": receipt_ref["sha256"],
         "endpoint_model_sha256": "b" * 64,
+        "evaluator_model_contract_sha256": sha256_file(
+            root / "evaluator-model-contract.json"
+        ),
         "protocol_sha256": protocol_ref["sha256"],
         "adapter_tree_sha256": receipt["adapter"]["tree_sha256"],
         "recipe_sha256": binding["recipe"]["recipe_sha256"],
