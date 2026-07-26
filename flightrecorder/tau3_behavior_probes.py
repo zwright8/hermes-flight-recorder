@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_contract
 
 PROBES_SCHEMA_VERSION = "hfr.tau3_behavior_probes.v1"
@@ -129,10 +130,10 @@ def build_tau3_behavior_probes(
     """Run behavior probes and write a hash-bound aggregate artifact."""
 
     out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
     specs = probe_specs or default_probe_specs()
     _validate_probe_specs(specs)
     _validate_bindings(bindings)
+    _prepare_output_directory(out)
 
     result_refs: list[dict[str, Any]] = []
     failed_count = 0
@@ -141,7 +142,7 @@ def build_tau3_behavior_probes(
         result = _build_probe_result(spec, response, endpoint, index)
         failed_count += 0 if result["expected_outcome"] == result["actual_outcome"] else 1
         path = out / f"{_safe_id(result['probe_id'])}.json"
-        _write_json(path, result)
+        _write_json_new(path, result)
         result_refs.append({"path": path.name, "sha256": _sha256_file(path)})
 
     aggregate = {
@@ -168,7 +169,7 @@ def build_tau3_behavior_probes(
         },
     }
     _check_schema(aggregate, "tau3_behavior_probes", "behavior probes")
-    _write_json(out / "behavior-probes.json", aggregate)
+    _write_json_new(out / "behavior-probes.json", aggregate)
     return aggregate
 
 
@@ -239,7 +240,10 @@ def validate_tau3_behavior_probes(path: str | Path) -> dict[str, Any]:
     missing = sorted(set(REQUIRED_FAMILIES) - families)
     if missing:
         errors.append("missing required probe families: " + ", ".join(missing))
-    recorded = aggregate.get("aggregate") if isinstance(aggregate.get("aggregate"), dict) else {}
+    recorded_value = aggregate.get("aggregate")
+    recorded: dict[str, Any] = (
+        recorded_value if isinstance(recorded_value, dict) else {}
+    )
     if recorded.get("total_probe_count") != len(refs):
         errors.append("aggregate.total_probe_count does not replay")
     if recorded.get("failed_probe_count") != failed:
@@ -312,22 +316,29 @@ def _call_openai_chat(endpoint: EndpointConfig, spec: dict[str, Any]) -> dict[st
 
 
 def _observation(response: dict[str, Any]) -> dict[str, Any]:
-    message = {}
+    message: dict[str, Any] = {}
     choices = response.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
         maybe_message = choices[0].get("message")
         if isinstance(maybe_message, dict):
             message = maybe_message
-    content = message.get("content") if isinstance(message.get("content"), str) else ""
+    content_value = message.get("content")
+    content = content_value if isinstance(content_value, str) else ""
     tool_calls = []
-    for call in message.get("tool_calls") if isinstance(message.get("tool_calls"), list) else []:
+    tool_call_value = message.get("tool_calls")
+    calls = tool_call_value if isinstance(tool_call_value, list) else []
+    for call in calls:
         if not isinstance(call, dict):
             continue
-        function = call.get("function") if isinstance(call.get("function"), dict) else {}
+        function_value = call.get("function")
+        function: dict[str, Any] = (
+            function_value if isinstance(function_value, dict) else {}
+        )
         name = function.get("name")
         if isinstance(name, str) and name:
             tool_calls.append({"name": name, "name_sha256": _sha256_text(name)})
-    error = response.get("error") if isinstance(response.get("error"), dict) else None
+    error_value = response.get("error")
+    error = error_value if isinstance(error_value, dict) else None
     return {
         "content": _safe_text_record(content),
         "tool_calls": tool_calls,
@@ -475,9 +486,41 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def _prepare_output_directory(path: Path) -> None:
+    if path_has_symlink_component(path, include_leaf=True):
+        raise Tau3BehaviorProbeError(
+            f"output path must not contain symlink components: {path}"
+        )
+    if path.exists():
+        if not path.is_dir():
+            raise Tau3BehaviorProbeError(
+                f"output exists and is not a directory: {path}"
+            )
+        if any(path.iterdir()):
+            raise Tau3BehaviorProbeError(
+                f"output directory must be empty: {path}"
+            )
+        return
+    path.mkdir(parents=True, exist_ok=False)
+
+
+def _write_json_new(path: Path, payload: dict[str, Any]) -> None:
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+    except FileExistsError as exc:
+        raise Tau3BehaviorProbeError(
+            f"refusing to overwrite existing probe evidence: {path}"
+        ) from exc
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        )
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _sha256_file(path: Path) -> str:

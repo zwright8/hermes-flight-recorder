@@ -33,9 +33,12 @@ class Tau3BehaviorProbesTests(unittest.TestCase):
 
                 schema_result = check_schema_file(aggregate_path, "tau3_behavior_probes")
                 self.assertTrue(schema_result["passed"], schema_result["errors"])
+                self.assertEqual(aggregate_path.stat().st_mode & 0o777, 0o600)
                 for ref in aggregate["probe_results"]:
-                    result = check_schema_file(out / ref["path"], "tau3_behavior_probe_result")
+                    result_path = out / ref["path"]
+                    result = check_schema_file(result_path, "tau3_behavior_probe_result")
                     self.assertTrue(result["passed"], result["errors"])
+                    self.assertEqual(result_path.stat().st_mode & 0o777, 0o600)
 
                 validation = validate_tau3_behavior_probes(out)
                 self.assertTrue(validation["passed"], json.dumps(validation, indent=2))
@@ -80,6 +83,37 @@ class Tau3BehaviorProbesTests(unittest.TestCase):
                     bindings=_bindings(),
                     probe_specs=specs,
                 )
+
+    def test_builder_refuses_to_overwrite_existing_probe_evidence(self) -> None:
+        with _mock_openai_server() as server:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                build_tau3_behavior_probes(
+                    out,
+                    endpoint=EndpointConfig(
+                        base_url=server.base_url,
+                        model="local-agent",
+                    ),
+                    bindings=_bindings(),
+                )
+                aggregate_path = out / "behavior-probes.json"
+                original = aggregate_path.read_bytes()
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "output directory must be empty",
+                ):
+                    build_tau3_behavior_probes(
+                        out,
+                        endpoint=EndpointConfig(
+                            base_url=server.base_url,
+                            model="local-agent",
+                        ),
+                        bindings=_bindings(),
+                    )
+
+                self.assertEqual(aggregate_path.read_bytes(), original)
+                self.assertEqual(len(server.requests), 8)
 
 
 class _Server:
