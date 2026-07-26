@@ -72,6 +72,7 @@ from typing import Any
 
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_mlx_training import validate_tau3_process_segments
 from .tau3_evaluation import analyze_tau3_evaluation
 
 EXECUTION_BUNDLE_SCHEMA_VERSION = "hfr.tau3_execution_bundle.v1"
@@ -206,7 +207,51 @@ def _validate_training_receipt_artifacts(root: Path, loaded: _Loaded, label: str
         _validate_mlx_config(mlx_config.target, mlx_config.payload, payload)
     if telemetry.path is not None:
         _validate_training_telemetry(telemetry.target, telemetry.path, payload)
+    process_target = _validate_training_process_segments(
+        base,
+        payload,
+        label,
+    )
+    if process_target is not None:
+        targets.append(process_target)
     return targets
+
+
+def _validate_training_process_segments(
+    base: Path,
+    receipt: dict[str, Any],
+    label: str,
+) -> _Target | None:
+    config = receipt.get("config")
+    segmented = (
+        isinstance(config, dict)
+        and config.get("process_segment_iters") is not None
+    )
+    evidence = receipt.get("process_segments")
+    if not segmented and evidence is None:
+        return None
+    target = _Target(
+        type=f"{label}_training_process_segments",
+        path=str(base / "process_segments"),
+    )
+    if segmented != isinstance(evidence, dict):
+        target.errors.append(
+            "process_segments evidence must be present exactly for segmented runs"
+        )
+        return target
+    assert isinstance(evidence, dict)
+    validation = validate_tau3_process_segments(
+        evidence,
+        output_dir=base,
+        expected_config=config,
+    )
+    target.details["validation"] = validation
+    if validation.get("passed") is not True:
+        target.errors.extend(
+            f"process segment replay: {error}"
+            for error in validation.get("errors") or []
+        )
+    return target
 
 
 def validate_tau3_benchmark_result_bundle(bundle: str | Path, *, strict: bool = False) -> dict[str, Any]:

@@ -9,6 +9,8 @@ import os
 import queue
 import re
 import signal
+import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -37,6 +39,7 @@ from .tau3_training_artifacts import REQUIRED_ARTIFACT_MAP, validate_tau3_traini
 from .tau3_training_mixture import TAU3_TRAINING_MIXTURE_SCHEMA_VERSION
 
 TAU3_MLX_TRAINING_RUN_SCHEMA_VERSION = "hfr.tau3_mlx_training_run.v1"
+TAU3_MLX_PROCESS_SEGMENTS_SCHEMA_VERSION = "hfr.tau3_mlx_process_segments.v1"
 MAX_TIMEOUT_SECONDS = 604_800
 MAX_ITERS = 2_000_000
 MAX_RANK = 256
@@ -110,6 +113,7 @@ class Tau3MlxTrainingConfig:
     prefix_cache_training: bool = False
     exposure_ledger_training: bool = False
     clear_cache_threshold: int = 0
+    process_segment_iters: int | None = None
     timeout_seconds: int = 172_800
 
 
@@ -131,6 +135,7 @@ def run_tau3_mlx_training(
     grounded_validator_python: str | Path | None = None,
     workspace_root: str | Path | None = None,
     created_at: str | None = None,
+    resume_process_segments: bool = False,
 ) -> dict[str, Any]:
     """Validate a governed Tau-3 dataset source and run local ``mlx_lm lora``.
 
@@ -152,8 +157,15 @@ def run_tau3_mlx_training(
         assert mixture_dir is not None
         raw_source_path = mixture_dir
     source_path = _require_local_directory(Path(raw_source_path), root, source_kind)
-    output = _require_local_output(Path(output_dir), root)
-    output.mkdir(parents=True, exist_ok=True)
+    output = _require_local_output(
+        Path(output_dir),
+        root,
+        resume_process_segments=resume_process_segments,
+    )
+    output.mkdir(
+        parents=True,
+        exist_ok=resume_process_segments,
+    )
     adapter_dir = output / "adapter"
     telemetry_path = output / "telemetry.jsonl"
     prelaunch_path = output / "prelaunch_receipt.json"
@@ -256,19 +268,29 @@ def run_tau3_mlx_training(
 
     python = _require_local_venv_python(root)
     _require_local_directory(data_dir, root, "mlx data")
-    adapter_dir.mkdir()
+    if resume_process_segments and cfg.process_segment_iters is None:
+        raise Tau3MlxTrainingError(
+            "resume_process_segments requires process_segment_iters"
+        )
+    if cfg.process_segment_iters is None:
+        adapter_dir.mkdir()
     lora_config_path = output / "mlx_lora_config.json"
-    _write_new_json_readonly(
-        lora_config_path,
-        _mlx_lora_config(
-            model_ref,
-            data_dir,
-            _relative_output_path(adapter_dir, output),
-            cfg,
-            exposure_binding=exposure_binding,
-            prefix_equivalence_binding=prefix_equivalence_binding,
-        ),
+    lora_config = _mlx_lora_config(
+        model_ref,
+        data_dir,
+        _relative_output_path(adapter_dir, output),
+        cfg,
+        exposure_binding=exposure_binding,
+        prefix_equivalence_binding=prefix_equivalence_binding,
     )
+    if resume_process_segments:
+        _require_existing_json_equal(
+            lora_config_path,
+            lora_config,
+            "segmented-resume MLX config",
+        )
+    else:
+        _write_new_json_readonly(lora_config_path, lora_config)
     command = _build_command(
         python,
         model_ref,
@@ -281,6 +303,11 @@ def run_tau3_mlx_training(
         prefix_equivalence_binding=prefix_equivalence_binding,
     )
     _reject_forbidden_tokens(command)
+    if cfg.process_segment_iters is not None and resume is not None:
+        raise Tau3MlxTrainingError(
+            "process-segmented training cannot use adapter-only resume evidence; "
+            "exact optimizer state is required"
+        )
 
     prelaunch = {
         "schema_version": TAU3_MLX_TRAINING_RUN_SCHEMA_VERSION,
@@ -301,7 +328,14 @@ def run_tau3_mlx_training(
         "weights_updated": False,
         "terminal_status": "prelaunch",
     }
-    _write_new_json_readonly(prelaunch_path, prelaunch)
+    if resume_process_segments:
+        _validate_segment_resume_prelaunch(
+            prelaunch_path,
+            prelaunch,
+            output,
+        )
+    else:
+        _write_new_json_readonly(prelaunch_path, prelaunch)
 
     status = "crash"
     exit_code: int | None = None
@@ -311,16 +345,35 @@ def run_tau3_mlx_training(
     started = time.monotonic()
     telemetry_count = 0
     peak_rss_kb = 0
+    process_segments: dict[str, Any] | None = None
     try:
-        exit_code, timed_out, telemetry_count, peak_rss_kb = _run_child(
-            command=command,
-            cwd=root,
-            telemetry_path=telemetry_path,
-            timeout_seconds=cfg.timeout_seconds,
-            losses=losses,
-            disable_compile=cfg.disable_compile,
-        )
-        status = _classify(exit_code, timed_out, telemetry_path)
+        if cfg.process_segment_iters is None:
+            exit_code, timed_out, telemetry_count, peak_rss_kb = _run_child(
+                command=command,
+                cwd=root,
+                telemetry_path=telemetry_path,
+                timeout_seconds=cfg.timeout_seconds,
+                losses=losses,
+                disable_compile=cfg.disable_compile,
+            )
+            status = _classify(exit_code, timed_out, telemetry_path)
+        else:
+            segmented = _run_process_segments(
+                command=command,
+                cwd=root,
+                output_dir=output,
+                final_adapter_dir=adapter_dir,
+                aggregate_telemetry_path=telemetry_path,
+                cfg=cfg,
+                losses=losses,
+                resume=resume_process_segments,
+            )
+            status = str(segmented["terminal_status"])
+            exit_code = segmented["exit_code"]
+            timed_out = bool(segmented["timed_out"])
+            telemetry_count = int(segmented["telemetry_event_count"])
+            peak_rss_kb = int(segmented["peak_child_rss_kb"])
+            process_segments = segmented["process_segments"]
     except KeyboardInterrupt:
         interrupted = True
         status = "interrupted"
@@ -374,10 +427,19 @@ def run_tau3_mlx_training(
         "weights_updated": weights_updated,
         "schema_checked": True,
     }
+    if process_segments is not None:
+        final["process_segments"] = process_segments
     schema_check = check_schema_contract(final, name_or_id="tau3_mlx_training_run")
     if schema_check["passed"] is not True:
         raise Tau3MlxTrainingError("final receipt violates schema: " + json.dumps(schema_check["errors"], sort_keys=True))
-    _write_new_json_readonly(final_path, final)
+    if resume_process_segments:
+        _freeze_json_publication_partials(final_path)
+    if resume_process_segments and os.path.lexists(final_path):
+        return _validate_existing_final_training_receipt(
+            final_path,
+            final,
+        )
+    _publish_new_json_readonly(final_path, final)
     return final
 
 
@@ -423,6 +485,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--eval-every", type=int, default=Tau3MlxTrainingConfig.eval_every)
     parser.add_argument("--val-batches", type=int, default=Tau3MlxTrainingConfig.val_batches)
     parser.add_argument("--clear-cache-threshold", type=int, default=Tau3MlxTrainingConfig.clear_cache_threshold)
+    parser.add_argument(
+        "--process-segment-iters",
+        type=int,
+        default=Tau3MlxTrainingConfig.process_segment_iters,
+        help=(
+            "Recycle the governed MLX child after this many microbatches while "
+            "preserving exact adapter and optimizer state. Supported only by "
+            "combined exposure-ledger detached-prefix training."
+        ),
+    )
+    parser.add_argument(
+        "--resume-process-segments",
+        action="store_true",
+        help=(
+            "Resume an interrupted process-segmented run in the same output "
+            "directory after replaying its immutable prelaunch, plan, and "
+            "committed adapter/optimizer chain."
+        ),
+    )
     grad = parser.add_mutually_exclusive_group()
     grad.add_argument("--grad-checkpoint", dest="grad_checkpoint", action="store_true", default=True)
     grad.add_argument("--no-grad-checkpoint", dest="grad_checkpoint", action="store_false")
@@ -501,6 +582,7 @@ def config_from_args(args: argparse.Namespace) -> Tau3MlxTrainingConfig:
         prefix_cache_training=args.prefix_cache_training,
         exposure_ledger_training=args.exposure_ledger_training,
         clear_cache_threshold=args.clear_cache_threshold,
+        process_segment_iters=args.process_segment_iters,
         timeout_seconds=args.timeout_seconds,
     )
 
@@ -524,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
             exposure_ledger_path=args.exposure_ledger,
             prefix_equivalence_path=args.prefix_equivalence,
             grounded_validator_python=args.grounded_validator_python,
+            resume_process_segments=args.resume_process_segments,
         )
     except (OSError, Tau3MlxTrainingError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -564,10 +647,38 @@ def _require_local_file(path: Path, root: Path, label: str) -> Path:
     return resolved
 
 
-def _require_local_output(path: Path, root: Path) -> Path:
+def _require_local_output(
+    path: Path,
+    root: Path,
+    *,
+    resume_process_segments: bool = False,
+) -> Path:
     resolved = _resolve_under_root(path, root, "output", must_exist=False)
     if path_has_symlink_component(resolved, include_leaf=True):
         raise Tau3MlxTrainingError(f"output must not contain symlink components: {path}")
+    if resume_process_segments:
+        if not resolved.is_dir():
+            raise Tau3MlxTrainingError(
+                f"segmented-resume output must be an existing directory: {path}"
+            )
+        required = (
+            resolved / "prelaunch_receipt.json",
+            resolved / "mlx_lora_config.json",
+            resolved / "process_segments" / "plan.json",
+            resolved / "process_segments" / "segments",
+        )
+        if any(not item.exists() for item in required):
+            raise Tau3MlxTrainingError(
+                "segmented-resume output is missing immutable recovery artifacts"
+            )
+        final_receipt = resolved / "training_receipt.json"
+        if os.path.lexists(final_receipt) and not _is_immutable_regular_file(
+            final_receipt
+        ):
+            raise Tau3MlxTrainingError(
+                "segmented-resume terminal training receipt is mutable or unsafe"
+            )
+        return resolved
     if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
         raise Tau3MlxTrainingError(f"output must be missing or an empty directory: {path}")
     return resolved
@@ -2426,6 +2537,7 @@ def _mlx_lora_config(
         "prefix_cache_training": cfg.prefix_cache_training,
         "exposure_ledger_training": cfg.exposure_ledger_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
+        "process_segment_iters": cfg.process_segment_iters,
         "report_to": None,
         "test": False,
         "lora_parameters": {
@@ -2534,6 +2646,1807 @@ def _build_command(
             ]
         )
     return command
+
+
+def build_tau3_process_segment_plan(cfg: Tau3MlxTrainingConfig) -> dict[str, Any]:
+    """Build the deterministic, hash-chained child-process execution plan."""
+
+    cadence = cfg.process_segment_iters
+    if cadence is None:
+        raise Tau3MlxTrainingError("process_segment_iters is required")
+    if not _config_within_bounds(cfg):
+        raise Tau3MlxTrainingError(
+            "process-segment configuration is outside governed bounds"
+        )
+    policy = {
+        "schema_version": TAU3_MLX_PROCESS_SEGMENTS_SCHEMA_VERSION,
+        "execution": "strictly_sequential_child_processes",
+        "boundary_semantics": "half_open_microbatch_iterations",
+        "state_continuity": "adapter_and_optimizer_sha256",
+        "partial_directory_policy": "fresh_then_atomic_rename",
+        "aggregate_telemetry_policy": "byte_concatenation_in_segment_order",
+        "total_iters": cfg.iters,
+        "process_segment_iters": cadence,
+        "gradient_accumulation": cfg.grad_accumulation,
+        "report_every": cfg.report_every,
+        "dropout": cfg.dropout,
+    }
+    policy_sha256 = _canonical_sha256(policy)
+    segments: list[dict[str, Any]] = []
+    previous: str | None = None
+    start = 0
+    index = 0
+    while start < cfg.iters:
+        end = min(start + cadence, cfg.iters)
+        record: dict[str, Any] = {
+            "index": index,
+            "segment_id": f"segment-{index + 1:04d}",
+            "start_iter": start,
+            "end_iter": end,
+            "iteration_count": end - start,
+            "previous_plan_record_sha256": previous,
+        }
+        record["plan_record_sha256"] = _canonical_sha256(record)
+        previous = record["plan_record_sha256"]
+        segments.append(record)
+        start = end
+        index += 1
+    plan: dict[str, Any] = {
+        "schema_version": TAU3_MLX_PROCESS_SEGMENTS_SCHEMA_VERSION,
+        "policy": policy,
+        "policy_sha256": policy_sha256,
+        "segments": segments,
+    }
+    plan["plan_sha256"] = _canonical_sha256(plan)
+    return plan
+
+
+def validate_tau3_process_segments(
+    process_segments: dict[str, Any],
+    *,
+    output_dir: str | Path,
+    expected_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Independently replay a successful segmented-run evidence chain."""
+
+    errors: list[str] = []
+    output = Path(output_dir)
+    try:
+        output = output.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return {"passed": False, "errors": [f"output_dir is unavailable: {exc}"]}
+    if not isinstance(process_segments, dict):
+        return {"passed": False, "errors": ["process_segments must be an object"]}
+
+    policy = process_segments.get("policy")
+    if not isinstance(policy, dict):
+        errors.append("policy must be an object")
+        policy = {}
+    _validate_process_segment_policy(policy, errors)
+    _validate_process_segment_config_binding(
+        policy,
+        expected_config,
+        errors,
+    )
+    policy_sha256 = process_segments.get("policy_sha256")
+    if policy_sha256 != _canonical_sha256(policy):
+        errors.append("policy_sha256 mismatch")
+
+    plan_binding = process_segments.get("plan")
+    plan = _validate_bound_json_file(
+        plan_binding,
+        output,
+        "plan",
+        errors,
+    )
+    if plan is not None:
+        expected_plan_sha = plan.get("plan_sha256")
+        replay_plan = dict(plan)
+        replay_plan.pop("plan_sha256", None)
+        if expected_plan_sha != _canonical_sha256(replay_plan):
+            errors.append("plan content hash mismatch")
+        if process_segments.get("plan_sha256") != expected_plan_sha:
+            errors.append("receipt plan_sha256 mismatch")
+        if plan.get("policy") != policy:
+            errors.append("plan policy differs from receipt policy")
+        if plan.get("policy_sha256") != policy_sha256:
+            errors.append("plan policy_sha256 mismatch")
+        _validate_process_segment_plan_records(plan, errors)
+
+    manifest_binding = process_segments.get("manifest")
+    manifest = _validate_bound_json_file(
+        manifest_binding,
+        output,
+        "manifest",
+        errors,
+    )
+    if manifest is not None:
+        receipt_manifest_view = {
+            key: value
+            for key, value in process_segments.items()
+            if key not in {"manifest", "validation"}
+        }
+        if receipt_manifest_view != manifest:
+            errors.append(
+                "receipt process_segments fields differ from bound manifest"
+            )
+        expected_manifest_sha = manifest.get("manifest_sha256")
+        replay_manifest = dict(manifest)
+        replay_manifest.pop("manifest_sha256", None)
+        if expected_manifest_sha != _canonical_sha256(replay_manifest):
+            errors.append("manifest content hash mismatch")
+        if process_segments.get("manifest_sha256") != expected_manifest_sha:
+            errors.append("receipt manifest_sha256 mismatch")
+        if manifest.get("policy") != policy:
+            errors.append("manifest policy differs from receipt policy")
+        if manifest.get("policy_sha256") != policy_sha256:
+            errors.append("manifest policy_sha256 mismatch")
+        if manifest.get("plan_sha256") != process_segments.get("plan_sha256"):
+            errors.append("manifest plan_sha256 mismatch")
+        if manifest.get("segments") != process_segments.get("segments"):
+            errors.append("manifest segment records differ from receipt")
+        if manifest.get("terminal_status") != "success":
+            errors.append("segmented run terminal_status is not success")
+
+    entries = process_segments.get("segments")
+    if not isinstance(entries, list) or not entries:
+        errors.append("segments must be a non-empty array")
+        entries = []
+    total_iters = policy.get("total_iters")
+    expected_start = 0
+    previous_record_sha: str | None = None
+    previous_adapter_sha: str | None = None
+    previous_optimizer_sha: str | None = None
+    previous_adapter_path: str | None = None
+    previous_optimizer_path: str | None = None
+    telemetry_paths: list[Path] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            errors.append(f"segment entry {index} must be an object")
+            continue
+        record = entry.get("record")
+        if not isinstance(record, dict):
+            errors.append(f"segment entry {index} record must be an object")
+            continue
+        record_sha = record.get("segment_record_sha256")
+        replay_record = dict(record)
+        replay_record.pop("segment_record_sha256", None)
+        if record_sha != _canonical_sha256(replay_record):
+            errors.append(f"segment {index} record hash mismatch")
+        if record.get("index") != index:
+            errors.append(f"segment {index} index mismatch")
+        if record.get("start_iter") != expected_start:
+            errors.append(f"segment {index} is not contiguous")
+        start_iter = record.get("start_iter")
+        end_iter = record.get("end_iter")
+        if (
+            not isinstance(start_iter, int)
+            or not isinstance(end_iter, int)
+            or end_iter <= start_iter
+        ):
+            errors.append(f"segment {index} has invalid boundaries")
+        else:
+            expected_start = end_iter
+        if record.get("previous_segment_record_sha256") != previous_record_sha:
+            errors.append(f"segment {index} record chain mismatch")
+        adapter_input = record.get("adapter_input")
+        optimizer_input = record.get("optimizer_state_input")
+        if index == 0:
+            if adapter_input is not None or optimizer_input is not None:
+                errors.append("first segment must not have state inputs")
+        else:
+            if not isinstance(adapter_input, dict) or adapter_input.get(
+                "sha256"
+            ) != previous_adapter_sha or adapter_input.get(
+                "path"
+            ) != previous_adapter_path:
+                errors.append(f"segment {index} adapter input chain mismatch")
+            if not isinstance(optimizer_input, dict) or optimizer_input.get(
+                "sha256"
+            ) != previous_optimizer_sha or optimizer_input.get(
+                "path"
+            ) != previous_optimizer_path:
+                errors.append(f"segment {index} optimizer input chain mismatch")
+        if record.get("terminal_status") != "success":
+            errors.append(f"segment {index} terminal_status is not success")
+
+        record_file = _validate_bound_json_file(
+            entry.get("record_file"),
+            output,
+            f"segment {index} record_file",
+            errors,
+        )
+        if record_file is not None and record_file != record:
+            errors.append(f"segment {index} record_file content mismatch")
+        telemetry = _validate_bound_file_record(
+            record.get("telemetry"),
+            output,
+            f"segment {index} telemetry",
+            errors,
+        )
+        if telemetry is not None:
+            telemetry_paths.append(telemetry)
+        adapter_output = _validate_bound_file_record(
+            record.get("adapter_output"),
+            output,
+            f"segment {index} adapter_output",
+            errors,
+        )
+        optimizer_output = _validate_bound_file_record(
+            record.get("optimizer_state_output"),
+            output,
+            f"segment {index} optimizer_state_output",
+            errors,
+        )
+        adapter_tree = record.get("adapter_tree")
+        if isinstance(adapter_tree, dict):
+            adapter_root = _resolve_output_relative_path(
+                adapter_tree.get("path"),
+                output,
+                f"segment {index} adapter_tree",
+                errors,
+            )
+            if adapter_root is not None:
+                replay_tree = _relative_fingerprint_tree(
+                    _fingerprint_tree(adapter_root),
+                    output,
+                )
+                if replay_tree != adapter_tree:
+                    errors.append(f"segment {index} adapter tree mismatch")
+                if not _tree_is_readonly_regular(adapter_root):
+                    errors.append(
+                        f"segment {index} adapter tree is mutable or unsafe"
+                    )
+                if (
+                    optimizer_output is not None
+                    and optimizer_output.is_relative_to(adapter_root)
+                ):
+                    errors.append(
+                        f"segment {index} optimizer state is inside adapter tree"
+                    )
+        else:
+            errors.append(f"segment {index} adapter_tree must be an object")
+        previous_record_sha = (
+            record_sha if isinstance(record_sha, str) else previous_record_sha
+        )
+        previous_adapter_sha = (
+            _sha256_file(adapter_output) if adapter_output is not None else None
+        )
+        previous_adapter_path = (
+            record["adapter_output"].get("path")
+            if isinstance(record.get("adapter_output"), dict)
+            else None
+        )
+        previous_optimizer_sha = (
+            _sha256_file(optimizer_output)
+            if optimizer_output is not None
+            else None
+        )
+        previous_optimizer_path = (
+            record["optimizer_state_output"].get("path")
+            if isinstance(record.get("optimizer_state_output"), dict)
+            else None
+        )
+
+    if isinstance(total_iters, int) and expected_start != total_iters:
+        errors.append("segment execution does not cover total_iters")
+    completed_count = sum(
+        isinstance(entry, dict)
+        and isinstance(entry.get("record"), dict)
+        and entry["record"].get("terminal_status") == "success"
+        for entry in entries
+    )
+    if process_segments.get("completed_segment_count") != completed_count:
+        errors.append("completed_segment_count does not replay")
+    if plan is not None:
+        planned = plan.get("segments")
+        planned_count = len(planned) if isinstance(planned, list) else 0
+        if process_segments.get("planned_segment_count") != planned_count:
+            errors.append("planned_segment_count does not replay")
+        executed = [
+            {
+                key: entry["record"].get(key)
+                for key in (
+                    "index",
+                    "segment_id",
+                    "start_iter",
+                    "end_iter",
+                    "iteration_count",
+                )
+            }
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("record"), dict)
+        ]
+        expected = [
+            {
+                key: item.get(key)
+                for key in (
+                    "index",
+                    "segment_id",
+                    "start_iter",
+                    "end_iter",
+                    "iteration_count",
+                )
+            }
+            for item in planned
+        ] if isinstance(planned, list) else []
+        if executed != expected:
+            errors.append("executed segments differ from plan")
+
+    aggregate = _validate_bound_file_record(
+        process_segments.get("aggregate_telemetry"),
+        output,
+        "aggregate_telemetry",
+        errors,
+    )
+    if aggregate is not None:
+        expected_bytes = b"".join(path.read_bytes() for path in telemetry_paths)
+        if aggregate.read_bytes() != expected_bytes:
+            errors.append("aggregate telemetry is not exact ordered concatenation")
+
+    final_adapter = process_segments.get("final_adapter")
+    artifact_tree = process_segments.get("artifact_tree")
+    if entries and isinstance(final_adapter, dict):
+        final_adapter_root = _resolve_output_relative_path(
+            final_adapter.get("path"),
+            output,
+            "final_adapter",
+            errors,
+        )
+        if final_adapter_root is not None:
+            replay_final = _relative_fingerprint_tree(
+                _fingerprint_tree(final_adapter_root),
+                output,
+            )
+            if replay_final != final_adapter:
+                errors.append("final adapter tree mismatch")
+            if not _tree_is_readonly_regular(final_adapter_root):
+                errors.append("final adapter tree is mutable or unsafe")
+            expected_files = _expected_assembled_adapter_files(
+                entries,
+                errors,
+            )
+            if replay_final.get("files") != expected_files:
+                errors.append(
+                    "final adapter differs from the ordered segment assembly"
+                )
+    else:
+        errors.append("final_adapter must be an object")
+    if isinstance(artifact_tree, dict):
+        segment_root = _resolve_output_relative_path(
+            artifact_tree.get("path"),
+            output,
+            "artifact_tree",
+            errors,
+        )
+        if segment_root is not None:
+            replay_artifacts = _relative_fingerprint_tree(
+                _fingerprint_tree(segment_root),
+                output,
+            )
+            if replay_artifacts != artifact_tree:
+                errors.append("segment artifact tree mismatch")
+    else:
+        errors.append("artifact_tree must be an object")
+    _validate_process_segment_recovery_artifacts(
+        process_segments.get("recovery"),
+        output,
+        errors,
+    )
+
+    return {
+        "passed": not errors,
+        "errors": errors,
+        "segment_count": len(entries),
+        "covered_iters": expected_start,
+    }
+
+
+def _run_process_segments(
+    *,
+    command: list[str],
+    cwd: Path,
+    output_dir: Path,
+    final_adapter_dir: Path,
+    aggregate_telemetry_path: Path,
+    cfg: Tau3MlxTrainingConfig,
+    losses: dict[str, list[float]],
+    resume: bool = False,
+) -> dict[str, Any]:
+    output_dir = output_dir.resolve(strict=True)
+    final_adapter_dir = final_adapter_dir.resolve(strict=False)
+    aggregate_telemetry_path = aggregate_telemetry_path.resolve(strict=False)
+    plan = build_tau3_process_segment_plan(cfg)
+    process_root = output_dir / "process_segments"
+    committed_root = process_root / "segments"
+    failed_root = process_root / "failed"
+    plan_path = process_root / "plan.json"
+    if resume:
+        _require_existing_json_equal(
+            plan_path,
+            plan,
+            "segmented-resume process plan",
+        )
+        manifest_path = process_root / "manifest.json"
+        if os.path.lexists(manifest_path):
+            _freeze_process_segment_partials(process_root)
+            return _load_completed_process_segments(
+                manifest_path=manifest_path,
+                output_dir=output_dir,
+                losses=losses,
+                cfg=cfg,
+            )
+        if failed_root.is_dir() and any(failed_root.iterdir()):
+            raise Tau3MlxTrainingError(
+                "segmented-resume found committed child-failure evidence; "
+                "it is preserved and cannot be retried as host-loss recovery"
+            )
+    else:
+        process_root.mkdir()
+        committed_root.mkdir()
+        _write_new_json_readonly(plan_path, plan)
+
+    deadline = time.monotonic() + cfg.timeout_seconds
+    recovery = _load_committed_process_segments(
+        committed_root=committed_root,
+        output_dir=output_dir,
+        plan=plan,
+    )
+    entries: list[dict[str, Any]] = recovery["entries"]
+    previous_record_sha: str | None = recovery["previous_record_sha256"]
+    previous_adapter_file: Path | None = recovery["previous_adapter_file"]
+    previous_optimizer_file: Path | None = recovery["previous_optimizer_file"]
+    terminal_status = "success"
+    exit_code: int | None = 0
+    timed_out = False
+    peak_rss_kb = int(recovery["peak_child_rss_kb"])
+    telemetry_count = int(recovery["telemetry_event_count"])
+    telemetry_sources: list[Path] = recovery["telemetry_paths"]
+    preserved_partial_paths = _freeze_process_segment_partials(process_root)
+    for path in telemetry_sources:
+        _replay_telemetry_losses(path, losses)
+
+    for planned in plan["segments"][len(entries) :]:
+        segment_id = str(planned["segment_id"])
+        partial = _fresh_process_segment_partial(process_root, segment_id)
+        partial.mkdir()
+        segment_adapter_dir = partial / "adapter"
+        segment_adapter_dir.mkdir()
+        segment_optimizer_path = partial / "optimizer_state.safetensors"
+        segment_telemetry_path = partial / "telemetry.jsonl"
+        segment_command = _replace_command_option(
+            command,
+            "--adapter-path",
+            str(segment_adapter_dir),
+        )
+        segment_command.extend(
+            [
+                "--hfr-child-segment-start",
+                str(planned["start_iter"]),
+                "--hfr-child-segment-end",
+                str(planned["end_iter"]),
+                "--hfr-child-segment-optimizer-state-output",
+                str(segment_optimizer_path),
+            ]
+        )
+        adapter_input: dict[str, Any] | None = None
+        optimizer_input: dict[str, Any] | None = None
+        if previous_adapter_file is not None:
+            adapter_sha = _sha256_file(previous_adapter_file)
+            adapter_input = {
+                "path": _relative_output_path(previous_adapter_file, output_dir),
+                "sha256": adapter_sha,
+            }
+            segment_command.extend(
+                [
+                    "--hfr-child-segment-adapter-input",
+                    str(previous_adapter_file),
+                    "--hfr-child-segment-adapter-sha256",
+                    adapter_sha,
+                ]
+            )
+        if previous_optimizer_file is not None:
+            optimizer_sha = _sha256_file(previous_optimizer_file)
+            optimizer_input = {
+                "path": _relative_output_path(previous_optimizer_file, output_dir),
+                "sha256": optimizer_sha,
+            }
+            segment_command.extend(
+                [
+                    "--hfr-child-segment-optimizer-state-input",
+                    str(previous_optimizer_file),
+                    "--hfr-child-segment-optimizer-state-sha256",
+                    optimizer_sha,
+                ]
+            )
+        _reject_forbidden_tokens(segment_command)
+        remaining = max(1, int(deadline - time.monotonic()))
+        child_exit, child_timed_out, child_count, child_peak = _run_child(
+            command=segment_command,
+            cwd=cwd,
+            telemetry_path=segment_telemetry_path,
+            timeout_seconds=remaining,
+            losses=losses,
+            disable_compile=cfg.disable_compile,
+        )
+        _require_safe_regular_tree(
+            partial,
+            f"{segment_id} child output",
+        )
+        child_status = _classify(
+            child_exit,
+            child_timed_out,
+            segment_telemetry_path,
+        )
+        adapter_output = _select_segment_adapter_file(segment_adapter_dir)
+        if (
+            child_status == "success"
+            and (
+                adapter_output is None
+                or not segment_optimizer_path.is_file()
+                or segment_optimizer_path.stat().st_size <= 0
+            )
+        ):
+            child_status = "no_output"
+        successful = child_status == "success"
+        destination_root = committed_root
+        if not successful:
+            failed_root.mkdir(exist_ok=True)
+            destination_root = failed_root
+        destination = destination_root / segment_id
+        destination_adapter = destination / "adapter"
+        destination_telemetry = destination / "telemetry.jsonl"
+        destination_optimizer = destination / "optimizer_state.safetensors"
+        destination_adapter_output = (
+            destination_adapter / adapter_output.relative_to(segment_adapter_dir)
+            if adapter_output is not None
+            else None
+        )
+        adapter_tree = _relative_fingerprint_tree(
+            _fingerprint_tree(segment_adapter_dir),
+            partial,
+        )
+        adapter_tree["path"] = _relative_output_path(
+            destination_adapter,
+            output_dir,
+        )
+        adapter_output_record: dict[str, Any] | None = None
+        if adapter_output is not None:
+            assert destination_adapter_output is not None
+            adapter_output_record = {
+                "path": _relative_output_path(
+                    destination_adapter_output,
+                    output_dir,
+                ),
+                "sha256": _sha256_file(adapter_output),
+                "read_only": True,
+            }
+        record: dict[str, Any] = {
+            "index": planned["index"],
+            "segment_id": segment_id,
+            "start_iter": planned["start_iter"],
+            "end_iter": planned["end_iter"],
+            "iteration_count": planned["iteration_count"],
+            "previous_segment_record_sha256": previous_record_sha,
+            "adapter_input": adapter_input,
+            "optimizer_state_input": optimizer_input,
+            "command": _redact_command(segment_command),
+            "telemetry": {
+                "path": _relative_output_path(
+                    destination_telemetry,
+                    output_dir,
+                ),
+                "sha256": _sha256_file(segment_telemetry_path),
+                "event_count": child_count,
+                "read_only": True,
+            },
+            "adapter_output": adapter_output_record,
+            "adapter_tree": adapter_tree,
+            "optimizer_state_output": (
+                {
+                    "path": _relative_output_path(
+                        destination_optimizer,
+                        output_dir,
+                    ),
+                    "sha256": _sha256_file(segment_optimizer_path),
+                    "read_only": True,
+                }
+                if segment_optimizer_path.is_file()
+                and segment_optimizer_path.stat().st_size > 0
+                else None
+            ),
+            "terminal_status": child_status,
+            "exit_code": child_exit,
+            "timed_out": child_timed_out,
+            "telemetry_event_count": child_count,
+            "peak_child_rss_kb": child_peak,
+        }
+        record["segment_record_sha256"] = _canonical_sha256(record)
+        record_path = partial / "segment_record.json"
+        _write_new_json_readonly(record_path, record)
+        _commit_readonly_directory(partial, destination)
+        record_file = _output_file_record(
+            destination / "segment_record.json",
+            output_dir,
+        )
+        entry = {"record": record, "record_file": record_file}
+        entries.append(entry)
+        telemetry_sources.append(destination_telemetry)
+        telemetry_count += child_count
+        peak_rss_kb = max(peak_rss_kb, child_peak)
+        exit_code = child_exit
+        timed_out = child_timed_out
+        if not successful:
+            terminal_status = child_status
+            break
+        previous_record_sha = str(record["segment_record_sha256"])
+        assert destination_adapter_output is not None
+        previous_adapter_file = destination_adapter_output
+        previous_optimizer_file = destination_optimizer
+
+    expected_telemetry = b"".join(
+        path.read_bytes() for path in telemetry_sources
+    )
+    if os.path.lexists(aggregate_telemetry_path):
+        aggregate_mode = os.lstat(aggregate_telemetry_path).st_mode
+        if (
+            not resume
+            or not stat.S_ISREG(aggregate_mode)
+            or path_has_symlink_component(
+                aggregate_telemetry_path,
+                include_leaf=True,
+            )
+            or bool(aggregate_mode & 0o222)
+            or aggregate_telemetry_path.read_bytes() != expected_telemetry
+        ):
+            raise Tau3MlxTrainingError(
+                "existing aggregate telemetry is not an immutable exact "
+                "segment concatenation"
+            )
+    else:
+        aggregate_partial = _fresh_process_segment_partial(
+            process_root,
+            "aggregate-telemetry",
+        )
+        _commit_readonly_file(
+            aggregate_partial,
+            aggregate_telemetry_path,
+            expected_telemetry,
+        )
+    if terminal_status == "success" and previous_adapter_file is not None:
+        if final_adapter_dir.exists():
+            errors: list[str] = []
+            expected_files = _expected_assembled_adapter_files(
+                entries,
+                errors,
+            )
+            actual_tree = _relative_fingerprint_tree(
+                _fingerprint_tree(final_adapter_dir),
+                output_dir,
+            )
+            if (
+                not resume
+                or errors
+                or actual_tree.get("files") != expected_files
+                or not _tree_is_readonly_regular(final_adapter_dir)
+            ):
+                raise Tau3MlxTrainingError(
+                    "existing final adapter is not the immutable ordered "
+                    "segment assembly: "
+                    + json.dumps(errors, sort_keys=True)
+                )
+        else:
+            adapter_partial = _fresh_process_segment_partial(
+                process_root,
+                "final-adapter",
+            )
+            _assemble_final_segment_adapter(
+                entries=entries,
+                output_dir=output_dir,
+                final_adapter_dir=adapter_partial,
+            )
+            _commit_readonly_directory(
+                adapter_partial,
+                final_adapter_dir,
+            )
+
+    if failed_root.is_dir():
+        _make_tree_readonly(failed_root)
+        _fsync_tree(failed_root)
+    artifact_tree = _relative_fingerprint_tree(
+        _fingerprint_tree(committed_root),
+        output_dir,
+    )
+    final_adapter = (
+        _relative_fingerprint_tree(
+            _fingerprint_tree(final_adapter_dir),
+            output_dir,
+        )
+        if final_adapter_dir.is_dir()
+        else None
+    )
+    manifest: dict[str, Any] = {
+        "schema_version": TAU3_MLX_PROCESS_SEGMENTS_SCHEMA_VERSION,
+        "policy": plan["policy"],
+        "policy_sha256": plan["policy_sha256"],
+        "plan": _output_file_record(plan_path, output_dir),
+        "plan_sha256": plan["plan_sha256"],
+        "segments": entries,
+        "aggregate_telemetry": _output_file_record(
+            aggregate_telemetry_path,
+            output_dir,
+        ),
+        "artifact_tree": artifact_tree,
+        "final_adapter": final_adapter,
+        "terminal_status": terminal_status,
+        "completed_segment_count": sum(
+            entry["record"]["terminal_status"] == "success" for entry in entries
+        ),
+        "planned_segment_count": len(plan["segments"]),
+        "recovery": {
+            "resumed": resume,
+            "accepted_segment_count": int(
+                recovery["accepted_segment_count"]
+            ),
+            "preserved_partial_artifact_trees": [
+                _preserved_partial_artifact_record(path, output_dir)
+                for path in preserved_partial_paths
+            ],
+            "preserved_failed_artifact_tree": (
+                _relative_fingerprint_tree(
+                    _fingerprint_tree(failed_root),
+                    output_dir,
+                )
+                if failed_root.is_dir()
+                else None
+            ),
+        },
+    }
+    manifest["manifest_sha256"] = _canonical_sha256(manifest)
+    manifest_path = process_root / "manifest.json"
+    _publish_new_json_readonly(manifest_path, manifest)
+    process_record = {
+        **manifest,
+        "manifest": _output_file_record(manifest_path, output_dir),
+    }
+    validation = validate_tau3_process_segments(
+        process_record,
+        output_dir=output_dir,
+        expected_config=_process_segment_config_binding(cfg),
+    )
+    process_record["validation"] = validation
+    if terminal_status == "success" and validation["passed"] is not True:
+        raise Tau3MlxTrainingError(
+            "process segment chain failed self-validation: "
+            + json.dumps(validation["errors"], sort_keys=True)
+        )
+    return {
+        "terminal_status": terminal_status,
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "telemetry_event_count": telemetry_count,
+        "peak_child_rss_kb": peak_rss_kb,
+        "process_segments": process_record,
+    }
+
+
+def _assemble_final_segment_adapter(
+    *,
+    entries: list[dict[str, Any]],
+    output_dir: Path,
+    final_adapter_dir: Path,
+) -> None:
+    if not entries:
+        raise Tau3MlxTrainingError(
+            "cannot assemble a final adapter without committed segments"
+        )
+    final_adapter_dir.mkdir()
+    last_index = len(entries) - 1
+    for index, entry in enumerate(entries):
+        record = entry.get("record")
+        adapter_tree = (
+            record.get("adapter_tree") if isinstance(record, dict) else None
+        )
+        if not isinstance(adapter_tree, dict):
+            raise Tau3MlxTrainingError(
+                f"segment {index} has no adapter tree for final assembly"
+            )
+        errors: list[str] = []
+        source_root = _resolve_output_relative_path(
+            adapter_tree.get("path"),
+            output_dir,
+            f"segment {index} adapter tree",
+            errors,
+        )
+        if errors or source_root is None or not source_root.is_dir():
+            raise Tau3MlxTrainingError(
+                "segment adapter tree cannot be assembled: "
+                + json.dumps(errors, sort_keys=True)
+            )
+        _require_safe_regular_tree(
+            source_root,
+            f"segment {index} adapter tree",
+        )
+        for source in sorted(
+            path for path in source_root.rglob("*") if path.is_file()
+        ):
+            relative = source.relative_to(source_root)
+            if index != last_index and relative.as_posix() in {
+                "adapters.safetensors",
+                "adapter_config.json",
+                "config.json",
+            }:
+                continue
+            destination = final_adapter_dir / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                if (
+                    not destination.is_file()
+                    or _sha256_file(destination) != _sha256_file(source)
+                ):
+                    raise Tau3MlxTrainingError(
+                        "segment adapter assembly collision differs: "
+                        + relative.as_posix()
+                    )
+                continue
+            shutil.copy2(source, destination)
+
+
+def _load_completed_process_segments(
+    *,
+    manifest_path: Path,
+    output_dir: Path,
+    losses: dict[str, list[float]],
+    cfg: Tau3MlxTrainingConfig,
+) -> dict[str, Any]:
+    if (
+        not manifest_path.is_file()
+        or path_has_symlink_component(manifest_path, include_leaf=True)
+        or bool(manifest_path.stat().st_mode & 0o222)
+    ):
+        raise Tau3MlxTrainingError(
+            "completed process manifest must be an immutable regular file"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise Tau3MlxTrainingError(
+            f"completed process manifest is invalid: {exc}"
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise Tau3MlxTrainingError(
+            "completed process manifest must be an object"
+        )
+    process_record = {
+        **manifest,
+        "manifest": _output_file_record(manifest_path, output_dir),
+    }
+    validation = validate_tau3_process_segments(
+        process_record,
+        output_dir=output_dir,
+        expected_config=_process_segment_config_binding(cfg),
+    )
+    process_record["validation"] = validation
+    if validation.get("passed") is not True:
+        raise Tau3MlxTrainingError(
+            "completed process manifest failed validation: "
+            + json.dumps(validation.get("errors"), sort_keys=True)
+        )
+    entries = process_record["segments"]
+    telemetry_count = 0
+    peak_rss_kb = 0
+    exit_code: int | None = 0
+    for entry in entries:
+        record = entry["record"]
+        telemetry_path = _resolve_output_relative_path(
+            record["telemetry"]["path"],
+            output_dir,
+            "completed segment telemetry",
+            [],
+        )
+        assert telemetry_path is not None
+        _replay_telemetry_losses(telemetry_path, losses)
+        telemetry_count += int(record.get("telemetry_event_count") or 0)
+        peak_rss_kb = max(
+            peak_rss_kb,
+            int(record.get("peak_child_rss_kb") or 0),
+        )
+        exit_code = record.get("exit_code")
+    return {
+        "terminal_status": "success",
+        "exit_code": exit_code,
+        "timed_out": False,
+        "telemetry_event_count": telemetry_count,
+        "peak_child_rss_kb": peak_rss_kb,
+        "process_segments": process_record,
+    }
+
+
+def _load_committed_process_segments(
+    *,
+    committed_root: Path,
+    output_dir: Path,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    telemetry_paths: list[Path] = []
+    previous_record_sha: str | None = None
+    previous_adapter_file: Path | None = None
+    previous_optimizer_file: Path | None = None
+    telemetry_count = 0
+    peak_rss_kb = 0
+    errors: list[str] = []
+    planned = plan["segments"]
+    children = sorted(committed_root.iterdir())
+    if any(not child.is_dir() for child in children):
+        raise Tau3MlxTrainingError(
+            "committed segment root contains a non-directory artifact"
+        )
+    if len(children) > len(planned):
+        raise Tau3MlxTrainingError(
+            "committed segment count exceeds the frozen process plan"
+        )
+    for index, segment_dir in enumerate(children):
+        expected = planned[index]
+        if segment_dir.name != expected["segment_id"]:
+            errors.append(
+                f"committed segment {index} is not the next planned segment"
+            )
+            continue
+        record_path = segment_dir / "segment_record.json"
+        if (
+            not record_path.is_file()
+            or path_has_symlink_component(record_path, include_leaf=True)
+            or bool(record_path.stat().st_mode & 0o222)
+        ):
+            errors.append(
+                f"committed segment {index} record is unavailable or mutable"
+            )
+            continue
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            errors.append(f"committed segment {index} record is invalid: {exc}")
+            continue
+        if not isinstance(record, dict):
+            errors.append(f"committed segment {index} record is not an object")
+            continue
+        for key in (
+            "index",
+            "segment_id",
+            "start_iter",
+            "end_iter",
+            "iteration_count",
+        ):
+            if record.get(key) != expected.get(key):
+                errors.append(
+                    f"committed segment {index} differs from plan field {key}"
+                )
+        record_sha = record.get("segment_record_sha256")
+        replay_record = dict(record)
+        replay_record.pop("segment_record_sha256", None)
+        if record_sha != _canonical_sha256(replay_record):
+            errors.append(f"committed segment {index} record hash mismatch")
+        if record.get("previous_segment_record_sha256") != previous_record_sha:
+            errors.append(f"committed segment {index} record chain mismatch")
+        if record.get("terminal_status") != "success":
+            errors.append(f"committed segment {index} is not successful")
+
+        adapter_input = record.get("adapter_input")
+        optimizer_input = record.get("optimizer_state_input")
+        if index == 0:
+            if adapter_input is not None or optimizer_input is not None:
+                errors.append(
+                    "first committed segment unexpectedly has state inputs"
+                )
+        else:
+            if (
+                not isinstance(adapter_input, dict)
+                or previous_adapter_file is None
+                or adapter_input.get("sha256")
+                != _sha256_file(previous_adapter_file)
+            ):
+                errors.append(
+                    f"committed segment {index} adapter chain mismatch"
+                )
+            if (
+                not isinstance(optimizer_input, dict)
+                or previous_optimizer_file is None
+                or optimizer_input.get("sha256")
+                != _sha256_file(previous_optimizer_file)
+            ):
+                errors.append(
+                    f"committed segment {index} optimizer chain mismatch"
+                )
+
+        telemetry = _validate_bound_file_record(
+            record.get("telemetry"),
+            output_dir,
+            f"committed segment {index} telemetry",
+            errors,
+        )
+        adapter = _validate_bound_file_record(
+            record.get("adapter_output"),
+            output_dir,
+            f"committed segment {index} adapter",
+            errors,
+        )
+        optimizer = _validate_bound_file_record(
+            record.get("optimizer_state_output"),
+            output_dir,
+            f"committed segment {index} optimizer",
+            errors,
+        )
+        expected_adapter_root = segment_dir / "adapter"
+        if adapter is not None and adapter.parent != expected_adapter_root:
+            errors.append(
+                f"committed segment {index} adapter is outside its adapter tree"
+            )
+        if optimizer is not None and optimizer != (
+            segment_dir / "optimizer_state.safetensors"
+        ):
+            errors.append(
+                f"committed segment {index} optimizer path is not canonical"
+            )
+        adapter_tree = record.get("adapter_tree")
+        if isinstance(adapter_tree, dict):
+            replay_tree = _relative_fingerprint_tree(
+                _fingerprint_tree(expected_adapter_root),
+                output_dir,
+            )
+            if replay_tree != adapter_tree:
+                errors.append(
+                    f"committed segment {index} adapter tree mismatch"
+                )
+            if not _tree_is_readonly_regular(expected_adapter_root):
+                errors.append(
+                    f"committed segment {index} adapter tree is mutable or unsafe"
+                )
+        else:
+            errors.append(
+                f"committed segment {index} adapter tree is unavailable"
+            )
+        if telemetry is not None:
+            telemetry_paths.append(telemetry)
+        telemetry_count += int(record.get("telemetry_event_count") or 0)
+        peak_rss_kb = max(
+            peak_rss_kb,
+            int(record.get("peak_child_rss_kb") or 0),
+        )
+        entries.append(
+            {
+                "record": record,
+                "record_file": _output_file_record(
+                    record_path,
+                    output_dir,
+                ),
+            }
+        )
+        previous_record_sha = (
+            str(record_sha) if isinstance(record_sha, str) else None
+        )
+        previous_adapter_file = adapter
+        previous_optimizer_file = optimizer
+    if errors:
+        raise Tau3MlxTrainingError(
+            "committed process segment chain failed validation: "
+            + json.dumps(errors, sort_keys=True)
+        )
+    return {
+        "entries": entries,
+        "previous_record_sha256": previous_record_sha,
+        "previous_adapter_file": previous_adapter_file,
+        "previous_optimizer_file": previous_optimizer_file,
+        "telemetry_paths": telemetry_paths,
+        "telemetry_event_count": telemetry_count,
+        "peak_child_rss_kb": peak_rss_kb,
+        "accepted_segment_count": len(entries),
+    }
+
+
+def _fresh_process_segment_partial(
+    process_root: Path,
+    segment_id: str,
+) -> Path:
+    canonical = process_root / f".{segment_id}.partial"
+    if not os.path.lexists(canonical):
+        return canonical
+    for attempt in range(1, 10_000):
+        candidate = process_root / (
+            f".{segment_id}.partial-retry-{attempt:04d}"
+        )
+        if not os.path.lexists(candidate):
+            return candidate
+    raise Tau3MlxTrainingError(
+        f"no fresh partial directory name remains for {segment_id}"
+    )
+
+
+def _replay_telemetry_losses(
+    path: Path,
+    losses: dict[str, list[float]],
+) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise Tau3MlxTrainingError(
+            f"committed telemetry cannot be replayed: {path}: {exc}"
+        ) from exc
+    for line_number, line in enumerate(lines, start=1):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise Tau3MlxTrainingError(
+                "committed telemetry is invalid JSON at "
+                f"{path}:{line_number}: {exc}"
+            ) from exc
+        text = event.get("text") if isinstance(event, dict) else None
+        if not isinstance(text, str):
+            continue
+        for match in LOSS_RE.finditer(text):
+            value = float(match.group("loss"))
+            kind = match.group("kind").lower()
+            losses[
+                "validation"
+                if kind in {"valid", "validation", "val"}
+                else "train"
+            ].append(value)
+
+
+def _require_existing_json_equal(
+    path: Path,
+    expected: dict[str, Any],
+    label: str,
+) -> None:
+    if (
+        not path.is_file()
+        or path_has_symlink_component(path, include_leaf=True)
+        or bool(path.stat().st_mode & 0o222)
+    ):
+        raise Tau3MlxTrainingError(
+            f"{label} must be an immutable regular file"
+        )
+    try:
+        actual = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise Tau3MlxTrainingError(f"{label} is invalid: {exc}") from exc
+    if actual != expected:
+        raise Tau3MlxTrainingError(
+            f"{label} differs from the fresh invocation"
+        )
+
+
+def _validate_segment_resume_prelaunch(
+    path: Path,
+    expected: dict[str, Any],
+    output_dir: Path,
+) -> None:
+    if (
+        not path.is_file()
+        or path_has_symlink_component(path, include_leaf=True)
+        or bool(path.stat().st_mode & 0o222)
+    ):
+        raise Tau3MlxTrainingError(
+            "segmented-resume prelaunch receipt must be immutable"
+        )
+    try:
+        actual = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise Tau3MlxTrainingError(
+            f"segmented-resume prelaunch receipt is invalid: {exc}"
+        ) from exc
+    if not isinstance(actual, dict):
+        raise Tau3MlxTrainingError(
+            "segmented-resume prelaunch receipt must be an object"
+        )
+    replay = dict(expected)
+    replay["created_at"] = actual.get("created_at")
+    if actual != replay:
+        raise Tau3MlxTrainingError(
+            "segmented-resume prelaunch receipt differs from fresh preflight"
+        )
+    schema = check_schema_contract(
+        actual,
+        name_or_id="tau3_mlx_training_run",
+    )
+    if schema.get("passed") is not True:
+        raise Tau3MlxTrainingError(
+            "segmented-resume prelaunch receipt violates schema: "
+            + json.dumps(schema.get("errors"), sort_keys=True)
+        )
+    mlx_binding = actual.get("mlx_lora_config")
+    errors: list[str] = []
+    _validate_bound_file_record(
+        mlx_binding,
+        output_dir,
+        "segmented-resume MLX config",
+        errors,
+    )
+    if errors:
+        raise Tau3MlxTrainingError(
+            "segmented-resume prelaunch artifact binding failed: "
+            + json.dumps(errors, sort_keys=True)
+        )
+
+
+def _validate_process_segment_plan_records(
+    plan: dict[str, Any],
+    errors: list[str],
+) -> None:
+    records = plan.get("segments")
+    if not isinstance(records, list) or not records:
+        errors.append("plan segments must be a non-empty array")
+        return
+    total_iters = (plan.get("policy") or {}).get("total_iters")
+    expected_start = 0
+    previous: str | None = None
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            errors.append(f"plan segment {index} must be an object")
+            continue
+        digest = record.get("plan_record_sha256")
+        replay = dict(record)
+        replay.pop("plan_record_sha256", None)
+        if digest != _canonical_sha256(replay):
+            errors.append(f"plan segment {index} hash mismatch")
+        if record.get("index") != index:
+            errors.append(f"plan segment {index} index mismatch")
+        if record.get("previous_plan_record_sha256") != previous:
+            errors.append(f"plan segment {index} chain mismatch")
+        if record.get("start_iter") != expected_start:
+            errors.append(f"plan segment {index} is not contiguous")
+        end = record.get("end_iter")
+        start = record.get("start_iter")
+        if not isinstance(start, int) or not isinstance(end, int) or end <= start:
+            errors.append(f"plan segment {index} has invalid boundaries")
+        else:
+            if record.get("iteration_count") != end - start:
+                errors.append(f"plan segment {index} iteration_count mismatch")
+            expected_start = end
+        previous = digest if isinstance(digest, str) else previous
+    if isinstance(total_iters, int) and expected_start != total_iters:
+        errors.append("plan does not cover total_iters")
+
+
+def _validate_process_segment_policy(
+    policy: dict[str, Any],
+    errors: list[str],
+) -> None:
+    exact = {
+        "schema_version": TAU3_MLX_PROCESS_SEGMENTS_SCHEMA_VERSION,
+        "execution": "strictly_sequential_child_processes",
+        "boundary_semantics": "half_open_microbatch_iterations",
+        "state_continuity": "adapter_and_optimizer_sha256",
+        "partial_directory_policy": "fresh_then_atomic_rename",
+        "aggregate_telemetry_policy": (
+            "byte_concatenation_in_segment_order"
+        ),
+        "dropout": 0.0,
+    }
+    for field, expected in exact.items():
+        if policy.get(field) != expected:
+            errors.append(f"policy field {field} mismatch")
+    total = policy.get("total_iters")
+    cadence = policy.get("process_segment_iters")
+    accumulation = policy.get("gradient_accumulation")
+    report = policy.get("report_every")
+    if (
+        not isinstance(total, int)
+        or not isinstance(cadence, int)
+        or not isinstance(accumulation, int)
+        or not isinstance(report, int)
+        or min(total, cadence, accumulation, report) <= 0
+        or cadence > total
+        or total % accumulation
+        or cadence % accumulation
+        or cadence % report
+    ):
+        errors.append("policy segment/alignment values are invalid")
+
+
+def _process_segment_config_binding(
+    cfg: Tau3MlxTrainingConfig,
+) -> dict[str, Any]:
+    return {
+        "iters": cfg.iters,
+        "process_segment_iters": cfg.process_segment_iters,
+        "grad_accumulation": cfg.grad_accumulation,
+        "report_every": cfg.report_every,
+        "dropout": cfg.dropout,
+    }
+
+
+def _validate_process_segment_config_binding(
+    policy: dict[str, Any],
+    config: dict[str, Any] | None,
+    errors: list[str],
+) -> None:
+    if config is None:
+        return
+    expected = {
+        "total_iters": config.get("iters"),
+        "process_segment_iters": config.get("process_segment_iters"),
+        "gradient_accumulation": config.get("grad_accumulation"),
+        "report_every": config.get("report_every"),
+        "dropout": config.get("dropout"),
+    }
+    for field, value in expected.items():
+        if policy.get(field) != value:
+            errors.append(
+                f"policy field {field} does not match training config"
+            )
+
+
+def _validate_process_segment_recovery_artifacts(
+    recovery: Any,
+    output: Path,
+    errors: list[str],
+) -> None:
+    if not isinstance(recovery, dict):
+        errors.append("recovery must be an object")
+        return
+    partials = recovery.get("preserved_partial_artifact_trees")
+    if not isinstance(partials, list):
+        errors.append(
+            "recovery preserved_partial_artifact_trees must be an array"
+        )
+        partials = []
+    for index, tree in enumerate(partials):
+        if not isinstance(tree, dict):
+            errors.append(f"recovery partial tree {index} is invalid")
+            continue
+        if tree.get("artifact_kind") == "regular_file":
+            path = _validate_bound_file_record(
+                tree,
+                output,
+                f"recovery partial file {index}",
+                errors,
+            )
+            if (
+                path is not None
+                and tree.get("size") != path.stat().st_size
+            ):
+                errors.append(
+                    f"recovery partial file {index} size mismatch"
+                )
+            continue
+        root = _resolve_output_relative_path(
+            tree.get("path"),
+            output,
+            f"recovery partial tree {index}",
+            errors,
+        )
+        if root is not None:
+            if not _tree_is_readonly_regular(root):
+                errors.append(
+                    f"recovery partial tree {index} is mutable or unsafe"
+                )
+            else:
+                replay = _relative_fingerprint_tree(
+                    _fingerprint_tree(root),
+                    output,
+                )
+                expected_tree = dict(tree)
+                expected_tree.pop("artifact_kind", None)
+                if replay != expected_tree:
+                    errors.append(f"recovery partial tree {index} mismatch")
+    failed = recovery.get("preserved_failed_artifact_tree")
+    if failed is not None:
+        if not isinstance(failed, dict):
+            errors.append("recovery failed artifact tree is invalid")
+        else:
+            root = _resolve_output_relative_path(
+                failed.get("path"),
+                output,
+                "recovery failed artifact tree",
+                errors,
+            )
+            if root is not None:
+                if not _tree_is_readonly_regular(root):
+                    errors.append(
+                        "recovery failed artifact tree is mutable or unsafe"
+                    )
+                else:
+                    replay = _relative_fingerprint_tree(
+                        _fingerprint_tree(root),
+                        output,
+                    )
+                    if replay != failed:
+                        errors.append("recovery failed artifact tree mismatch")
+
+
+def _validate_bound_json_file(
+    binding: Any,
+    output: Path,
+    label: str,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    path = _validate_bound_file_record(binding, output, label, errors)
+    if path is None:
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        errors.append(f"{label} is not valid JSON: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        errors.append(f"{label} JSON must be an object")
+        return None
+    return payload
+
+
+def _validate_bound_file_record(
+    binding: Any,
+    output: Path,
+    label: str,
+    errors: list[str],
+) -> Path | None:
+    if not isinstance(binding, dict):
+        errors.append(f"{label} binding must be an object")
+        return None
+    path = _resolve_output_relative_path(binding.get("path"), output, label, errors)
+    if path is None:
+        return None
+    if not path.is_file() or path_has_symlink_component(path, include_leaf=True):
+        errors.append(f"{label} must be a regular non-symlink file")
+        return None
+    expected = binding.get("sha256")
+    if expected != _sha256_file(path):
+        errors.append(f"{label} sha256 mismatch")
+    if binding.get("read_only") is not True or bool(path.stat().st_mode & 0o222):
+        errors.append(f"{label} must be read-only")
+    return path
+
+
+def _resolve_output_relative_path(
+    value: Any,
+    output: Path,
+    label: str,
+    errors: list[str],
+) -> Path | None:
+    if not isinstance(value, str) or not value:
+        errors.append(f"{label} path must be a non-empty string")
+        return None
+    raw = Path(value)
+    if raw.is_absolute() or ".." in raw.parts:
+        errors.append(f"{label} path must be output-relative")
+        return None
+    try:
+        path = (output / raw).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        errors.append(f"{label} path is unavailable: {exc}")
+        return None
+    if not path.is_relative_to(output):
+        errors.append(f"{label} path escapes output_dir")
+        return None
+    return path
+
+
+def _replace_command_option(
+    command: list[str],
+    option: str,
+    value: str,
+) -> list[str]:
+    result = list(command)
+    try:
+        index = result.index(option)
+    except ValueError as exc:
+        raise Tau3MlxTrainingError(f"child command is missing {option}") from exc
+    if index + 1 >= len(result):
+        raise Tau3MlxTrainingError(f"child command has no value for {option}")
+    result[index + 1] = value
+    return result
+
+
+def _select_segment_adapter_file(adapter_dir: Path) -> Path | None:
+    canonical = adapter_dir / "adapters.safetensors"
+    if canonical.is_file() and canonical.stat().st_size > 0:
+        return canonical
+    candidates = sorted(
+        path
+        for path in adapter_dir.iterdir()
+        if path.is_file()
+        and path.stat().st_size > 0
+        and path.suffix in {".safetensors", ".npz", ".bin"}
+    )
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
+
+
+def _relative_fingerprint_tree(
+    fingerprint: dict[str, Any],
+    output_root: Path,
+) -> dict[str, Any]:
+    return {
+        **fingerprint,
+        "path": _relative_output_path(Path(fingerprint["path"]), output_root),
+    }
+
+
+def _preserved_partial_artifact_record(
+    path: Path,
+    output_root: Path,
+) -> dict[str, Any]:
+    mode = os.lstat(path).st_mode
+    if stat.S_ISDIR(mode):
+        return {
+            **_relative_fingerprint_tree(
+                _fingerprint_tree(path),
+                output_root,
+            ),
+            "artifact_kind": "directory",
+        }
+    if stat.S_ISREG(mode):
+        return {
+            "artifact_kind": "regular_file",
+            "path": _relative_output_path(path, output_root),
+            "size": path.stat().st_size,
+            "sha256": _sha256_file(path),
+            "read_only": not bool(mode & 0o222),
+        }
+    raise Tau3MlxTrainingError(
+        f"preserved partial has unsupported file type: {path}"
+    )
+
+
+def _expected_assembled_adapter_files(
+    entries: list[dict[str, Any]],
+    errors: list[str],
+) -> list[dict[str, Any]]:
+    assembled: dict[str, dict[str, Any]] = {}
+    last_index = len(entries) - 1
+    for index, entry in enumerate(entries):
+        record = entry.get("record")
+        tree = record.get("adapter_tree") if isinstance(record, dict) else None
+        files = tree.get("files") if isinstance(tree, dict) else None
+        if not isinstance(files, list):
+            errors.append(f"segment {index} adapter files are unavailable")
+            continue
+        for file_record in files:
+            if not isinstance(file_record, dict):
+                errors.append(
+                    f"segment {index} adapter file record is invalid"
+                )
+                continue
+            relative = file_record.get("path")
+            if not isinstance(relative, str):
+                errors.append(
+                    f"segment {index} adapter file path is invalid"
+                )
+                continue
+            if index != last_index and relative in {
+                "adapters.safetensors",
+                "adapter_config.json",
+                "config.json",
+            }:
+                continue
+            previous = assembled.get(relative)
+            if previous is not None and previous != file_record:
+                errors.append(
+                    f"segment adapter assembly collision differs: {relative}"
+                )
+                continue
+            assembled[relative] = file_record
+    return [assembled[path] for path in sorted(assembled)]
+
+
+def _make_tree_readonly(root: Path) -> None:
+    directories, files = _regular_tree_nodes(root, "read-only tree")
+    for path in files:
+        path.chmod(0o444)
+    for path in sorted(directories, reverse=True):
+        path.chmod(0o555)
+
+
+def _make_files_readonly(root: Path) -> None:
+    _, files = _regular_tree_nodes(root, "read-only files")
+    for path in files:
+        path.chmod(0o444)
+
+
+def _commit_readonly_directory(source: Path, destination: Path) -> None:
+    _require_safe_regular_tree(source, "directory commit source")
+    _fsync_tree(source)
+    _make_files_readonly(source)
+    _fsync_tree(source)
+    os.replace(source, destination)
+    _fsync_directory(destination.parent)
+    _make_tree_readonly(destination)
+    _fsync_tree(destination)
+    _fsync_directory(destination.parent)
+
+
+def _commit_readonly_file(
+    source: Path,
+    destination: Path,
+    content: bytes,
+) -> None:
+    _publish_new_readonly_file(source, destination, content)
+
+
+def _publish_new_readonly_file(
+    source: Path,
+    destination: Path,
+    content: bytes,
+) -> None:
+    with source.open("xb") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+        os.fchmod(handle.fileno(), 0o444)
+        os.fsync(handle.fileno())
+    if not stat.S_ISREG(os.lstat(source).st_mode):
+        raise Tau3MlxTrainingError(
+            f"publication partial is not a regular file: {source}"
+        )
+    try:
+        os.link(
+            source,
+            destination,
+            follow_symlinks=False,
+        )
+    except FileExistsError as exc:
+        raise Tau3MlxTrainingError(
+            f"create-once publication destination already exists: {destination}"
+        ) from exc
+    _fsync_directory(destination.parent)
+    os.unlink(source)
+    _fsync_directory(destination.parent)
+
+
+def _fsync_tree(root: Path) -> None:
+    directories, files = _regular_tree_nodes(root, "fsync tree")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    for path in files:
+        descriptor = os.open(path, os.O_RDONLY | nofollow)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise Tau3MlxTrainingError(
+                    f"fsync tree file changed type: {path}"
+                )
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    for path in sorted(directories[1:], reverse=True):
+        _fsync_directory(path)
+    _fsync_directory(root)
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise Tau3MlxTrainingError(
+                f"fsync directory changed type: {path}"
+            )
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _freeze_regular_file_nofollow(path: Path, label: str) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise Tau3MlxTrainingError(
+            f"{label} cannot be opened safely: {path}: {exc}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise Tau3MlxTrainingError(
+                f"{label} must be a regular file: {path}"
+            )
+        os.fsync(descriptor)
+        os.fchmod(descriptor, 0o444)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _tree_is_readonly_regular(root: Path) -> bool:
+    try:
+        directories, files = _regular_tree_nodes(
+            root,
+            "read-only validation tree",
+        )
+    except (OSError, Tau3MlxTrainingError):
+        return False
+    return all(
+        not bool(os.lstat(path).st_mode & 0o222)
+        for path in [*directories, *files]
+    )
+
+
+def _require_safe_regular_tree(root: Path, label: str) -> None:
+    _regular_tree_nodes(root, label)
+
+
+def _regular_tree_nodes(
+    root: Path,
+    label: str,
+) -> tuple[list[Path], list[Path]]:
+    if path_has_symlink_component(root, include_leaf=True):
+        raise Tau3MlxTrainingError(
+            f"{label} must not contain symlink components: {root}"
+        )
+    try:
+        root_status = os.lstat(root)
+    except OSError as exc:
+        raise Tau3MlxTrainingError(
+            f"{label} is unavailable: {root}: {exc}"
+        ) from exc
+    if not stat.S_ISDIR(root_status.st_mode):
+        raise Tau3MlxTrainingError(
+            f"{label} root must be a regular directory: {root}"
+        )
+    directories = [root]
+    files: list[Path] = []
+    pending = [root]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as iterator:
+                entries = sorted(
+                    iterator,
+                    key=lambda entry: entry.name,
+                )
+        except OSError as exc:
+            raise Tau3MlxTrainingError(
+                f"{label} cannot be traversed safely: {current}: {exc}"
+            ) from exc
+        for entry in entries:
+            path = Path(entry.path)
+            try:
+                mode = entry.stat(follow_symlinks=False).st_mode
+            except OSError as exc:
+                raise Tau3MlxTrainingError(
+                    f"{label} node is unavailable: {path}: {exc}"
+                ) from exc
+            if stat.S_ISLNK(mode):
+                raise Tau3MlxTrainingError(
+                    f"{label} contains a symlink: {path}"
+                )
+            if stat.S_ISDIR(mode):
+                directories.append(path)
+                pending.append(path)
+            elif stat.S_ISREG(mode):
+                files.append(path)
+            else:
+                raise Tau3MlxTrainingError(
+                    f"{label} contains a non-regular node: {path}"
+                )
+    directories.sort()
+    files.sort()
+    return directories, files
+
+
+def _freeze_process_segment_partials(process_root: Path) -> list[Path]:
+    partials = sorted(process_root.glob(".*.partial*"))
+    for path in partials:
+        mode = os.lstat(path).st_mode
+        if stat.S_ISDIR(mode):
+            _require_safe_regular_tree(path, "preserved process partial")
+            _fsync_tree(path)
+            _make_tree_readonly(path)
+            _fsync_tree(path)
+        elif stat.S_ISREG(mode):
+            _freeze_regular_file_nofollow(
+                path,
+                "preserved process partial",
+            )
+        else:
+            raise Tau3MlxTrainingError(
+                f"preserved process partial must be a regular file or "
+                f"directory: {path}"
+            )
+    return partials
 
 
 def _run_child(
@@ -2652,10 +4565,18 @@ def _classify(exit_code: int | None, timed_out: bool, telemetry_path: Path) -> s
 
 def _fingerprint_tree(root: Path) -> dict[str, Any]:
     files = []
-    if root.is_dir():
-        for path in sorted(item for item in root.rglob("*") if item.is_file()):
+    if os.path.lexists(root):
+        _, regular_files = _regular_tree_nodes(root, "fingerprint tree")
+        for path in regular_files:
             rel = path.relative_to(root).as_posix()
-            files.append({"path": rel, "size": path.stat().st_size, "sha256": _sha256_file(path), "kind": _fingerprint_kind(rel)})
+            files.append(
+                {
+                    "path": rel,
+                    "size": os.lstat(path).st_size,
+                    "sha256": _sha256_file(path),
+                    "kind": _fingerprint_kind(rel),
+                }
+            )
     digest = hashlib.sha256()
     for record in files:
         digest.update(json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
@@ -2706,6 +4627,81 @@ def _write_new_json_readonly(path: Path, payload: dict[str, Any]) -> None:
     path.chmod(0o444)
 
 
+def _publish_new_json_readonly(
+    path: Path,
+    payload: dict[str, Any],
+) -> None:
+    partial = _fresh_process_segment_partial(path.parent, path.name)
+    content = (
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    _publish_new_readonly_file(partial, path, content)
+
+
+def _freeze_json_publication_partials(destination: Path) -> list[Path]:
+    partials = sorted(
+        destination.parent.glob(f".{destination.name}.partial*")
+    )
+    for path in partials:
+        mode = os.lstat(path).st_mode
+        if not stat.S_ISREG(mode):
+            raise Tau3MlxTrainingError(
+                "JSON publication partial must be a regular file: "
+                f"{path}"
+            )
+        _freeze_regular_file_nofollow(path, "JSON publication partial")
+    return partials
+
+
+def _is_immutable_regular_file(path: Path) -> bool:
+    try:
+        mode = os.lstat(path).st_mode
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(mode)
+        and not path_has_symlink_component(path, include_leaf=True)
+        and not bool(mode & 0o222)
+    )
+
+
+def _validate_existing_final_training_receipt(
+    path: Path,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if not _is_immutable_regular_file(path):
+        raise Tau3MlxTrainingError(
+            "existing final training receipt is mutable or unsafe"
+        )
+    try:
+        actual = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise Tau3MlxTrainingError(
+            f"existing final training receipt is invalid: {exc}"
+        ) from exc
+    if not isinstance(actual, dict):
+        raise Tau3MlxTrainingError(
+            "existing final training receipt must be an object"
+        )
+    replay = dict(expected)
+    for field in ("created_at", "elapsed_seconds"):
+        replay[field] = actual.get(field)
+    if actual != replay:
+        raise Tau3MlxTrainingError(
+            "existing final training receipt differs from recovered evidence"
+        )
+    schema = check_schema_contract(
+        actual,
+        name_or_id="tau3_mlx_training_run",
+    )
+    if schema.get("passed") is not True:
+        raise Tau3MlxTrainingError(
+            "existing final training receipt violates schema: "
+            + json.dumps(schema.get("errors"), sort_keys=True)
+        )
+    return actual
+
+
 def _config_within_bounds(cfg: Tau3MlxTrainingConfig) -> bool:
     return (
         1 <= cfg.iters <= MAX_ITERS
@@ -2722,6 +4718,19 @@ def _config_within_bounds(cfg: Tau3MlxTrainingConfig) -> bool:
         and 1 <= cfg.eval_every <= MAX_ITERS
         and (-1 <= cfg.val_batches <= MAX_ITERS)
         and cfg.clear_cache_threshold >= 0
+        and (
+            cfg.process_segment_iters is None
+            or (
+                cfg.prefix_cache_training
+                and cfg.exposure_ledger_training
+                and cfg.dropout == 0
+                and cfg.process_segment_iters >= cfg.grad_accumulation
+                and cfg.process_segment_iters <= cfg.iters
+                and cfg.iters % cfg.grad_accumulation == 0
+                and cfg.process_segment_iters % cfg.grad_accumulation == 0
+                and cfg.process_segment_iters % cfg.report_every == 0
+            )
+        )
         and 1 <= cfg.timeout_seconds <= MAX_TIMEOUT_SECONDS
         and (
             not cfg.prefix_cache_training
@@ -2771,6 +4780,7 @@ def _config_record(
         "prefix_cache_training": cfg.prefix_cache_training,
         "exposure_ledger_training": cfg.exposure_ledger_training,
         "clear_cache_threshold": cfg.clear_cache_threshold,
+        "process_segment_iters": cfg.process_segment_iters,
         "timeout_seconds": cfg.timeout_seconds,
     }
     if resume is not None:

@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .schema_registry import SchemaRegistryError, check_schema_contract
+from .tau3_mlx_training import validate_tau3_process_segments
 
 
 STAGING_SCHEMA_VERSION = "hfr.tau3_competitive_v3_training_run_stage.v1"
@@ -67,6 +68,8 @@ def stage_tau3_competitive_v3_training_run(
         )
     )
     try:
+        for relative in _selected_source_directories(receipt):
+            (temporary / relative).mkdir(parents=True, exist_ok=True)
         selected = _selected_source_files(source, receipt_path, receipt)
         records: list[dict[str, Any]] = []
         for kind, relative, source_path in selected:
@@ -109,12 +112,15 @@ def stage_tau3_competitive_v3_training_run(
                 f"{staging_schema_result.get('errors')}"
             )
         _write_json(temporary / "staging_receipt.json", staging_receipt)
+        _freeze_staged_training_trees(temporary, receipt)
+        _validate_completed_receipt(temporary, receipt)
         if destination.exists():
             raise Tau3CompetitiveV3TrainingStageError(
                 f"refusing to overwrite existing staged run: {destination}"
             )
         os.replace(temporary, destination)
     except Exception:
+        _make_owned_tree_writable(temporary)
         shutil.rmtree(temporary, ignore_errors=True)
         raise
 
@@ -189,6 +195,36 @@ def _validate_completed_receipt(
     if receipt.get("adapter_weight_file_count") != adapter_weight_count:
         raise Tau3CompetitiveV3TrainingStageError(
             "adapter_weight_file_count does not replay"
+        )
+    _validate_process_segment_evidence(source, receipt)
+
+
+def _validate_process_segment_evidence(
+    source: Path,
+    receipt: dict[str, Any],
+) -> None:
+    config = receipt.get("config")
+    segmented = (
+        isinstance(config, dict)
+        and config.get("process_segment_iters") is not None
+    )
+    evidence = receipt.get("process_segments")
+    if segmented != isinstance(evidence, dict):
+        raise Tau3CompetitiveV3TrainingStageError(
+            "process_segments evidence must be present exactly for segmented runs"
+        )
+    if not segmented:
+        return
+    assert isinstance(evidence, dict)
+    validation = validate_tau3_process_segments(
+        evidence,
+        output_dir=source,
+        expected_config=config,
+    )
+    if validation.get("passed") is not True:
+        raise Tau3CompetitiveV3TrainingStageError(
+            "process segment chain does not replay: "
+            + json.dumps(validation.get("errors") or [], sort_keys=True)
         )
 
 
@@ -393,7 +429,211 @@ def _selected_source_files(
                 ),
             )
         )
+    process_segments = receipt.get("process_segments")
+    if isinstance(process_segments, dict):
+        for kind, relative, source_path in _process_segment_source_files(
+            source,
+            process_segments,
+        ):
+            relative_text = relative.as_posix()
+            if relative_text in seen:
+                continue
+            seen.add(relative_text)
+            selected.append((kind, relative, source_path))
     return selected
+
+
+def _process_segment_source_files(
+    source: Path,
+    evidence: dict[str, Any],
+) -> list[tuple[str, Path, Path]]:
+    selected: list[tuple[str, Path, Path]] = []
+    for label in ("plan", "manifest"):
+        record = evidence.get(label)
+        if not isinstance(record, dict):
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"process_segments.{label} must be a file record"
+            )
+        relative = _safe_relative_path(
+            record.get("path"),
+            f"process_segments.{label}.path",
+        )
+        selected.append(
+            (
+                f"process_segment_{label}",
+                relative,
+                _resolve_source_ref(source, relative.as_posix(), label),
+            )
+        )
+
+    trees: list[tuple[str, dict[str, Any]]] = []
+    artifact_tree = evidence.get("artifact_tree")
+    if isinstance(artifact_tree, dict):
+        trees.append(("artifact_tree", artifact_tree))
+    else:
+        raise Tau3CompetitiveV3TrainingStageError(
+            "process_segments.artifact_tree must be an artifact tree record"
+        )
+    recovery = evidence.get("recovery")
+    if not isinstance(recovery, dict):
+        raise Tau3CompetitiveV3TrainingStageError(
+            "process_segments.recovery must be an object"
+        )
+    partials = recovery.get("preserved_partial_artifact_trees")
+    if not isinstance(partials, list):
+        raise Tau3CompetitiveV3TrainingStageError(
+            "process_segments recovery partial trees must be an array"
+        )
+    for index, tree in enumerate(partials):
+        if not isinstance(tree, dict):
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"process_segments recovery partial tree {index} must be an object"
+            )
+        trees.append((f"recovery.partial[{index}]", tree))
+    failed = recovery.get("preserved_failed_artifact_tree")
+    if failed is not None:
+        if not isinstance(failed, dict):
+            raise Tau3CompetitiveV3TrainingStageError(
+                "process_segments recovery failed tree must be an object"
+            )
+        trees.append(("recovery.failed", failed))
+    for label, tree in trees:
+        selected.extend(
+            _artifact_tree_source_files(
+                source,
+                tree,
+                label=label,
+            )
+        )
+    return selected
+
+
+def _artifact_tree_source_files(
+    source: Path,
+    artifact_tree: dict[str, Any],
+    *,
+    label: str,
+) -> list[tuple[str, Path, Path]]:
+    selected: list[tuple[str, Path, Path]] = []
+    root_relative = _safe_relative_path(
+        artifact_tree.get("path"),
+        f"process_segments.{label}.path",
+    )
+    artifact_root = _resolve_source_ref(
+        source,
+        root_relative.as_posix(),
+        f"process_segments.{label}.path",
+        require_file=False,
+    )
+    files = artifact_tree.get("files")
+    if not isinstance(files, list):
+        raise Tau3CompetitiveV3TrainingStageError(
+            f"process_segments.{label}.files must be an array"
+        )
+    for index, record in enumerate(files):
+        if not isinstance(record, dict):
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"process_segments.{label}.files[{index}] must be an object"
+            )
+        file_relative = _safe_relative_path(
+            record.get("path"),
+            f"process_segments.{label}.files[{index}].path",
+        )
+        relative = root_relative / file_relative
+        selected.append(
+            (
+                "process_segment_artifact",
+                relative,
+                _resolve_source_ref(
+                    artifact_root,
+                    file_relative.as_posix(),
+                    f"process_segments.{label}.files[{index}].path",
+                ),
+            )
+        )
+    return selected
+
+
+def _selected_source_directories(
+    receipt: dict[str, Any],
+) -> list[Path]:
+    evidence = receipt.get("process_segments")
+    if not isinstance(evidence, dict):
+        return []
+    records: list[Any] = [
+        evidence.get("artifact_tree"),
+        evidence.get("final_adapter"),
+    ]
+    recovery = evidence.get("recovery")
+    if isinstance(recovery, dict):
+        partials = recovery.get("preserved_partial_artifact_trees")
+        if isinstance(partials, list):
+            records.extend(partials)
+        records.append(recovery.get("preserved_failed_artifact_tree"))
+    directories: set[Path] = set()
+    for index, record in enumerate(records):
+        if record is None:
+            continue
+        if not isinstance(record, dict):
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"process segment directory record {index} must be an object"
+            )
+        directories.add(
+            _safe_relative_path(
+                record.get("path"),
+                f"process segment directory record {index}.path",
+            )
+        )
+    return sorted(directories)
+
+
+def _freeze_staged_training_trees(
+    root: Path,
+    receipt: dict[str, Any],
+) -> None:
+    adapter = receipt.get("adapter")
+    if isinstance(adapter, dict):
+        _make_tree_readonly(
+            root
+            / _safe_relative_path(
+                adapter.get("path"),
+                "adapter.path",
+            )
+        )
+    if isinstance(receipt.get("process_segments"), dict):
+        _make_tree_readonly(root / "process_segments")
+
+
+def _make_tree_readonly(root: Path) -> None:
+    if not root.is_dir():
+        raise Tau3CompetitiveV3TrainingStageError(
+            f"staged governed tree is missing: {root}"
+        )
+    for path in sorted(root.rglob("*"), reverse=True):
+        if path.is_symlink():
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"staged governed tree contains a symlink: {path}"
+            )
+        if path.is_file():
+            path.chmod(0o444)
+        elif path.is_dir():
+            path.chmod(0o555)
+        else:
+            raise Tau3CompetitiveV3TrainingStageError(
+                f"staged governed tree contains a non-regular node: {path}"
+            )
+    root.chmod(0o555)
+
+
+def _make_owned_tree_writable(root: Path) -> None:
+    if not root.exists() or root.is_symlink():
+        return
+    for path in sorted(root.rglob("*")):
+        if path.is_dir() and not path.is_symlink():
+            path.chmod(0o755)
+        elif path.is_file() and not path.is_symlink():
+            path.chmod(0o644)
+    root.chmod(0o755)
 
 
 def _resolve_source_ref(

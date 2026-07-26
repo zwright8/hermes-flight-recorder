@@ -6,12 +6,16 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from flightrecorder.schema_registry import check_schema_file
 from flightrecorder.tau3_candidate_identity import (
     Tau3CandidateIdentityError,
     build_tau3_candidate_identity,
     main,
+)
+from tests.tau3_process_segments_fixture import (
+    write_process_segments_fixture,
 )
 
 
@@ -53,6 +57,38 @@ class Tau3CandidateIdentityTests(unittest.TestCase):
             self.assertNotIn(str(root), rendered)
             self.assertTrue(check_schema_file(out, "tau3_candidate_identity")["passed"])
             self.assertFalse(out.stat().st_mode & stat.S_IWUSR)
+
+    def test_rejects_segmented_receipt_when_chain_does_not_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            receipt = _write_training_fixture(root)
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["config"]["process_segment_iters"] = 400
+            payload["process_segments"] = write_process_segments_fixture(root)
+            receipt.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_candidate_identity.validate_tau3_process_segments",
+                    return_value={
+                        "passed": False,
+                        "errors": ["segment state hash mismatch"],
+                    },
+                ),
+                self.assertRaisesRegex(
+                    Tau3CandidateIdentityError,
+                    "process segment chain does not replay",
+                ),
+            ):
+                build_tau3_candidate_identity(
+                    candidate_id="candidate-a",
+                    training_receipt_path=receipt,
+                    endpoint_model="qwen-local+candidate-a",
+                    output_path=root / "identity.json",
+                )
 
     def test_cli_writes_identity(self):
         with tempfile.TemporaryDirectory() as tmp:

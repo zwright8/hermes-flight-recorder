@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from flightrecorder.tau3_evaluation import analyze_tau3_evaluation
 from flightrecorder.tau3_execution_validation import (
@@ -20,6 +21,38 @@ from tests.test_tau3_mlx_training import _fake_model, _install_fake_python, _mix
 
 
 class Tau3ExecutionValidationTests(unittest.TestCase):
+    def test_training_bundle_rejects_segment_chain_replay_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+
+            def mutate(receipt: dict[str, Any]) -> None:
+                receipt["config"]["process_segment_iters"] = 400
+                receipt["process_segments"] = {}
+
+            update_training_receipt_and_lock(root, mutate)
+            with mock.patch(
+                "flightrecorder.tau3_execution_validation.validate_tau3_process_segments",
+                return_value={
+                    "passed": False,
+                    "errors": ["segment optimizer state hash mismatch"],
+                },
+            ):
+                result = validate_tau3_training_result_bundle(
+                    root,
+                    strict=True,
+                )
+
+            self.assertFalse(result["passed"])
+            self.assertTrue(
+                any(
+                    "process segment replay" in error
+                    for target in result["targets"]
+                    for error in target["errors"]
+                ),
+                result,
+            )
+
     def test_training_bundle_passes_with_single_locked_updated_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

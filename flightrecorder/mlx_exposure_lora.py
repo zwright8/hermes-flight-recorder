@@ -86,13 +86,17 @@ def load_exposure_schedule(
         if not bounded_smoke or not _bounded_smoke_exposure_is_safe(receipt):
             raise ExposureLoraError("exposure receipt is not candidate eligible")
     steps = []
+    microbatch_token_counts = []
     for step in ledger:
         microbatches = []
+        step_token_counts = []
         for microbatch in step.get("microbatches", []):
             row_hashes = microbatch.get("row_hashes")
             if not isinstance(row_hashes, list) or len(row_hashes) != batch_size:
                 raise ExposureLoraError("exposure microbatch size mismatch")
             row_indices = []
+            prompt_tokens = 0
+            supervised_tokens = 0
             for row_hash in row_hashes:
                 matches = [
                     row
@@ -108,15 +112,36 @@ def load_exposure_schedule(
                     raise ExposureLoraError(
                         "exposure row hash does not map to one dataset row"
                     )
+                matching_row = next(
+                    row
+                    for row in matches
+                    if row.get("row_index") in matching_indices
+                )
                 row_indices.append(next(iter(matching_indices)))
+                for field in ("prompt_tokens", "supervised_tokens"):
+                    value = matching_row.get(field)
+                    if not isinstance(value, int) or value < 1:
+                        raise ExposureLoraError(
+                            f"exposure row has invalid {field}"
+                        )
+                prompt_tokens += int(matching_row["prompt_tokens"])
+                supervised_tokens += int(matching_row["supervised_tokens"])
             microbatches.append(row_indices)
+            step_token_counts.append(
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "supervised_tokens": supervised_tokens,
+                }
+            )
         if len(microbatches) != grad_accumulation_steps:
             raise ExposureLoraError("gradient accumulation schedule mismatch")
         steps.append(microbatches)
+        microbatch_token_counts.append(step_token_counts)
     return {
         "validation": validation,
         "receipt": receipt,
         "steps": steps,
+        "microbatch_token_counts": microbatch_token_counts,
         "microbatch_iterations": ledger_microbatch_iterations,
         "optimizer_steps": optimizer_steps,
     }
@@ -349,7 +374,9 @@ def _batch_from_indices(
         raise ExposureLoraError("exposure microbatch does not match MLX batch size")
     batch = [_dataset_item(dataset, index) for index in indices]
     if len(batch[0]) == 2:
-        tokens, offsets = zip(*batch)
+        paired_tokens, paired_offsets = zip(*batch)
+        tokens = list(paired_tokens)
+        offsets = list(paired_offsets)
     else:
         tokens = batch
         offsets = [0] * len(tokens)
@@ -366,7 +393,7 @@ def _batch_from_indices(
     pad_to = 32
     width = 1 + pad_to * ((max(lengths) + pad_to - 1) // pad_to)
     width = min(width, max_seq_length)
-    batch_array = np.zeros((batch_size, width), dtype=np.int32)
+    batch_array: Any = np.zeros((batch_size, width), dtype=np.int32)
     for row_index, row_tokens in enumerate(tokens):
         batch_array[row_index, : lengths[row_index]] = row_tokens[: lengths[row_index]]
     # MLX-LM's default loss interprets the second length value as the

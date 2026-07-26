@@ -76,6 +76,10 @@
     "prelaunch_receipt": {
       "$ref": "#/$defs/outputFileRecord"
     },
+    "process_segments": {
+      "description": "Hash-bound exact child-process execution evidence for segmented training.",
+      "$ref": "#/$defs/processSegments"
+    },
     "schema_checked": {
       "type": "boolean"
     },
@@ -176,6 +180,300 @@
         "path",
         "read_only",
         "sha256"
+      ],
+      "type": "object"
+    },
+    "artifactTree": {
+      "additionalProperties": true,
+      "properties": {
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "files": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/outputRelativePath"
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "size": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "sha256",
+              "size"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "path": {
+          "$ref": "#/$defs/outputRelativePath"
+        },
+        "tree_sha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "file_count",
+        "files",
+        "tree_sha256"
+      ],
+      "type": "object"
+    },
+    "processSegmentEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "record": {
+          "additionalProperties": true,
+          "properties": {
+            "adapter_output": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/outputFileRecord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "adapter_tree": {
+              "$ref": "#/$defs/artifactTree"
+            },
+            "end_iter": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "iteration_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "optimizer_state_output": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/outputFileRecord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "previous_segment_record_sha256": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "segment_id": {
+              "pattern": "^segment-[0-9]{4}$",
+              "type": "string"
+            },
+            "segment_record_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "start_iter": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "telemetry": {
+              "$ref": "#/$defs/outputFileRecord"
+            },
+            "terminal_status": {
+              "enum": [
+                "success",
+                "crash",
+                "timeout",
+                "oom",
+                "no_output"
+              ]
+            }
+          },
+          "required": [
+            "index",
+            "segment_id",
+            "start_iter",
+            "end_iter",
+            "iteration_count",
+            "previous_segment_record_sha256",
+            "telemetry",
+            "adapter_output",
+            "adapter_tree",
+            "optimizer_state_output",
+            "terminal_status",
+            "segment_record_sha256"
+          ],
+          "type": "object"
+        },
+        "record_file": {
+          "$ref": "#/$defs/outputFileRecord"
+        }
+      },
+      "required": [
+        "record",
+        "record_file"
+      ],
+      "type": "object"
+    },
+    "processSegments": {
+      "additionalProperties": true,
+      "properties": {
+        "aggregate_telemetry": {
+          "$ref": "#/$defs/outputFileRecord"
+        },
+        "artifact_tree": {
+          "$ref": "#/$defs/artifactTree"
+        },
+        "completed_segment_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "final_adapter": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/artifactTree"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifest": {
+          "$ref": "#/$defs/outputFileRecord"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "plan": {
+          "$ref": "#/$defs/outputFileRecord"
+        },
+        "planned_segment_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "plan_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "policy": {
+          "additionalProperties": true,
+          "properties": {
+            "dropout": {
+              "const": 0
+            },
+            "gradient_accumulation": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "process_segment_iters": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "report_every": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "hfr.tau3_mlx_process_segments.v1"
+            },
+            "total_iters": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "schema_version",
+            "total_iters",
+            "process_segment_iters",
+            "gradient_accumulation",
+            "report_every",
+            "dropout"
+          ],
+          "type": "object"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "recovery": {
+          "type": "object"
+        },
+        "schema_version": {
+          "const": "hfr.tau3_mlx_process_segments.v1"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/processSegmentEntry"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "terminal_status": {
+          "enum": [
+            "success",
+            "crash",
+            "timeout",
+            "oom",
+            "no_output"
+          ]
+        },
+        "validation": {
+          "additionalProperties": true,
+          "properties": {
+            "errors": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "passed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "passed",
+            "errors"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "policy",
+        "policy_sha256",
+        "plan",
+        "plan_sha256",
+        "segments",
+        "aggregate_telemetry",
+        "artifact_tree",
+        "final_adapter",
+        "terminal_status",
+        "completed_segment_count",
+        "planned_segment_count",
+        "recovery",
+        "manifest_sha256",
+        "manifest",
+        "validation"
       ],
       "type": "object"
     },

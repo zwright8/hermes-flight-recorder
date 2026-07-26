@@ -9,12 +9,14 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 from flightrecorder.tau3_candidate_selection import (
     TAU3_CANDIDATE_LOCK_SCHEMA_VERSION,
     Tau3CandidateEntry,
     Tau3CandidateSelectionError,
+    _training_receipt_eligible,
     select_tau3_candidate,
 )
 
@@ -23,6 +25,39 @@ REV = "2" * 40
 
 
 class Tau3CandidateSelectionTests(unittest.TestCase):
+    def test_segmented_training_is_ineligible_when_chain_does_not_replay(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            receipt = _read(candidate.training_receipt_path)
+            receipt["config"]["process_segment_iters"] = 400
+            receipt["process_segments"] = {}
+
+            with mock.patch(
+                "flightrecorder.tau3_candidate_selection.validate_tau3_process_segments",
+                return_value={
+                    "passed": False,
+                    "errors": ["optimizer state hash mismatch"],
+                },
+            ):
+                result = _training_receipt_eligible(
+                    receipt,
+                    candidate.training_receipt_path,
+                )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "process_segments_replay_failed",
+                result["blocking_reasons"],
+            )
+
     def test_selects_one_eligible_candidate_and_writes_hash_only_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 from typing import Any
@@ -15,13 +14,16 @@ from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.tau3_mlx_training import (
     Tau3MlxTrainingConfig,
     Tau3MlxTrainingError,
+    _run_process_segments,
     _config_within_bounds,
     _prefix_equivalence_sample_membership,
     _policy_complete_manifest_replays,
     _scan_mlx_data_dir,
     _write_telemetry,
+    build_tau3_process_segment_plan,
     main as tau3_mlx_training_main,
     run_tau3_mlx_training,
+    validate_tau3_process_segments,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger
 from flightrecorder.mlx_prefix_cache_lora import (
@@ -2022,6 +2024,1179 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             _rewrite_manifest(bundle)
             with self.assertRaisesRegex(Tau3MlxTrainingError, "prelaunch checks failed"):
                 run_tau3_mlx_training(bundle_dir=bundle, output_dir=root / "out", workspace_root=root)
+
+
+class Tau3MlxProcessSegmentTests(unittest.TestCase):
+    @staticmethod
+    def _config(
+        *,
+        iters: int = 12,
+        process_segment_iters: int = 4,
+    ) -> Tau3MlxTrainingConfig:
+        return Tau3MlxTrainingConfig(
+            iters=iters,
+            dropout=0.0,
+            grad_accumulation=4,
+            report_every=4,
+            grad_checkpoint=False,
+            disable_compile=True,
+            prefix_cache_training=True,
+            exposure_ledger_training=True,
+            process_segment_iters=process_segment_iters,
+            timeout_seconds=30,
+        )
+
+    @staticmethod
+    def _successful_child(calls: list[list[str]]):
+        def run(**kwargs):
+            command = kwargs["command"]
+            calls.append(command)
+            adapter_dir = Path(
+                command[command.index("--adapter-path") + 1]
+            )
+            end = int(
+                command[
+                    command.index("--hfr-child-segment-end") + 1
+                ]
+            )
+            (adapter_dir / "adapters.safetensors").write_bytes(
+                f"adapter-{end}".encode()
+            )
+            (adapter_dir / f"{end:07d}_adapters.safetensors").write_bytes(
+                f"checkpoint-{end}".encode()
+            )
+            optimizer_path = Path(
+                command[
+                    command.index(
+                        "--hfr-child-segment-optimizer-state-output"
+                    )
+                    + 1
+                ]
+            )
+            optimizer_path.write_bytes(f"optimizer-{end}".encode())
+            with kwargs["telemetry_path"].open("x", encoding="utf-8") as handle:
+                _write_telemetry(
+                    handle,
+                    "stdout",
+                    f"Iter {end}: Train loss {1 / end:.4f}",
+                    kwargs["losses"],
+                )
+            return 0, False, 1, 100 + end
+
+        return run
+
+    def test_plan_uses_contiguous_half_open_segments_with_short_final(self) -> None:
+        config = self._config(iters=3632, process_segment_iters=400)
+        config = Tau3MlxTrainingConfig(
+            **{
+                **config.__dict__,
+                "report_every": 20,
+            }
+        )
+        plan = build_tau3_process_segment_plan(config)
+
+        self.assertEqual(len(plan["segments"]), 10)
+        self.assertEqual(
+            [
+                (
+                    segment["start_iter"],
+                    segment["end_iter"],
+                    segment["iteration_count"],
+                )
+                for segment in plan["segments"][-2:]
+            ],
+            [(3200, 3600, 400), (3600, 3632, 32)],
+        )
+        self.assertEqual(
+            plan["segments"][0]["previous_plan_record_sha256"],
+            None,
+        )
+        for previous, current in zip(
+            plan["segments"],
+            plan["segments"][1:],
+        ):
+            self.assertEqual(previous["end_iter"], current["start_iter"])
+            self.assertEqual(
+                current["previous_plan_record_sha256"],
+                previous["plan_record_sha256"],
+            )
+
+    def test_segment_policy_rejects_objective_and_alignment_drift(self) -> None:
+        base = self._config()
+        invalid = (
+            Tau3MlxTrainingConfig(
+                **{**base.__dict__, "prefix_cache_training": False}
+            ),
+            Tau3MlxTrainingConfig(**{**base.__dict__, "dropout": 0.1}),
+            Tau3MlxTrainingConfig(
+                **{**base.__dict__, "process_segment_iters": 6}
+            ),
+            Tau3MlxTrainingConfig(**{**base.__dict__, "iters": 14}),
+        )
+        for config in invalid:
+            with self.subTest(config=config):
+                self.assertFalse(_config_within_bounds(config))
+
+    def test_success_chains_state_and_assembles_exact_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            losses: dict[str, list[float]] = {
+                "train": [],
+                "validation": [],
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(calls),
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "-m",
+                        "flightrecorder.mlx_exposure_prefix_cache_lora",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(),
+                    losses=losses,
+                )
+
+            self.assertEqual(result["terminal_status"], "success")
+            self.assertEqual(len(calls), 3)
+            evidence = result["process_segments"]
+            self.assertTrue(evidence["validation"]["passed"])
+            self.assertTrue(
+                validate_tau3_process_segments(
+                    evidence,
+                    output_dir=output,
+                )["passed"]
+            )
+            records = [entry["record"] for entry in evidence["segments"]]
+            for index, record in enumerate(records):
+                self.assertEqual(record["start_iter"], index * 4)
+                self.assertEqual(record["end_iter"], (index + 1) * 4)
+                if index:
+                    self.assertEqual(
+                        record["previous_segment_record_sha256"],
+                        records[index - 1]["segment_record_sha256"],
+                    )
+                    self.assertEqual(
+                        record["adapter_input"]["sha256"],
+                        records[index - 1]["adapter_output"]["sha256"],
+                    )
+                    self.assertEqual(
+                        record["optimizer_state_input"]["sha256"],
+                        records[index - 1]["optimizer_state_output"][
+                            "sha256"
+                        ],
+                    )
+            expected_telemetry = b"".join(
+                (
+                    output
+                    / entry["record"]["telemetry"]["path"]
+                ).read_bytes()
+                for entry in evidence["segments"]
+            )
+            self.assertEqual(
+                (output / "telemetry.jsonl").read_bytes(),
+                expected_telemetry,
+            )
+            self.assertEqual(
+                (output / "adapter" / "adapters.safetensors").read_bytes(),
+                b"adapter-12",
+            )
+            self.assertFalse(
+                any(
+                    "optimizer" in path.name
+                    for path in (output / "adapter").rglob("*")
+                )
+            )
+            self.assertIn(
+                "--hfr-child-segment-adapter-input",
+                calls[1],
+            )
+            self.assertIn(
+                "--hfr-child-segment-optimizer-state-input",
+                calls[1],
+            )
+
+    def test_final_adapter_unions_global_segment_checkpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            config = Tau3MlxTrainingConfig(
+                iters=4,
+                dropout=0.0,
+                grad_accumulation=2,
+                save_every=2,
+                report_every=2,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                process_segment_iters=2,
+                timeout_seconds=30,
+            )
+            calls: list[list[str]] = []
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(calls),
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=config,
+                    losses={"train": [], "validation": []},
+                )
+
+            self.assertEqual(result["terminal_status"], "success")
+            self.assertEqual(
+                sorted(
+                    path.name
+                    for path in (output / "adapter").glob(
+                        "*_adapters.safetensors"
+                    )
+                ),
+                [
+                    "0000002_adapters.safetensors",
+                    "0000004_adapters.safetensors",
+                ],
+            )
+            self.assertEqual(
+                (output / "adapter" / "adapters.safetensors").read_bytes(),
+                b"adapter-4",
+            )
+            self.assertTrue(result["process_segments"]["validation"]["passed"])
+
+    def test_runner_receipts_segment_policy_without_changing_recipe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = (
+                _exposure_mixture_variant(
+                    root,
+                    protocol,
+                    batch_size=1,
+                    gradient_accumulation_steps=4,
+                )
+            )
+            config = Tau3MlxTrainingConfig(
+                iters=104,
+                batch_size=1,
+                grad_accumulation=4,
+                report_every=4,
+                dropout=0.0,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                process_segment_iters=52,
+                timeout_seconds=30,
+            )
+            equivalence = _write_prefix_equivalence(
+                root,
+                mixture=mixture,
+                protocol=protocol,
+                identity=identity,
+                config=config,
+            )
+            calls: list[list[str]] = []
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(calls),
+            ):
+                receipt = run_tau3_mlx_training(
+                    mixture_dir=mixture,
+                    protocol_path=protocol,
+                    model_path=model,
+                    model_identity_path=identity,
+                    output_dir=root / "out",
+                    workspace_root=root,
+                    config=config,
+                    exposure_dataset_path=mixture / "train.jsonl",
+                    exposure_receipt_path=exposure_receipt,
+                    exposure_ledger_path=exposure_ledger,
+                    prefix_equivalence_path=equivalence,
+                )
+
+            prelaunch = _read_json(
+                root / "out" / "prelaunch_receipt.json"
+            )
+            self.assertEqual(receipt["terminal_status"], "success")
+            self.assertEqual(
+                prelaunch["config"],
+                receipt["config"],
+            )
+            self.assertEqual(
+                prelaunch["training_binding"],
+                receipt["training_binding"],
+            )
+            self.assertEqual(receipt["config"]["process_segment_iters"], 52)
+            self.assertNotIn(
+                "process_segment_iters",
+                receipt["training_binding"]["recipe"],
+            )
+            self.assertTrue(receipt["process_segments"]["validation"]["passed"])
+            self.assertEqual(len(calls), 2)
+
+    def test_runner_restarts_after_parent_loss_from_committed_segment(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            model, identity = _fake_model(root)
+            protocol = _protocol_config(root, identity)
+            mixture, exposure_receipt, exposure_ledger = (
+                _exposure_mixture_variant(
+                    root,
+                    protocol,
+                    batch_size=1,
+                    gradient_accumulation_steps=4,
+                )
+            )
+            config = Tau3MlxTrainingConfig(
+                iters=104,
+                batch_size=1,
+                grad_accumulation=4,
+                report_every=4,
+                dropout=0.0,
+                grad_checkpoint=False,
+                disable_compile=True,
+                prefix_cache_training=True,
+                exposure_ledger_training=True,
+                process_segment_iters=52,
+                timeout_seconds=30,
+            )
+            equivalence = _write_prefix_equivalence(
+                root,
+                mixture=mixture,
+                protocol=protocol,
+                identity=identity,
+                config=config,
+            )
+            run_kwargs = {
+                "mixture_dir": mixture,
+                "protocol_path": protocol,
+                "model_path": model,
+                "model_identity_path": identity,
+                "output_dir": root / "out",
+                "workspace_root": root,
+                "config": config,
+                "exposure_dataset_path": mixture / "train.jsonl",
+                "exposure_receipt_path": exposure_receipt,
+                "exposure_ledger_path": exposure_ledger,
+                "prefix_equivalence_path": equivalence,
+            }
+            first_calls: list[list[str]] = []
+            success = self._successful_child(first_calls)
+
+            def lose_parent_after_first(**kwargs):
+                if not first_calls:
+                    return success(**kwargs)
+                first_calls.append(kwargs["command"])
+                raise SystemExit(137)
+
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=lose_parent_after_first,
+            ), self.assertRaises(SystemExit):
+                run_tau3_mlx_training(**run_kwargs)
+
+            committed = (
+                root
+                / "out/process_segments/segments/segment-0001"
+            )
+            committed_hashes = {
+                path.relative_to(committed).as_posix(): _sha256(path)
+                for path in committed.rglob("*")
+                if path.is_file()
+            }
+            resumed_calls: list[list[str]] = []
+            original_unlink = os.unlink
+
+            def lose_parent_after_final_receipt_link(path, *args, **kwargs):
+                if Path(path).name.startswith(
+                    ".training_receipt.json.partial"
+                ):
+                    raise SystemExit(137)
+                return original_unlink(path, *args, **kwargs)
+
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training._run_child",
+                    side_effect=self._successful_child(resumed_calls),
+                ),
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training.os.unlink",
+                    side_effect=lose_parent_after_final_receipt_link,
+                ),
+                self.assertRaises(SystemExit),
+            ):
+                run_tau3_mlx_training(
+                    **run_kwargs,
+                    resume_process_segments=True,
+                )
+            final_path = root / "out/training_receipt.json"
+            final_partial = (
+                root / "out/.training_receipt.json.partial"
+            )
+            self.assertTrue(final_path.is_file())
+            self.assertTrue(final_partial.is_file())
+            receipt_bytes = final_path.read_bytes()
+
+            child = mock.Mock()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ):
+                receipt = run_tau3_mlx_training(
+                    **run_kwargs,
+                    resume_process_segments=True,
+                )
+
+            child.assert_not_called()
+            self.assertEqual(receipt["terminal_status"], "success")
+            self.assertEqual(len(resumed_calls), 1)
+            self.assertEqual(final_path.read_bytes(), receipt_bytes)
+            self.assertFalse(final_partial.stat().st_mode & 0o222)
+            self.assertEqual(
+                committed_hashes,
+                {
+                    path.relative_to(committed).as_posix(): _sha256(path)
+                    for path in committed.rglob("*")
+                    if path.is_file()
+                },
+            )
+            self.assertEqual(
+                receipt["process_segments"]["recovery"][
+                    "accepted_segment_count"
+                ],
+                1,
+            )
+            self.assertTrue(receipt["process_segments"]["validation"]["passed"])
+
+    def test_validator_rejects_state_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(calls),
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(),
+                    losses={"train": [], "validation": []},
+                )
+            state = (
+                output
+                / result["process_segments"]["segments"][0]["record"][
+                    "optimizer_state_output"
+                ]["path"]
+            )
+            state.chmod(0o644)
+            state.write_bytes(b"tampered")
+
+            validation = validate_tau3_process_segments(
+                result["process_segments"],
+                output_dir=output,
+            )
+            self.assertFalse(validation["passed"])
+            self.assertTrue(
+                any(
+                    "optimizer_state_output sha256 mismatch" in error
+                    for error in validation["errors"]
+                )
+            )
+
+    def test_validator_rejects_receipt_config_policy_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child([]),
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(),
+                    losses={"train": [], "validation": []},
+                )
+
+            validation = validate_tau3_process_segments(
+                result["process_segments"],
+                output_dir=output,
+                expected_config={
+                    "iters": 12,
+                    "process_segment_iters": 8,
+                    "grad_accumulation": 4,
+                    "report_every": 4,
+                    "dropout": 0.0,
+                },
+            )
+
+            self.assertFalse(validation["passed"])
+            self.assertIn(
+                "policy field process_segment_iters does not match training config",
+                validation["errors"],
+            )
+
+    def test_child_symlink_is_rejected_without_mutating_external_target(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "out"
+            output.mkdir()
+            external = root / "external.safetensors"
+            external.write_bytes(b"external-immutable")
+            external.chmod(0o644)
+            before = (
+                external.read_bytes(),
+                external.stat().st_mode & 0o777,
+            )
+
+            def symlink_child(**kwargs):
+                command = kwargs["command"]
+                adapter_dir = Path(
+                    command[command.index("--adapter-path") + 1]
+                )
+                (adapter_dir / "adapters.safetensors").symlink_to(
+                    external
+                )
+                optimizer = Path(
+                    command[
+                        command.index(
+                            "--hfr-child-segment-optimizer-state-output"
+                        )
+                        + 1
+                    ]
+                )
+                optimizer.write_bytes(b"optimizer")
+                kwargs["telemetry_path"].write_text(
+                    '{"stream":"stdout","text":"done","time":"now"}\n',
+                    encoding="utf-8",
+                )
+                return 0, False, 1, 1
+
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training._run_child",
+                    side_effect=symlink_child,
+                ),
+                self.assertRaisesRegex(
+                    Tau3MlxTrainingError,
+                    "contains a symlink",
+                ),
+            ):
+                _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=root,
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(
+                        iters=4,
+                        process_segment_iters=4,
+                    ),
+                    losses={"train": [], "validation": []},
+                )
+
+            self.assertEqual(external.read_bytes(), before[0])
+            self.assertEqual(external.stat().st_mode & 0o777, before[1])
+
+    def test_reboot_resume_accepts_only_committed_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            success = self._successful_child(calls)
+
+            def interrupt_second(**kwargs):
+                if len(calls) == 0:
+                    return success(**kwargs)
+                calls.append(kwargs["command"])
+                raise KeyboardInterrupt
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": self._config(),
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=interrupt_second,
+            ), self.assertRaises(KeyboardInterrupt):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+
+            committed = (
+                output / "process_segments/segments/segment-0001"
+            )
+            orphan = (
+                output / "process_segments/.segment-0002.partial"
+            )
+            committed_record_before = (
+                committed / "segment_record.json"
+            ).read_bytes()
+            adapter_before = (
+                committed / "adapter/adapters.safetensors"
+            ).read_bytes()
+            optimizer_before = (
+                committed / "optimizer_state.safetensors"
+            ).read_bytes()
+            self.assertTrue(orphan.is_dir())
+
+            resumed_calls: list[list[str]] = []
+            resumed_losses: dict[str, list[float]] = {
+                "train": [],
+                "validation": [],
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(resumed_calls),
+            ):
+                result = _run_process_segments(
+                    **run_kwargs,
+                    losses=resumed_losses,
+                    resume=True,
+                )
+
+            self.assertEqual(result["terminal_status"], "success")
+            self.assertEqual(len(resumed_calls), 2)
+            self.assertEqual(len(resumed_losses["train"]), 3)
+            self.assertEqual(
+                (committed / "segment_record.json").read_bytes(),
+                committed_record_before,
+            )
+            self.assertEqual(
+                (
+                    committed / "adapter/adapters.safetensors"
+                ).read_bytes(),
+                adapter_before,
+            )
+            self.assertEqual(
+                (
+                    committed / "optimizer_state.safetensors"
+                ).read_bytes(),
+                optimizer_before,
+            )
+            self.assertTrue(orphan.is_dir())
+            recovery = result["process_segments"]["recovery"]
+            self.assertTrue(recovery["resumed"])
+            self.assertFalse(orphan.stat().st_mode & 0o222)
+            self.assertEqual(recovery["accepted_segment_count"], 1)
+            self.assertEqual(
+                [
+                    tree["path"]
+                    for tree in recovery[
+                        "preserved_partial_artifact_trees"
+                    ]
+                ],
+                ["process_segments/.segment-0002.partial"],
+            )
+            self.assertTrue(result["process_segments"]["validation"]["passed"])
+            second_command = resumed_calls[0]
+            self.assertEqual(
+                Path(
+                    second_command[
+                        second_command.index(
+                            "--hfr-child-segment-adapter-input"
+                        )
+                        + 1
+                    ]
+                ).resolve(),
+                (
+                    committed / "adapter/adapters.safetensors"
+                ).resolve(),
+            )
+            self.assertEqual(
+                Path(
+                    second_command[
+                        second_command.index(
+                            "--hfr-child-segment-optimizer-state-input"
+                        )
+                        + 1
+                    ]
+                ).resolve(),
+                (
+                    committed / "optimizer_state.safetensors"
+                ).resolve(),
+            )
+            child = mock.Mock()
+            replayed_losses: dict[str, list[float]] = {
+                "train": [],
+                "validation": [],
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ):
+                replayed = _run_process_segments(
+                    **run_kwargs,
+                    losses=replayed_losses,
+                    resume=True,
+                )
+            child.assert_not_called()
+            self.assertEqual(replayed["terminal_status"], "success")
+            self.assertEqual(len(replayed_losses["train"]), 3)
+            self.assertTrue(
+                replayed["process_segments"]["validation"]["passed"]
+            )
+
+    def test_reboot_resume_rejects_tampered_committed_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            success = self._successful_child(calls)
+
+            def interrupt_second(**kwargs):
+                if not calls:
+                    return success(**kwargs)
+                raise KeyboardInterrupt
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": self._config(),
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=interrupt_second,
+            ), self.assertRaises(KeyboardInterrupt):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+            optimizer = (
+                output
+                / "process_segments/segments/segment-0001"
+                / "optimizer_state.safetensors"
+            )
+            optimizer.chmod(0o644)
+            optimizer.write_bytes(b"tampered optimizer")
+
+            child = mock.Mock()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ), self.assertRaisesRegex(
+                Tau3MlxTrainingError,
+                "committed process segment chain failed validation",
+            ):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                    resume=True,
+                )
+            child.assert_not_called()
+
+    def test_reboot_during_final_assembly_preserves_partial_and_recovers(
+        self,
+    ) -> None:
+        import flightrecorder.tau3_mlx_training as training_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            config = self._config()
+            original_commit = training_module._commit_readonly_directory
+
+            def lose_parent_on_final(source: Path, destination: Path):
+                if source.name.startswith(".final-adapter.partial"):
+                    raise SystemExit(137)
+                return original_commit(source, destination)
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": config,
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child(calls),
+            ), mock.patch(
+                "flightrecorder.tau3_mlx_training._commit_readonly_directory",
+                side_effect=lose_parent_on_final,
+            ), self.assertRaises(SystemExit):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+
+            orphan = (
+                output
+                / "process_segments/.final-adapter.partial"
+            )
+            self.assertTrue(orphan.is_dir())
+            self.assertTrue((output / "telemetry.jsonl").is_file())
+            self.assertFalse((output / "adapter").exists())
+            child = mock.Mock()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ):
+                result = _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                    resume=True,
+                )
+
+            child.assert_not_called()
+            self.assertEqual(result["terminal_status"], "success")
+            self.assertTrue(orphan.is_dir())
+            self.assertTrue((output / "adapter").is_dir())
+            self.assertTrue(result["process_segments"]["validation"]["passed"])
+            self.assertIn(
+                "process_segments/.final-adapter.partial",
+                [
+                    tree["path"]
+                    for tree in result["process_segments"]["recovery"][
+                        "preserved_partial_artifact_trees"
+                    ]
+                ],
+            )
+
+    def test_reboot_during_aggregate_publish_preserves_regular_partial(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            original_link = os.link
+
+            def lose_parent_before_aggregate_link(
+                source,
+                destination,
+                *args,
+                **kwargs,
+            ):
+                if Path(destination).name == "telemetry.jsonl":
+                    raise SystemExit(137)
+                return original_link(
+                    source,
+                    destination,
+                    *args,
+                    **kwargs,
+                )
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": self._config(),
+            }
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training._run_child",
+                    side_effect=self._successful_child(calls),
+                ),
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training.os.link",
+                    side_effect=lose_parent_before_aggregate_link,
+                ),
+                self.assertRaises(SystemExit),
+            ):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+
+            partial = (
+                output
+                / "process_segments/.aggregate-telemetry.partial"
+            )
+            self.assertTrue(partial.is_file())
+            partial_bytes = partial.read_bytes()
+            child = mock.Mock()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ):
+                result = _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                    resume=True,
+                )
+
+            child.assert_not_called()
+            self.assertEqual(result["terminal_status"], "success")
+            self.assertEqual(partial.read_bytes(), partial_bytes)
+            self.assertFalse(partial.stat().st_mode & 0o222)
+            partial_records = result["process_segments"]["recovery"][
+                "preserved_partial_artifact_trees"
+            ]
+            self.assertIn(
+                {
+                    "artifact_kind": "regular_file",
+                    "path": (
+                        "process_segments/.aggregate-telemetry.partial"
+                    ),
+                    "size": len(partial_bytes),
+                    "sha256": _sha256(partial),
+                    "read_only": True,
+                },
+                partial_records,
+            )
+            self.assertTrue(result["process_segments"]["validation"]["passed"])
+
+    def test_resume_rejects_symlink_aggregate_partial_without_following(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            success = self._successful_child(calls)
+
+            def interrupt_second(**kwargs):
+                if not calls:
+                    return success(**kwargs)
+                raise KeyboardInterrupt
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": self._config(),
+            }
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=interrupt_second,
+            ), self.assertRaises(KeyboardInterrupt):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+            external = Path(tmp) / "external.txt"
+            external.write_bytes(b"do-not-read-or-change")
+            before = (
+                external.read_bytes(),
+                external.stat().st_mode & 0o777,
+            )
+            partial = (
+                output
+                / "process_segments/.aggregate-telemetry.partial"
+            )
+            partial.symlink_to(external)
+
+            child = mock.Mock()
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training._run_child",
+                    child,
+                ),
+                self.assertRaisesRegex(
+                    Tau3MlxTrainingError,
+                    "regular file or directory",
+                ),
+            ):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                    resume=True,
+                )
+            child.assert_not_called()
+            self.assertEqual(external.read_bytes(), before[0])
+            self.assertEqual(external.stat().st_mode & 0o777, before[1])
+
+    def test_reboot_after_manifest_link_resumes_without_republication(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            original_unlink = os.unlink
+
+            def lose_parent_after_manifest_link(path, *args, **kwargs):
+                if Path(path).name.startswith(".manifest.json.partial"):
+                    raise SystemExit(137)
+                return original_unlink(path, *args, **kwargs)
+
+            run_kwargs = {
+                "command": [
+                    "python",
+                    "--adapter-path",
+                    str(output / "adapter"),
+                ],
+                "cwd": Path(tmp),
+                "output_dir": output,
+                "final_adapter_dir": output / "adapter",
+                "aggregate_telemetry_path": output / "telemetry.jsonl",
+                "cfg": self._config(),
+            }
+            with (
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training._run_child",
+                    side_effect=self._successful_child(calls),
+                ),
+                mock.patch(
+                    "flightrecorder.tau3_mlx_training.os.unlink",
+                    side_effect=lose_parent_after_manifest_link,
+                ),
+                self.assertRaises(SystemExit),
+            ):
+                _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                )
+
+            manifest = output / "process_segments/manifest.json"
+            partial = output / "process_segments/.manifest.json.partial"
+            self.assertTrue(manifest.is_file())
+            self.assertTrue(partial.is_file())
+            manifest_bytes = manifest.read_bytes()
+            child = mock.Mock()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                child,
+            ):
+                result = _run_process_segments(
+                    **run_kwargs,
+                    losses={"train": [], "validation": []},
+                    resume=True,
+                )
+
+            child.assert_not_called()
+            self.assertEqual(manifest.read_bytes(), manifest_bytes)
+            self.assertFalse(manifest.stat().st_mode & 0o222)
+            self.assertFalse(partial.stat().st_mode & 0o222)
+            self.assertTrue(result["process_segments"]["validation"]["passed"])
+
+    def test_child_failure_stops_chain_and_preserves_atomic_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            calls: list[list[str]] = []
+            success = self._successful_child(calls)
+
+            def fail_second(**kwargs):
+                if len(calls) == 0:
+                    return success(**kwargs)
+                calls.append(kwargs["command"])
+                with kwargs["telemetry_path"].open(
+                    "x",
+                    encoding="utf-8",
+                ) as handle:
+                    _write_telemetry(
+                        handle,
+                        "stderr",
+                        "simulated segment crash",
+                        kwargs["losses"],
+                    )
+                return 9, False, 1, 50
+
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=fail_second,
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(),
+                    losses={"train": [], "validation": []},
+                )
+
+            self.assertEqual(result["terminal_status"], "crash")
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(
+                (output / "process_segments/segments/segment-0001").is_dir()
+            )
+            self.assertTrue(
+                (output / "process_segments/failed/segment-0002").is_dir()
+            )
+            self.assertFalse(
+                any(
+                    path.name.endswith(".partial")
+                    for path in (output / "process_segments").iterdir()
+                )
+            )
+            self.assertFalse((output / "adapter").exists())
+            self.assertFalse(
+                result["process_segments"]["validation"]["passed"]
+            )
 
 
 if __name__ == "__main__":

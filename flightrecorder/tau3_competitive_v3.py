@@ -29,6 +29,7 @@ from .tau3_competitive_dataset import validate_tau3_competitive_dataset_bundle
 from .tau3_evaluation import validate_tau3_evaluation_report
 from .tau3_exposure import Tau3ExposureError, validate_tau3_exposure_ledger
 from .tau3_internal_validation import validate_tau3_internal_validation
+from .tau3_mlx_training import validate_tau3_process_segments
 from .tau3_objective_validity import validate_tau3_objective_validity_report
 from .tau3_prefix_equivalence import validate_tau3_prefix_equivalence
 from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
@@ -425,8 +426,8 @@ def _validate_evaluator_model_payload(target: _Target, payload: dict[str, Any]) 
         _require(target, record.get("comparator_specific_prompting") is False, f"evaluator {role} must forbid comparator-specific prompting")
         identity = _dict(record.get("model_identity"))
         identities[role] = identity
-        for field in ("model_id", "revision", "local_tree_sha256", "local_identity_sha256"):
-            _require(target, isinstance(identity.get(field), str) and bool(identity.get(field)), f"evaluator {role}.model_identity.{field} must be pinned")
+        for field_name in ("model_id", "revision", "local_tree_sha256", "local_identity_sha256"):
+            _require(target, isinstance(identity.get(field_name), str) and bool(identity.get(field_name)), f"evaluator {role}.model_identity.{field_name} must be pinned")
         _require_revision(target, identity.get("revision"), f"evaluator {role}.model_identity.revision")
         _require_sha(target, identity.get("local_tree_sha256"), f"evaluator {role}.model_identity.local_tree_sha256")
         _require_sha(target, identity.get("local_identity_sha256"), f"evaluator {role}.model_identity.local_identity_sha256")
@@ -1018,6 +1019,29 @@ def _validate_training_receipt(
     adapter = _dict(receipt.get("adapter"))
     _require_sha(target, adapter.get("tree_sha256"), "qualified training receipt adapter.tree_sha256")
     _require(target, _adapter_files_replay(path.parent, adapter), "qualified training receipt adapter file fingerprints must replay")
+    config = _dict(receipt.get("config"))
+    process_segments = receipt.get("process_segments")
+    segmented = config.get("process_segment_iters") is not None
+    _require(
+        target,
+        segmented == isinstance(process_segments, dict),
+        "qualified training receipt process_segments presence must match config",
+    )
+    if segmented and isinstance(process_segments, dict):
+        process_validation = validate_tau3_process_segments(
+            process_segments,
+            output_dir=path.parent,
+            expected_config=config,
+        )
+        _require(
+            target,
+            process_validation.get("passed") is True,
+            "qualified training receipt process segment chain must replay: "
+            + json.dumps(
+                process_validation.get("errors") or [],
+                sort_keys=True,
+            ),
+        )
     binding = _dict(receipt.get("training_binding"))
     recipe = _dict(binding.get("recipe"))
     exposure = _dict(binding.get("exposure"))
@@ -1129,7 +1153,7 @@ def _validate_equivalence_recipe_binding(
     equivalence_recipe: dict[str, Any],
     training_recipe: dict[str, Any],
 ) -> None:
-    for field in (
+    for field_name in (
         "rank",
         "scale",
         "learning_rate",
@@ -1141,8 +1165,9 @@ def _validate_equivalence_recipe_binding(
     ):
         _require(
             target,
-            equivalence_recipe.get(field) == training_recipe.get(field),
-            f"prefix equivalence recipe.{field} must match training recipe",
+            equivalence_recipe.get(field_name)
+            == training_recipe.get(field_name),
+            f"prefix equivalence recipe.{field_name} must match training recipe",
         )
     allowed_seeds = equivalence_recipe.get("allowed_seeds")
     _require(

@@ -57,6 +57,50 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
         grounded_patcher.start()
         self.addCleanup(grounded_patcher.stop)
 
+    def test_qualified_segmented_receipt_replays_process_chain(self) -> None:
+        from tests.test_tau3_competitive_v3_training_stage import (
+            segmented_completed_run_fixture,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run = segmented_completed_run_fixture(Path(tmp) / "source")
+            receipt_path = run / "training_receipt.json"
+            receipt = read_json(receipt_path)
+            exposure = receipt["training_binding"]["exposure"]
+            target = _Target("training", str(receipt_path))
+
+            _validate_training_receipt(
+                target,
+                receipt_path,
+                receipt,
+                exposure_receipt_sha256=exposure["receipt"]["sha256"],
+                exposure_ledger_sha256=exposure["ledger"]["sha256"],
+            )
+
+            self.assertFalse(target.errors, target.errors)
+            optimizer = (
+                run
+                / receipt["process_segments"]["segments"][0]["record"][
+                    "optimizer_state_output"
+                ]["path"]
+            )
+            optimizer.chmod(0o644)
+            optimizer.write_bytes(b"tampered")
+            rejected = _Target("training", str(receipt_path))
+
+            _validate_training_receipt(
+                rejected,
+                receipt_path,
+                receipt,
+                exposure_receipt_sha256=exposure["receipt"]["sha256"],
+                exposure_ledger_sha256=exposure["ledger"]["sha256"],
+            )
+
+            self.assertIn(
+                "process segment chain must replay",
+                json.dumps(rejected.errors),
+            )
+
     def test_plan_only_fixture_passes_plan_stage(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2062,7 +2106,6 @@ def sealed_evaluation() -> dict[str, Any]:
             "domain_counts": {"airline": 4, "retail": 4, "telecom": 4},
             "pair_set_sha256": "3" * 64,
         },
-        "metrics": {"macro_pass1": {"adapter": 0.20, "base": 0.10, "comparator_1": 0.23, "comparator_2": 0.18}},
         "metrics": {
             "macro_pass1": {"adapter": 0.20, "base": 0.10, "comparator_1": 0.23, "comparator_2": 0.18},
             "per_domain_pass1": {arm: domains for arm in arms},
@@ -2171,7 +2214,10 @@ def old_dataset_evidence() -> dict[str, Any]:
         "telecom_supervised_token_fraction": 0.27,
         "domain_supervised_token_fractions": {"airline": 0.34, "retail": 0.39, "telecom": 0.27},
         "max_domain_canonical_target_duplication_fraction": 0.10,
-        "behavior_coverage": {domain: {"behaviors": behaviors} for domain in ("airline", "retail", "telecom")},
+        "behavior_coverage": {
+            domain: {"behaviors": list(competitive_v3_module.BEHAVIORS)}
+            for domain in ("airline", "retail", "telecom")
+        },
         "coverage_counts_are_supervised_targets": True,
     }
 

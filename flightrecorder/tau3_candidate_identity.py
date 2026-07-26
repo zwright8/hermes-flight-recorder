@@ -14,6 +14,7 @@ from typing import Any
 from .atomic_json import AtomicJsonError, atomic_write_json_cas
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_mlx_training import validate_tau3_process_segments
 
 TAU3_CANDIDATE_IDENTITY_SCHEMA_VERSION = "hfr.tau3_candidate_identity.v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -153,7 +154,37 @@ def _load_receipt(path: Path) -> dict[str, Any]:
         failures.append("adapter_weight_file_count")
     if failures:
         raise Tau3CandidateIdentityError(f"{path}: training receipt is not final successful weighted output: {', '.join(failures)}")
+    _require_valid_process_segments(payload, path)
     return payload
+
+
+def _require_valid_process_segments(
+    receipt: dict[str, Any],
+    receipt_path: Path,
+) -> None:
+    config = receipt.get("config")
+    segmented = (
+        isinstance(config, dict)
+        and config.get("process_segment_iters") is not None
+    )
+    evidence = receipt.get("process_segments")
+    if segmented != isinstance(evidence, dict):
+        raise Tau3CandidateIdentityError(
+            "process_segments evidence must be present exactly for segmented runs"
+        )
+    if not segmented:
+        return
+    assert isinstance(evidence, dict)
+    validation = validate_tau3_process_segments(
+        evidence,
+        output_dir=receipt_path.parent,
+        expected_config=config,
+    )
+    if validation.get("passed") is not True:
+        raise Tau3CandidateIdentityError(
+            "process segment chain does not replay: "
+            + "; ".join(str(item) for item in validation.get("errors") or [])
+        )
 
 
 def _verified_adapter(receipt: dict[str, Any], *, receipt_path: Path) -> dict[str, Any]:
