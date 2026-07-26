@@ -120,6 +120,88 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             )
             self.assertEqual(resumed["run_count"], 12)
 
+    def test_benchmark_binds_exact_frozen_evaluator_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._development_source(root)
+            protocol = self._protocol(root, source=source)
+            evaluator = self._evaluator_contract(root)
+            tau2 = self._fake_tau2(root, reward=0.0)
+            evaluator_endpoint = self._endpoint(
+                "local/evaluator",
+                18081,
+            )
+
+            manifest = run_tau3_benchmark_arm(
+                out_dir=root / "bound-evaluator",
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                agent=self._endpoint("local/base", 18080),
+                user=evaluator_endpoint,
+                reviewer=evaluator_endpoint,
+                config=Tau3BenchmarkConfig(
+                    mode="development",
+                    arm_id="base",
+                    protocol_path=protocol,
+                    evaluator_model_contract=evaluator,
+                    source_split=source,
+                    timeout_seconds=2,
+                ),
+            )
+
+            binding = manifest["evaluator_model_contract"]
+            self.assertEqual(
+                binding["sha256"],
+                self._sha256(evaluator),
+            )
+            self.assertEqual(
+                binding["path"],
+                "inputs/evaluator-model-contract.json",
+            )
+            self.assertEqual(
+                binding["model_identity_sha256"],
+                self._canonical_sha256(
+                    json.loads(
+                        evaluator.read_text(encoding="utf-8")
+                    )["roles"]["user_simulator"]["model_identity"]
+                ),
+            )
+            receipt = json.loads(
+                (
+                    root
+                    / "bound-evaluator"
+                    / "run-airline-seed101.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                receipt["evaluator_model_contract_sha256"],
+                self._sha256(evaluator),
+            )
+
+            with self.assertRaisesRegex(
+                Tau3BenchmarkRunError,
+                "exact frozen evaluator model_id",
+            ):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "wrong-evaluator",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=self._endpoint("local/base", 18080),
+                    user=self._endpoint("local/other", 18081),
+                    reviewer=evaluator_endpoint,
+                    config=Tau3BenchmarkConfig(
+                        mode="development",
+                        arm_id="base",
+                        protocol_path=protocol,
+                        evaluator_model_contract=evaluator,
+                        source_split=source,
+                        timeout_seconds=2,
+                    ),
+                )
+
     def test_sealed_never_uses_source_or_task_ids_and_requires_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1188,6 +1270,74 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         }
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
+
+    def _evaluator_contract(self, root: Path) -> Path:
+        path = root / "evaluator-model-contract.json"
+        identity = {
+            "model_id": "local/evaluator",
+            "local_path": "local/evaluator",
+            "local_identity_sha256": "1" * 64,
+            "local_tree_sha256": "2" * 64,
+            "revision": "3" * 40,
+        }
+        identity_sha256 = self._canonical_sha256(identity)
+        role_common = {
+            "comparator_specific_prompting": False,
+            "local_only": True,
+            "model_identity": identity,
+            "model_identity_sha256": identity_sha256,
+            "network": False,
+            "no_test_time_search": True,
+            "temperature": 0.0,
+            "top_p": 1.0,
+        }
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": (
+                        "hfr.tau3_evaluator_model_contract.v1"
+                    ),
+                    "applies_to_arms": [
+                        "adapter",
+                        "base",
+                        "comparator_1",
+                        "comparator_2",
+                    ],
+                    "excluded_from_comparator_claims": True,
+                    "excluded_from_gradient_data": True,
+                    "identical_for_all_arms": True,
+                    "local_only": True,
+                    "network": False,
+                    "no_comparator_specific_prompting": True,
+                    "roles": {
+                        "user_simulator": {
+                            **role_common,
+                            "role": "user_simulator",
+                        },
+                        "reviewer": {
+                            **role_common,
+                            "role": "reviewer",
+                        },
+                    },
+                    "roles_share_exact_model": True,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    @staticmethod
+    def _canonical_sha256(value: object) -> str:
+        return hashlib_sha256(
+            json.dumps(
+                value,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
 
     def _sealed_source_manifest(self, root: Path, *, task_count: int, entry_extra: dict[str, object] | None = None) -> Path:
         path = root / f"sealed-{len(list(root.glob('sealed-*.json')))}.json"

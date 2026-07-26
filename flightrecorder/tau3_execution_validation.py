@@ -10,6 +10,7 @@ manifest layout:
   "schema_version": "hfr.tau3_execution_bundle.v1",
   "code_revision": {"flight_recorder_git_commit": "...40 hex...", "tracked_worktree_clean": true},
   "protocol": {"path": "protocol.json", "sha256": "..."},
+  "evaluator_model_contract": {"path": "evaluator-model-contract.json", "sha256": "..."},
   "training": {
     "selected_candidate_id": "candidate-a",
     "selected_receipt": {"path": "training/candidate-a/training_receipt.json", "sha256": "..."},
@@ -78,6 +79,7 @@ VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 TAU3_MLX_TRAINING_RUN_SCHEMA_VERSION = "hfr.tau3_mlx_training_run.v1"
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
 TAU3_EVALUATION_SCHEMA_VERSION = "hfr.tau3_evaluation.v1"
+TAU3_EVALUATOR_MODEL_CONTRACT_SCHEMA_VERSION = "hfr.tau3_evaluator_model_contract.v1"
 DOMAINS = ("airline", "retail", "telecom")
 SEEDS = (101, 202, 303, 404)
 ARMS = ("adapter", "base", "comparator_1", "comparator_2")
@@ -224,6 +226,14 @@ def validate_tau3_benchmark_result_bundle(bundle: str | Path, *, strict: bool = 
     if training_result.get("passed") is not True:
         targets.append(_Target("training_result", str(root), errors=["training result validation failed; benchmark evidence cannot stand alone"]))
 
+    evaluator_contract = _load_json_ref_target(
+        root,
+        manifest.get("evaluator_model_contract"),
+        "evaluator_model_contract",
+    )
+    targets.append(evaluator_contract.target)
+    evaluator_binding = _validate_evaluator_model_contract(evaluator_contract)
+
     benchmark = manifest.get("benchmark") if isinstance(manifest.get("benchmark"), dict) else {}
     if not benchmark:
         targets.append(_missing_target(root, "benchmark", "manifest missing benchmark object"))
@@ -232,8 +242,22 @@ def validate_tau3_benchmark_result_bundle(bundle: str | Path, *, strict: bool = 
     selected_lock = _selected_lock(root, manifest)
     targets.append(selected_lock.target)
     lock_payload = selected_lock.payload if isinstance(selected_lock.payload, dict) else {}
-    dev_manifests = _load_arm_manifests(root, benchmark.get("development_arms"), "development_arm", targets)
-    sealed_manifests = _load_arm_manifests(root, benchmark.get("sealed_arms"), "sealed_arm", targets)
+    dev_manifests = _load_arm_manifests(
+        root,
+        benchmark.get("development_arms"),
+        "development_arm",
+        targets,
+        evaluator_contract=evaluator_contract,
+        evaluator_binding=evaluator_binding,
+    )
+    sealed_manifests = _load_arm_manifests(
+        root,
+        benchmark.get("sealed_arms"),
+        "sealed_arm",
+        targets,
+        evaluator_contract=evaluator_contract,
+        evaluator_binding=evaluator_binding,
+    )
     _validate_development_grid(manifest_target, dev_manifests, manifest, lock_payload)
     _validate_sealed_grid(manifest_target, sealed_manifests)
     _validate_common_protocol_and_lock(manifest_target, dev_manifests, sealed_manifests, manifest)
@@ -311,6 +335,97 @@ def _load_json_ref_target(root: Path, record: Any, target_type: str) -> _Loaded:
     if loaded.path is not None and not isinstance(loaded.payload, dict):
         loaded.target.errors.append("referenced file must be a JSON object")
     return loaded
+
+
+def _validate_evaluator_model_contract(loaded: _Loaded) -> dict[str, str]:
+    target = loaded.target
+    contract = loaded.payload if isinstance(loaded.payload, dict) else {}
+    _require(
+        target,
+        contract.get("schema_version")
+        == TAU3_EVALUATOR_MODEL_CONTRACT_SCHEMA_VERSION,
+        "evaluator model contract has an invalid schema_version",
+    )
+    for key, expected in (
+        ("roles_share_exact_model", True),
+        ("identical_for_all_arms", True),
+        ("local_only", True),
+        ("network", False),
+        ("no_comparator_specific_prompting", True),
+        ("excluded_from_gradient_data", True),
+    ):
+        _require(
+            target,
+            contract.get(key) is expected,
+            f"evaluator model contract must set {key}={str(expected).lower()}",
+        )
+    _require(
+        target,
+        sorted(str(value) for value in contract.get("applies_to_arms") or [])
+        == list(ARMS),
+        "evaluator model contract must apply to every benchmark arm",
+    )
+
+    roles = _dict(contract.get("roles"))
+    user = _dict(roles.get("user_simulator"))
+    reviewer = _dict(roles.get("reviewer"))
+    user_identity = _dict(user.get("model_identity"))
+    reviewer_identity = _dict(reviewer.get("model_identity"))
+    identity_sha256 = user.get("model_identity_sha256")
+    _require(
+        target,
+        bool(user_identity)
+        and user_identity == reviewer_identity
+        and identity_sha256 == reviewer.get("model_identity_sha256"),
+        "evaluator roles must share one exact model identity",
+    )
+    model_id = user_identity.get("model_id")
+    _require(
+        target,
+        isinstance(model_id, str) and bool(model_id),
+        "evaluator model identity must include model_id",
+    )
+    _require(
+        target,
+        isinstance(user_identity.get("revision"), str)
+        and bool(re.fullmatch(r"[0-9a-f]{40,64}", user_identity["revision"])),
+        "evaluator model identity must include an immutable revision",
+    )
+    for key in ("local_identity_sha256", "local_tree_sha256"):
+        _require(
+            target,
+            isinstance(user_identity.get(key), str)
+            and bool(SHA256_RE.fullmatch(user_identity[key])),
+            f"evaluator model identity must include valid {key}",
+        )
+    _require(
+        target,
+        isinstance(identity_sha256, str)
+        and bool(SHA256_RE.fullmatch(identity_sha256))
+        and identity_sha256 == _canonical_sha256(user_identity),
+        "evaluator model_identity_sha256 does not replay the canonical identity",
+    )
+    for role, label in (
+        (user, "user_simulator"),
+        (reviewer, "reviewer"),
+    ):
+        _require(
+            target,
+            role.get("role") == label
+            and role.get("local_only") is True
+            and role.get("network") is False
+            and role.get("temperature") == 0.0
+            and role.get("top_p") == 1.0,
+            f"evaluator {label} role is not frozen, local, and deterministic",
+        )
+    if not isinstance(model_id, str) or not isinstance(identity_sha256, str):
+        return {}
+    return {
+        "model_identity_sha256": identity_sha256,
+        "endpoint_model_sha256": hashlib.sha256(
+            model_id.encode("utf-8")
+        ).hexdigest(),
+    }
 
 
 def _load_local_ref_target(root: Path, base: Path, record: Any, target_type: str) -> _Loaded:
@@ -642,7 +757,15 @@ def _validate_candidate_selection(
         _require(target, candidate_identity.get("endpoint_model_sha256") == lock.get("endpoint_model_sha256"), "selection endpoint model binding does not match lock")
 
 
-def _load_arm_manifests(root: Path, refs: Any, target_type: str, targets: list[_Target]) -> list[_Loaded]:
+def _load_arm_manifests(
+    root: Path,
+    refs: Any,
+    target_type: str,
+    targets: list[_Target],
+    *,
+    evaluator_contract: _Loaded,
+    evaluator_binding: dict[str, str],
+) -> list[_Loaded]:
     loaded: list[_Loaded] = []
     for record in _list_of_refs(refs):
         item = _load_ref_target(root, record, target_type)
@@ -653,12 +776,25 @@ def _load_arm_manifests(root: Path, refs: Any, target_type: str, targets: list[_
             _require(item.target, item.payload.get("phase") == "final", "arm manifest is not final")
             _require(item.target, item.payload.get("run_count") == 12, "arm manifest must contain exactly 12 domain/seed runs")
             _require(item.target, item.payload.get("success_count") == 12 and item.payload.get("failure_count") == 0, "all 12 arm runs must complete successfully")
-            targets.extend(_validate_benchmark_arm_refs(root, item))
+            targets.extend(
+                _validate_benchmark_arm_refs(
+                    root,
+                    item,
+                    evaluator_contract=evaluator_contract,
+                    evaluator_binding=evaluator_binding,
+                )
+            )
             loaded.append(item)
     return loaded
 
 
-def _validate_benchmark_arm_refs(root: Path, loaded: _Loaded) -> list[_Target]:
+def _validate_benchmark_arm_refs(
+    root: Path,
+    loaded: _Loaded,
+    *,
+    evaluator_contract: _Loaded,
+    evaluator_binding: dict[str, str],
+) -> list[_Target]:
     payload = loaded.payload if isinstance(loaded.payload, dict) else {}
     base = loaded.path.parent if loaded.path is not None else root
     targets: list[_Target] = []
@@ -667,8 +803,66 @@ def _validate_benchmark_arm_refs(root: Path, loaded: _Loaded) -> list[_Target]:
     if isinstance(prelaunch.payload, dict):
         _check_schema(prelaunch.target, prelaunch.payload, "tau3_benchmark_run")
         _require(prelaunch.target, prelaunch.payload.get("phase") == "prelaunch", "benchmark prelaunch phase mismatch")
-        for key in ("protocol_sha256", "mode", "arm_id", "config", "candidate_lock", "candidate_identity"):
+        for key in (
+            "protocol_sha256",
+            "evaluator_model_contract",
+            "mode",
+            "arm_id",
+            "agent",
+            "user_simulator",
+            "reviewer",
+            "config",
+            "candidate_lock",
+            "candidate_identity",
+        ):
             _require(prelaunch.target, prelaunch.payload.get(key) == payload.get(key), f"benchmark prelaunch {key} does not match final manifest")
+    evaluator = _receipt_nested_file(
+        root,
+        base,
+        payload,
+        "evaluator_model_contract",
+        "benchmark_evaluator_model_contract",
+    )
+    targets.append(evaluator.target)
+    binding = _dict(payload.get("evaluator_model_contract"))
+    _require(
+        evaluator.target,
+        evaluator_contract.sha256 is not None
+        and binding.get("sha256") == evaluator_contract.sha256,
+        "benchmark arm evaluator contract does not match the execution bundle contract",
+    )
+    _require(
+        evaluator.target,
+        evaluator.sha256 is not None and evaluator.sha256 == evaluator_contract.sha256,
+        "benchmark arm staged evaluator contract does not replay the execution bundle contract",
+    )
+    for key in (
+        "model_identity_sha256",
+        "endpoint_model_sha256",
+    ):
+        _require(
+            evaluator.target,
+            bool(evaluator_binding)
+            and binding.get(key) == evaluator_binding.get(key),
+            f"benchmark arm evaluator {key} does not match the frozen contract",
+        )
+    _require(
+        evaluator.target,
+        binding.get("roles_share_exact_model") is True,
+        "benchmark arm evaluator contract must bind roles_share_exact_model=true",
+    )
+    _require(
+        evaluator.target,
+        binding.get("identical_for_all_arms") is True,
+        "benchmark arm evaluator contract must bind identical_for_all_arms=true",
+    )
+    for endpoint_key in ("user_simulator", "reviewer"):
+        _require(
+            evaluator.target,
+            _dict(payload.get(endpoint_key)).get("model_sha256")
+            == evaluator_binding.get("endpoint_model_sha256"),
+            f"benchmark {endpoint_key} endpoint model does not match the frozen evaluator model",
+        )
     if payload.get("mode") == "development":
         source = _receipt_nested_file(root, base, payload, "source", "development_source")
         targets.append(source.target)
@@ -781,6 +975,15 @@ def _validate_common_protocol_and_lock(target: _Target, dev: list[_Loaded], seal
     payloads = [item.payload for item in [*dev, *sealed] if isinstance(item.payload, dict)]
     protocols = {item.get("protocol_sha256") for item in payloads}
     _require(target, len(protocols) == 1 and None not in protocols, "all benchmark arms must bind one identical protocol hash")
+    evaluator_contracts = {
+        _dict(item.get("evaluator_model_contract")).get("sha256")
+        for item in payloads
+    }
+    _require(
+        target,
+        len(evaluator_contracts) == 1 and None not in evaluator_contracts,
+        "all benchmark arms must bind one identical evaluator model contract",
+    )
     sealed_locks = {_dict(item.get("candidate_lock")).get("sha256") for item in payloads if item.get("mode") == "sealed"}
     _require(target, len(sealed_locks) == 1 and None not in sealed_locks, "all sealed arms must bind one identical candidate lock")
     lock_refs = _list_of_refs(_dict(manifest.get("training")).get("candidate_locks"))
@@ -844,6 +1047,12 @@ def _validate_run_receipts(root: Path, loaded: _Loaded) -> list[_Target]:
         _require(receipt_target, receipt.get("mode") == payload.get("mode"), "run receipt mode mismatch")
         _require(receipt_target, receipt.get("arm_id") == payload.get("arm_id"), "run receipt arm mismatch")
         _require(receipt_target, receipt.get("protocol_sha256") == payload.get("protocol_sha256"), "run receipt protocol mismatch")
+        _require(
+            receipt_target,
+            receipt.get("evaluator_model_contract_sha256")
+            == _dict(payload.get("evaluator_model_contract")).get("sha256"),
+            "run receipt evaluator model contract mismatch",
+        )
         _require(receipt_target, receipt.get("result_sha256") is not None, "run receipt missing raw result hash")
         _require(receipt_target, receipt.get("result_path") == record.get("result_path"), "manifest copied result_path does not match run receipt")
         _validate_raw_result(root, path.parent, receipt_target, receipt)

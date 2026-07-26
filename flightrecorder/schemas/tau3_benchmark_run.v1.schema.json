@@ -20,6 +20,12 @@
       "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
+    "evaluator_model_contract": {
+      "anyOf": [
+        {"$ref": "#/$defs/evaluator_model_contract_ref"},
+        {"type": "null"}
+      ]
+    },
     "mode": {
       "enum": ["development", "sealed"]
     },
@@ -240,6 +246,46 @@
         "top_p": {"const": 1.0}
       },
       "required": ["context_window", "endpoint_hash", "loopback", "max_tokens", "model_sha256", "temperature", "top_p"],
+      "type": "object"
+    },
+    "evaluator_model_contract_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_model_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "identical_for_all_arms": {
+          "const": true
+        },
+        "model_identity_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/output_relative_path"
+        },
+        "roles_share_exact_model": {
+          "const": true
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "model_identity_sha256",
+        "endpoint_model_sha256",
+        "roles_share_exact_model",
+        "identical_for_all_arms"
+      ],
       "type": "object"
     },
     "output_file_ref": {

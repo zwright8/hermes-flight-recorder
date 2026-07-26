@@ -49,6 +49,7 @@ class Tau3BenchmarkConfig:
     mode: str
     arm_id: str
     protocol_path: Path
+    evaluator_model_contract: Path | None = None
     seeds: tuple[int, ...] = DEFAULT_SEEDS
     timeout_seconds: int = 600
     max_steps: int = 30
@@ -104,6 +105,17 @@ def run_tau3_benchmark_arm(
     _validate_endpoint(reviewer, "reviewer")
     protocol = _load_protocol(config.protocol_path)
     protocol_hash = _sha256(config.protocol_path)
+    evaluator_contract = (
+        _load_evaluator_model_contract(config.evaluator_model_contract)
+        if config.evaluator_model_contract is not None
+        else None
+    )
+    if evaluator_contract is not None:
+        _validate_evaluator_endpoints(
+            evaluator_contract,
+            user=user,
+            reviewer=reviewer,
+        )
     _validate_protocol_binding(
         protocol,
         protocol_hash=protocol_hash,
@@ -121,6 +133,16 @@ def run_tau3_benchmark_arm(
         else None
     )
     protocol_ref = _stage_input_file(config.protocol_path, out, "inputs/protocol.json", "protocol")
+    evaluator_contract_ref = (
+        _stage_input_file(
+            config.evaluator_model_contract,
+            out,
+            "inputs/evaluator-model-contract.json",
+            "evaluator model contract",
+        )
+        if config.evaluator_model_contract is not None
+        else None
+    )
     source_ref = (
         _stage_input_file(config.source_split, out, "inputs/development_source.json", "development source")
         if config.mode == "development" and config.source_split is not None
@@ -167,6 +189,10 @@ def run_tau3_benchmark_arm(
     expected_binding = {
         "protocol": protocol_ref,
         "protocol_sha256": protocol_hash,
+        "evaluator_model_contract": _evaluator_contract_binding(
+            evaluator_contract_ref,
+            evaluator_contract,
+        ),
         "tau_revision": expected_tau_revision,
         "mode": config.mode,
         "arm_id": config.arm_id,
@@ -282,6 +308,11 @@ def run_tau3_benchmark_arm(
                 "phase": "domain_seed",
                 "created_at": created_at or _now_utc(),
                 "protocol_sha256": protocol_hash,
+                "evaluator_model_contract_sha256": (
+                    evaluator_contract_ref["sha256"]
+                    if evaluator_contract_ref is not None
+                    else None
+                ),
                 "arm_identity": arm_identity,
                 "mode": config.mode,
                 "arm_id": config.arm_id,
@@ -348,6 +379,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--arm-id", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--protocol", dest="protocol_path", type=Path, required=True)
+    parser.add_argument(
+        "--evaluator-model-contract",
+        type=Path,
+        required=True,
+    )
     parser.add_argument("--tau-repo", type=Path, required=True)
     parser.add_argument("--tau-venv-bin", type=Path, required=True)
     parser.add_argument("--expected-tau-revision", required=True)
@@ -390,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 arm_id=args.arm_id,
                 protocol_path=args.protocol_path,
+                evaluator_model_contract=args.evaluator_model_contract,
                 source_split=args.source_split,
                 sealed_task_count_manifest=args.sealed_task_count_manifest,
                 sealed_authorization=args.sealed_authorization,
@@ -565,6 +602,143 @@ def _load_protocol(path: Path) -> dict[str, Any]:
     if payload.get("schema_version") != TAU3_PROTOCOL_CONFIG_SCHEMA_VERSION:
         raise Tau3BenchmarkRunError("protocol is not a tau3_protocol_config manifest")
     return payload
+
+
+def _load_evaluator_model_contract(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise Tau3BenchmarkRunError(
+            f"evaluator model contract does not exist: {path}"
+        )
+    payload = _read_json(path)
+    if payload.get("schema_version") != (
+        "hfr.tau3_evaluator_model_contract.v1"
+    ):
+        raise Tau3BenchmarkRunError(
+            "evaluator model contract has an invalid schema_version"
+        )
+    if (
+        payload.get("roles_share_exact_model") is not True
+        or payload.get("identical_for_all_arms") is not True
+        or payload.get("local_only") is not True
+        or payload.get("network") is not False
+        or payload.get("no_comparator_specific_prompting") is not True
+        or payload.get("excluded_from_gradient_data") is not True
+    ):
+        raise Tau3BenchmarkRunError(
+            "evaluator model contract governance is incomplete"
+        )
+    if sorted(payload.get("applies_to_arms") or []) != sorted(
+        REQUIRED_ARMS
+    ):
+        raise Tau3BenchmarkRunError(
+            "evaluator model contract must apply to every benchmark arm"
+        )
+    roles = _dict(payload.get("roles"))
+    user = _dict(roles.get("user_simulator"))
+    reviewer = _dict(roles.get("reviewer"))
+    if (
+        user.get("model_identity") != reviewer.get("model_identity")
+        or user.get("model_identity_sha256")
+        != reviewer.get("model_identity_sha256")
+    ):
+        raise Tau3BenchmarkRunError(
+            "evaluator roles must share one exact model identity"
+        )
+    identity = _dict(user.get("model_identity"))
+    model_id = identity.get("model_id")
+    if (
+        not isinstance(model_id, str)
+        or not model_id
+        or not re.fullmatch(
+            r"[0-9a-f]{40,64}",
+            str(identity.get("revision") or ""),
+        )
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(identity.get("local_identity_sha256") or ""),
+        )
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(identity.get("local_tree_sha256") or ""),
+        )
+        or user.get("model_identity_sha256")
+        != _canonical_sha256(identity)
+    ):
+        raise Tau3BenchmarkRunError(
+            "evaluator model contract lacks a content-addressed model"
+        )
+    for role, label in (
+        (user, "user_simulator"),
+        (reviewer, "reviewer"),
+    ):
+        if (
+            role.get("role") != label
+            or role.get("local_only") is not True
+            or role.get("network") is not False
+            or role.get("temperature") != 0.0
+            or role.get("top_p") != 1.0
+        ):
+            raise Tau3BenchmarkRunError(
+                f"evaluator {label} contract is not frozen local deterministic"
+            )
+    return payload
+
+
+def _validate_evaluator_endpoints(
+    contract: dict[str, Any],
+    *,
+    user: Tau3BenchmarkEndpoint,
+    reviewer: Tau3BenchmarkEndpoint,
+) -> None:
+    model_id = str(
+        _nested(
+            contract,
+            "roles",
+            "user_simulator",
+            "model_identity",
+            "model_id",
+        )
+        or ""
+    )
+    if user.model != model_id or reviewer.model != model_id:
+        raise Tau3BenchmarkRunError(
+            "user simulator and reviewer endpoints must use the exact "
+            "frozen evaluator model_id"
+        )
+    if user.model != reviewer.model:
+        raise Tau3BenchmarkRunError(
+            "user simulator and reviewer endpoint models must be identical"
+        )
+
+
+def _evaluator_contract_binding(
+    ref: dict[str, Any] | None,
+    contract: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if ref is None or contract is None:
+        return None
+    identity_sha256 = _nested(
+        contract,
+        "roles",
+        "user_simulator",
+        "model_identity_sha256",
+    )
+    model_id = _nested(
+        contract,
+        "roles",
+        "user_simulator",
+        "model_identity",
+        "model_id",
+    )
+    return {
+        **ref,
+        "model_identity_sha256": identity_sha256,
+        "endpoint_model_sha256": hashlib.sha256(
+            str(model_id).encode("utf-8")
+        ).hexdigest(),
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+    }
 
 
 def _validate_protocol_binding(
@@ -886,6 +1060,15 @@ def _canonical_sha256(value: Any) -> str:
 
 def _dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _nested(value: Any, *keys: str) -> Any:
+    current = value
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
 
 
 def _candidate_lock_record(config: Tau3BenchmarkConfig, staged_ref: dict[str, Any] | None) -> dict[str, Any]:

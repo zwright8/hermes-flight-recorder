@@ -330,6 +330,14 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   --model-identity local/tau3/identities/base.json
 ```
 
+Development and sealed benchmark arms also require
+`--evaluator-model-contract`. The runner rejects user-simulator or reviewer
+endpoints whose model string differs from that frozen contract, stages the
+contract into every arm, and binds its digest into prelaunch, final, and
+domain/seed receipts. Strict benchmark-result validation independently replays
+the canonical evaluator identity and requires the same binding across every
+arm.
+
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and
 reviewed trajectories. `goal3-handoff` then packages the common path from those

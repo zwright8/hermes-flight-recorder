@@ -87,6 +87,29 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
 
             self.assertTrue(result["passed"], result)
 
+    def test_benchmark_bundle_rejects_evaluator_model_contract_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            manifest_path = root / "manifest.json"
+            manifest = read_json(manifest_path)
+            arm_ref = manifest["benchmark"]["sealed_arms"][0]
+            arm_path = root / arm_ref["path"]
+            arm = read_json(arm_path)
+            arm["evaluator_model_contract"]["endpoint_model_sha256"] = "0" * 64
+            write_json(arm_path, arm)
+            arm_ref["sha256"] = sha256_file(arm_path)
+            arm_ref["size"] = arm_path.stat().st_size
+            write_json(manifest_path, manifest)
+
+            result = validate_tau3_benchmark_result_bundle(root, strict=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "evaluator endpoint_model_sha256 does not match the frozen contract",
+                json.dumps(result),
+            )
+
     def test_training_bundle_fails_on_tampered_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -323,6 +346,11 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
 def build_execution_bundle(root: Path) -> None:
     sealed_source_ref = write_hashed_json(root, "sealed-source-manifest.json", sealed_source_manifest())
     protocol_ref = write_hashed_json(root, "protocol.json", protocol_config(sealed_source_ref["sha256"]))
+    evaluator_ref = write_hashed_json(
+        root,
+        "evaluator-model-contract.json",
+        evaluator_model_contract(),
+    )
     receipt_ref = build_training_receipts(root, protocol_ref)
     dev_refs = [
         build_arm(root, "development", "base", protocol_ref["sha256"], None),
@@ -337,6 +365,7 @@ def build_execution_bundle(root: Path) -> None:
         "schema_version": "hfr.tau3_execution_bundle.v1",
         "code_revision": {"flight_recorder_git_commit": "a" * 40, "tracked_worktree_clean": True},
         "protocol": protocol_ref,
+        "evaluator_model_contract": evaluator_ref,
         "training": {
             "selected_candidate_id": "candidate-a",
             "selected_receipt": receipt_ref,
@@ -700,6 +729,21 @@ def build_arm(
     arm_dir = root / "benchmark" / mode / arm_id
     arm_dir.mkdir(parents=True)
     protocol_record = write_hashed_json(arm_dir, "protocol.json", read_json(root / "protocol.json"))
+    evaluator_contract = read_json(root / "evaluator-model-contract.json")
+    evaluator_record = write_hashed_json(
+        arm_dir,
+        "evaluator-model-contract.json",
+        evaluator_contract,
+    )
+    evaluator_identity = evaluator_contract["roles"]["user_simulator"]
+    evaluator_model_id = evaluator_identity["model_identity"]["model_id"]
+    evaluator_binding = {
+        **evaluator_record,
+        "model_identity_sha256": evaluator_identity["model_identity_sha256"],
+        "endpoint_model_sha256": sha256_text(evaluator_model_id),
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+    }
     source_ref = write_hashed_json(arm_dir, "source.json", {"split": "development", "rows": []}) if mode == "development" else None
     identity_ref = write_hashed_json(
         arm_dir,
@@ -747,6 +791,7 @@ def build_arm(
                 "phase": "domain_seed",
                 "created_at": "2026-07-23T00:30:00Z",
                 "protocol_sha256": protocol_sha256,
+                "evaluator_model_contract_sha256": evaluator_record["sha256"],
                 "arm_identity": arm_identity,
                 "mode": mode,
                 "arm_id": arm_id,
@@ -788,12 +833,13 @@ def build_arm(
         "tau_revision": "a" * 40,
         "protocol": protocol_record,
         "protocol_sha256": protocol_sha256,
+        "evaluator_model_contract": evaluator_binding,
         "mode": mode,
         "arm_id": arm_id,
         "arm_identity": arm_identity,
         "agent": endpoint(),
-        "user_simulator": endpoint(),
-        "reviewer": endpoint(),
+        "user_simulator": evaluator_endpoint(evaluator_model_id),
+        "reviewer": evaluator_endpoint(evaluator_model_id),
         "config": config(),
         "source": source_ref if mode == "development" else None,
         "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
@@ -815,12 +861,13 @@ def build_arm(
         "tau_revision": "a" * 40,
         "protocol": protocol_record,
         "protocol_sha256": protocol_sha256,
+        "evaluator_model_contract": evaluator_binding,
         "mode": mode,
         "arm_id": arm_id,
         "arm_identity": arm_identity,
         "agent": endpoint(),
-        "user_simulator": endpoint(),
-        "reviewer": endpoint(),
+        "user_simulator": evaluator_endpoint(evaluator_model_id),
+        "reviewer": evaluator_endpoint(evaluator_model_id),
         "config": config(),
         "source": source_ref if mode == "development" else None,
         "sealed_task_count_manifest": sealed_task_count_ref if mode == "sealed" else None,
@@ -850,6 +897,45 @@ def endpoint() -> dict[str, Any]:
         "model_sha256": "8" * 64,
         "temperature": 0.0,
         "top_p": 1.0,
+    }
+
+
+def evaluator_endpoint(model_id: str) -> dict[str, Any]:
+    return {
+        **endpoint(),
+        "model_sha256": sha256_text(model_id),
+    }
+
+
+def evaluator_model_contract() -> dict[str, Any]:
+    identity = {
+        "model_id": "local/frozen-teacher",
+        "revision": "9" * 40,
+        "local_identity_sha256": "a" * 64,
+        "local_tree_sha256": "b" * 64,
+    }
+    identity_sha256 = tree_value_sha256(identity)
+    return {
+        "schema_version": "hfr.tau3_evaluator_model_contract.v1",
+        "applies_to_arms": list(ARMS),
+        "roles_share_exact_model": True,
+        "identical_for_all_arms": True,
+        "local_only": True,
+        "network": False,
+        "no_comparator_specific_prompting": True,
+        "excluded_from_gradient_data": True,
+        "roles": {
+            role: {
+                "role": role,
+                "model_identity": identity,
+                "model_identity_sha256": identity_sha256,
+                "local_only": True,
+                "network": False,
+                "temperature": 0.0,
+                "top_p": 1.0,
+            }
+            for role in ("user_simulator", "reviewer")
+        },
     }
 
 
@@ -1092,6 +1178,12 @@ def tree_value_sha256(value: Any) -> str:
 
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def sha256_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 DOMAINS = ("airline", "retail", "telecom")
