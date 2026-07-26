@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -48,6 +48,26 @@ def _model_sha256(model: str) -> str:
     return hashlib.sha256(model.encode("utf-8")).hexdigest()
 
 
+def _normalize_request_models(request_model: str, request_model_aliases: Iterable[str] | None) -> tuple[str, ...]:
+    raw_models = [request_model]
+    if request_model_aliases is not None:
+        if isinstance(request_model_aliases, (str, bytes)):
+            raise Tau3NLJudgeAliasProxyError("request model aliases must be an iterable of model names")
+        raw_models.extend(request_model_aliases)
+
+    normalized_models: list[str] = []
+    for model in raw_models:
+        if not isinstance(model, str):
+            raise Tau3NLJudgeAliasProxyError("request models must be strings")
+        normalized = model.strip()
+        if not normalized:
+            raise Tau3NLJudgeAliasProxyError("request models must be non-empty")
+        normalized_models.append(normalized)
+    if len(set(normalized_models)) != len(normalized_models):
+        raise Tau3NLJudgeAliasProxyError("request models must be unique after normalization")
+    return tuple(sorted(normalized_models))
+
+
 def build_server(
     *,
     upstream_base_url: str,
@@ -55,6 +75,7 @@ def build_server(
     port: int,
     audit_log: str | Path,
     request_model: str = DEFAULT_REQUEST_MODEL,
+    request_model_aliases: Iterable[str] | None = None,
     served_model: str,
 ) -> ThreadingHTTPServer:
     """Construct a loopback-only OpenAI-compatible model-alias proxy."""
@@ -66,10 +87,11 @@ def build_server(
         raise Tau3NLJudgeAliasProxyError("upstream must be an HTTP loopback endpoint")
     if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
         raise Tau3NLJudgeAliasProxyError("upstream endpoint must not contain credentials, query, or fragment")
-    if not request_model:
-        raise Tau3NLJudgeAliasProxyError("request model must be non-empty")
     if not served_model:
         raise Tau3NLJudgeAliasProxyError("served model must be non-empty")
+    allowed_request_models = _normalize_request_models(request_model, request_model_aliases)
+    allowed_request_model_set = frozenset(allowed_request_models)
+    allowed_request_models_sha256 = hashlib.sha256(_canonical_bytes(allowed_request_models)).hexdigest()
 
     upstream_origin = f"{parsed.scheme}://{parsed.netloc}"
     upstream_prefix = parsed.path.rstrip("/")
@@ -100,10 +122,11 @@ def build_server(
                         "object": "list",
                         "data": [
                             {
-                                "id": request_model,
+                                "id": model,
                                 "object": "model",
                                 "created": int(time.time()),
                             }
+                            for model in allowed_request_models
                         ],
                     }
                 )
@@ -129,7 +152,8 @@ def build_server(
             if not isinstance(payload, dict):
                 self._json_error(400, "chat request body must be a JSON object")
                 return
-            if payload.get("model") != request_model:
+            actual_request_model = payload.get("model")
+            if not isinstance(actual_request_model, str) or actual_request_model not in allowed_request_model_set:
                 self._json_error(400, "unexpected judge request model")
                 return
             if payload.get("stream") is True:
@@ -149,8 +173,10 @@ def build_server(
                     "rewritten_request_sha256": hashlib.sha256(rewritten_body).hexdigest(),
                     "response_sha256": hashlib.sha256(response_body).hexdigest(),
                     "status": status,
-                    "request_model_sha256": _model_sha256(request_model),
+                    "request_model_sha256": _model_sha256(actual_request_model),
                     "served_model_sha256": _model_sha256(served_model),
+                    "allowed_request_models_sha256": allowed_request_models_sha256,
+                    "allowed_request_model_count": len(allowed_request_models),
                     "payload_recorded": False,
                 },
                 audit_lock,
@@ -203,6 +229,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=18085)
     parser.add_argument("--audit-log", type=Path, required=True)
     parser.add_argument("--request-model", default=DEFAULT_REQUEST_MODEL)
+    parser.add_argument("--request-model-alias", action="append", default=[], dest="request_model_aliases")
     parser.add_argument("--served-model", required=True)
     return parser
 
@@ -216,6 +243,7 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             audit_log=args.audit_log,
             request_model=args.request_model,
+            request_model_aliases=args.request_model_aliases,
             served_model=args.served_model,
         )
     except (OSError, Tau3NLJudgeAliasProxyError, ValueError) as exc:
