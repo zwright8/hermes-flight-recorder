@@ -27,6 +27,7 @@ from .tau3_behavior_probes import validate_tau3_behavior_probes
 from .tau3_competitive_dataset import validate_tau3_competitive_dataset_bundle
 from .tau3_evaluation import validate_tau3_evaluation_report
 from .tau3_exposure import Tau3ExposureError, validate_tau3_exposure_ledger
+from .tau3_internal_validation import validate_tau3_internal_validation
 from .tau3_objective_validity import validate_tau3_objective_validity_report
 from .tau3_prefix_equivalence import validate_tau3_prefix_equivalence
 from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
@@ -951,6 +952,14 @@ def _validate_development_qualification(
     adapter_sha256: Any,
 ) -> bool:
     before = len(target.errors)
+    _validate_candidate_internal_validation(
+        root,
+        target,
+        candidate,
+        label,
+        receipt_ref,
+        adapter_sha256,
+    )
     scorecard = _load_json_artifact_ref(root, target, candidate.get("development_scorecard"), f"qualified_candidates.{label}.development_scorecard")
     probes = _load_json_artifact_ref(root, target, candidate.get("behavior_probes"), f"qualified_candidates.{label}.behavior_probes")
     if isinstance(scorecard.payload, dict):
@@ -971,6 +980,103 @@ def _validate_development_qualification(
         _require_probe_binding(target, probes.payload, "grid_sha256", _nested(scorecard.payload, "bindings", "grid_sha256") if isinstance(scorecard.payload, dict) else None, f"{label} behavior probes")
         _validate_behavior_probe_replay(probes.path.parent if probes.path is not None else root, target, probes.payload, label)
     return len(target.errors) == before
+
+
+def _validate_candidate_internal_validation(
+    root: Path,
+    target: _Target,
+    candidate: dict[str, Any],
+    label: str,
+    receipt_ref: _Loaded,
+    adapter_sha256: Any,
+) -> None:
+    evidence = _dict(candidate.get("internal_validation"))
+    artifact = _load_json_artifact_ref(
+        root,
+        target,
+        evidence.get("artifact"),
+        f"qualified_candidates.{label}.internal_validation.artifact",
+    )
+    dataset = _load_ref_path(
+        root,
+        target,
+        evidence.get("dataset"),
+        f"qualified_candidates.{label}.internal_validation.dataset",
+    )
+    protocol = _load_ref_path(
+        root,
+        target,
+        evidence.get("protocol"),
+        f"qualified_candidates.{label}.internal_validation.protocol",
+    )
+    model_identity = _load_ref_path(
+        root,
+        target,
+        evidence.get("model_identity"),
+        f"qualified_candidates.{label}.internal_validation.model_identity",
+    )
+    if (
+        artifact.path is None
+        or not isinstance(artifact.payload, dict)
+        or dataset is None
+        or protocol is None
+        or model_identity is None
+        or receipt_ref.path is None
+    ):
+        return
+    _check_registered_schema(
+        target,
+        artifact.payload,
+        "tau3_internal_validation",
+        f"{label} internal validation",
+    )
+    result = validate_tau3_internal_validation(
+        artifact.path,
+        dataset_path=dataset,
+        training_receipt_path=receipt_ref.path,
+        protocol_path=protocol,
+        model_identity_path=model_identity,
+    )
+    _require(
+        target,
+        result.get("passed") is True,
+        f"{label} internal validation must independently replay: "
+        + ", ".join(result.get("errors") or []),
+    )
+    bindings = _dict(artifact.payload.get("bindings"))
+    _require(
+        target,
+        bindings.get("training_receipt_sha256") == receipt_ref.sha256,
+        f"{label} internal validation must bind training receipt sha256",
+    )
+    _require(
+        target,
+        bindings.get("adapter_tree_sha256") == adapter_sha256,
+        f"{label} internal validation must bind adapter tree sha256",
+    )
+    coverage = _dict(artifact.payload.get("coverage"))
+    _require(
+        target,
+        coverage.get("every_row_evaluated") is True
+        and coverage.get("evaluated_row_count") == coverage.get("row_count"),
+        f"{label} internal validation must evaluate every row",
+    )
+    _require(
+        target,
+        coverage.get("required_domains_exact") is True
+        and coverage.get("required_behaviors_exact") is True,
+        f"{label} internal validation must cover every required domain and behavior",
+    )
+    _require(
+        target,
+        _nested(
+            artifact.payload,
+            "aggregate",
+            "numerical_failure_count",
+        )
+        == 0,
+        f"{label} internal validation must have zero numerical failures",
+    )
 
 
 def _require_probe_binding(target: _Target, probes: dict[str, Any], field: str, expected: Any, label: str) -> None:

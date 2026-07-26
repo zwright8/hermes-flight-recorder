@@ -130,6 +130,14 @@
       "name": "tau3_prefix_equivalence"
     },
     {
+      "artifact": "tau3_internal_validation",
+      "artifact_schema_version": "hfr.tau3_internal_validation.v1",
+      "description": "Coverage-complete target-only loss replay over the exact Tau-3 internal-validation export and one immutable trained adapter.",
+      "filename": "tau3_internal_validation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_internal_validation.v1.schema.json",
+      "name": "tau3_internal_validation"
+    },
+    {
       "artifact": "tau3_evaluation",
       "artifact_schema_version": "hfr.tau3_evaluation.v1",
       "description": "Public-safe paired Tau-3 evaluation, statistics, safety, and promotion evidence.",

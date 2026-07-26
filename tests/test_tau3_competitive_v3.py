@@ -24,6 +24,10 @@ from flightrecorder.tau3_competitive_v3 import (
     validate_tau3_competitive_v3_bundle,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger, validate_tau3_exposure_ledger
+from flightrecorder.tau3_internal_validation import (
+    _expected_run_binding,
+    build_tau3_internal_validation,
+)
 from flightrecorder.tau3_objective_validity import build_tau3_objective_validity_report, validate_tau3_objective_validity_report
 from flightrecorder.tau3_promotion_preflight import build_tau3_post_publication_record
 from flightrecorder.tau3_behavior_probes import REQUIRED_FAMILIES
@@ -497,6 +501,34 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
             self.assertIn("development_scorecard", json.dumps(result))
             self.assertIn("at least two candidates must pass development qualification gates", json.dumps(result))
 
+    def test_missing_internal_validation_does_not_qualify_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            for candidate in training["qualified_candidates"]:
+                candidate.pop("internal_validation")
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn("internal_validation.artifact", json.dumps(result))
+            self.assertIn(
+                "at least two candidates must pass development qualification gates",
+                json.dumps(result),
+            )
+
     def test_below_threshold_development_scorecard_does_not_qualify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -902,8 +934,39 @@ def build_training_evidence(root: Path) -> dict[str, str]:
     exposure_ledger = root / "exposure" / "training_exposure_ledger.jsonl"
     exposure_validation = validate_tau3_exposure_ledger(exposure_dataset, exposure_receipt, exposure_ledger)
     write_json(root / "exposure-validation.json", exposure_validation)
-    candidate_a = write_training_receipt(root, "candidate-a", "a" * 64, exposure_receipt, exposure_ledger)
-    candidate_b = write_training_receipt(root, "candidate-b", "b" * 64, exposure_receipt, exposure_ledger)
+    internal_sources = write_internal_validation_sources(root)
+    candidate_a = write_training_receipt(
+        root,
+        "candidate-a",
+        "a" * 64,
+        exposure_receipt,
+        exposure_ledger,
+        protocol_sha256=sha256_file(internal_sources["protocol"]),
+        model_identity_sha256=sha256_file(internal_sources["identity"]),
+        dataset_manifest_sha256=sha256_file(internal_sources["manifest"]),
+    )
+    candidate_b = write_training_receipt(
+        root,
+        "candidate-b",
+        "b" * 64,
+        exposure_receipt,
+        exposure_ledger,
+        protocol_sha256=sha256_file(internal_sources["protocol"]),
+        model_identity_sha256=sha256_file(internal_sources["identity"]),
+        dataset_manifest_sha256=sha256_file(internal_sources["manifest"]),
+    )
+    candidate_a_internal = write_candidate_internal_validation(
+        root,
+        "candidate-a",
+        candidate_a,
+        internal_sources,
+    )
+    candidate_b_internal = write_candidate_internal_validation(
+        root,
+        "candidate-b",
+        candidate_b,
+        internal_sources,
+    )
     candidate_a_scorecard, candidate_a_probes = write_development_qualification(root, "candidate-a", candidate_a)
     candidate_b_scorecard, candidate_b_probes = write_development_qualification(root, "candidate-b", candidate_b)
     return write_artifact(
@@ -922,12 +985,14 @@ def build_training_evidence(root: Path) -> dict[str, str]:
                 {
                     "candidate_id": "candidate-a",
                     "training_receipt": ref_for(root, candidate_a),
+                    "internal_validation": candidate_a_internal,
                     "development_scorecard": ref_for(root, candidate_a_scorecard),
                     "behavior_probes": ref_for(root, candidate_a_probes),
                 },
                 {
                     "candidate_id": "candidate-b",
                     "training_receipt": ref_for(root, candidate_b),
+                    "internal_validation": candidate_b_internal,
                     "development_scorecard": ref_for(root, candidate_b_scorecard),
                     "behavior_probes": ref_for(root, candidate_b_probes),
                 },
@@ -936,7 +1001,17 @@ def build_training_evidence(root: Path) -> dict[str, str]:
     )
 
 
-def write_training_receipt(root: Path, candidate_id: str, recipe_sha256: str, exposure_receipt: Path, exposure_ledger: Path) -> Path:
+def write_training_receipt(
+    root: Path,
+    candidate_id: str,
+    recipe_sha256: str,
+    exposure_receipt: Path,
+    exposure_ledger: Path,
+    *,
+    protocol_sha256: str = "c" * 64,
+    model_identity_sha256: str | None = None,
+    dataset_manifest_sha256: str | None = None,
+) -> Path:
     out = root / "training" / candidate_id
     adapter = out / "adapter"
     adapter.mkdir(parents=True)
@@ -959,11 +1034,16 @@ def write_training_receipt(root: Path, candidate_id: str, recipe_sha256: str, ex
         "adapter_weight_file_count": 1,
         "training_binding": {
             "protocol": {
-                "sha256": "c" * 64,
+                "sha256": protocol_sha256,
                 "protocol_signature": "d" * 64,
                 "protocol_signature_provenance": {"source": "protocol_file_sha256_content_seal", "algorithm": "sha256"},
             },
-            "recipe": {"recipe_sha256": recipe_sha256, "full_gradient_objective": True, "exposure_ledger_training": True},
+            "recipe": {
+                "recipe_sha256": recipe_sha256,
+                "full_gradient_objective": True,
+                "exposure_ledger_training": True,
+                "max_seq_length": 64,
+            },
             "exposure": {
                 "receipt": {"sha256": sha256_file(exposure_receipt)},
                 "ledger": {"sha256": sha256_file(exposure_ledger)},
@@ -971,9 +1051,156 @@ def write_training_receipt(root: Path, candidate_id: str, recipe_sha256: str, ex
             },
         },
     }
+    if model_identity_sha256 is not None:
+        receipt["training_binding"]["model"] = {
+            "identity_sha256": model_identity_sha256,
+        }
+    if dataset_manifest_sha256 is not None:
+        receipt["training_binding"]["dataset"] = {
+            "manifest_sha256": dataset_manifest_sha256,
+        }
     path = out / "training_receipt.json"
     write_json(path, receipt)
     return path
+
+
+def write_internal_validation_sources(root: Path) -> dict[str, Path]:
+    source = root / "internal-validation-source"
+    source.mkdir()
+    dataset = source / "valid.jsonl"
+    rows = []
+    for index, behavior in enumerate(competitive_v3_module.BEHAVIORS):
+        tokens = [100 + index, 200 + index, 300 + index, 400 + index]
+        rows.append(
+            {
+                "messages": [
+                    {"role": "system", "content": "policy"},
+                    {"role": "assistant", "content": "target"},
+                ],
+                "metadata": {
+                    "domain": competitive_v3_module.DOMAINS[
+                        index % len(competitive_v3_module.DOMAINS)
+                    ],
+                    "behavior": behavior,
+                    "token_counts": {
+                        "input_token_ids": tokens,
+                        "input_token_ids_sha256": canonical_sha256(tokens),
+                        "prompt_tokens": 2,
+                        "supervised_tokens": 2,
+                        "total_tokens": 4,
+                    },
+                },
+            }
+        )
+    write_jsonl(dataset, rows)
+    manifest = source / "manifest.json"
+    write_json(
+        manifest,
+        {
+            "schema_version": "hfr.tau3_competitive_dataset.v1",
+            "files": {
+                "valid": {
+                    "path": "valid.jsonl",
+                    "sha256": sha256_file(dataset),
+                    "bytes": dataset.stat().st_size,
+                }
+            },
+        },
+    )
+    protocol = source / "protocol.json"
+    write_json(
+        protocol,
+        {"schema_version": "hfr.tau3_protocol_config.v1"},
+    )
+    identity = source / "model-identity.json"
+    write_json(
+        identity,
+        {
+            "schema_version": "hfr.tau3_model_identity.v1",
+            "model_id": "fixture/base",
+            "revision": "a" * 40,
+        },
+    )
+    return {
+        "dataset": dataset,
+        "manifest": manifest,
+        "protocol": protocol,
+        "identity": identity,
+    }
+
+
+def write_candidate_internal_validation(
+    root: Path,
+    candidate_id: str,
+    receipt_path: Path,
+    sources: dict[str, Path],
+) -> dict[str, dict[str, str]]:
+    receipt = read_json(receipt_path)
+    out = receipt_path.parent / "internal-validation"
+    out.mkdir()
+    dataset_rows = [
+        json.loads(line)
+        for line in sources["dataset"].read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.strip()
+    ]
+    measurements = out / "measurements.jsonl"
+    measurement_rows = []
+    for index, row in enumerate(dataset_rows):
+        metadata = row["metadata"]
+        counts = metadata["token_counts"]
+        targets = counts["input_token_ids"][counts["prompt_tokens"] :]
+        mean_loss = 0.2 + index / 100
+        measurement_rows.append(
+            {
+                "row_index": index,
+                "row_sha256": canonical_sha256(row),
+                "domain": metadata["domain"],
+                "behavior": metadata["behavior"],
+                "prompt_tokens": counts["prompt_tokens"],
+                "supervised_tokens": counts["supervised_tokens"],
+                "input_token_ids_sha256": canonical_sha256(
+                    counts["input_token_ids"]
+                ),
+                "target_tokens_sha256": canonical_sha256(targets),
+                "mean_loss": mean_loss,
+                "loss_sum": mean_loss * counts["supervised_tokens"],
+                "finite": True,
+            }
+        )
+    write_jsonl(measurements, measurement_rows)
+    run_binding = out / "run-binding.json"
+    write_json(
+        run_binding,
+        _expected_run_binding(
+            dataset_file=sources["dataset"],
+            dataset_manifest_file=sources["manifest"],
+            receipt_file=receipt_path,
+            adapter_tree_sha256=receipt["adapter"]["tree_sha256"],
+            protocol_file=sources["protocol"],
+            identity_file=sources["identity"],
+            max_seq_length=64,
+        ),
+    )
+    artifact = out / "internal-validation.json"
+    build_tau3_internal_validation(
+        dataset_path=sources["dataset"],
+        measurements_path=measurements,
+        run_binding_path=run_binding,
+        training_receipt_path=receipt_path,
+        protocol_path=sources["protocol"],
+        model_identity_path=sources["identity"],
+        output_path=artifact,
+        max_seq_length=64,
+        created_at="2026-07-23T00:45:00Z",
+    )
+    return {
+        "artifact": ref_for(root, artifact),
+        "dataset": ref_for(root, sources["dataset"]),
+        "protocol": ref_for(root, sources["protocol"]),
+        "model_identity": ref_for(root, sources["identity"]),
+    }
 
 
 def write_development_qualification(root: Path, candidate_id: str, training_receipt_path: Path) -> tuple[Path, Path]:
@@ -984,7 +1211,7 @@ def write_development_qualification(root: Path, candidate_id: str, training_rece
         "training_receipt_sha256": receipt_sha,
         "adapter_tree_sha256": adapter_sha,
         "harness_sha256": "4" * 64,
-        "protocol_sha256": "c" * 64,
+        "protocol_sha256": receipt["training_binding"]["protocol"]["sha256"],
         "grid_sha256": "5" * 64,
         "base_identity_sha256": "6" * 64,
     }

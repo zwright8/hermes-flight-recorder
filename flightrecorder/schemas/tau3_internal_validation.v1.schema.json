@@ -1,0 +1,294 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_internal_validation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Coverage-complete target-only loss replay over the exact Tau-3 internal-validation export and one immutable trained adapter.",
+  "properties": {
+    "aggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "numerical_failure_count": {
+          "const": 0
+        },
+        "perplexity": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "total_supervised_tokens": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "weighted_mean_loss": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "total_supervised_tokens",
+        "weighted_mean_loss",
+        "perplexity",
+        "numerical_failure_count"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_tree_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "dataset_file_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "dataset_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "model_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "protocol_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "training_receipt_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "dataset_file_sha256",
+        "dataset_manifest_sha256",
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+        "protocol_sha256",
+        "model_identity_sha256"
+      ],
+      "type": "object"
+    },
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "behaviors": {
+          "items": {
+            "$ref": "#/$defs/behaviorCount"
+          },
+          "minItems": 13,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "domains": {
+          "items": {
+            "$ref": "#/$defs/domainCount"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "evaluated_row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "every_row_evaluated": {
+          "const": true
+        },
+        "required_behaviors_exact": {
+          "const": true
+        },
+        "required_domains_exact": {
+          "const": true
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "row_hashes_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "row_count",
+        "evaluated_row_count",
+        "every_row_evaluated",
+        "row_hashes_sha256",
+        "domains",
+        "behaviors",
+        "required_domains_exact",
+        "required_behaviors_exact"
+      ],
+      "type": "object"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "measurements": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "method": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": {
+          "const": 1
+        },
+        "candidate_weights_frozen": {
+          "const": true
+        },
+        "full_prompt_conditioning": {
+          "const": true
+        },
+        "max_seq_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "const": "detached_complete_prompt_target_loss_v1"
+        },
+        "prompt_tokens_masked": {
+          "const": true
+        },
+        "target_only_loss": {
+          "const": true
+        }
+      },
+      "required": [
+        "name",
+        "full_prompt_conditioning",
+        "target_only_loss",
+        "prompt_tokens_masked",
+        "candidate_weights_frozen",
+        "batch_size",
+        "max_seq_length"
+      ],
+      "type": "object"
+    },
+    "passed": {
+      "const": true
+    },
+    "run_binding": {
+      "$ref": "#/$defs/fileRef"
+    },
+    "schema_checked": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "hfr.tau3_internal_validation.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "method",
+    "bindings",
+    "coverage",
+    "aggregate",
+    "measurements",
+    "run_binding",
+    "schema_checked"
+  ],
+  "title": "Hermes Flight Recorder Tau-3 Internal Validation",
+  "type": "object",
+  "$defs": {
+    "behaviorCount": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "enum": [
+            "successful_completion",
+            "clarification_refusal",
+            "authentication",
+            "confirmation_before_mutation",
+            "later_task_completion_actions",
+            "safe_stopping",
+            "transfer_handoff",
+            "empty_result_recovery",
+            "error_result_recovery",
+            "repeated_call_recovery",
+            "hallucinated_tool_correction",
+            "harmful_mutation_correction",
+            "premature_completion_correction"
+          ]
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "row_count"
+      ],
+      "type": "object"
+    },
+    "domainCount": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "enum": [
+            "airline",
+            "retail",
+            "telecom"
+          ]
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "row_count"
+      ],
+      "type": "object"
+    },
+    "fileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "relativePath": {
+      "minLength": 1,
+      "not": {
+        "pattern": "(^/|(^|/)\\.\\.(/|$)|\\\\)"
+      },
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

@@ -224,6 +224,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_evaluation",
             "tau3_generation_retry_source",
             "tau3_grounded_generation",
+            "tau3_internal_validation",
             "tau3_mlx_dataset",
             "tau3_mlx_training_run",
             "tau3_model_identity",

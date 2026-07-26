@@ -303,6 +303,33 @@ identity commands, protocol-freeze command, and current 192-capture,
 evidence only: they do not start training, access the sealed evaluation,
 publish weights, or promote a model.
 
+After a governed MLX candidate finishes, qualification requires a separate,
+coverage-complete loss replay over the exact `valid.jsonl` export. The runner
+loads the receipt-bound base plus adapter locally, conditions on every complete
+prompt, measures only supervised targets, and writes resumable row evidence.
+Its final artifact binds the dataset manifest, receipt, adapter tree, protocol,
+and base identity. Candidate qualification reopens and replays these sources;
+the five spot checks emitted during training are not a substitute.
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python scripts/run_tau3_internal_validation.py \
+  --dataset runs/tau3_competitive_agent_v3/dataset/valid.jsonl \
+  --training-receipt local/tau3/candidate-attempts/<candidate>/run/training_receipt.json \
+  --protocol runs/tau3_competitive_agent_v3/evidence/protocol.json \
+  --model-identity local/tau3/identities/base.json \
+  --model local/tau3/models/base \
+  --max-seq-length 16384 \
+  --out local/tau3/internal-validation/<candidate>
+
+.venv/bin/python scripts/validate_tau3_internal_validation.py \
+  --artifact local/tau3/internal-validation/<candidate>/internal-validation.json \
+  --dataset runs/tau3_competitive_agent_v3/dataset/valid.jsonl \
+  --training-receipt local/tau3/candidate-attempts/<candidate>/run/training_receipt.json \
+  --protocol runs/tau3_competitive_agent_v3/evidence/protocol.json \
+  --model-identity local/tau3/identities/base.json
+```
+
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and
 reviewed trajectories. `goal3-handoff` then packages the common path from those
