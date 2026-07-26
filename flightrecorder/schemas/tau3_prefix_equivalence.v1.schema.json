@@ -53,7 +53,10 @@
       "type": "object"
     },
     "failures": {
-      "maxItems": 0,
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
       "type": "array"
     },
     "gradient_evidence": {
@@ -115,7 +118,7 @@
       "type": "object"
     },
     "passed": {
-      "const": true
+      "type": "boolean"
     },
     "sample": {
       "additionalProperties": false,

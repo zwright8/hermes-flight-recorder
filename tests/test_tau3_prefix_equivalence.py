@@ -8,9 +8,19 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.mlx_prefix_equivalence_smoke import (
+    PrefixEquivalenceSmokeError,
+    _parse_smoke_args,
+    target_accounting_row,
+)
+from flightrecorder.tau3_prefix_equivalence_sample import (
+    SAMPLE_STRATA,
+    build_tau3_prefix_equivalence_sample,
+)
 from flightrecorder.tau3_prefix_equivalence import (
     REQUIRED_EQUIVALENCE_PROBE_FAMILIES,
     TAU3_PREFIX_EQUIVALENCE_SCHEMA_VERSION,
+    build_tau3_prefix_equivalence,
     validate_tau3_prefix_equivalence,
 )
 
@@ -209,6 +219,113 @@ def equivalence_fixture() -> dict[str, object]:
 
 
 class Tau3PrefixEquivalenceTests(unittest.TestCase):
+    def test_equivalence_sample_selects_one_deterministic_row_per_stratum(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "train.jsonl"
+            rows = [
+                {
+                    "messages": [
+                        {"role": "user", "content": f"{domain}-{behavior}"},
+                        {"role": "assistant", "content": "ok"},
+                    ],
+                    "metadata": {"domain": domain, "behavior": behavior},
+                    "tools": [],
+                }
+                for domain, behavior in SAMPLE_STRATA
+                for _ in range(2)
+            ]
+            source.write_text(
+                "".join(
+                    json.dumps(row, sort_keys=True) + "\n" for row in rows
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = build_tau3_prefix_equivalence_sample(
+                source,
+                root / "sample",
+            )
+
+            self.assertEqual(manifest["row_count"], len(SAMPLE_STRATA))
+            self.assertFalse(manifest["candidate_eligible"])
+            selected = [
+                json.loads(line)
+                for line in (root / "sample" / "train.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertEqual(
+                [
+                    (
+                        row["metadata"]["domain"],
+                        row["metadata"]["behavior"],
+                    )
+                    for row in selected
+                ],
+                list(SAMPLE_STRATA),
+            )
+
+    def test_smoke_target_accounting_preserves_first_target_boundary(self) -> None:
+        row = target_accounting_row(
+            tokens=[10, 11, 12, 13, 14],
+            prompt_offset=3,
+            row_sha256="a" * 64,
+        )
+
+        self.assertEqual(row["prompt_offset"], 3)
+        self.assertEqual(row["target_start"], 3)
+        self.assertEqual(row["target_end"], 5)
+        self.assertEqual(row["supervised_token_count"], 2)
+
+    def test_smoke_target_accounting_rejects_empty_target(self) -> None:
+        with self.assertRaises(PrefixEquivalenceSmokeError):
+            target_accounting_row(
+                tokens=[10, 11, 12],
+                prompt_offset=3,
+                row_sha256="a" * 64,
+            )
+
+    def test_smoke_parser_strips_only_measurement_arguments(self) -> None:
+        args, passthrough = _parse_smoke_args(
+            [
+                "--equivalence-arm",
+                "full_gradient",
+                "--measurement-out",
+                "measurement.json",
+                "--protocol",
+                "protocol.json",
+                "--model-identity",
+                "identity.json",
+                "--sample-domains",
+                "airline,retail,telecom",
+                "--sample-probe-families",
+                "tool_choice,clarification,recovery,stopping,state_transition",
+                "--exposure-dataset",
+                "train.jsonl",
+                "--exposure-receipt",
+                "receipt.json",
+                "--exposure-ledger",
+                "ledger.jsonl",
+                "--batch-size",
+                "1",
+                "--grad-accumulation-steps",
+                "4",
+                "--iters",
+                "8",
+                "--model",
+                "base-model",
+            ]
+        )
+
+        self.assertEqual(args.equivalence_arm, "full_gradient")
+        self.assertEqual(args.model_identity, Path("identity.json"))
+        self.assertNotIn("--measurement-out", passthrough)
+        self.assertNotIn("--protocol", passthrough)
+        self.assertIn("--batch-size", passthrough)
+        self.assertIn("--iters", passthrough)
+        self.assertIn("--model", passthrough)
+
     def test_valid_artifact_passes_schema_and_semantic_replay(self) -> None:
         artifact = equivalence_fixture()
 
@@ -281,6 +398,151 @@ class Tau3PrefixEquivalenceTests(unittest.TestCase):
 
             self.assertTrue(validation["passed"], validation["errors"])
             self.assertEqual(validation["artifact"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_builder_replays_raw_arm_measurements(self) -> None:
+        fixture = equivalence_fixture()
+        bindings = fixture["bindings"]
+        target_rows = fixture["target_accounting"]["full_gradient"]["rows"]  # type: ignore[index]
+        behavior_trials = [
+            {"family": family, **trial}
+            for family, result in fixture["behavior_probes"]["family_results"].items()  # type: ignore[index]
+            for trial in result["trials"]
+        ]
+        full_modules = fixture["gradient_evidence"]["full_gradient"]["modules"]  # type: ignore[index]
+        prefix_modules = fixture["gradient_evidence"]["detached_prefix"]["modules"]  # type: ignore[index]
+        full_replays = fixture["stability"]["full_gradient"]["replays"]  # type: ignore[index]
+        prefix_replays = fixture["stability"]["detached_prefix"]["replays"]  # type: ignore[index]
+
+        def measurement(
+            arm: str,
+            modules: object,
+            replay: dict[str, object],
+            run_id: str,
+        ) -> dict[str, object]:
+            return {
+                "schema_version": "hfr.tau3_prefix_equivalence_run.v1",
+                "arm": arm,
+                "run_id": run_id,
+                "bindings": {
+                    "dataset_file_sha256": bindings["dataset_file_sha256"],
+                    "protocol_file_sha256": bindings["protocol_file_sha256"],
+                    "model_identity_file_sha256": bindings[
+                        "model_identity_file_sha256"
+                    ],
+                    "recipe": {
+                        key: value
+                        for key, value in bindings["recipe"].items()
+                        if key != "allowed_seeds"
+                    }
+                    | {"seed": 101},
+                },
+                "sample": {
+                    "domains": ["airline", "retail", "telecom"],
+                    "probe_families": list(
+                        REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+                    ),
+                    "stratified": True,
+                },
+                "target_rows": copy.deepcopy(target_rows),
+                "gradient_modules": copy.deepcopy(modules),
+                "losses": copy.deepcopy(replay["losses"]),
+                "peak_memory_bytes": replay["peak_memory_bytes"],
+                "numerical_failure_count": replay[
+                    "numerical_failure_count"
+                ],
+            }
+
+        artifact = build_tau3_prefix_equivalence(
+            bindings=bindings,
+            full_gradient_runs=[
+                measurement(
+                    "full_gradient",
+                    full_modules,
+                    replay,
+                    f"full-{index}",
+                )
+                for index, replay in enumerate(full_replays)
+            ],
+            detached_prefix_runs=[
+                measurement(
+                    "detached_prefix",
+                    prefix_modules,
+                    replay,
+                    f"prefix-{index}",
+                )
+                for index, replay in enumerate(prefix_replays)
+            ],
+            behavior_trials=behavior_trials,
+        )
+
+        validation = validate_tau3_prefix_equivalence(artifact)
+        self.assertTrue(artifact["passed"], artifact["failures"])
+        self.assertTrue(validation["passed"], validation["errors"])
+
+    def test_builder_records_mismatched_target_boundaries_as_negative_evidence(self) -> None:
+        fixture = equivalence_fixture()
+        bindings = fixture["bindings"]
+        target_rows = fixture["target_accounting"]["full_gradient"]["rows"]  # type: ignore[index]
+
+        def measurement(arm: str, run_id: str) -> dict[str, object]:
+            return {
+                "schema_version": "hfr.tau3_prefix_equivalence_run.v1",
+                "arm": arm,
+                "run_id": run_id,
+                "bindings": {
+                    "dataset_file_sha256": bindings["dataset_file_sha256"],
+                    "protocol_file_sha256": bindings["protocol_file_sha256"],
+                    "model_identity_file_sha256": bindings[
+                        "model_identity_file_sha256"
+                    ],
+                    "recipe": {
+                        key: value
+                        for key, value in bindings["recipe"].items()
+                        if key != "allowed_seeds"
+                    }
+                    | {"seed": 101},
+                },
+                "sample": {
+                    "domains": ["airline", "retail", "telecom"],
+                    "probe_families": list(
+                        REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+                    ),
+                    "stratified": True,
+                },
+                "target_rows": copy.deepcopy(target_rows),
+                "gradient_modules": [
+                    {"name": "adapter.a", "l2_norm": 0.5}
+                ],
+                "losses": [1.0, 0.9],
+                "peak_memory_bytes": 1000,
+                "numerical_failure_count": 0,
+            }
+
+        full = [measurement("full_gradient", f"full-{index}") for index in range(2)]
+        prefix = [
+            measurement("detached_prefix", f"prefix-{index}")
+            for index in range(2)
+        ]
+        prefix[0]["target_rows"][0]["target_start"] += 1  # type: ignore[index]
+        trials = [
+            {
+                "family": family,
+                "probe_id": family,
+                "full_gradient_passed": True,
+                "detached_prefix_passed": True,
+            }
+            for family in REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+        ]
+
+        artifact = build_tau3_prefix_equivalence(
+            bindings=bindings,
+            full_gradient_runs=full,
+            detached_prefix_runs=prefix,
+            behavior_trials=trials,
+        )
+
+        self.assertFalse(artifact["passed"])
+        self.assertIn("target", json.dumps(artifact["failures"]).lower())
 
 
 if __name__ == "__main__":

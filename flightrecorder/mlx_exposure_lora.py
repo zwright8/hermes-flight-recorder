@@ -31,6 +31,7 @@ def load_exposure_schedule(
     batch_size: int,
     grad_accumulation_steps: int,
     iters: int,
+    bounded_smoke: bool = False,
 ) -> dict[str, Any]:
     """Validate and return the deterministic microbatch schedule."""
 
@@ -82,7 +83,8 @@ def load_exposure_schedule(
     if coverage.get("all_rows_seen") is not True:
         raise ExposureLoraError("exposure ledger does not expose every row")
     if receipt.get("passed") is not True:
-        raise ExposureLoraError("exposure receipt is not candidate eligible")
+        if not bounded_smoke or not _bounded_smoke_exposure_is_safe(receipt):
+            raise ExposureLoraError("exposure receipt is not candidate eligible")
     steps = []
     for step in ledger:
         microbatches = []
@@ -97,9 +99,16 @@ def load_exposure_schedule(
                     for row in step.get("rows", [])
                     if row.get("row_sha256") == row_hash
                 ]
-                if len(matches) != 1:
-                    raise ExposureLoraError("exposure row hash does not map to one row")
-                row_indices.append(int(matches[0]["row_index"]))
+                matching_indices = {
+                    int(row["row_index"])
+                    for row in matches
+                    if isinstance(row.get("row_index"), int)
+                }
+                if len(matching_indices) != 1:
+                    raise ExposureLoraError(
+                        "exposure row hash does not map to one dataset row"
+                    )
+                row_indices.append(next(iter(matching_indices)))
             microbatches.append(row_indices)
         if len(microbatches) != grad_accumulation_steps:
             raise ExposureLoraError("gradient accumulation schedule mismatch")
@@ -111,6 +120,47 @@ def load_exposure_schedule(
         "microbatch_iterations": ledger_microbatch_iterations,
         "optimizer_steps": optimizer_steps,
     }
+
+
+def _bounded_smoke_exposure_is_safe(receipt: dict[str, Any]) -> bool:
+    """Allow a non-candidate sample only when behavior completeness alone fails."""
+
+    eligibility = receipt.get("candidate_eligibility")
+    if not isinstance(eligibility, dict):
+        return False
+    checks = eligibility.get("checks")
+    if not isinstance(checks, list) or not checks:
+        return False
+    failed_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is not True
+    }
+    required_passes = {
+        "every_row_seen",
+        "at_least_two_effective_epochs",
+        "full_epoch_replay",
+        "complete_optimizer_steps",
+        "effective_batch_at_least_four",
+        "competitive_dataset_row_schema",
+        "required_domains_exact",
+        "recovery_strata_nonzero",
+        "stopping_strata_nonzero",
+        "clarification_strata_nonzero",
+        "telecom_strata_nonzero",
+        "state_mutation_strata_nonzero",
+        "action_class_strata_nonzero",
+        "result_class_strata_nonzero",
+    }
+    passed_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is True
+    }
+    return (
+        failed_ids == {"required_behaviors_exact"}
+        and required_passes.issubset(passed_ids)
+    )
 
 
 def exposure_iterate_batches(

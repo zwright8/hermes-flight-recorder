@@ -30,6 +30,188 @@ class Tau3PrefixEquivalenceError(ValueError):
     """Raised when prefix-equivalence evidence cannot be read safely."""
 
 
+def build_tau3_prefix_equivalence(
+    *,
+    bindings: dict[str, Any],
+    full_gradient_runs: list[dict[str, Any] | str | Path],
+    detached_prefix_runs: list[dict[str, Any] | str | Path],
+    behavior_trials: list[dict[str, Any]],
+    max_material_probe_drop: float = 0.05,
+    max_loss_replay_delta: float = 0.0001,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Build replayable equivalence evidence from raw arm measurements."""
+
+    failures: list[str] = []
+    full_runs = [
+        _load_measurement(value, failures, f"full_gradient_runs[{index}]")
+        for index, value in enumerate(full_gradient_runs)
+    ]
+    prefix_runs = [
+        _load_measurement(value, failures, f"detached_prefix_runs[{index}]")
+        for index, value in enumerate(detached_prefix_runs)
+    ]
+    full_runs = [value for value in full_runs if value is not None]
+    prefix_runs = [value for value in prefix_runs if value is not None]
+    if len(full_runs) < 2:
+        failures.append("at least two full-gradient measurement replays are required")
+    if len(prefix_runs) < 2:
+        failures.append("at least two detached-prefix measurement replays are required")
+
+    all_runs = [*full_runs, *prefix_runs]
+    seen_run_ids: set[str] = set()
+    for expected_arm, runs in (
+        ("full_gradient", full_runs),
+        ("detached_prefix", prefix_runs),
+    ):
+        for index, run in enumerate(runs):
+            label = f"{expected_arm}[{index}]"
+            if run.get("schema_version") != "hfr.tau3_prefix_equivalence_run.v1":
+                failures.append(f"{label} has an invalid schema_version")
+            if run.get("arm") != expected_arm:
+                failures.append(f"{label} arm does not match its collection")
+            run_id = run.get("run_id")
+            if (
+                not isinstance(run_id, str)
+                or not run_id
+                or run_id in seen_run_ids
+            ):
+                failures.append(f"{label} run_id must be unique and nonempty")
+            else:
+                seen_run_ids.add(run_id)
+            _measurement_matches_bindings(run, bindings, failures, label)
+            sample = _dict(run.get("sample"))
+            if set(_string_list(sample.get("domains"))) != set(REQUIRED_DOMAINS):
+                failures.append(f"{label} does not cover every Tau domain")
+            if set(_string_list(sample.get("probe_families"))) != set(
+                REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+            ):
+                failures.append(f"{label} does not cover every probe family")
+            if sample.get("stratified") is not True:
+                failures.append(f"{label} sample is not stratified")
+
+    full_target_rows = _measurement_target_rows(full_runs, failures, "full_gradient")
+    prefix_target_rows = _measurement_target_rows(
+        prefix_runs,
+        failures,
+        "detached_prefix",
+    )
+    if full_target_rows != prefix_target_rows:
+        failures.append(
+            "full-gradient and detached-prefix target row evidence does not match"
+        )
+    sample_rows = full_target_rows or prefix_target_rows
+    row_hashes = [
+        str(row.get("row_sha256"))
+        for row in sample_rows
+        if isinstance(row, dict)
+    ]
+
+    full_gradient = _gradient_aggregate(
+        full_runs,
+        failures,
+        "full_gradient",
+    )
+    detached_prefix = _gradient_aggregate(
+        prefix_runs,
+        failures,
+        "detached_prefix",
+    )
+    intended_modules = [
+        item["name"]
+        for item in full_gradient["modules"]
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    prefix_module_names = [
+        item["name"]
+        for item in detached_prefix["modules"]
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    if intended_modules != prefix_module_names:
+        failures.append(
+            "full-gradient and detached-prefix intended adapter modules do not match"
+        )
+
+    family_results = _behavior_aggregate(behavior_trials, failures)
+    full_stability = _stability_aggregate(
+        full_runs,
+        failures,
+        "full_gradient",
+    )
+    prefix_stability = _stability_aggregate(
+        prefix_runs,
+        failures,
+        "detached_prefix",
+    )
+    for label, stability in (
+        ("full_gradient", full_stability),
+        ("detached_prefix", prefix_stability),
+    ):
+        if stability["loss_replay_max_abs_delta"] > max_loss_replay_delta:
+            failures.append(f"{label} loss replay exceeds the frozen tolerance")
+    for family, result in family_results.items():
+        if (
+            result["detached_prefix_pass_rate"] + max_material_probe_drop
+            < result["full_gradient_pass_rate"]
+        ):
+            failures.append(
+                f"{family} behavior probes show material detached-prefix degradation"
+            )
+
+    target_full = _target_accounting_from_rows(full_target_rows)
+    target_prefix = _target_accounting_from_rows(prefix_target_rows)
+    sample_source = _dict(all_runs[0].get("sample")) if all_runs else {}
+    artifact: dict[str, Any] = {
+        "schema_version": TAU3_PREFIX_EQUIVALENCE_SCHEMA_VERSION,
+        "passed": not failures,
+        "method": {
+            "reference": "standard_full_gradient_mlx_lora",
+            "candidate": "detached_complete_prompt_cache_mlx_lora",
+            "max_material_probe_drop": max_material_probe_drop,
+            "max_loss_replay_delta": max_loss_replay_delta,
+        },
+        "bindings": bindings,
+        "sample": {
+            "row_count": len(row_hashes),
+            "row_hashes": row_hashes,
+            "row_hashes_sha256": _canonical_sha256(row_hashes),
+            "domains": _string_list(sample_source.get("domains")),
+            "probe_families": _string_list(
+                sample_source.get("probe_families")
+            ),
+            "stratified": sample_source.get("stratified") is True,
+        },
+        "target_accounting": {
+            "full_gradient": target_full,
+            "detached_prefix": target_prefix,
+        },
+        "gradient_evidence": {
+            "intended_modules": intended_modules,
+            "intended_modules_sha256": _canonical_sha256(intended_modules),
+            "full_gradient": full_gradient,
+            "detached_prefix": detached_prefix,
+        },
+        "behavior_probes": {
+            "required_families": list(REQUIRED_EQUIVALENCE_PROBE_FAMILIES),
+            "family_results": family_results,
+        },
+        "stability": {
+            "full_gradient": full_stability,
+            "detached_prefix": prefix_stability,
+        },
+        "failures": failures,
+    }
+    if output_path is not None:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(artifact, indent=2, sort_keys=True) + "\n"
+            )
+        path.chmod(0o444)
+    return artifact
+
+
 def validate_tau3_prefix_equivalence(
     artifact_or_path: dict[str, Any] | str | Path,
     *,
@@ -510,6 +692,320 @@ def _validate_recipe(recipe: dict[str, Any], errors: list[str]) -> None:
         or len(set(seeds)) != len(seeds)
     ):
         errors.append("bindings.recipe.allowed_seeds must be unique integers")
+
+
+def _load_measurement(
+    value: dict[str, Any] | str | Path,
+    failures: list[str],
+    label: str,
+) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    path = Path(value)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(f"{label} is unreadable: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        failures.append(f"{label} must be a JSON object")
+        return None
+    return payload
+
+
+def _measurement_matches_bindings(
+    run: dict[str, Any],
+    bindings: dict[str, Any],
+    failures: list[str],
+    label: str,
+) -> None:
+    actual = _dict(run.get("bindings"))
+    for field in (
+        "dataset_file_sha256",
+        "protocol_file_sha256",
+        "model_identity_file_sha256",
+    ):
+        if actual.get(field) != bindings.get(field):
+            failures.append(f"{label} binding {field} does not match")
+    actual_recipe = _dict(actual.get("recipe"))
+    expected_recipe = _dict(bindings.get("recipe"))
+    for field in (
+        "rank",
+        "scale",
+        "learning_rate",
+        "num_layers",
+        "max_seq_length",
+        "batch_size",
+        "grad_accumulation",
+        "mask_prompt",
+    ):
+        if actual_recipe.get(field) != expected_recipe.get(field):
+            failures.append(f"{label} recipe {field} does not match")
+    allowed_seeds = expected_recipe.get("allowed_seeds")
+    if (
+        not isinstance(allowed_seeds, list)
+        or actual_recipe.get("seed") not in allowed_seeds
+    ):
+        failures.append(f"{label} seed is outside allowed_seeds")
+
+
+def _measurement_target_rows(
+    runs: list[dict[str, Any]],
+    failures: list[str],
+    arm_name: str,
+) -> list[dict[str, Any]]:
+    if not runs:
+        return []
+    first = runs[0].get("target_rows")
+    if not isinstance(first, list) or not all(
+        isinstance(row, dict) for row in first
+    ):
+        failures.append(f"{arm_name} target_rows must be a list of objects")
+        return []
+    for index, run in enumerate(runs[1:], start=1):
+        if run.get("target_rows") != first:
+            failures.append(
+                f"{arm_name} target evidence differs across replay {index}"
+            )
+    return [dict(row) for row in first]
+
+
+def _gradient_aggregate(
+    runs: list[dict[str, Any]],
+    failures: list[str],
+    arm_name: str,
+) -> dict[str, Any]:
+    if not runs:
+        return {
+            "nonzero_module_count": 0,
+            "gradient_l2_norm": 0.0,
+            "finite": False,
+            "modules": [],
+        }
+    first = runs[0].get("gradient_modules")
+    if not isinstance(first, list) or not all(
+        isinstance(item, dict) for item in first
+    ):
+        failures.append(f"{arm_name} gradient_modules must be a list of objects")
+        first = []
+    names = [
+        str(item.get("name"))
+        for item in first
+        if isinstance(item.get("name"), str)
+    ]
+    if len(names) != len(first) or len(set(names)) != len(names):
+        failures.append(f"{arm_name} gradient module names must be unique")
+    norms_by_run: list[dict[str, float]] = []
+    for index, run in enumerate(runs):
+        modules = run.get("gradient_modules")
+        if not isinstance(modules, list):
+            failures.append(f"{arm_name} replay {index} has no gradient modules")
+            continue
+        current: dict[str, float] = {}
+        for module in modules:
+            if not isinstance(module, dict):
+                continue
+            name = module.get("name")
+            norm = module.get("l2_norm")
+            if (
+                isinstance(name, str)
+                and isinstance(norm, (int, float))
+                and not isinstance(norm, bool)
+                and math.isfinite(float(norm))
+            ):
+                current[name] = float(norm)
+        if list(current) != names:
+            failures.append(
+                f"{arm_name} gradient modules differ across replay {index}"
+            )
+        norms_by_run.append(current)
+    modules = []
+    for name in names:
+        observed = [
+            run_norms.get(name, 0.0)
+            for run_norms in norms_by_run
+        ]
+        minimum = min(observed) if observed else 0.0
+        if minimum <= 0:
+            failures.append(
+                f"{arm_name} module {name} lacks a nonzero gradient in every replay"
+            )
+        modules.append({"name": name, "l2_norm": minimum})
+    total_norm = math.sqrt(
+        sum(float(item["l2_norm"]) ** 2 for item in modules)
+    )
+    return {
+        "nonzero_module_count": sum(
+            float(item["l2_norm"]) > 0 for item in modules
+        ),
+        "gradient_l2_norm": total_norm,
+        "finite": math.isfinite(total_norm) and total_norm > 0,
+        "modules": modules,
+    }
+
+
+def _behavior_aggregate(
+    trials: list[dict[str, Any]],
+    failures: list[str],
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {
+        family: [] for family in REQUIRED_EQUIVALENCE_PROBE_FAMILIES
+    }
+    for index, trial in enumerate(trials):
+        if not isinstance(trial, dict):
+            failures.append(f"behavior trial {index} must be an object")
+            continue
+        family = trial.get("family")
+        if family not in grouped:
+            failures.append(f"behavior trial {index} has an unknown family")
+            continue
+        grouped[str(family)].append(
+            {
+                "probe_id": trial.get("probe_id"),
+                "full_gradient_passed": trial.get(
+                    "full_gradient_passed"
+                ),
+                "detached_prefix_passed": trial.get(
+                    "detached_prefix_passed"
+                ),
+            }
+        )
+    results: dict[str, dict[str, Any]] = {}
+    for family, family_trials in grouped.items():
+        if not family_trials:
+            failures.append(f"behavior family {family} has no trials")
+            family_trials = [
+                {
+                    "probe_id": f"missing-{family}",
+                    "full_gradient_passed": False,
+                    "detached_prefix_passed": False,
+                }
+            ]
+        count = len(family_trials)
+        results[family] = {
+            "trial_count": count,
+            "full_gradient_pass_rate": sum(
+                trial.get("full_gradient_passed") is True
+                for trial in family_trials
+            )
+            / count,
+            "detached_prefix_pass_rate": sum(
+                trial.get("detached_prefix_passed") is True
+                for trial in family_trials
+            )
+            / count,
+            "trials": family_trials,
+        }
+    return results
+
+
+def _stability_aggregate(
+    runs: list[dict[str, Any]],
+    failures: list[str],
+    arm_name: str,
+) -> dict[str, Any]:
+    replays = []
+    for index, run in enumerate(runs):
+        losses = run.get("losses")
+        if not isinstance(losses, list) or not losses:
+            failures.append(f"{arm_name} replay {index} has no loss trace")
+            losses = [0.0]
+        finite_losses = [
+            float(value)
+            for value in losses
+            if isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        ]
+        if len(finite_losses) != len(losses):
+            failures.append(f"{arm_name} replay {index} has non-finite losses")
+        peak_memory = run.get("peak_memory_bytes")
+        if (
+            not isinstance(peak_memory, int)
+            or isinstance(peak_memory, bool)
+            or peak_memory < 1
+        ):
+            failures.append(f"{arm_name} replay {index} has invalid peak memory")
+            peak_memory = 1
+        numerical_failures = run.get("numerical_failure_count")
+        if (
+            not isinstance(numerical_failures, int)
+            or isinstance(numerical_failures, bool)
+            or numerical_failures < 0
+        ):
+            failures.append(
+                f"{arm_name} replay {index} has invalid numerical failure count"
+            )
+            numerical_failures = 1
+        replays.append(
+            {
+                "losses": finite_losses or [0.0],
+                "peak_memory_bytes": peak_memory,
+                "numerical_failure_count": numerical_failures,
+            }
+        )
+    delta = _max_replay_delta(
+        [replay["losses"] for replay in replays]
+    )
+    if delta is None:
+        delta = 1_000_000_000.0
+    if not math.isfinite(delta):
+        failures.append(f"{arm_name} replay loss traces have different lengths")
+        delta = 1_000_000_000.0
+    return {
+        "replay_count": len(replays),
+        "loss_count": sum(len(replay["losses"]) for replay in replays),
+        "finite_loss_count": sum(len(replay["losses"]) for replay in replays),
+        "numerical_failure_count": sum(
+            replay["numerical_failure_count"] for replay in replays
+        ),
+        "peak_memory_bytes": max(
+            (replay["peak_memory_bytes"] for replay in replays),
+            default=1,
+        ),
+        "loss_replay_max_abs_delta": delta,
+        "replay_sha256": _canonical_sha256(replays),
+        "replays": replays,
+    }
+
+
+def _target_accounting_from_rows(
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    boundaries = [
+        {
+            "row_sha256": row.get("row_sha256"),
+            "prompt_offset": row.get("prompt_offset"),
+            "target_start": row.get("target_start"),
+            "target_end": row.get("target_end"),
+            "supervised_token_count": row.get("supervised_token_count"),
+        }
+        for row in rows
+    ]
+    mask_records = [
+        {
+            "row_sha256": row.get("row_sha256"),
+            "loss_mask_sha256": row.get("loss_mask_sha256"),
+        }
+        for row in rows
+    ]
+    target_records = [
+        {
+            "row_sha256": row.get("row_sha256"),
+            "target_tokens_sha256": row.get("target_tokens_sha256"),
+        }
+        for row in rows
+    ]
+    return {
+        "sample_row_count": len(rows),
+        "supervised_token_count": sum(
+            int(row.get("supervised_token_count") or 0) for row in rows
+        ),
+        "target_boundaries_sha256": _canonical_sha256(boundaries),
+        "loss_mask_sha256": _canonical_sha256(mask_records),
+        "target_tokens_sha256": _canonical_sha256(target_records),
+        "rows": rows,
+    }
 
 
 def _replay_target_accounting(

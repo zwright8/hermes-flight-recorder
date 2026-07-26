@@ -17,6 +17,7 @@ from flightrecorder.mlx_exposure_lora import (
     make_exposure_train,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger
+from flightrecorder.tau3_prefix_equivalence_sample import SAMPLE_STRATA
 
 
 class ChatDataset:
@@ -222,6 +223,56 @@ class MlxExposureLoraTests(unittest.TestCase):
                     grad_accumulation_steps=1,
                     iters=52,
                 )
+
+    def test_bounded_smoke_schedule_allows_only_behavior_completeness_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "train.jsonl"
+            rows = []
+            for index, (domain, behavior) in enumerate(SAMPLE_STRATA):
+                row = _row(index)
+                row["metadata"]["domain"] = domain
+                row["metadata"]["behavior"] = behavior
+                rows.append(row)
+            _write_jsonl(dataset, rows)
+            receipt = build_tau3_exposure_ledger(
+                dataset,
+                root / "exposure",
+                seed=101,
+                epochs=2,
+                batch_size=1,
+                gradient_accumulation_steps=4,
+            )
+
+            with self.assertRaisesRegex(
+                ExposureLoraError,
+                "candidate eligible",
+            ):
+                load_exposure_schedule(
+                    dataset_jsonl=dataset,
+                    receipt_path=receipt["receipt_path"],
+                    ledger_path=root
+                    / "exposure"
+                    / "training_exposure_ledger.jsonl",
+                    batch_size=1,
+                    grad_accumulation_steps=4,
+                    iters=12,
+                )
+
+            schedule = load_exposure_schedule(
+                dataset_jsonl=dataset,
+                receipt_path=receipt["receipt_path"],
+                ledger_path=root
+                / "exposure"
+                / "training_exposure_ledger.jsonl",
+                batch_size=1,
+                grad_accumulation_steps=4,
+                iters=12,
+                bounded_smoke=True,
+            )
+
+            self.assertFalse(schedule["receipt"]["passed"])
+            self.assertEqual(schedule["microbatch_iterations"], 12)
 
     def test_exposure_iterator_yields_every_ledger_microbatch_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
