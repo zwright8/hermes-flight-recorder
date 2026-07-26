@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from flightrecorder.tau3_exposure import (
     build_tau3_exposure_ledger,
     validate_tau3_exposure_ledger,
 )
+from flightrecorder.tau3_competitive_v3 import _Target, _validate_training_exposure
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,6 +22,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def _artifact_ref(root: Path, path: Path) -> dict[str, str]:
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
 
 
 def _length_bucket(prompt_tokens: int, supervised_tokens: int) -> str:
@@ -354,6 +363,7 @@ class Tau3ExposureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             dataset = root / "train.jsonl"
+            validation_out = root / "validation.json"
             _write_jsonl(dataset, _eligible_rows())
             build = subprocess.run(
                 [
@@ -382,7 +392,7 @@ class Tau3ExposureTests(unittest.TestCase):
             payload = json.loads(build.stdout)
             self.assertTrue(payload["candidate_eligible"])
 
-            validate = subprocess.run(
+            validate_without_out = subprocess.run(
                 [
                     sys.executable,
                     str(ROOT / "scripts" / "validate_tau3_exposure_ledger.py"),
@@ -397,8 +407,146 @@ class Tau3ExposureTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            self.assertEqual(validate.returncode, 0, validate.stderr)
-            self.assertTrue(json.loads(validate.stdout)["passed"])
+            self.assertEqual(validate_without_out.returncode, 0, validate_without_out.stderr)
+            self.assertTrue(json.loads(validate_without_out.stdout)["passed"])
+
+            validate_with_out = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "validate_tau3_exposure_ledger.py"),
+                    "--dataset",
+                    str(dataset),
+                    "--receipt",
+                    str(root / "exposure" / "training_exposure_receipt.json"),
+                    "--out",
+                    str(validation_out),
+                ],
+                check=False,
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(validate_with_out.returncode, 0, validate_with_out.stderr)
+            self.assertEqual(validate_with_out.stdout, validate_without_out.stdout)
+            stdout_payload = json.loads(validate_with_out.stdout)
+            replay_fields = {
+                "passed",
+                "candidate_eligible",
+                "row_count",
+                "step_count",
+                "receipt_sha256",
+                "ledger_sha256",
+            }
+            self.assertEqual(set(stdout_payload), replay_fields)
+            saved_payload = json.loads(validation_out.read_text(encoding="utf-8"))
+            self.assertEqual(set(saved_payload), {"schema_version", *replay_fields})
+            self.assertEqual(
+                saved_payload,
+                {
+                    "schema_version": "hfr.tau3_training_exposure_validation.v1",
+                    **stdout_payload,
+                },
+            )
+
+            receipt = root / "exposure" / "training_exposure_receipt.json"
+            ledger = root / "exposure" / "training_exposure_ledger.jsonl"
+            consumer = _Target("test_training_exposure", str(root))
+            _validate_training_exposure(
+                root,
+                consumer,
+                {
+                    "dataset": _artifact_ref(root, dataset),
+                    "receipt": _artifact_ref(root, receipt),
+                    "ledger": _artifact_ref(root, ledger),
+                    "validation": _artifact_ref(root, validation_out),
+                },
+                "exposure",
+            )
+            self.assertEqual(consumer.errors, [])
+
+    def test_validate_cli_refuses_to_overwrite_saved_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "train.jsonl"
+            exposure = root / "exposure"
+            validation_out = root / "validation.json"
+            _write_jsonl(dataset, _eligible_rows())
+            build_tau3_exposure_ledger(
+                dataset,
+                exposure,
+                seed=606,
+                epochs=2,
+                batch_size=2,
+                gradient_accumulation_steps=2,
+            )
+            sentinel = '{"existing":true}\n'
+            validation_out.write_text(sentinel, encoding="utf-8")
+
+            validate = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "validate_tau3_exposure_ledger.py"),
+                    "--dataset",
+                    str(dataset),
+                    "--receipt",
+                    str(exposure / "training_exposure_receipt.json"),
+                    "--out",
+                    str(validation_out),
+                ],
+                check=False,
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(validate.returncode, 1)
+            self.assertEqual(validate.stdout, "")
+            self.assertIn("already exists; refusing to overwrite it", validate.stderr)
+            self.assertEqual(validation_out.read_text(encoding="utf-8"), sentinel)
+
+    def test_validate_cli_invalid_input_leaves_no_saved_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "train.jsonl"
+            exposure = root / "exposure"
+            validation_out = root / "validation.json"
+            rows = _eligible_rows()
+            _write_jsonl(dataset, rows)
+            build_tau3_exposure_ledger(
+                dataset,
+                exposure,
+                seed=707,
+                epochs=2,
+                batch_size=2,
+                gradient_accumulation_steps=2,
+            )
+            rows[0]["metadata"]["token_counts"]["prompt_tokens"] += 1
+            _write_jsonl(dataset, rows)
+
+            validate = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "validate_tau3_exposure_ledger.py"),
+                    "--dataset",
+                    str(dataset),
+                    "--receipt",
+                    str(exposure / "training_exposure_receipt.json"),
+                    "--out",
+                    str(validation_out),
+                ],
+                check=False,
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(validate.returncode, 1)
+            self.assertEqual(validate.stdout, "")
+            self.assertIn("ledger does not replay", validate.stderr)
+            self.assertFalse(validation_out.exists())
 
 
 if __name__ == "__main__":

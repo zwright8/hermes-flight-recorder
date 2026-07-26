@@ -357,12 +357,12 @@ provide its own bundle-local exposure refs.
 ```bash
 .venv/bin/python scripts/build_tau3_development_evaluation.py \
   --reference-root runs/tau3_competitive_agent_v3 \
-  --out runs/tau3_competitive_agent_v3/training/<candidate>/development \
+  --out runs/tau3_competitive_agent_v3/training/candidates/<candidate>/development \
   --candidate-id <candidate> \
   --base-manifest local/tau3/development-evals/base/manifest.json \
   --candidate-manifest local/tau3/development-evals/<candidate>/manifest.json \
-  --training-receipt local/tau3/candidate-attempts/<candidate>/run/training_receipt.json \
-  --candidate-identity runs/tau3_competitive_agent_v3/training/<candidate>/candidate-identity.json
+  --training-receipt runs/tau3_competitive_agent_v3/training/candidates/<candidate>/run/training_receipt.json \
+  --candidate-identity runs/tau3_competitive_agent_v3/training/candidates/<candidate>/candidate-identity.json
 ```
 
 For a new task such as tool calling, first represent success, safety, tool

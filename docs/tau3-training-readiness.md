@@ -19,6 +19,51 @@ The study contract is deliberately narrow:
 - fail-closed redaction, licensing, contamination, safety, state-mutation,
   budget, archive, and launch gates.
 
+## Assemble competitive-v3 training evidence
+
+After at least two candidates have completed training, internal validation,
+development evaluation, and behavior probes, assemble the private training
+stage by reference:
+
+```bash
+.venv/bin/python scripts/build_tau3_competitive_v3_training_evidence.py \
+  --bundle runs/tau3_competitive_agent_v3 \
+  --candidate candidate-a \
+  --candidate candidate-b
+```
+
+The command expects shared `dataset/train.jsonl`, `dataset/valid.jsonl`,
+`evidence/protocol.json`, and `evidence/base-model-identity.json`. Candidate
+artifacts live below `training/candidates/<candidate-id>/`: the staged receipt
+and adapter under `run/`, exposure receipt/ledger/validation under `exposure/`,
+internal-validation artifacts under `internal-validation/`, the development
+scorecard and evaluation under `development/`, and the behavior aggregate and
+child results under `behavior/`. Detached-prefix candidates additionally
+require `prefix-equivalence.json`; full-gradient candidates must not include
+it.
+
+Persist each candidate's compact exposure replay only after its receipt and
+ledger are staged:
+
+```bash
+.venv/bin/python scripts/validate_tau3_exposure_ledger.py \
+  --dataset runs/tau3_competitive_agent_v3/dataset/train.jsonl \
+  --receipt runs/tau3_competitive_agent_v3/training/candidates/<candidate-id>/exposure/training_exposure_receipt.json \
+  --ledger runs/tau3_competitive_agent_v3/training/candidates/<candidate-id>/exposure/training_exposure_ledger.jsonl \
+  --out runs/tau3_competitive_agent_v3/training/candidates/<candidate-id>/exposure/validation.json
+```
+
+The output is created atomically with private permissions and is never
+overwritten. The assembler independently replays the dataset, receipt, and
+ledger instead of trusting the saved `passed` flag.
+
+The assembler copies no model or evaluation data. It replays every candidate
+against the registered competitive-v3 qualification gates and writes only
+bundle-relative, hash-bound references to `training-evidence.json`. It refuses
+unsafe paths, symlinks, duplicate candidates, incomplete qualification,
+distinctness failures, and an existing output. Plan binding remains a separate
+immutable lifecycle action.
+
 ## Frozen study inputs
 
 The first study lineage uses these immutable public inputs:
