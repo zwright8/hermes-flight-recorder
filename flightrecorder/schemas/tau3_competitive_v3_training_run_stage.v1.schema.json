@@ -1,0 +1,87 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_competitive_v3_training_run_stage.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Private fail-closed receipt for staging a completed governed Tau-3 v3 MLX training run without raw child logs.",
+  "properties": {
+    "candidate_id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "passed": {
+      "const": true
+    },
+    "raw_logs_included": {
+      "const": false
+    },
+    "schema_checked": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "hfr.tau3_competitive_v3_training_run_stage.v1"
+    },
+    "source_training_receipt_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "staged_file_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "staged_files": {
+      "items": {
+        "$ref": "#/$defs/fileRecord"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "staged_tree_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "required": [
+    "schema_version",
+    "schema_checked",
+    "passed",
+    "candidate_id",
+    "raw_logs_included",
+    "source_training_receipt_sha256",
+    "staged_file_count",
+    "staged_files",
+    "staged_tree_sha256"
+  ],
+  "title": "Tau-3 Competitive v3 Training Run Stage",
+  "type": "object",
+  "$defs": {
+    "fileRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}
