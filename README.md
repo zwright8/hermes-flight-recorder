@@ -336,7 +336,9 @@ endpoints whose model string differs from that frozen contract, stages the
 contract into every arm, and binds its digest into prelaunch, final, and
 domain/seed receipts. Strict benchmark-result validation independently replays
 the canonical evaluator identity and requires the same binding across every
-arm.
+arm. `build_tau3_execution_bundle.py` requires the same
+`--evaluator-model-contract` input and copies it into the portable private
+bundle.
 
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and

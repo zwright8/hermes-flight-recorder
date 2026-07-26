@@ -31,6 +31,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Explicit attestation that the supplied git revision had a clean tracked worktree.",
     )
     parser.add_argument("--protocol", type=Path, required=True)
+    parser.add_argument(
+        "--evaluator-model-contract",
+        type=Path,
+        required=True,
+    )
     parser.add_argument("--selected-candidate-id", required=True)
     parser.add_argument("--candidate", action="append", required=True, help="candidate_id=/path/to/portable-training-output")
     parser.add_argument("--candidate-selection-report", type=Path, required=True)
@@ -43,8 +48,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help=(
-            "Optional source hash guard as label=sha256. Labels: protocol, candidate_selection_report, "
-            "candidate_lock, public_report, candidate:<id>, development:<arm>, sealed:<arm>."
+            "Optional source hash guard as label=sha256. Labels: protocol, evaluator_model_contract, "
+            "candidate_selection_report, candidate_lock, public_report, candidate:<id>, "
+            "development:<arm>, sealed:<arm>."
         ),
     )
     parser.add_argument("--keep-writable", action="store_true", help="Do not chmod copied bundle files read-only after assembly.")
@@ -60,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
             flight_recorder_git_commit=args.git_commit,
             tracked_worktree_clean=args.tracked_worktree_clean,
             protocol=args.protocol,
+            evaluator_model_contract=args.evaluator_model_contract,
             selected_candidate_id=args.selected_candidate_id,
             candidate_dirs=[parse_candidate_arg(item) for item in args.candidate],
             candidate_selection_report=args.candidate_selection_report,

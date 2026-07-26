@@ -36,6 +36,10 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
             training_manifest = manifest["training"]
             self.assertIsInstance(training_manifest, dict)
             self.assertEqual(manifest["schema_version"], "hfr.tau3_execution_bundle.v1")
+            self.assertEqual(
+                manifest["evaluator_model_contract"]["sha256"],
+                sha256_file(source / "evaluator-model-contract.json"),
+            )
             self.assertEqual(training_manifest["selected_candidate_id"], "candidate-a")
             self.assertFalse(str(manifest).count(str(source)))
             self.assertTrue((out / "training" / "candidate-a" / "training_receipt.json").is_file())
@@ -70,6 +74,7 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
                     flight_recorder_git_commit="a" * 40,
                     tracked_worktree_clean=True,
                     protocol=source / "protocol.json",
+                    evaluator_model_contract=source / "evaluator-model-contract.json",
                     selected_candidate_id="candidate-a",
                     candidate_dirs=[
                         CandidateInput("candidate-a", source / "training" / "candidate-a"),
@@ -94,6 +99,7 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
                     flight_recorder_git_commit="a" * 40,
                     tracked_worktree_clean=True,
                     protocol=source / "protocol.json",
+                    evaluator_model_contract=source / "evaluator-model-contract.json",
                     selected_candidate_id="missing",
                     candidate_dirs=[CandidateInput("candidate-a", source / "training" / "candidate-a")],
                     candidate_selection_report=source / "candidate-selection-report.json",
@@ -143,6 +149,8 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
                     "--tracked-worktree-clean",
                     "--protocol",
                     str(source / "protocol.json"),
+                    "--evaluator-model-contract",
+                    str(source / "evaluator-model-contract.json"),
                     "--selected-candidate-id",
                     "candidate-a",
                     "--candidate",
@@ -188,6 +196,7 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
             flight_recorder_git_commit="a" * 40,
             tracked_worktree_clean=True,
             protocol=source / "protocol.json",
+            evaluator_model_contract=source / "evaluator-model-contract.json",
             selected_candidate_id="candidate-a",
             candidate_dirs=[CandidateInput("candidate-a", source / "training" / "candidate-a")],
             candidate_selection_report=source / "candidate-selection-report.json",

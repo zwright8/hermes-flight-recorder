@@ -48,6 +48,7 @@ def build_tau3_execution_bundle(
     flight_recorder_git_commit: str,
     tracked_worktree_clean: bool,
     protocol: str | Path,
+    evaluator_model_contract: str | Path,
     selected_candidate_id: str,
     candidate_dirs: Sequence[CandidateInput],
     candidate_selection_report: str | Path,
@@ -71,6 +72,11 @@ def build_tau3_execution_bundle(
     _require_fresh_output(out)
     expected = dict(expected_source_hashes or {})
     _check_expected_hash("protocol", Path(protocol), expected)
+    _check_expected_hash(
+        "evaluator_model_contract",
+        Path(evaluator_model_contract),
+        expected,
+    )
     _check_expected_hash("candidate_selection_report", Path(candidate_selection_report), expected)
     _check_expected_hash("candidate_lock", Path(candidate_lock), expected)
     _check_expected_hash("public_report", Path(public_report), expected)
@@ -90,6 +96,12 @@ def build_tau3_execution_bundle(
     out.mkdir(mode=0o700)
     try:
         protocol_ref = _copy_file(Path(protocol), out / "protocol.json", out, expected_sha=expected.get("protocol"))
+        evaluator_model_contract_ref = _copy_file(
+            Path(evaluator_model_contract),
+            out / "evaluator-model-contract.json",
+            out,
+            expected_sha=expected.get("evaluator_model_contract"),
+        )
         training_dir = out / "training"
         candidate_receipts: list[dict[str, Any]] = []
         selected_receipt: dict[str, Any] | None = None
@@ -134,6 +146,7 @@ def build_tau3_execution_bundle(
                 "tracked_worktree_clean": True,
             },
             "protocol": protocol_ref,
+            "evaluator_model_contract": evaluator_model_contract_ref,
             "training": {
                 "selected_candidate_id": selected_candidate_id,
                 "selected_receipt": selected_receipt,
@@ -293,6 +306,7 @@ def _relative_path(path: Path, root: Path) -> str:
 def _verify_manifest_refs(root: Path, manifest: dict[str, Any]) -> None:
     refs = [
         manifest["protocol"],
+        manifest["evaluator_model_contract"],
         manifest["training"]["selected_receipt"],
         manifest["training"]["candidate_selection_report"],
         *manifest["training"]["candidate_locks"],
