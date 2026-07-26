@@ -1210,35 +1210,110 @@ def write_development_qualification(root: Path, candidate_id: str, training_rece
     bindings = {
         "training_receipt_sha256": receipt_sha,
         "adapter_tree_sha256": adapter_sha,
+        "candidate_identity_sha256": "7" * 64,
         "harness_sha256": "4" * 64,
         "protocol_sha256": receipt["training_binding"]["protocol"]["sha256"],
         "grid_sha256": "5" * 64,
         "base_identity_sha256": "6" * 64,
+        "evaluator_model_contract_sha256": "8" * 64,
     }
-    evaluation = sealed_evaluation()
-    evaluation["mode"] = "development"
-    evaluation["candidate_binding"] = {"training_receipt_sha256": receipt_sha, "adapter_tree_sha256": adapter_sha}
-    evaluation["harness"]["identity_sha256"] = "4" * 64
     grid, trials, replayed_metrics = development_trial_grid()
-    evaluation["development_grid"] = grid
-    evaluation["development_trials"] = trials
-    evaluation["metrics"]["macro_pass1"] = replayed_metrics["macro_pass1"]
-    evaluation["metrics"]["per_domain_pass1"]["adapter"] = replayed_metrics["per_domain_pass1"]["adapter"]
+    grid["evaluator_model_contract_sha256"] = "8" * 64
+    safety = {
+        "provable": True,
+        "blocking_reasons": [],
+    }
+    evaluation = {
+        "schema_version": "hfr.tau3_development_evaluation.v1",
+        "created_at": "2026-07-23T00:46:00Z",
+        "mode": "development",
+        "passed": True,
+        "tau_revision": "a" * 40,
+        "bindings": bindings,
+        "harness": {"passed": True, "identity_sha256": "4" * 64},
+        "source_artifacts": {
+            "adapter": {"manifest_sha256": "9" * 64},
+            "base": {"manifest_sha256": "a" * 64},
+        },
+        "pairing": {
+            "passed": True,
+            "key_fields": ["domain", "task_sha256", "trial", "seed"],
+            "paired_count": len(trials),
+            "domain_counts": {
+                "airline": 4,
+                "retail": 4,
+                "telecom": 4,
+            },
+            "pair_set_sha256": canonical_sha256(
+                [
+                    {
+                        "domain": trial["domain"],
+                        "seed": trial["seed"],
+                        "task_sha256": trial["task_sha256"],
+                    }
+                    for trial in trials
+                ]
+            ),
+        },
+        "development_grid": grid,
+        "development_trials": trials,
+        "metrics": {
+            "macro_pass1": replayed_metrics["macro_pass1"],
+            "per_domain_pass1": {
+                "adapter": replayed_metrics["per_domain_pass1"]["adapter"],
+                "base": {
+                    "airline": 0.0,
+                    "retail": 0.0,
+                    "telecom": 0.0,
+                },
+            },
+            "safety": safety,
+        },
+        "effects": {"base": {}},
+        "checks": [{"id": "fixture", "passed": True, "details": True}],
+        "failed_check_count": 0,
+        "blocking_reasons": [],
+        "public_payload_scan": {"passed": True},
+    }
+    evaluation["public_payload_scan"]["report_sha256"] = canonical_sha256(
+        evaluation
+    )
     evaluation_path = root / "training" / candidate_id / "development-evaluation.json"
     write_json(evaluation_path, evaluation)
     scorecard = {
         "schema_version": "hfr.tau3_development_scorecard.v1",
+        "schema_checked": True,
+        "created_at": "2026-07-23T00:47:00Z",
         "passed": True,
         "completed": True,
         "bindings": bindings,
-        "frozen_contract": {"harness_sha256": "4" * 64, "protocol_sha256": "c" * 64, "grid_sha256": "5" * 64, "base_identity_sha256": "6" * 64},
-        "development_evaluation": ref_for(root, evaluation_path),
-        "metrics": {
-            "macro_pass1": 0.12,
-            "per_domain_pass1": {"airline": 0.06, "retail": 0.07, "telecom": 0.08},
-            "adapter_base_macro_gain": 0.06,
+        "frozen_contract": {
+            "harness_sha256": "4" * 64,
+            "protocol_sha256": "c" * 64,
+            "grid_sha256": "5" * 64,
+            "base_identity_sha256": "6" * 64,
+            "evaluator_model_contract_sha256": "8" * 64,
         },
-        "blockers": {"safety": 0, "context_overflow": 0, "harness_mismatch": 0, "contamination": 0},
+        "development_evaluation": {
+            **ref_for(root, evaluation_path),
+            "size": evaluation_path.stat().st_size,
+        },
+        "metrics": {
+            "macro_pass1": 1.0,
+            "per_domain_pass1": {
+                "airline": 1.0,
+                "retail": 1.0,
+                "telecom": 1.0,
+            },
+            "adapter_base_macro_gain": 1.0,
+        },
+        "blockers": {
+            "safety": 0,
+            "context_overflow": 0,
+            "harness_mismatch": 0,
+            "evaluator_mismatch": 0,
+            "threshold": 0,
+        },
     }
     scorecard_path = root / "training" / candidate_id / "development-scorecard.json"
     probes_path = root / "training" / candidate_id / "behavior-probes.json"

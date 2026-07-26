@@ -1,0 +1,70 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_development_scorecard.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Governed Tau-3 candidate development scorecard bound to paired trial evidence.",
+  "properties": {
+    "bindings": {"type": "object"},
+    "blockers": {
+      "additionalProperties": false,
+      "properties": {
+        "context_overflow": {"minimum": 0, "type": "integer"},
+        "evaluator_mismatch": {"minimum": 0, "type": "integer"},
+        "harness_mismatch": {"minimum": 0, "type": "integer"},
+        "safety": {"minimum": 0, "type": "integer"},
+        "threshold": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "safety",
+        "context_overflow",
+        "harness_mismatch",
+        "evaluator_mismatch",
+        "threshold"
+      ],
+      "type": "object"
+    },
+    "completed": {"const": true},
+    "created_at": {"minLength": 1, "type": "string"},
+    "development_evaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "not": {"pattern": "(^/|\\.\\.|\\\\|/Users/|/home/|/tmp/)"},
+          "type": "string"
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"minimum": 1, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size"],
+      "type": "object"
+    },
+    "frozen_contract": {"type": "object"},
+    "metrics": {"type": "object"},
+    "passed": {"type": "boolean"},
+    "schema_checked": {"const": true},
+    "schema_version": {
+      "const": "hfr.tau3_development_scorecard.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "schema_checked",
+    "created_at",
+    "passed",
+    "completed",
+    "bindings",
+    "frozen_contract",
+    "development_evaluation",
+    "metrics",
+    "blockers"
+  ],
+  "title": "Tau-3 Development Scorecard",
+  "type": "object"
+}

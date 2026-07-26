@@ -221,6 +221,8 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_candidate_selection",
             "tau3_competitive_dataset",
             "tau3_conversation_import",
+            "tau3_development_evaluation",
+            "tau3_development_scorecard",
             "tau3_evaluation",
             "tau3_generation_retry_source",
             "tau3_grounded_generation",

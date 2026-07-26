@@ -844,7 +844,7 @@ def _fingerprint_kind(rel: str) -> str:
 
 
 def _result(domain: str, seed: int, *, reward: float, db_match: bool) -> dict[str, Any]:
-    task_id = f"{domain}-{seed}"
+    task_id = f"{domain}-task"
     return {
         "timestamp": "2026-07-23T00:00:00",
         "info": {

@@ -1,0 +1,241 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_development_evaluation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Public-safe paired base/adapter Tau-3 development evaluation with trial-level replay evidence.",
+  "properties": {
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "base_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "evaluator_model_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "grid_sha256": {"$ref": "#/$defs/sha256"},
+        "harness_sha256": {"$ref": "#/$defs/sha256"},
+        "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "training_receipt_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+        "candidate_identity_sha256",
+        "harness_sha256",
+        "protocol_sha256",
+        "grid_sha256",
+        "base_identity_sha256",
+        "evaluator_model_contract_sha256"
+      ],
+      "type": "object"
+    },
+    "blocking_reasons": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {},
+          "id": {"minLength": 1, "type": "string"},
+          "passed": {"type": "boolean"}
+        },
+        "required": ["id", "passed", "details"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "created_at": {"minLength": 1, "type": "string"},
+    "development_grid": {
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "const": ["airline", "retail", "telecom"]
+        },
+        "evaluator_model_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "harness_sha256": {"$ref": "#/$defs/sha256"},
+        "seeds": {
+          "items": {"type": "integer"},
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "tasks_by_domain": {
+          "additionalProperties": false,
+          "properties": {
+            "airline": {
+              "items": {"$ref": "#/$defs/sha256"},
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "retail": {
+              "items": {"$ref": "#/$defs/sha256"},
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "telecom": {
+              "items": {"$ref": "#/$defs/sha256"},
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": ["airline", "retail", "telecom"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "domains",
+        "seeds",
+        "tasks_by_domain",
+        "harness_sha256",
+        "evaluator_model_contract_sha256"
+      ],
+      "type": "object"
+    },
+    "development_trials": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_pass1": {"type": "boolean"},
+          "base_pass1": {"type": "boolean"},
+          "domain": {"enum": ["airline", "retail", "telecom"]},
+          "result_sha256": {"$ref": "#/$defs/sha256"},
+          "seed": {"type": "integer"},
+          "source_sha256": {"$ref": "#/$defs/sha256"},
+          "task_sha256": {"$ref": "#/$defs/sha256"}
+        },
+        "required": [
+          "domain",
+          "task_sha256",
+          "seed",
+          "adapter_pass1",
+          "base_pass1",
+          "source_sha256",
+          "result_sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "effects": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {"type": "object"}
+      },
+      "required": ["base"],
+      "type": "object"
+    },
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "harness": {
+      "additionalProperties": false,
+      "properties": {
+        "identity_sha256": {"$ref": "#/$defs/sha256"},
+        "passed": {"type": "boolean"}
+      },
+      "required": ["passed", "identity_sha256"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "macro_pass1": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {"maximum": 1, "minimum": 0, "type": "number"},
+            "base": {"maximum": 1, "minimum": 0, "type": "number"}
+          },
+          "required": ["adapter", "base"],
+          "type": "object"
+        },
+        "per_domain_pass1": {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {"type": "object"},
+            "base": {"type": "object"}
+          },
+          "required": ["adapter", "base"],
+          "type": "object"
+        },
+        "safety": {"type": "object"}
+      },
+      "required": ["macro_pass1", "per_domain_pass1", "safety"],
+      "type": "object"
+    },
+    "mode": {"const": "development"},
+    "pairing": {
+      "additionalProperties": false,
+      "properties": {
+        "domain_counts": {"type": "object"},
+        "key_fields": {
+          "const": ["domain", "task_sha256", "trial", "seed"]
+        },
+        "pair_set_sha256": {"$ref": "#/$defs/sha256"},
+        "paired_count": {"minimum": 1, "type": "integer"},
+        "passed": {"type": "boolean"}
+      },
+      "required": [
+        "passed",
+        "key_fields",
+        "paired_count",
+        "domain_counts",
+        "pair_set_sha256"
+      ],
+      "type": "object"
+    },
+    "passed": {"type": "boolean"},
+    "public_payload_scan": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": {"const": true},
+        "report_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["passed", "report_sha256"],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_development_evaluation.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {"type": "object"},
+        "base": {"type": "object"}
+      },
+      "required": ["adapter", "base"],
+      "type": "object"
+    },
+    "tau_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "mode",
+    "passed",
+    "tau_revision",
+    "bindings",
+    "harness",
+    "source_artifacts",
+    "pairing",
+    "development_grid",
+    "development_trials",
+    "metrics",
+    "effects",
+    "checks",
+    "failed_check_count",
+    "blocking_reasons",
+    "public_payload_scan"
+  ],
+  "title": "Tau-3 Development Evaluation",
+  "type": "object"
+}

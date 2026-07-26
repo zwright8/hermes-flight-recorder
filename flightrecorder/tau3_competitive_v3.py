@@ -963,6 +963,12 @@ def _validate_development_qualification(
     scorecard = _load_json_artifact_ref(root, target, candidate.get("development_scorecard"), f"qualified_candidates.{label}.development_scorecard")
     probes = _load_json_artifact_ref(root, target, candidate.get("behavior_probes"), f"qualified_candidates.{label}.behavior_probes")
     if isinstance(scorecard.payload, dict):
+        _check_registered_schema(
+            target,
+            scorecard.payload,
+            "tau3_development_scorecard",
+            f"{label} development scorecard",
+        )
         _require(target, _nested(scorecard.payload, "bindings", "training_receipt_sha256") == receipt_ref.sha256, f"{label} development scorecard must bind training receipt sha256")
         _require(target, _nested(scorecard.payload, "bindings", "adapter_tree_sha256") == adapter_sha256, f"{label} development scorecard must bind adapter tree sha256")
         _require(target, _nested(scorecard.payload, "bindings", "harness_sha256") == _nested(scorecard.payload, "frozen_contract", "harness_sha256"), f"{label} development scorecard must bind identical frozen harness")
@@ -1095,11 +1101,18 @@ def _validate_development_evaluation(
     if evaluation.path is None or not isinstance(evaluation.payload, dict):
         return
     payload = evaluation.payload
-    _require(target, payload.get("schema_version") == "hfr.tau3_evaluation.v1", f"{label} development evaluation schema_version must be hfr.tau3_evaluation.v1")
+    _check_registered_schema(
+        target,
+        payload,
+        "tau3_development_evaluation",
+        f"{label} development evaluation",
+    )
+    _require(target, payload.get("schema_version") == "hfr.tau3_development_evaluation.v1", f"{label} development evaluation schema_version must be hfr.tau3_development_evaluation.v1")
     _require(target, payload.get("mode") == "development", f"{label} development evaluation must be mode=development")
     _require(target, payload.get("passed") is True, f"{label} development evaluation must pass")
-    _require(target, _nested(payload, "candidate_binding", "training_receipt_sha256") == training_receipt_sha256, f"{label} development evaluation must bind training receipt sha256")
-    _require(target, _nested(payload, "candidate_binding", "adapter_tree_sha256") == adapter_sha256, f"{label} development evaluation must bind adapter tree sha256")
+    _require(target, _nested(payload, "bindings", "training_receipt_sha256") == training_receipt_sha256, f"{label} development evaluation must bind training receipt sha256")
+    _require(target, _nested(payload, "bindings", "adapter_tree_sha256") == adapter_sha256, f"{label} development evaluation must bind adapter tree sha256")
+    _require(target, _dict(payload.get("bindings")) == _dict(scorecard.get("bindings")), f"{label} development evaluation bindings must match scorecard")
     _require(target, _nested(payload, "pairing", "passed") is True, f"{label} development evaluation must have complete paired runs")
     sources = _dict(payload.get("source_artifacts"))
     _require(target, bool(sources.get("adapter")) and bool(sources.get("base")), f"{label} development evaluation must include adapter/base source artifacts")
@@ -1117,6 +1130,7 @@ def _validate_development_evaluation(
     _require(target, payload.get("failed_check_count") == 0 and payload.get("blocking_reasons") == [], f"{label} development evaluation must have zero blockers")
     _require(target, _nested(payload, "harness", "passed") is True, f"{label} development evaluation harness must pass")
     _require(target, _nested(payload, "harness", "identity_sha256") == _nested(payload, "development_grid", "harness_sha256"), f"{label} development evaluation must bind identical harness identity")
+    _require(target, _nested(payload, "bindings", "evaluator_model_contract_sha256") == _nested(payload, "development_grid", "evaluator_model_contract_sha256"), f"{label} development evaluation must bind identical evaluator model contract")
     _require(target, _nested(payload, "public_payload_scan", "passed") is True, f"{label} development evaluation public payload scan must pass")
     safety = _dict(_nested(payload, "metrics", "safety"))
     _require(target, safety.get("provable") is True and safety.get("blocking_reasons") == [], f"{label} development safety blockers must be zero")

@@ -342,6 +342,24 @@ bundle. Development selection records its digest in the candidate lock, so a
 sealed arm fails before task access if its evaluator contract differs from the
 one used to choose the candidate.
 
+Candidate development qualification is built directly from the paired base
+and adapter benchmark manifests. The builder reopens all run receipts and raw
+Tau results through the governed selection validator, requires the exact
+task/seed grid, applies the v3 minimum macro, gain, per-domain, safety, harness,
+and evaluator gates, and emits only hash-safe trial evidence. Its scorecard
+provides the frozen harness and grid hashes consumed by behavior probes.
+
+```bash
+.venv/bin/python scripts/build_tau3_development_evaluation.py \
+  --reference-root runs/tau3_competitive_agent_v3 \
+  --out runs/tau3_competitive_agent_v3/training/<candidate>/development \
+  --candidate-id <candidate> \
+  --base-manifest local/tau3/development-evals/base/manifest.json \
+  --candidate-manifest local/tau3/development-evals/<candidate>/manifest.json \
+  --training-receipt local/tau3/candidate-attempts/<candidate>/run/training_receipt.json \
+  --candidate-identity runs/tau3_competitive_agent_v3/training/<candidate>/candidate-identity.json
+```
+
 For a new task such as tool calling, first represent success, safety, tool
 schemas, arguments, results, and call order as Flight Recorder scenarios and
 reviewed trajectories. `goal3-handoff` then packages the common path from those
