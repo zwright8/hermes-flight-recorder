@@ -9,13 +9,16 @@ import json
 import os
 import platform
 import re
+import secrets
+import stat
 import sys
 import threading
 import time
 import urllib.parse
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -23,6 +26,10 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from flightrecorder.path_safety import (  # noqa: E402
+    atomic_rename_entry_noreplace,
+    opened_directory_descriptor,
+)
 from flightrecorder.redaction import (  # noqa: E402
     REDACTED_VALUE,
     is_secret_key,
@@ -149,56 +156,80 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    out_dir = args.out.expanduser().resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = args.out.expanduser().absolute()
+    if not out_dir.name:
+        raise SystemExit("serving evidence output must name a directory")
 
-    mock_server: ThreadingHTTPServer | None = None
-    mock_requests: list[dict[str, Any]] = []
-    base_url = args.base_url
-    if args.mock_response is not None:
-        mock_server, mock_requests, base_url = _start_mock_server(args.mock_response, args.model, args.adapter)
-    if not base_url:
-        raise SystemExit("--base-url is required unless --mock-response is used")
+    with _open_serving_output_parent(out_dir.parent) as parent_descriptor:
+        _require_fresh_output(parent_descriptor, out_dir.name, out_dir)
 
-    api_key = _api_key(args, str(base_url))
-    try:
-        profile, compatibility, report = check_endpoint(
-            base_url=str(base_url),
-            model=args.model,
-            provider=args.provider,
-            arm=args.arm,
-            engine=args.engine,
-            adapter=args.adapter,
-            adapter_id=args.adapter_id,
-            adapter_revision=args.adapter_revision,
-            adapter_sha256=args.adapter_sha256,
-            profile_id=args.profile_id,
-            api_key=api_key,
-            timeout=float(args.timeout),
-            out_dir=out_dir,
-            require_streaming=bool(args.require_streaming),
-            require_tool_call=bool(args.require_tool_call),
-            require_structured_output=bool(args.require_structured_output),
-        )
-    finally:
-        if mock_server is not None:
-            mock_server.shutdown()
-            mock_server.server_close()
+        mock_server: ThreadingHTTPServer | None = None
+        mock_requests: list[dict[str, Any]] = []
+        base_url = args.base_url
+        if args.mock_response is not None:
+            mock_server, mock_requests, base_url = _start_mock_server(
+                args.mock_response,
+                args.model,
+                args.adapter,
+            )
+        if not base_url:
+            raise SystemExit(
+                "--base-url is required unless --mock-response is used"
+            )
 
-    _write_json(out_dir / "serving_profile.json", profile)
-    _write_json(out_dir / "compatibility_report.json", compatibility)
-    _write_json(out_dir / "serving_check.json", report)
-    if mock_requests:
-        _write_json(
-            out_dir / "mock_requests.json",
-            sanitize_public_artifact(
+        api_key = _api_key(args, str(base_url))
+        try:
+            profile, compatibility, report = check_endpoint(
+                base_url=str(base_url),
+                model=args.model,
+                provider=args.provider,
+                arm=args.arm,
+                engine=args.engine,
+                adapter=args.adapter,
+                adapter_id=args.adapter_id,
+                adapter_revision=args.adapter_revision,
+                adapter_sha256=args.adapter_sha256,
+                profile_id=args.profile_id,
+                api_key=api_key,
+                timeout=float(args.timeout),
+                out_dir=out_dir,
+                require_streaming=bool(args.require_streaming),
+                require_tool_call=bool(args.require_tool_call),
+                require_structured_output=bool(args.require_structured_output),
+            )
+        finally:
+            if mock_server is not None:
+                mock_server.shutdown()
+                mock_server.server_close()
+
+        artifacts = {
+            "serving_profile.json": profile,
+            "compatibility_report.json": compatibility,
+            "serving_check.json": report,
+        }
+        if mock_requests:
+            artifacts["mock_requests.json"] = sanitize_public_artifact(
                 {"requests": mock_requests},
-                secret_values=[api_key, *sensitive_url_values(str(base_url))],
+                secret_values=[
+                    api_key,
+                    *sensitive_url_values(str(base_url)),
+                ],
                 path_replacements={
-                    **public_path_replacements(args.adapter, label=Path(args.adapter).name or "adapter"),
-                    **public_path_replacements(args.model, label=Path(args.model).name or "model"),
+                    **public_path_replacements(
+                        args.adapter,
+                        label=Path(args.adapter).name or "adapter",
+                    ),
+                    **public_path_replacements(
+                        args.model,
+                        label=Path(args.model).name or "model",
+                    ),
                 },
-            ),
+            )
+        _publish_serving_evidence(
+            parent_descriptor,
+            target_name=out_dir.name,
+            display_path=out_dir,
+            artifacts=artifacts,
         )
     print(json.dumps({"passed": report["passed"], "failed_checks": report["failed_checks"], "out": str(out_dir)}, indent=2))
     return 0 if report["passed"] else 1
@@ -974,8 +1005,345 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _write_json(path: Path, data: dict[str, Any]) -> None:
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def _write_json(
+    directory_descriptor: int,
+    name: str,
+    data: dict[str, Any],
+) -> None:
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(
+            name,
+            flags,
+            0o600,
+            dir_fd=directory_descriptor,
+        )
+    except FileExistsError as exc:
+        raise SystemExit(
+            f"refusing to overwrite existing serving evidence: {name}"
+        ) from exc
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        handle.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+@contextmanager
+def _open_serving_output_parent(path: Path) -> Iterator[int]:
+    try:
+        with opened_directory_descriptor(path) as descriptor:
+            _require_private_output_parent(descriptor, path)
+            retained_descriptor = os.dup(descriptor)
+    except (NotImplementedError, OSError, TypeError, ValueError) as exc:
+        raise SystemExit(
+            f"could not open serving evidence output parent {path}: {exc}"
+        ) from exc
+    try:
+        yield retained_descriptor
+    finally:
+        os.close(retained_descriptor)
+
+
+def _require_private_output_parent(
+    parent_descriptor: int,
+    display_path: Path,
+) -> None:
+    get_effective_user_id = getattr(os, "geteuid", None)
+    if get_effective_user_id is None:
+        raise NotImplementedError(
+            "effective-user ownership checks are unavailable"
+        )
+    observed = os.fstat(parent_descriptor)
+    observed_mode = stat.S_IMODE(observed.st_mode)
+    effective_user_id = get_effective_user_id()
+    if observed.st_uid != effective_user_id or observed_mode != 0o700:
+        raise ValueError(
+            "serving evidence output parent must be owned by the effective "
+            f"user and have mode 0700: {display_path}"
+        )
+
+
+def _require_fresh_output(
+    parent_descriptor: int,
+    target_name: str,
+    display_path: Path,
+) -> None:
+    try:
+        os.stat(
+            target_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return
+    except (NotImplementedError, OSError, TypeError) as exc:
+        raise SystemExit(
+            f"could not inspect serving evidence output {display_path}: {exc}"
+        ) from exc
+    raise SystemExit(
+        f"serving evidence output already exists: {display_path}"
+    )
+
+
+def _publish_serving_evidence(
+    parent_descriptor: int,
+    *,
+    target_name: str,
+    display_path: Path,
+    artifacts: dict[str, dict[str, Any]],
+) -> None:
+    _require_fresh_output(parent_descriptor, target_name, display_path)
+    staging_name, created_identity = _create_private_staging_directory(
+        parent_descriptor,
+        target_name,
+    )
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    staging_descriptor = os.open(
+        staging_name,
+        directory_flags,
+        dir_fd=parent_descriptor,
+    )
+    staging_identity = os.fstat(staging_descriptor)
+    if (
+        staging_identity.st_dev,
+        staging_identity.st_ino,
+    ) != created_identity:
+        os.close(staging_descriptor)
+        raise SystemExit(
+            "private serving evidence staging directory changed before open"
+        )
+    renamed = False
+    try:
+        os.fchmod(staging_descriptor, 0o700)
+        for artifact_name, payload in artifacts.items():
+            _write_json(
+                staging_descriptor,
+                artifact_name,
+                payload,
+            )
+        os.fsync(staging_descriptor)
+        _require_fresh_output(
+            parent_descriptor,
+            target_name,
+            display_path,
+        )
+        _require_staging_identity(
+            parent_descriptor,
+            staging_name,
+            (
+                staging_identity.st_dev,
+                staging_identity.st_ino,
+            ),
+        )
+        atomic_rename_entry_noreplace(
+            parent_descriptor,
+            staging_name,
+            target_name,
+        )
+        renamed = True
+        published = os.stat(
+            target_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            published.st_dev,
+            published.st_ino,
+        ) != (
+            staging_identity.st_dev,
+            staging_identity.st_ino,
+        ):
+            raise SystemExit(
+                f"published serving evidence identity mismatch: {display_path}"
+            )
+        _require_output_parent_binding(
+            parent_descriptor,
+            display_path.parent,
+        )
+    except BaseException as primary_error:
+        if not renamed:
+            descriptor_to_cleanup = staging_descriptor
+            staging_descriptor = -1
+            try:
+                _remove_private_staging_directory(
+                    parent_descriptor,
+                    descriptor_to_cleanup,
+                    staging_name=staging_name,
+                    staging_identity=(
+                        staging_identity.st_dev,
+                        staging_identity.st_ino,
+                    ),
+                    expected_names=frozenset(artifacts),
+                )
+            except BaseException as cleanup_error:
+                raise BaseExceptionGroup(
+                    "serving evidence publication and cleanup both failed",
+                    [primary_error, cleanup_error],
+                ) from None
+        raise
+    finally:
+        if staging_descriptor >= 0:
+            os.close(staging_descriptor)
+
+
+def _create_private_staging_directory(
+    parent_descriptor: int,
+    target_name: str,
+) -> tuple[str, tuple[int, int]]:
+    for _attempt in range(100):
+        staging_name = (
+            f".{target_name}.hfr-stage-{secrets.token_hex(8)}"
+        )
+        try:
+            os.mkdir(
+                staging_name,
+                mode=0o700,
+                dir_fd=parent_descriptor,
+            )
+        except FileExistsError:
+            continue
+        created = os.stat(
+            staging_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        os.chmod(
+            staging_name,
+            0o700,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        current = os.stat(
+            staging_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        created_identity = (created.st_dev, created.st_ino)
+        if (current.st_dev, current.st_ino) != created_identity:
+            raise SystemExit(
+                "private serving evidence staging directory changed during creation"
+            )
+        return staging_name, created_identity
+    raise SystemExit(
+        "could not allocate private serving evidence staging directory"
+    )
+
+
+def _require_output_parent_binding(
+    expected_descriptor: int,
+    display_parent: Path,
+) -> None:
+    expected = os.fstat(expected_descriptor)
+    try:
+        with opened_directory_descriptor(display_parent) as current_descriptor:
+            current = os.fstat(current_descriptor)
+    except (NotImplementedError, OSError, TypeError, ValueError) as exc:
+        raise SystemExit(
+            "serving evidence output parent changed during publication: "
+            f"{display_parent}: {exc}"
+        ) from exc
+    if (
+        current.st_dev,
+        current.st_ino,
+    ) != (
+        expected.st_dev,
+        expected.st_ino,
+    ):
+        raise SystemExit(
+            "serving evidence output parent changed during publication: "
+            f"{display_parent}"
+        )
+
+
+def _require_staging_identity(
+    parent_descriptor: int,
+    staging_name: str,
+    expected_identity: tuple[int, int],
+) -> None:
+    try:
+        current = os.stat(
+            staging_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            "private serving evidence staging directory disappeared before "
+            "publication"
+        ) from exc
+    if (
+        current.st_dev,
+        current.st_ino,
+    ) != expected_identity or not stat.S_ISDIR(current.st_mode):
+        raise SystemExit(
+            "private serving evidence staging directory changed before "
+            "publication"
+        )
+
+
+def _remove_private_staging_directory(
+    parent_descriptor: int,
+    staging_descriptor: int,
+    *,
+    staging_name: str,
+    staging_identity: tuple[int, int],
+    expected_names: frozenset[str],
+) -> None:
+    try:
+        with os.scandir(staging_descriptor) as iterator:
+            entries = sorted(iterator, key=lambda entry: entry.name)
+        for entry in entries:
+            if entry.name not in expected_names:
+                raise SystemExit(
+                    "private serving evidence staging directory contains "
+                    f"an unexpected entry: {entry.name}"
+                )
+            observed = entry.stat(follow_symlinks=False)
+            if not stat.S_ISREG(observed.st_mode):
+                raise SystemExit(
+                    "private serving evidence staging entry is not a regular "
+                    f"file: {entry.name}"
+                )
+        for entry in entries:
+            os.unlink(
+                entry.name,
+                dir_fd=staging_descriptor,
+            )
+        os.fsync(staging_descriptor)
+    finally:
+        os.close(staging_descriptor)
+
+    try:
+        current = os.stat(
+            staging_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return
+    if (
+        current.st_dev,
+        current.st_ino,
+    ) != staging_identity or not stat.S_ISDIR(current.st_mode):
+        raise SystemExit(
+            "private serving evidence staging directory changed before cleanup"
+        )
+    os.rmdir(
+        staging_name,
+        dir_fd=parent_descriptor,
+    )
+    os.fsync(parent_descriptor)
 
 
 def _send_handler_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any], *, status: int = 200) -> None:

@@ -2,6 +2,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -132,6 +133,471 @@ class ServingDemoTests(unittest.TestCase):
             self.assertEqual(
                 [target["type"] for target in validation["targets"]],
                 ["serving_profile", "serving_compatibility_report", "serving_endpoint_check"],
+            )
+            for artifact_name in (
+                "serving_profile.json",
+                "compatibility_report.json",
+                "serving_check.json",
+                "mock_requests.json",
+            ):
+                self.assertEqual(
+                    (out / artifact_name).stat().st_mode & 0o777,
+                    0o600,
+                    artifact_name,
+                )
+
+    def test_serving_check_refuses_occupied_output_before_endpoint_use(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_create_once",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "serving"
+            out.mkdir()
+            sentinel = out / "sentinel.json"
+            sentinel.write_text('{"preserve": true}\n', encoding="utf-8")
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_start_mock_server",
+                    side_effect=AssertionError("endpoint must not be contacted"),
+                ),
+                self.assertRaisesRegex(
+                    SystemExit,
+                    "serving evidence output already exists",
+                ),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "must not run",
+                    ]
+                )
+
+            self.assertEqual(
+                sentinel.read_text(encoding="utf-8"),
+                '{"preserve": true}\n',
+            )
+
+    def test_serving_check_rejects_symlinked_output_parent_before_endpoint_use(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_symlink_parent",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_start_mock_server",
+                    side_effect=AssertionError("endpoint must not be contacted"),
+                ),
+                self.assertRaisesRegex(
+                    SystemExit,
+                    "serving evidence output parent",
+                ),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(linked_parent / "serving"),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "must not run",
+                    ]
+                )
+
+    def test_serving_check_rejects_public_output_parent_before_endpoint_use(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_public_parent",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            public_parent = Path(tmp) / "public-parent"
+            public_parent.mkdir()
+            public_parent.chmod(0o777)
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_start_mock_server",
+                    side_effect=AssertionError("endpoint must not be contacted"),
+                ),
+                self.assertRaisesRegex(
+                    SystemExit,
+                    "owned by the effective user and have mode 0700",
+                ),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(public_parent / "serving"),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "must not run",
+                    ]
+                )
+
+    def test_serving_check_does_not_publish_partial_output_and_can_retry(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_atomic_publication",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "serving"
+            original_write = check_openai_serving._write_json
+            write_count = 0
+
+            def fail_after_second_write(*args):
+                nonlocal write_count
+                write_count += 1
+                original_write(*args)
+                if write_count == 2:
+                    raise OSError("injected publication failure")
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_write_json",
+                    side_effect=fail_after_second_write,
+                ),
+                self.assertRaisesRegex(
+                    OSError,
+                    "injected publication failure",
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+
+            self.assertFalse(out.exists())
+            self.assertEqual(
+                list(Path(tmp).glob(".serving.hfr-stage-*")),
+                [],
+            )
+            with redirect_stdout(StringIO()):
+                code = check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(
+                list(Path(tmp).glob(".serving.hfr-stage-*")),
+                [],
+            )
+
+    def test_serving_check_enforces_private_modes_under_restrictive_umask(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_private_modes",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "serving"
+            previous_umask = os.umask(0o777)
+            try:
+                with redirect_stdout(StringIO()):
+                    code = check_openai_serving.main(
+                        [
+                            "--out",
+                            str(out),
+                            "--model",
+                            "hfr-mock-model",
+                            "--mock-response",
+                            "hfr serving smoke ok",
+                        ]
+                    )
+            finally:
+                os.umask(previous_umask)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(out.stat().st_mode & 0o777, 0o700)
+            for artifact in out.iterdir():
+                self.assertEqual(artifact.stat().st_mode & 0o777, 0o600)
+
+    def test_serving_check_rejects_output_swap_before_atomic_publication(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_output_swap",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "serving"
+            original_rename = (
+                check_openai_serving.atomic_rename_entry_noreplace
+            )
+
+            def insert_target_then_rename(
+                parent_descriptor,
+                source_name,
+                target_name,
+            ):
+                os.mkdir(
+                    target_name,
+                    mode=0o700,
+                    dir_fd=parent_descriptor,
+                )
+                target_descriptor = os.open(
+                    target_name,
+                    os.O_RDONLY
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=parent_descriptor,
+                )
+                try:
+                    sentinel_descriptor = os.open(
+                        "sentinel.json",
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                        0o600,
+                        dir_fd=target_descriptor,
+                    )
+                    with os.fdopen(
+                        sentinel_descriptor,
+                        "w",
+                        encoding="utf-8",
+                    ) as handle:
+                        handle.write('{"preserve": true}\n')
+                finally:
+                    os.close(target_descriptor)
+                return original_rename(
+                    parent_descriptor,
+                    source_name,
+                    target_name,
+                )
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "atomic_rename_entry_noreplace",
+                    side_effect=insert_target_then_rename,
+                ),
+                self.assertRaisesRegex(
+                    ValueError,
+                    "atomic publication target changed concurrently",
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+
+            self.assertEqual(
+                (out / "sentinel.json").read_text(encoding="utf-8"),
+                '{"preserve": true}\n',
+            )
+            self.assertEqual(
+                list(root.glob(".serving.hfr-stage-*")),
+                [],
+            )
+
+    def test_serving_check_cannot_succeed_after_parent_rebinding(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_parent_rebinding",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parent = root / "parent"
+            parent.mkdir()
+            parent.chmod(0o700)
+            displaced_parent = root / "displaced-parent"
+            victim = root / "victim"
+            victim.mkdir()
+            out = parent / "serving"
+            original_check = check_openai_serving.check_endpoint
+
+            def check_then_rebind_parent(*args, **kwargs):
+                result = original_check(*args, **kwargs)
+                parent.rename(displaced_parent)
+                parent.symlink_to(victim, target_is_directory=True)
+                return result
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "check_endpoint",
+                    side_effect=check_then_rebind_parent,
+                ),
+                self.assertRaisesRegex(
+                    SystemExit,
+                    "serving evidence output parent changed",
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+
+            self.assertTrue((displaced_parent / "serving").is_dir())
+            self.assertFalse((victim / "serving").exists())
+
+    def test_serving_check_rejects_staging_source_swap_before_publication(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_source_swap",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "serving"
+            original_require_identity = (
+                check_openai_serving._require_staging_identity
+            )
+
+            def swap_staging_source(
+                parent_descriptor,
+                staging_name,
+                expected_identity,
+            ):
+                displaced_name = f"{staging_name}.displaced"
+                os.rename(
+                    staging_name,
+                    displaced_name,
+                    src_dir_fd=parent_descriptor,
+                    dst_dir_fd=parent_descriptor,
+                )
+                os.mkdir(
+                    staging_name,
+                    mode=0o700,
+                    dir_fd=parent_descriptor,
+                )
+                return original_require_identity(
+                    parent_descriptor,
+                    staging_name,
+                    expected_identity,
+                )
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_require_staging_identity",
+                    side_effect=swap_staging_source,
+                ),
+                self.assertRaises(BaseExceptionGroup) as captured,
+                redirect_stdout(StringIO()),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+
+            messages = [
+                str(error)
+                for error in captured.exception.exceptions
+            ]
+            self.assertTrue(
+                any("changed before publication" in item for item in messages),
+                messages,
+            )
+            self.assertTrue(
+                any("changed before cleanup" in item for item in messages),
+                messages,
+            )
+            self.assertFalse(out.exists())
+            self.assertEqual(
+                len(list(root.glob(".serving.hfr-stage-*"))),
+                2,
+            )
+
+    def test_serving_check_preserves_primary_and_cleanup_failures(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_cleanup_failure",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "serving"
+
+            def fail_with_unexpected_entry(
+                directory_descriptor,
+                _name,
+                _payload,
+            ):
+                os.mkdir(
+                    "unexpected-entry",
+                    mode=0o700,
+                    dir_fd=directory_descriptor,
+                )
+                raise OSError("primary publication failure")
+
+            with (
+                mock.patch.object(
+                    check_openai_serving,
+                    "_write_json",
+                    side_effect=fail_with_unexpected_entry,
+                ),
+                self.assertRaises(BaseExceptionGroup) as captured,
+                redirect_stdout(StringIO()),
+            ):
+                check_openai_serving.main(
+                    [
+                        "--out",
+                        str(out),
+                        "--model",
+                        "hfr-mock-model",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                    ]
+                )
+
+            messages = [
+                str(error)
+                for error in captured.exception.exceptions
+            ]
+            self.assertIn("primary publication failure", messages)
+            self.assertTrue(
+                any("unexpected entry" in item for item in messages),
+                messages,
+            )
+            self.assertFalse(out.exists())
+            retained_stages = list(root.glob(".serving.hfr-stage-*"))
+            self.assertEqual(len(retained_stages), 1)
+            self.assertTrue(
+                (retained_stages[0] / "unexpected-entry").is_dir()
             )
 
     def test_remote_adapter_identity_must_be_observed_from_endpoint_metadata(self):

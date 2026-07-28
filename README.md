@@ -856,6 +856,7 @@ Serving checks verify OpenAI-compatible endpoint behavior before eval or demo
 claims consume a model endpoint.
 
 ```bash
+install -d -m 700 runs/serving
 python3.11 scripts/check_openai_serving.py \
   --mock-response "hfr serving smoke ok" \
   --require-streaming \

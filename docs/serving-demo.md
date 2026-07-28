@@ -8,6 +8,7 @@ and a replayable demo report over held-out evaluation artifacts.
 For local or CI verification without a model server, use the managed mock:
 
 ```bash
+install -d -m 700 experiments/qwen3_4b_flightrecorder/serving
 python3 scripts/check_openai_serving.py \
   --mock-response "hfr serving smoke ok" \
   --require-streaming \
@@ -24,6 +25,15 @@ The command writes:
 - `compatibility_report.json`: OpenAI core, streaming, tool-call, and
   structured-output smoke results.
 - `serving_check.json`: pass/fail summary and failed checks for automation.
+
+The parent of `--out` must already exist, be owned by the effective user, have
+mode `0700`, and contain no symlink components; the examples use
+`install -d -m 700` to establish that boundary.
+The `--out` path itself is create-once: it must not exist. The checker stages
+the complete result privately, writes every JSON artifact exclusively with
+mode `0600`, and then publishes the directory atomically. Preserve failed
+preflight directories as evidence and use a fresh path for an infrastructure
+retry.
 
 For a real endpoint, pass `--base-url http://127.0.0.1:<port>/v1` instead of
 `--mock-response`.

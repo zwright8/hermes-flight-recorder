@@ -188,6 +188,7 @@ identity used in the arm manifest. Local adapters derive these values from the
 weights automatically; remote adapters must supply them explicitly:
 
 ```bash
+install -d -m 700 experiments/qwen3_4b_flightrecorder/serving
 python3 scripts/check_openai_serving.py \
   --arm flightrecorder \
   --model YOUR_BASE_MODEL \
