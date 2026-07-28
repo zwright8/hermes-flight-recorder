@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
@@ -10,6 +11,7 @@ import os
 import re
 import secrets
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -20,6 +22,11 @@ from typing import Any
 from .path_safety import path_has_symlink_component
 from .repeated_eval import canonical_sha256
 from .schema_registry import check_schema_contract
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - governed MLX attempts are POSIX-only
+    fcntl = None  # type: ignore[assignment]
 
 TAU3_CANDIDATE_ATTEMPT_LEDGER_SCHEMA_VERSION = "hfr.tau3_candidate_attempt_ledger.v1"
 CAMPAIGN_MARKER = ".hfr_tau3_candidate_attempt_campaign"
@@ -78,27 +85,33 @@ def run_candidate_attempt(
     attempt_id: str | None = None,
     created_at: str | None = None,
     workspace_root: str | Path | None = None,
+    resume_existing_attempt: bool = False,
 ) -> dict[str, Any]:
     """Write intent, run the existing Tau-3 MLX script, and always write outcome."""
 
     root = _workspace_root(workspace_root)
     campaign = _prepare_campaign_root(Path(campaign_root), root)
     _reject_forwarded_args(training_args, root)
-    created = created_at or _now_utc()
+    if resume_existing_attempt and attempt_id is None:
+        raise Tau3CandidateAttemptError("resume_existing_attempt requires an explicit attempt_id")
     safe_id = _new_attempt_id(attempt_id)
     attempt_dir = campaign / safe_id
-    try:
-        attempt_dir.mkdir(mode=0o755)
-    except FileExistsError as exc:
-        raise Tau3CandidateAttemptError(f"attempt directory already exists: {safe_id}") from exc
     run_dir = attempt_dir / "run"
 
     repo_root = Path(__file__).resolve().parents[1]
     script = repo_root / "scripts" / "run_tau3_mlx_training.py"
     if not script.is_file() or path_has_symlink_component(script, include_leaf=True):
         raise Tau3CandidateAttemptError("run_tau3_mlx_training.py must be a regular local script")
-    command = [sys.executable, str(script), *training_args, "--out", str(run_dir)]
-    intent = {
+    if resume_existing_attempt:
+        intent = _load_resume_intent(attempt_dir=attempt_dir, campaign=campaign)
+        created = str(intent.get("created_at") or "")
+    else:
+        created = created_at or _now_utc()
+        try:
+            attempt_dir.mkdir(mode=0o755)
+        except FileExistsError as exc:
+            raise Tau3CandidateAttemptError(f"attempt directory already exists: {safe_id}") from exc
+    expected_intent = {
         "schema_version": "hfr.tau3_candidate_attempt_intent.v1",
         "created_at": created,
         "attempt_id": safe_id,
@@ -112,16 +125,72 @@ def run_candidate_attempt(
             ["python", "scripts/run_tau3_mlx_training.py", *_public_training_args(training_args, root), "--out", "run"]
         ),
     }
-    _write_new_json(attempt_dir / "attempt_intent.json", intent)
+    intent_path = attempt_dir / "attempt_intent.json"
+    if resume_existing_attempt:
+        if intent != expected_intent:
+            raise Tau3CandidateAttemptError(
+                "existing attempt intent does not match supplied training args "
+                "and current immutable source bindings"
+            )
+        if not run_dir.is_dir() or path_has_symlink_component(run_dir, include_leaf=True):
+            raise Tau3CandidateAttemptError(
+                "resumed attempt run directory must be an existing regular non-symlink directory"
+            )
+    else:
+        _write_new_json(intent_path, expected_intent)
+    attempt_lease_fd = _acquire_attempt_lease(attempt_dir)
+    try:
+        outcome_path = attempt_dir / "attempt_outcome.json"
+        if os.path.lexists(outcome_path):
+            raise Tau3CandidateAttemptError("cannot resume an attempt with an existing outcome")
+        outcome_partial_refs = _freeze_existing_outcome_partials(attempt_dir)
+        if resume_existing_attempt:
+            prior_log_refs = _snapshot_existing_attempt_logs(attempt_dir)
+            stdout_path, stderr_path = _next_recovery_log_paths(attempt_dir)
+            child_training_args = [*training_args, "--resume-process-segments"]
+        else:
+            prior_log_refs = []
+            stdout_path = attempt_dir / "child.stdout.log"
+            stderr_path = attempt_dir / "child.stderr.log"
+            child_training_args = training_args
+        command = [sys.executable, str(script), *child_training_args, "--out", str(run_dir)]
+        return _execute_candidate_attempt(
+            root=root,
+            attempt_dir=attempt_dir,
+            run_dir=run_dir,
+            attempt_id=safe_id,
+            command=command,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            prior_log_refs=prior_log_refs,
+            outcome_partial_refs=outcome_partial_refs,
+            resume_existing_attempt=resume_existing_attempt,
+            attempt_lease_fd=attempt_lease_fd,
+        )
+    finally:
+        os.close(attempt_lease_fd)
 
+
+def _execute_candidate_attempt(
+    *,
+    root: Path,
+    attempt_dir: Path,
+    run_dir: Path,
+    attempt_id: str,
+    command: list[str],
+    stdout_path: Path,
+    stderr_path: Path,
+    prior_log_refs: list[dict[str, Any]],
+    outcome_partial_refs: list[dict[str, Any]],
+    resume_existing_attempt: bool,
+    attempt_lease_fd: int,
+) -> dict[str, Any]:
     child: subprocess.Popen[str] | None = None
     status = "failed"
     exit_code: int | None = None
     interrupted = False
     started = time.monotonic()
     previous_handlers: dict[int, Any] = {}
-    stdout_path = attempt_dir / "child.stdout.log"
-    stderr_path = attempt_dir / "child.stderr.log"
 
     def _handle_signal(signum: int, _frame: Any) -> None:
         nonlocal interrupted, status
@@ -138,10 +207,15 @@ def run_candidate_attempt(
             "x",
             encoding="utf-8",
         ) as stderr_handle:
-            child = subprocess.Popen(command, cwd=root, text=True, stdout=stdout_handle, stderr=stderr_handle)
+            child = subprocess.Popen(
+                command,
+                cwd=root,
+                text=True,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                pass_fds=(attempt_lease_fd,),
+            )
             exit_code = child.wait()
-        stdout_path.chmod(0o444)
-        stderr_path.chmod(0o444)
         if interrupted or (exit_code is not None and exit_code < 0):
             interrupted = True
             status = "interrupted"
@@ -149,6 +223,8 @@ def run_candidate_attempt(
             status = "completed" if exit_code == 0 else "failed"
     finally:
         _restore_signal_handlers(previous_handlers)
+        stdout_record = _freeze_regular_file_record(stdout_path, attempt_dir)
+        stderr_record = _freeze_regular_file_record(stderr_path, attempt_dir)
         receipt_path = run_dir / "training_receipt.json"
         receipt, receipt_ref, receipt_reason = _inspect_training_receipt(receipt_path, attempt_dir)
         failure_reasons = [receipt_reason] if receipt_reason is not None else []
@@ -173,22 +249,28 @@ def run_candidate_attempt(
         elif status == "completed":
             status = "failed"
             failure_reasons.append("receipt_not_successful")
+        log_records: dict[str, Any] = {
+            "stdout": stdout_record,
+            "stderr": stderr_record,
+        }
+        if resume_existing_attempt:
+            log_records["prior"] = prior_log_refs
         outcome = {
             "schema_version": "hfr.tau3_candidate_attempt_outcome.v1",
             "created_at": _now_utc(),
-            "attempt_id": safe_id,
+            "attempt_id": attempt_id,
             "status": status,
             "exit_code": exit_code,
             "interrupted": interrupted,
             "elapsed_seconds": round(time.monotonic() - started, 6),
             "failure_reasons": failure_reasons,
             "training_receipt": receipt_ref,
-            "logs": {
-                "stdout": _best_effort_file_ref(stdout_path, attempt_dir),
-                "stderr": _best_effort_file_ref(stderr_path, attempt_dir),
-            },
+            "logs": log_records,
+            "outcome_partials": outcome_partial_refs,
+            "resume_process_segments": resume_existing_attempt,
         }
-        _best_effort_write_outcome(attempt_dir / "attempt_outcome.json", outcome)
+        outcome_path = attempt_dir / "attempt_outcome.json"
+        _publish_new_json_readonly(outcome_path, outcome)
     return outcome
 
 
@@ -255,6 +337,14 @@ def build_run_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--campaign-root", type=Path, required=True)
     parser.add_argument("--attempt-id")
     parser.add_argument(
+        "--resume-existing-attempt",
+        action="store_true",
+        help=(
+            "Resume an existing interrupted process-segmented attempt after "
+            "replaying its immutable intent and committed training state."
+        ),
+    )
+    parser.add_argument(
         "training_args",
         nargs=argparse.REMAINDER,
         help="Arguments for run_tau3_mlx_training.py after --",
@@ -272,6 +362,7 @@ def run_main(argv: list[str] | None = None) -> int:
             campaign_root=args.campaign_root,
             attempt_id=args.attempt_id,
             training_args=training_args,
+            resume_existing_attempt=args.resume_existing_attempt,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
@@ -434,6 +525,330 @@ def _prepare_campaign_root(path: Path, root: Path) -> Path:
     return campaign
 
 
+def _load_resume_intent(
+    *,
+    attempt_dir: Path,
+    campaign: Path,
+) -> dict[str, Any]:
+    if not attempt_dir.is_dir() or path_has_symlink_component(
+        attempt_dir,
+        include_leaf=True,
+    ):
+        raise Tau3CandidateAttemptError(
+            "resumed attempt must be an existing regular non-symlink directory"
+        )
+    try:
+        attempt_dir.resolve(strict=True).relative_to(campaign.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise Tau3CandidateAttemptError(
+            "resumed attempt must remain inside the candidate campaign"
+        ) from exc
+    intent_path = attempt_dir / "attempt_intent.json"
+    if (
+        not intent_path.is_file()
+        or path_has_symlink_component(intent_path, include_leaf=True)
+        or intent_path.stat().st_mode & 0o222
+    ):
+        raise Tau3CandidateAttemptError(
+            "resumed attempt intent must be an immutable regular non-symlink file"
+        )
+    try:
+        intent = _load_json(intent_path)
+    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise Tau3CandidateAttemptError(
+            "resumed attempt intent must be valid JSON"
+        ) from exc
+    if intent.get("schema_version") != "hfr.tau3_candidate_attempt_intent.v1":
+        raise Tau3CandidateAttemptError(
+            "resumed attempt intent schema_version is invalid"
+        )
+    return intent
+
+
+def _snapshot_existing_attempt_logs(
+    attempt_dir: Path,
+) -> list[dict[str, Any]]:
+    log_paths = sorted(
+        (
+            child
+            for child in attempt_dir.iterdir()
+            if child.name.startswith("child.") and child.name.endswith(".log")
+        ),
+        key=lambda path: path.name,
+    )
+    return [
+        _snapshot_regular_file(path, attempt_dir)
+        for path in log_paths
+    ]
+
+
+def _snapshot_regular_file(
+    source: Path,
+    base: Path,
+) -> dict[str, Any]:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(source, flags)
+    except OSError as exc:
+        raise Tau3CandidateAttemptError(
+            f"log snapshot source is unavailable: {source.name}"
+        ) from exc
+    try:
+        before = os.fstat(fd)
+        path_state = os.lstat(source)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or (before.st_dev, before.st_ino)
+            != (path_state.st_dev, path_state.st_ino)
+        ):
+            raise Tau3CandidateAttemptError(
+                f"log snapshot source must be a single-link regular file: "
+                f"{source.name}"
+            )
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        after = os.fstat(fd)
+        final_path_state = os.lstat(source)
+        if (
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            or (after.st_dev, after.st_ino)
+            != (final_path_state.st_dev, final_path_state.st_ino)
+            or size != after.st_size
+        ):
+            raise Tau3CandidateAttemptError(
+                f"log snapshot source changed while being copied: {source.name}"
+            )
+    finally:
+        os.close(fd)
+    snapshot = _next_log_snapshot_path(base, source.name)
+    _publish_new_bytes_readonly(snapshot, b"".join(chunks))
+    record = _file_ref(snapshot, base)
+    record["source_path"] = _safe_rel(source, base)
+    return record
+
+
+def _next_log_snapshot_path(attempt_dir: Path, source_name: str) -> Path:
+    for index in range(1, 10_000):
+        candidate = attempt_dir / (
+            f"evidence-log-snapshot-{index:04d}-{source_name}"
+        )
+        if not os.path.lexists(candidate):
+            return candidate
+    raise Tau3CandidateAttemptError(
+        "candidate attempt has exhausted log snapshot names"
+    )
+
+
+def _next_recovery_log_paths(attempt_dir: Path) -> tuple[Path, Path]:
+    for index in range(1, 10_000):
+        suffix = f"recovery-{index:04d}.log"
+        stdout_path = attempt_dir / f"child.stdout.{suffix}"
+        stderr_path = attempt_dir / f"child.stderr.{suffix}"
+        if not os.path.lexists(stdout_path) and not os.path.lexists(stderr_path):
+            return stdout_path, stderr_path
+    raise Tau3CandidateAttemptError(
+        "candidate attempt has exhausted recovery log names"
+    )
+
+
+def _acquire_attempt_lease(attempt_dir: Path) -> int:
+    if fcntl is None:
+        raise Tau3CandidateAttemptError(
+            "candidate attempt leases require POSIX flock support"
+        )
+    lease_path = attempt_dir / ".attempt.lock"
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(lease_path, flags, 0o600)
+    try:
+        descriptor = os.fstat(fd)
+        path_state = os.lstat(lease_path)
+        if (
+            not stat.S_ISREG(descriptor.st_mode)
+            or descriptor.st_nlink != 1
+            or (descriptor.st_dev, descriptor.st_ino)
+            != (path_state.st_dev, path_state.st_ino)
+        ):
+            raise Tau3CandidateAttemptError(
+                "candidate attempt lease must be a single-link regular file"
+            )
+        os.fchmod(fd, 0o600)
+        os.fsync(fd)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EAGAIN}:
+                raise Tau3CandidateAttemptError(
+                    "candidate attempt is already active"
+                ) from exc
+            raise
+        locked_descriptor = os.fstat(fd)
+        locked_path_state = os.lstat(lease_path)
+        if (
+            not stat.S_ISREG(locked_descriptor.st_mode)
+            or locked_descriptor.st_nlink != 1
+            or (locked_descriptor.st_dev, locked_descriptor.st_ino)
+            != (locked_path_state.st_dev, locked_path_state.st_ino)
+        ):
+            raise Tau3CandidateAttemptError(
+                "candidate attempt lease changed during acquisition"
+            )
+        _fsync_directory(attempt_dir)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _freeze_existing_outcome_partials(
+    attempt_dir: Path,
+) -> list[dict[str, Any]]:
+    return [
+        _freeze_regular_file_record(path, attempt_dir)
+        for path in sorted(
+            attempt_dir.glob(".attempt_outcome.json.partial-*"),
+            key=lambda child: child.name,
+        )
+    ]
+
+
+def _freeze_regular_file_record(
+    path: Path,
+    base: Path,
+) -> dict[str, Any]:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise Tau3CandidateAttemptError(
+            f"immutable evidence file is unavailable: {path.name}"
+        ) from exc
+    try:
+        before = os.fstat(fd)
+        path_state = os.lstat(path)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or (before.st_dev, before.st_ino)
+            != (path_state.st_dev, path_state.st_ino)
+        ):
+            raise Tau3CandidateAttemptError(
+                f"immutable evidence must be a single-link regular file: {path.name}"
+            )
+        os.fchmod(fd, 0o444)
+        os.fsync(fd)
+        os.lseek(fd, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        size = 0
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+        after = os.fstat(fd)
+        final_path_state = os.lstat(path)
+        if (
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            or (after.st_dev, after.st_ino)
+            != (final_path_state.st_dev, final_path_state.st_ino)
+            or after.st_mode & 0o222
+            or size != after.st_size
+        ):
+            raise Tau3CandidateAttemptError(
+                f"immutable evidence changed while being frozen: {path.name}"
+            )
+        return {
+            "path": _safe_rel(path, base),
+            "sha256": digest.hexdigest(),
+            "size": size,
+        }
+    finally:
+        os.close(fd)
+
+
+def _publish_new_json_readonly(path: Path, payload: dict[str, Any]) -> None:
+    data = (
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    _publish_new_bytes_readonly(path, data)
+
+
+def _publish_new_bytes_readonly(path: Path, data: bytes) -> None:
+    if os.path.lexists(path):
+        raise FileExistsError(path)
+    partial = path.parent / (
+        f".{path.name}.partial-{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(partial, flags, 0o600)
+    try:
+        try:
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0:
+                    raise OSError("immutable publication write made no progress")
+                view = view[written:]
+            os.fsync(fd)
+            os.fchmod(fd, 0o444)
+            os.fsync(fd)
+        except BaseException:
+            try:
+                os.fsync(fd)
+                os.fchmod(fd, 0o444)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            raise
+        os.close(fd)
+        os.link(partial, path, follow_symlinks=False)
+        _fsync_directory(path.parent)
+        os.unlink(partial)
+        _fsync_directory(path.parent)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    fd = os.open(path, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _require_campaign_root(path: Path, root: Path) -> Path:
     campaign = _resolve_under_root(path, root, "campaign root", must_exist=True)
     if not campaign.is_dir() or path_has_symlink_component(campaign, include_leaf=True):
@@ -449,6 +864,10 @@ def _reject_forwarded_args(args: list[str], root: Path) -> None:
         raise Tau3CandidateAttemptError("training args are required")
     if "--out" in args or any(token.startswith("--out=") for token in args):
         raise Tau3CandidateAttemptError("candidate wrapper owns --out; do not forward --out")
+    if "--resume-process-segments" in args:
+        raise Tau3CandidateAttemptError(
+            "candidate wrapper owns --resume-process-segments; use --resume-existing-attempt"
+        )
     index = 0
     while index < len(args):
         token = args[index]
@@ -656,13 +1075,6 @@ def _write_new_json(path: Path, payload: dict[str, Any]) -> None:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
     path.chmod(0o444)
-
-
-def _best_effort_write_outcome(path: Path, payload: dict[str, Any]) -> None:
-    try:
-        _write_new_json(path, payload)
-    except FileExistsError:
-        return
 
 
 def _sha256_or_none(value: Any) -> str | None:
