@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import socket
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -295,6 +296,28 @@ class ServingLifecycleTests(unittest.TestCase):
 
     def test_builtin_engine_profiles_render_expected_launch_commands(self):
         manage_openai_serving = _load_script(LIFECYCLE_SCRIPT, "manage_openai_serving_profiles")
+        mlx_args = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--model",
+                "local/tau3/models/base",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--port",
+                "18081",
+                "--adapter",
+                "candidate-a/adapter",
+                "--adapter-id",
+                "candidate-a",
+                "--adapter-revision",
+                "local-0123456789abcdef",
+                "--adapter-sha256",
+                "0" * 64,
+                "--out",
+                "unused",
+            ]
+        )
         vllm_args = manage_openai_serving.parse_args(
             [
                 "--profile",
@@ -330,16 +353,198 @@ class ServingLifecycleTests(unittest.TestCase):
             ]
         )
 
+        mlx_command = manage_openai_serving._launch_command(mlx_args)
+        self.assertEqual(
+            manage_openai_serving._managed_base_url(mlx_args),
+            "http://127.0.0.1:18081/v1",
+        )
+        self.assertEqual(
+            mlx_command[1],
+            str(ROOT / "scripts" / "serve_mlx_openai.py"),
+        )
+        self.assertIn("--served-model-name", mlx_command)
+        self.assertIn("mlx-community/Qwen3.5-9B-4bit", mlx_command)
+        self.assertIn("--adapter-path", mlx_command)
+        self.assertIn("candidate-a/adapter", mlx_command)
+        self.assertIn("--adapter-sha256", mlx_command)
         self.assertEqual(manage_openai_serving._launch_command(vllm_args)[:2], ["vllm", "serve"])
         self.assertIn("--served-model-name", manage_openai_serving._launch_command(vllm_args))
         self.assertEqual(manage_openai_serving._launch_command(sglang_args)[:3], ["python3", "-m", "sglang.launch_server"])
         self.assertIn("--tp-size", manage_openai_serving._launch_command(sglang_args))
+        mlx_strategy = manage_openai_serving._adapter_strategy(mlx_args)
         vllm_strategy = manage_openai_serving._adapter_strategy(vllm_args)
         sglang_strategy = manage_openai_serving._adapter_strategy(sglang_args)
+        self.assertEqual(mlx_strategy["resolved_strategy"], "mlx_adapter_path")
+        self.assertTrue(mlx_strategy["launch_command_applies_adapter"])
+        self.assertFalse(mlx_strategy["requires_engine_args"])
         self.assertEqual(vllm_strategy["resolved_strategy"], "engine_args")
         self.assertTrue(vllm_strategy["requires_engine_args"])
         self.assertIn("engine-specific adapter flags", " ".join(vllm_strategy["notes"]))
         self.assertEqual(sglang_strategy["resolved_strategy"], "engine_args")
+
+    def test_mlx_profile_cannot_be_overridden_or_omit_served_name(self):
+        manage_openai_serving = _load_script(
+            LIFECYCLE_SCRIPT,
+            "manage_openai_serving_mlx_fail_closed",
+        )
+        overridden = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--command",
+                "python3 -m mlx_lm server --model base-only",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--out",
+                "unused",
+            ]
+        )
+        missing_name = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--model",
+                "local/tau3/models/base",
+                "--out",
+                "unused",
+            ]
+        )
+        overridden_adapter = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--model",
+                "local/tau3/models/base",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--adapter",
+                "candidate-a/adapter",
+                "--extra-engine-arg=--adapter-p=base-only",
+                "--out",
+                "unused",
+            ]
+        )
+        wrong_engine = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--engine",
+                "openai_compatible",
+                "--model",
+                "local/tau3/models/base",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--out",
+                "unused",
+            ]
+        )
+        wrong_endpoint = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "18081",
+                "--base-url",
+                "http://127.0.0.1:18082/v1",
+                "--model",
+                "local/tau3/models/base",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--out",
+                "unused",
+            ]
+        )
+        bracketed_ipv6 = manage_openai_serving.parse_args(
+            [
+                "--profile",
+                "mlx",
+                "--host",
+                "[::1]",
+                "--port",
+                "18081",
+                "--model",
+                "local/tau3/models/base",
+                "--served-model-name",
+                "mlx-community/Qwen3.5-9B-4bit",
+                "--out",
+                "unused",
+            ]
+        )
+
+        with self.assertRaisesRegex(SystemExit, "cannot override"):
+            manage_openai_serving._launch_command(overridden)
+        with self.assertRaisesRegex(SystemExit, "served-model-name is required"):
+            manage_openai_serving._launch_command(missing_name)
+        with self.assertRaisesRegex(SystemExit, "reserves identity"):
+            manage_openai_serving._launch_command(overridden_adapter)
+        with self.assertRaisesRegex(SystemExit, "requires --engine mlx"):
+            manage_openai_serving._managed_base_url(wrong_engine)
+        with self.assertRaisesRegex(SystemExit, "must exactly bind"):
+            manage_openai_serving._managed_base_url(wrong_endpoint)
+        ipv6_command = manage_openai_serving._launch_command(bracketed_ipv6)
+        host_index = ipv6_command.index("--host")
+        self.assertEqual(ipv6_command[host_index + 1], "::1")
+        self.assertEqual(
+            manage_openai_serving._managed_base_url(bracketed_ipv6),
+            "http://[::1]:18081/v1",
+        )
+
+    def test_mlx_lifecycle_sanitizes_repo_interpreter_and_external_cwd(self):
+        manage_openai_serving = _load_script(
+            LIFECYCLE_SCRIPT,
+            "manage_openai_serving_mlx_sanitization",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd = root / "external-cwd"
+            out = root / "output"
+            cwd.mkdir()
+            out.mkdir()
+            args = manage_openai_serving.parse_args(
+                [
+                    "--profile",
+                    "mlx",
+                    "--cwd",
+                    str(cwd),
+                    "--model",
+                    str(ROOT / "local" / "tau3" / "models" / "base"),
+                    "--served-model-name",
+                    "mlx-community/Qwen3.5-9B-4bit",
+                    "--out",
+                    str(out),
+                ]
+            )
+            command = manage_openai_serving._launch_command(args)
+            lifecycle = manage_openai_serving._base_lifecycle(
+                args,
+                command,
+                manage_openai_serving._managed_base_url(args),
+                "mlx",
+                cwd,
+                "2026-07-28T00:00:00Z",
+                out,
+                manage_openai_serving._adapter_strategy(args),
+            )
+            sanitized = manage_openai_serving.sanitize_public_artifact(
+                lifecycle,
+                path_replacements=(
+                    manage_openai_serving._serving_path_replacements(
+                        args,
+                        out_dir=out,
+                        cwd=cwd,
+                    )
+                ),
+            )
+            rendered = json.dumps(sanitized, sort_keys=True)
+
+            self.assertNotIn(str(ROOT), rendered)
+            self.assertNotIn(str(cwd), rendered)
+            self.assertNotIn(str(out), rendered)
+            self.assertNotIn(sys.executable, rendered)
+            self.assertNotIn(sys.prefix, rendered)
+            self.assertIn("serve_mlx_openai.py", rendered)
 
 
 def _read_json(path: Path):

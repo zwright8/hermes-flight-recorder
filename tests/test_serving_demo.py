@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import io
 import json
 import sys
@@ -218,6 +219,153 @@ class ServingDemoTests(unittest.TestCase):
             )
             self.assertIn("adapter_identity_observed", declared_report["failed_checks"])
             self.assertIn("adapter_identity_matches_expected", declared_report["failed_checks"])
+
+    def test_mlx_adapter_requires_matching_endpoint_metadata(self):
+        check_openai_serving = _load_script(
+            SERVING_SCRIPT,
+            "check_openai_serving_mlx_identity",
+        )
+        model = "mlx-community/Qwen3.5-9B-4bit"
+        health = {
+            "ok": True,
+            "status_code": 200,
+            "url": "http://endpoint/health",
+            "json": {"status": "ok"},
+        }
+        models = {
+            "ok": True,
+            "status_code": 200,
+            "url": "http://endpoint/v1/models",
+            "json": {"data": [{"id": model}]},
+        }
+        chat = {
+            "ok": True,
+            "status_code": 200,
+            "url": "http://endpoint/v1/chat/completions",
+            "json": {
+                "model": model,
+                "choices": [{"message": {"content": "ok"}}],
+            },
+        }
+        capability = {"status": "supported", "response_ok": True, "error": None}
+        streaming = {
+            **capability,
+            "event_count": 1,
+            "done_seen": True,
+            "text": "ok",
+        }
+        tools = {
+            **capability,
+            "tool_call_count": 1,
+            "tool_calls": [{}],
+        }
+        structured = {
+            **capability,
+            "json_parse_passed": True,
+            "parsed": {},
+            "text": "{}",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = root / "adapter"
+            adapter.mkdir()
+            weights = adapter / "adapters.safetensors"
+            weights.write_bytes(b"hfr-mlx-adapter")
+            (adapter / "adapter_config.json").write_text(
+                "{}\n",
+                encoding="utf-8",
+            )
+            sha256 = hashlib.sha256(weights.read_bytes()).hexdigest()
+            revision = f"local-{sha256[:16]}"
+
+            def run_check(metadata_adapter: dict) -> tuple[dict, dict]:
+                metadata = {
+                    "ok": True,
+                    "status_code": 200,
+                    "url": "http://endpoint/v1/models/model",
+                    "json": {
+                        "id": model,
+                        "adapter": metadata_adapter,
+                    },
+                }
+                with (
+                    mock.patch.object(
+                        check_openai_serving,
+                        "_get_first_json",
+                        side_effect=[health, metadata],
+                    ),
+                    mock.patch.object(
+                        check_openai_serving,
+                        "_request_json",
+                        side_effect=[models, chat],
+                    ),
+                    mock.patch.object(
+                        check_openai_serving,
+                        "_tool_call_check",
+                        return_value=tools,
+                    ),
+                    mock.patch.object(
+                        check_openai_serving,
+                        "_structured_output_check",
+                        return_value=structured,
+                    ),
+                    mock.patch.object(
+                        check_openai_serving,
+                        "_streaming_check",
+                        return_value=streaming,
+                    ),
+                ):
+                    profile, _compatibility, report = (
+                        check_openai_serving.check_endpoint(
+                            base_url="http://endpoint/v1",
+                            model=model,
+                            provider="local",
+                            arm="adapter",
+                            engine="mlx",
+                            adapter=str(adapter),
+                            adapter_id="candidate-a",
+                            adapter_revision=revision,
+                            adapter_sha256=sha256,
+                            api_key="",
+                            timeout=1.0,
+                            out_dir=root,
+                            require_streaming=False,
+                            require_tool_call=False,
+                            require_structured_output=False,
+                        )
+                    )
+                return profile, report
+
+            matched_profile, matched = run_check(
+                {
+                    "id": "candidate-a",
+                    "revision": revision,
+                    "sha256": sha256,
+                }
+            )
+            self.assertTrue(matched["passed"], matched)
+            self.assertNotIn(str(root), json.dumps(matched_profile))
+            self.assertNotIn(str(root), json.dumps(matched))
+            matched_check = next(
+                item
+                for item in matched["checks"]
+                if item["id"] == "mlx_adapter_endpoint_identity"
+            )
+            self.assertTrue(matched_check["passed"])
+
+            _mismatched_profile, mismatched = run_check(
+                {
+                    "id": "candidate-a",
+                    "revision": revision,
+                    "sha256": "f" * 64,
+                }
+            )
+            self.assertFalse(mismatched["passed"])
+            self.assertIn(
+                "mlx_adapter_endpoint_identity",
+                mismatched["failed_checks"],
+            )
 
     def test_partial_sse_stream_without_done_marker_is_not_supported(self):
         check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_partial_sse")

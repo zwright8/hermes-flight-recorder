@@ -53,6 +53,28 @@ _BEARER_RE = re.compile(r"(?i)\bbearer\s+[^\s,;]+")
 
 
 ENGINE_PROFILES: dict[str, dict[str, Any]] = {
+    "mlx": {
+        "engine": "mlx",
+        "status": "profile_ready",
+        "openai_compatible": True,
+        "local_script": "scripts/serve_mlx_openai.py",
+        "adapter_strategy": (
+            "MLX adapter path bound by the local wrapper and attested through "
+            "endpoint model metadata"
+        ),
+        "required_checks": [
+            "health",
+            "models",
+            "model_metadata",
+            "chat_completion",
+            "mlx_adapter_endpoint_identity",
+        ],
+        "launch_command_template": (
+            ".venv/bin/python scripts/serve_mlx_openai.py "
+            "--model {model} --served-model-name {served_model_name} "
+            "--adapter-path {adapter} --host 127.0.0.1 --port {port}"
+        ),
+    },
     "transformers": {
         "engine": "transformers",
         "status": "mvp",
@@ -250,16 +272,18 @@ def check_endpoint(
         local_revision=adapter_revision,
     )
     if adapter:
-        expected_adapter = {
+        expected_adapter: dict[str, str] = {
             "id": adapter_id or adapter,
             "revision": adapter_revision,
             "sha256": adapter_sha256,
         }
         if adapter_identity.get("local") is True:
             expected_adapter = {
-                "id": adapter_id or adapter_identity.get("id"),
-                "revision": adapter_revision or adapter_identity.get("revision"),
-                "sha256": adapter_sha256 or adapter_identity.get("sha256"),
+                "id": adapter_id or str(adapter_identity.get("id") or ""),
+                "revision": adapter_revision
+                or str(adapter_identity.get("revision") or ""),
+                "sha256": adapter_sha256
+                or str(adapter_identity.get("sha256") or ""),
             }
         observed_adapter = {
             key: adapter_identity.get(key)
@@ -293,6 +317,23 @@ def check_endpoint(
                 {"expected": expected_adapter, "observed": observed_adapter},
             )
         )
+        if engine == "mlx":
+            endpoint_adapter = _metadata_adapter_identity(metadata.get("json"))
+            checks.append(
+                _check(
+                    "mlx_adapter_endpoint_identity",
+                    endpoint_adapter == expected_adapter,
+                    {
+                        "expected": expected_adapter,
+                        "observed": endpoint_adapter,
+                        "observation_source": (
+                            "endpoint_model_metadata"
+                            if endpoint_adapter is not None
+                            else "missing"
+                        ),
+                    },
+                )
+            )
     elif adapter_identity.get("present") is True:
         checks.append(
             _check(
@@ -610,9 +651,10 @@ def _adapter_identity(
         }
     path = Path(adapter).expanduser()
     if adapter and path.exists():
-        files = []
+        files: list[dict[str, Any]] = []
         for name in (
             "adapter_config.json",
+            "adapters.safetensors",
             "adapter_model.safetensors",
             "adapter_model.bin",
             "tokenizer_config.json",
@@ -625,7 +667,12 @@ def _adapter_identity(
             (
                 item
                 for item in files
-                if Path(item["path"]).name in {"adapter_model.safetensors", "adapter_model.bin"}
+                if Path(str(item["path"])).name
+                in {
+                    "adapters.safetensors",
+                    "adapter_model.safetensors",
+                    "adapter_model.bin",
+                }
             ),
             None,
         )
@@ -676,7 +723,10 @@ def _metadata_adapter_identity(payload: Any) -> dict[str, str] | None:
 
     if not isinstance(payload, dict):
         return None
-    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    raw_metadata = payload.get("metadata")
+    metadata: dict[str, Any] = (
+        raw_metadata if isinstance(raw_metadata, dict) else {}
+    )
     candidates = (
         payload.get("adapter_identity"),
         payload.get("adapter"),

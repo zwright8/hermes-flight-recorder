@@ -32,6 +32,7 @@ from check_openai_serving import (  # noqa: E402
     sanitize_public_artifact,
     sensitive_url_values,
 )
+from serve_mlx_openai import canonical_loopback_host  # noqa: E402
 from flightrecorder.redaction import is_secret_key  # noqa: E402
 from flightrecorder.safe_http import (  # noqa: E402
     DEFAULT_MAX_BODY_BYTES,
@@ -48,8 +49,15 @@ _OVERSIZED_LOG_LINE_MARKER = "[REDACTED: oversized log line]"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", choices=["custom", "mock", "sglang", "vllm"], default="custom")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--profile",
+        choices=["custom", "mlx", "mock", "sglang", "vllm"],
+        default="custom",
+    )
     parser.add_argument("--command", help="Command to launch. Omit when using a built-in profile.")
     parser.add_argument("--cwd", default=".", help="Working directory for the managed process.")
     parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="Extra environment variable for the managed process.")
@@ -60,7 +68,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--served-model-name", default="")
     parser.add_argument("--provider", default="custom")
     parser.add_argument("--arm", default="candidate")
-    parser.add_argument("--engine", choices=["mock", "openai_compatible", "sglang", "transformers", "vllm"], default="")
+    parser.add_argument(
+        "--engine",
+        choices=[
+            "mlx",
+            "mock",
+            "openai_compatible",
+            "sglang",
+            "transformers",
+            "vllm",
+        ],
+        default="",
+    )
     parser.add_argument("--adapter", default="", help="Optional adapter path or id.")
     parser.add_argument("--adapter-id", default="", help="Expected immutable adapter repository/id.")
     parser.add_argument("--adapter-revision", default="", help="Expected immutable adapter revision.")
@@ -71,7 +90,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--adapter-load-strategy",
-        choices=["auto", "none", "mock_suffix", "engine_args", "merged"],
+        choices=[
+            "auto",
+            "none",
+            "mock_suffix",
+            "engine_args",
+            "merged",
+            "mlx_adapter_path",
+        ],
         default="auto",
         help="Record how --adapter is expected to be used; built-in non-mock profiles do not add adapter flags automatically.",
     )
@@ -92,6 +118,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    base_url = _managed_base_url(args)
     out_dir = args.out.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     preflight_dir = out_dir / "preflight"
@@ -107,7 +134,6 @@ def main(argv: list[str] | None = None) -> int:
     private_stdout_path = private_log_dir / stdout_path.name
     private_stderr_path = private_log_dir / stderr_path.name
 
-    base_url = args.base_url or f"http://{args.host}:{int(args.port)}/v1"
     command = _launch_command(args)
     engine = args.engine or ("openai_compatible" if args.profile == "custom" else args.profile)
     adapter_strategy = _adapter_strategy(args)
@@ -121,12 +147,11 @@ def main(argv: list[str] | None = None) -> int:
         *_environment_secret_values(env),
         *_command_secret_values(command),
     ]
-    path_replacements = {
-        **public_path_replacements(out_dir, label="."),
-        **public_path_replacements(cwd, label="."),
-        **public_path_replacements(args.adapter, label=Path(args.adapter).name or "adapter"),
-        **public_path_replacements(args.model, label=Path(args.model).name or "model"),
-    }
+    path_replacements = _serving_path_replacements(
+        args,
+        out_dir=out_dir,
+        cwd=cwd,
+    )
     generated_at = _utc_now()
     started_monotonic = time.monotonic()
     process: subprocess.Popen[Any] | None = None
@@ -284,6 +309,10 @@ def main(argv: list[str] | None = None) -> int:
 
 def _launch_command(args: argparse.Namespace) -> list[str]:
     if args.command:
+        if args.profile == "mlx":
+            raise SystemExit(
+                "--command cannot override the fail-closed --profile mlx launcher"
+            )
         return shlex.split(args.command)
     served_model = args.served_model_name or args.model
     extra = list(args.extra_engine_arg or [])
@@ -302,6 +331,68 @@ def _launch_command(args: argparse.Namespace) -> list[str]:
         ]
         if args.adapter:
             command.extend(["--adapter", args.adapter])
+        return command + extra
+    if args.profile == "mlx":
+        if args.engine not in {"", "mlx"}:
+            raise SystemExit(
+                "--profile mlx requires --engine mlx or an unset --engine"
+            )
+        if not args.served_model_name:
+            raise SystemExit(
+                "--served-model-name is required when --profile mlx is used"
+            )
+        if args.adapter and args.adapter_load_strategy not in {
+            "auto",
+            "mlx_adapter_path",
+        }:
+            raise SystemExit(
+                "--profile mlx requires --adapter-load-strategy "
+                "auto or mlx_adapter_path"
+            )
+        reserved = {
+            "--adapter-id",
+            "--adapter-path",
+            "--adapter-revision",
+            "--adapter-sha256",
+            "--host",
+            "--model",
+            "--port",
+            "--served-model-name",
+        }
+        overridden = sorted(
+            {
+                candidate
+                for value in extra
+                for candidate in (value.split("=", 1)[0],)
+                if any(flag.startswith(candidate) for flag in reserved)
+            }
+        )
+        if overridden:
+            raise SystemExit(
+                "--profile mlx reserves identity and binding arguments: "
+                + ", ".join(overridden)
+            )
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "serve_mlx_openai.py"),
+            "--model",
+            args.model,
+            "--served-model-name",
+            served_model,
+            "--host",
+            canonical_loopback_host(args.host),
+            "--port",
+            str(int(args.port)),
+        ]
+        if args.adapter:
+            command.extend(["--adapter-path", args.adapter])
+        for flag, value in (
+            ("--adapter-id", args.adapter_id),
+            ("--adapter-revision", args.adapter_revision),
+            ("--adapter-sha256", args.adapter_sha256),
+        ):
+            if value:
+                command.extend([flag, value])
         return command + extra
     if args.profile == "vllm":
         command = [
@@ -336,6 +427,78 @@ def _launch_command(args: argparse.Namespace) -> list[str]:
             command.extend(["--served-model-name", served_model])
         return command + extra
     raise SystemExit("--command is required when --profile custom is used")
+
+
+def _managed_base_url(args: argparse.Namespace) -> str:
+    host = str(args.host)
+    port = int(args.port)
+    if args.profile != "mlx":
+        return args.base_url or f"http://{host}:{port}/v1"
+    if args.engine not in {"", "mlx"}:
+        raise SystemExit(
+            "--profile mlx requires --engine mlx or an unset --engine"
+        )
+    if port < 1 or port > 65535:
+        raise SystemExit("--profile mlx --port must be between 1 and 65535")
+    try:
+        normalized_host = canonical_loopback_host(host)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    url_host = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    expected = f"http://{url_host}:{port}/v1"
+    if not args.base_url:
+        return expected
+    parsed = urllib.parse.urlsplit(str(args.base_url))
+    try:
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise SystemExit(
+            "--profile mlx --base-url contains an invalid port"
+        ) from exc
+    if (
+        parsed.scheme != "http"
+        or parsed.username is not None
+        or parsed.password is not None
+        or (parsed.hostname or "").lower() != normalized_host
+        or parsed_port != port
+        or parsed.path.rstrip("/") != "/v1"
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise SystemExit(
+            "--profile mlx --base-url must exactly bind the launched "
+            "loopback host, port, and /v1 path"
+        )
+    return expected
+
+
+def _serving_path_replacements(
+    args: argparse.Namespace,
+    *,
+    out_dir: Path,
+    cwd: Path,
+) -> dict[str, str]:
+    return {
+        **public_path_replacements(REPO_ROOT, label="."),
+        **public_path_replacements(
+            sys.executable,
+            label=Path(sys.executable).name or "python",
+        ),
+        **public_path_replacements(
+            sys.prefix,
+            label="python-env",
+        ),
+        **public_path_replacements(out_dir, label="."),
+        **public_path_replacements(cwd, label="."),
+        **public_path_replacements(
+            args.adapter,
+            label=Path(args.adapter).name or "adapter",
+        ),
+        **public_path_replacements(
+            args.model,
+            label=Path(args.model).name or "model",
+        ),
+    }
 
 
 def _base_lifecycle(
@@ -384,14 +547,28 @@ def _adapter_strategy(args: argparse.Namespace) -> dict[str, Any]:
         resolved = requested
     elif args.profile == "mock":
         resolved = "mock_suffix"
+    elif args.profile == "mlx":
+        resolved = "mlx_adapter_path"
     else:
         resolved = "engine_args"
     requires_engine_args = bool(adapter and resolved == "engine_args")
+    launch_command_applies_adapter = bool(
+        adapter
+        and (
+            (args.profile == "mock" and resolved == "mock_suffix")
+            or (args.profile == "mlx" and resolved == "mlx_adapter_path")
+        )
+    )
     notes: list[str] = []
     if adapter and args.profile in {"vllm", "sglang"} and resolved == "engine_args":
         notes.append("Built-in launch profiles record adapter intent; pass engine-specific adapter flags with --extra-engine-arg or use --command.")
     if adapter and resolved == "merged":
         notes.append("Adapter is treated as already merged into the served model; lifecycle records it for provenance only.")
+    if adapter and args.profile == "mlx" and resolved == "mlx_adapter_path":
+        notes.append(
+            "The MLX launch profile binds the adapter path and emits matching "
+            "endpoint adapter metadata."
+        )
     if not adapter and requested not in {"auto", "none"}:
         notes.append("No adapter was provided, so the resolved strategy is none.")
     return {
@@ -401,7 +578,7 @@ def _adapter_strategy(args: argparse.Namespace) -> dict[str, Any]:
         "requested_strategy": requested,
         "resolved_strategy": resolved,
         "engine_profile": args.profile,
-        "launch_command_applies_adapter": bool(adapter and args.profile == "mock" and resolved == "mock_suffix"),
+        "launch_command_applies_adapter": launch_command_applies_adapter,
         "requires_engine_args": requires_engine_args,
         "notes": notes,
     }

@@ -91,6 +91,36 @@ python3 scripts/manage_openai_serving.py \
   --out experiments/qwen3_4b_flightrecorder/serving/sglang_lifecycle
 ```
 
+For a local MLX model, use the fail-closed MLX profile. A served model name is
+required because the on-disk model path is not the model identity sent by an
+evaluation harness:
+
+```bash
+python3 scripts/manage_openai_serving.py \
+  --profile mlx \
+  --host 127.0.0.1 \
+  --port 18081 \
+  --base-url http://127.0.0.1:18081/v1 \
+  --model local/tau3/models/base \
+  --served-model-name mlx-community/Qwen3.5-9B-4bit \
+  --adapter runs/tau3_competitive_agent_v3/training/candidates/candidate-a/run/adapter \
+  --adapter-id candidate-a \
+  --adapter-revision "${ADAPTER_REVISION}" \
+  --adapter-sha256 "${ADAPTER_SHA256}" \
+  --require-streaming \
+  --require-tool-call \
+  --out local/tau3/serving/competitive-v3/candidate-a
+```
+
+The MLX profile cannot be replaced with `--command`. It launches
+`serve_mlx_openai.py`, binds both `default_model` and the required served name
+to the same local base and adapter, and exposes the adapter identity through
+`/v1/models/<served-name>`. Preflight requires that endpoint metadata to match
+the locally replayed adapter weights. This prevents a base-only process from
+passing merely because an adapter path was supplied to the checker. Use the
+same served model name for paired base and adapter arms, but distinct loopback
+ports and lifecycle directories.
+
 If upstream launch flags need local tuning, pass `--command "<server command>"`
 and keep `--base-url` pointed at the resulting OpenAI-compatible endpoint.
 When `--adapter` is supplied, the lifecycle artifact records
