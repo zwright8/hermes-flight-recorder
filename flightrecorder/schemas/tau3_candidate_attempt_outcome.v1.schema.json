@@ -1,0 +1,183 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_attempt_outcome.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable terminal outcome for one governed Tau-3 candidate-attempt invocation, including append-only recovery lineage.",
+  "properties": {
+    "attempt_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$",
+      "type": "string"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "elapsed_seconds": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "exit_code": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failure_reasons": {
+      "items": {
+        "enum": [
+          "malformed_receipt",
+          "missing_receipt",
+          "receipt_not_successful",
+          "receipt_parse_error",
+          "receipt_reference_error",
+          "receipt_schema_invalid",
+          "receipt_unsafe_symlink"
+        ]
+      },
+      "type": "array"
+    },
+    "interrupted": {
+      "type": "boolean"
+    },
+    "logs": {
+      "additionalProperties": false,
+      "properties": {
+        "prior": {
+          "items": {
+            "$ref": "#/$defs/logSnapshotRef"
+          },
+          "type": "array"
+        },
+        "stderr": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "stdout": {
+          "$ref": "#/$defs/fileRef"
+        }
+      },
+      "required": [
+        "stdout",
+        "stderr"
+      ],
+      "type": "object"
+    },
+    "outcome_partials": {
+      "items": {
+        "$ref": "#/$defs/fileRef"
+      },
+      "type": "array"
+    },
+    "prior_outcomes": {
+      "items": {
+        "$ref": "#/$defs/fileRef"
+      },
+      "type": "array"
+    },
+    "resume_process_segments": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.tau3_candidate_attempt_outcome.v1"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "timeout",
+        "interrupted",
+        "missing-receipt",
+        "malformed-receipt"
+      ]
+    },
+    "training_receipt": {
+      "$ref": "#/$defs/optionalFileRef"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "attempt_id",
+    "status",
+    "exit_code",
+    "interrupted",
+    "elapsed_seconds",
+    "failure_reasons",
+    "training_receipt",
+    "logs",
+    "outcome_partials",
+    "resume_process_segments"
+  ],
+  "title": "Tau-3 Candidate Attempt Outcome",
+  "type": "object",
+  "$defs": {
+    "fileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "logSnapshotRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_path": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "source_path"
+      ],
+      "type": "object"
+    },
+    "optionalFileRef": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/fileRef"
+        }
+      ]
+    },
+    "relativePath": {
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?!.*(^|[\\\\/])~([\\\\/]|$))(?!.*\\\\).+$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

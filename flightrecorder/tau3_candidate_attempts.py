@@ -29,8 +29,10 @@ except ImportError:  # pragma: no cover - governed MLX attempts are POSIX-only
     fcntl = None  # type: ignore[assignment]
 
 TAU3_CANDIDATE_ATTEMPT_LEDGER_SCHEMA_VERSION = "hfr.tau3_candidate_attempt_ledger.v1"
+TAU3_CANDIDATE_ATTEMPT_OUTCOME_SCHEMA_VERSION = "hfr.tau3_candidate_attempt_outcome.v1"
 CAMPAIGN_MARKER = ".hfr_tau3_candidate_attempt_campaign"
 SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+RECOVERY_OUTCOME_RE = re.compile(r"^attempt_outcome\.recovery-(\d{4})\.json$")
 SEALED_TEST_RE = re.compile(r"(?:^|[/_.-])(?:sealed|test)(?:$|[/_.-])", re.IGNORECASE)
 PATH_ARG_NAMES = {
     "--bundle",
@@ -140,9 +142,11 @@ def run_candidate_attempt(
         _write_new_json(intent_path, expected_intent)
     attempt_lease_fd = _acquire_attempt_lease(attempt_dir)
     try:
-        outcome_path = attempt_dir / "attempt_outcome.json"
-        if os.path.lexists(outcome_path):
-            raise Tau3CandidateAttemptError("cannot resume an attempt with an existing outcome")
+        prior_outcome_refs, outcome_path = _prepare_outcome_publication(
+            attempt_dir=attempt_dir,
+            attempt_id=safe_id,
+            resume_existing_attempt=resume_existing_attempt,
+        )
         outcome_partial_refs = _freeze_existing_outcome_partials(attempt_dir)
         if resume_existing_attempt:
             prior_log_refs = _snapshot_existing_attempt_logs(attempt_dir)
@@ -163,7 +167,9 @@ def run_candidate_attempt(
             stdout_path=stdout_path,
             stderr_path=stderr_path,
             prior_log_refs=prior_log_refs,
+            prior_outcome_refs=prior_outcome_refs,
             outcome_partial_refs=outcome_partial_refs,
+            outcome_path=outcome_path,
             resume_existing_attempt=resume_existing_attempt,
             attempt_lease_fd=attempt_lease_fd,
         )
@@ -181,7 +187,9 @@ def _execute_candidate_attempt(
     stdout_path: Path,
     stderr_path: Path,
     prior_log_refs: list[dict[str, Any]],
+    prior_outcome_refs: list[dict[str, Any]],
     outcome_partial_refs: list[dict[str, Any]],
+    outcome_path: Path,
     resume_existing_attempt: bool,
     attempt_lease_fd: int,
 ) -> dict[str, Any]:
@@ -256,7 +264,7 @@ def _execute_candidate_attempt(
         if resume_existing_attempt:
             log_records["prior"] = prior_log_refs
         outcome = {
-            "schema_version": "hfr.tau3_candidate_attempt_outcome.v1",
+            "schema_version": TAU3_CANDIDATE_ATTEMPT_OUTCOME_SCHEMA_VERSION,
             "created_at": _now_utc(),
             "attempt_id": attempt_id,
             "status": status,
@@ -266,10 +274,19 @@ def _execute_candidate_attempt(
             "failure_reasons": failure_reasons,
             "training_receipt": receipt_ref,
             "logs": log_records,
+            "prior_outcomes": prior_outcome_refs,
             "outcome_partials": outcome_partial_refs,
             "resume_process_segments": resume_existing_attempt,
         }
-        outcome_path = attempt_dir / "attempt_outcome.json"
+        schema = check_schema_contract(
+            outcome,
+            name_or_id="tau3_candidate_attempt_outcome",
+        )
+        if schema["passed"] is not True:
+            raise Tau3CandidateAttemptError(
+                "candidate attempt outcome violates schema: "
+                + "; ".join(schema["errors"])
+            )
         _publish_new_json_readonly(outcome_path, outcome)
     return outcome
 
@@ -408,10 +425,32 @@ def ledger_main(argv: list[str] | None = None) -> int:
 
 def _attempt_record(attempt_dir: Path, campaign: Path) -> dict[str, Any]:
     intent_path = attempt_dir / "attempt_intent.json"
-    outcome_path = attempt_dir / "attempt_outcome.json"
+    try:
+        outcome_paths = _candidate_outcome_paths(attempt_dir)
+        outcome_paths_malformed = False
+    except Tau3CandidateAttemptError:
+        outcome_paths = []
+        outcome_paths_malformed = True
+    outcome_path = (
+        outcome_paths[-1]
+        if outcome_paths
+        else attempt_dir / "attempt_outcome.json"
+    )
     receipt_path = attempt_dir / "run" / "training_receipt.json"
     intent, intent_malformed = _load_attempt_artifact(intent_path, "intent")
-    outcome, outcome_malformed = _load_attempt_artifact(outcome_path, "outcome")
+    attempt_id = _safe_attempt_id(
+        attempt_dir.name
+        if intent is None
+        else str(intent.get("attempt_id") or attempt_dir.name)
+    )
+    if outcome_paths_malformed:
+        outcome, outcome_malformed = None, True
+    else:
+        outcome, outcome_malformed = _load_candidate_outcome_chain(
+            outcome_paths,
+            attempt_dir=attempt_dir,
+            attempt_id=attempt_id,
+        )
     receipt, receipt_malformed = _load_attempt_artifact(
         receipt_path,
         "receipt",
@@ -453,9 +492,7 @@ def _attempt_record(attempt_dir: Path, campaign: Path) -> dict[str, Any]:
         status = "failed"
         reasons.append("receipt_not_successful")
     record = {
-        "attempt_id": _safe_attempt_id(
-            attempt_dir.name if intent is None else str(intent.get("attempt_id") or attempt_dir.name)
-        ),
+        "attempt_id": attempt_id,
         "attempt_ref": _safe_rel(attempt_dir, campaign),
         "status": status,
         "failure_reasons": sorted(set(reasons)),
@@ -721,10 +758,169 @@ def _freeze_existing_outcome_partials(
     return [
         _freeze_regular_file_record(path, attempt_dir)
         for path in sorted(
-            attempt_dir.glob(".attempt_outcome.json.partial-*"),
+            attempt_dir.glob(".attempt_outcome*.json.partial-*"),
             key=lambda child: child.name,
         )
     ]
+
+
+def _candidate_outcome_paths(attempt_dir: Path) -> list[Path]:
+    primary = attempt_dir / "attempt_outcome.json"
+    recovery_paths: dict[int, Path] = {}
+    for path in attempt_dir.glob("attempt_outcome.recovery-*.json"):
+        match = RECOVERY_OUTCOME_RE.fullmatch(path.name)
+        if match is None:
+            raise Tau3CandidateAttemptError(
+                f"unrecognized candidate recovery outcome: {path.name}"
+            )
+        index = int(match.group(1))
+        if index < 1 or index in recovery_paths:
+            raise Tau3CandidateAttemptError(
+                f"invalid candidate recovery outcome index: {path.name}"
+            )
+        recovery_paths[index] = path
+    if recovery_paths and not os.path.lexists(primary):
+        raise Tau3CandidateAttemptError(
+            "candidate recovery outcomes require the primary attempt outcome"
+        )
+    if recovery_paths:
+        expected = list(range(1, max(recovery_paths) + 1))
+        if sorted(recovery_paths) != expected:
+            raise Tau3CandidateAttemptError(
+                "candidate recovery outcome sequence must be contiguous"
+            )
+    paths = [primary] if os.path.lexists(primary) else []
+    paths.extend(recovery_paths[index] for index in sorted(recovery_paths))
+    return paths
+
+
+def _prepare_outcome_publication(
+    *,
+    attempt_dir: Path,
+    attempt_id: str,
+    resume_existing_attempt: bool,
+) -> tuple[list[dict[str, Any]], Path]:
+    outcome_paths = _candidate_outcome_paths(attempt_dir)
+    primary = attempt_dir / "attempt_outcome.json"
+    if not resume_existing_attempt:
+        if outcome_paths:
+            raise Tau3CandidateAttemptError(
+                "cannot start an attempt with an existing outcome"
+            )
+        return [], primary
+    if not outcome_paths:
+        return [], primary
+
+    prior_refs: list[dict[str, Any]] = []
+    latest_payload: dict[str, Any] | None = None
+    for index, path in enumerate(outcome_paths):
+        record = _freeze_regular_file_record(path, attempt_dir)
+        try:
+            payload = _load_json(path)
+        except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise Tau3CandidateAttemptError(
+                f"existing outcome is not valid JSON: {path.name}"
+            ) from exc
+        if (
+            check_schema_contract(
+                payload,
+                name_or_id="tau3_candidate_attempt_outcome",
+            )["passed"]
+            is not True
+            or payload.get("schema_version")
+            != TAU3_CANDIDATE_ATTEMPT_OUTCOME_SCHEMA_VERSION
+            or payload.get("attempt_id") != attempt_id
+            or payload.get("status") not in ATTEMPT_STATUSES
+            or not isinstance(payload.get("interrupted"), bool)
+            or payload.get("interrupted")
+            is not (payload.get("status") == "interrupted")
+        ):
+            raise Tau3CandidateAttemptError(
+                f"existing outcome is not a valid candidate outcome: {path.name}"
+            )
+        if (
+            payload.get("status") != "interrupted"
+            or payload.get("interrupted") is not True
+        ):
+            raise Tau3CandidateAttemptError(
+                "cannot resume an attempt whose existing outcome is not "
+                f"interrupted: {path.name}"
+            )
+        if index == 0 and payload.get("prior_outcomes") not in (None, []):
+            raise Tau3CandidateAttemptError(
+                f"candidate primary outcome has recovery lineage: {path.name}"
+            )
+        if index > 0 and payload.get("prior_outcomes") != prior_refs:
+            raise Tau3CandidateAttemptError(
+                f"candidate recovery outcome chain mismatch: {path.name}"
+            )
+        if _freeze_regular_file_record(path, attempt_dir) != record:
+            raise Tau3CandidateAttemptError(
+                f"existing outcome changed during replay: {path.name}"
+            )
+        prior_refs.append(record)
+        latest_payload = payload
+
+    if latest_payload is None:
+        raise Tau3CandidateAttemptError(
+            "cannot resume an attempt whose existing outcome is not interrupted"
+        )
+    recovery_index = len(outcome_paths)
+    if recovery_index >= 10_000:
+        raise Tau3CandidateAttemptError(
+            "candidate attempt has exhausted recovery outcome names"
+        )
+    return (
+        prior_refs,
+        attempt_dir / f"attempt_outcome.recovery-{recovery_index:04d}.json",
+    )
+
+
+def _load_candidate_outcome_chain(
+    outcome_paths: list[Path],
+    *,
+    attempt_dir: Path,
+    attempt_id: str,
+) -> tuple[dict[str, Any] | None, bool]:
+    if not outcome_paths:
+        return None, False
+    prior_refs: list[dict[str, Any]] = []
+    latest_payload: dict[str, Any] | None = None
+    for index, path in enumerate(outcome_paths):
+        payload, malformed = _load_attempt_artifact(path, "outcome")
+        if malformed or payload is None:
+            return None, True
+        if (
+            check_schema_contract(
+                payload,
+                name_or_id="tau3_candidate_attempt_outcome",
+            )["passed"]
+            is not True
+            or payload.get("schema_version")
+            != TAU3_CANDIDATE_ATTEMPT_OUTCOME_SCHEMA_VERSION
+            or payload.get("attempt_id") != attempt_id
+            or payload.get("status") not in ATTEMPT_STATUSES
+            or not isinstance(payload.get("interrupted"), bool)
+            or payload.get("interrupted")
+            is not (payload.get("status") == "interrupted")
+        ):
+            return None, True
+        if index == 0:
+            if payload.get("prior_outcomes") not in (None, []):
+                return None, True
+        elif payload.get("prior_outcomes") != prior_refs:
+            return None, True
+        if index < len(outcome_paths) - 1 and (
+            payload.get("status") != "interrupted"
+            or payload.get("interrupted") is not True
+        ):
+            return None, True
+        record = _best_effort_file_ref(path, attempt_dir)
+        if record is None:
+            return None, True
+        prior_refs.append(record)
+        latest_payload = payload
+    return latest_payload, False
 
 
 def _freeze_regular_file_record(

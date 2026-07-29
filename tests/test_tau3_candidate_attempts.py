@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import fcntl
+import hashlib
 import json
 import os
 import signal
@@ -20,6 +21,7 @@ from flightrecorder.tau3_candidate_attempts import (
     Tau3CandidateAttemptError,
     _acquire_attempt_lease,
     _freeze_regular_file_record,
+    _prepare_outcome_publication,
     _publish_new_json_readonly,
     _snapshot_regular_file,
     build_candidate_attempt_ledger,
@@ -41,6 +43,41 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _interrupted_outcome(
+    attempt_id: str,
+    *,
+    prior_outcomes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": "hfr.tau3_candidate_attempt_outcome.v1",
+        "created_at": "2026-07-29T00:00:00Z",
+        "attempt_id": attempt_id,
+        "status": "interrupted",
+        "exit_code": -signal.SIGTERM,
+        "interrupted": True,
+        "elapsed_seconds": 1.0,
+        "failure_reasons": ["missing_receipt"],
+        "training_receipt": None,
+        "logs": {
+            "stdout": {
+                "path": "child.stdout.log",
+                "sha256": "0" * 64,
+                "size": 0,
+            },
+            "stderr": {
+                "path": "child.stderr.log",
+                "sha256": "0" * 64,
+                "size": 0,
+            },
+        },
+        "outcome_partials": [],
+        "resume_process_segments": prior_outcomes is not None,
+    }
+    if prior_outcomes is not None:
+        payload["prior_outcomes"] = prior_outcomes
+    return payload
 
 
 def _ledger_strings(value: Any) -> list[str]:
@@ -71,6 +108,14 @@ class Tau3CandidateAttemptTests(unittest.TestCase):
                 training_args=["--bundle", str(bundle), "--iters", "2", "--timeout-seconds", "5"],
             )
             self.assertEqual(outcome["status"], "completed")
+            outcome_schema = check_schema_contract(
+                outcome,
+                name_or_id="tau3_candidate_attempt_outcome",
+            )
+            self.assertTrue(
+                outcome_schema["passed"],
+                outcome_schema["errors"],
+            )
             self.assertTrue((campaign / "candidate-a" / "attempt_intent.json").is_file())
             self.assertTrue((campaign / "candidate-a" / "attempt_outcome.json").is_file())
             self.assertTrue((campaign / "candidate-a" / "run" / "training_receipt.json").is_file())
@@ -401,7 +446,7 @@ class Tau3CandidateAttemptTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(
                     Tau3CandidateAttemptError,
-                    "existing outcome",
+                    "existing outcome is not interrupted",
                 ),
             ):
                 run_candidate_attempt(
@@ -441,6 +486,377 @@ class Tau3CandidateAttemptTests(unittest.TestCase):
                     resume_existing_attempt=True,
                 )
             child.assert_not_called()
+
+    def test_wrapper_resume_preserves_interrupted_outcome_append_only(self) -> None:
+        class ReceiptWritingProcess:
+            def __init__(
+                self,
+                command: list[str],
+                receipt_bytes: bytes,
+                **_kwargs: Any,
+            ) -> None:
+                self.returncode: int | None = None
+                run_dir = Path(command[command.index("--out") + 1])
+                run_dir.mkdir(parents=True, exist_ok=True)
+                (run_dir / "training_receipt.json").write_bytes(receipt_bytes)
+
+            def wait(self) -> int:
+                self.returncode = 0
+                return 0
+
+            def poll(self) -> int | None:
+                return self.returncode
+
+            def terminate(self) -> None:
+                self.returncode = -signal.SIGTERM
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            campaign = root / "campaign"
+            template = run_candidate_attempt(
+                campaign_root=campaign,
+                attempt_id="template",
+                workspace_root=root,
+                training_args=[
+                    "--bundle",
+                    str(bundle),
+                    "--iters",
+                    "2",
+                    "--timeout-seconds",
+                    "5",
+                ],
+            )
+            self.assertEqual(template["status"], "completed")
+            receipt_bytes = (
+                campaign / "template/run/training_receipt.json"
+            ).read_bytes()
+            training_args = [
+                "--bundle",
+                str(bundle),
+                "--iters",
+                "4",
+                "--process-segment-iters",
+                "2",
+                "--timeout-seconds",
+                "5",
+            ]
+            with mock.patch(
+                "flightrecorder.tau3_candidate_attempts.subprocess.Popen",
+                side_effect=lambda command, **kwargs: ReceiptWritingProcess(
+                    command,
+                    receipt_bytes,
+                    **kwargs,
+                ),
+            ):
+                first = run_candidate_attempt(
+                    campaign_root=campaign,
+                    attempt_id="candidate-a",
+                    workspace_root=root,
+                    training_args=training_args,
+                )
+            self.assertEqual(first["status"], "completed")
+            attempt = campaign / "candidate-a"
+            primary = attempt / "attempt_outcome.json"
+            interrupted = _read_json(primary)
+            interrupted.update(
+                {
+                    "status": "interrupted",
+                    "exit_code": -signal.SIGTERM,
+                    "interrupted": True,
+                    "failure_reasons": ["missing_receipt"],
+                    "training_receipt": None,
+                }
+            )
+            primary.chmod(0o644)
+            _write_json(primary, interrupted)
+            primary.chmod(0o444)
+            (attempt / "run/training_receipt.json").unlink()
+            primary_bytes = primary.read_bytes()
+
+            with mock.patch(
+                "flightrecorder.tau3_candidate_attempts.subprocess.Popen",
+                side_effect=lambda command, **kwargs: ReceiptWritingProcess(
+                    command,
+                    receipt_bytes,
+                    **kwargs,
+                ),
+            ):
+                outcome = run_candidate_attempt(
+                    campaign_root=campaign,
+                    attempt_id="candidate-a",
+                    workspace_root=root,
+                    training_args=training_args,
+                    resume_existing_attempt=True,
+                )
+
+            recovery = attempt / "attempt_outcome.recovery-0001.json"
+            self.assertEqual(outcome["status"], "completed")
+            self.assertEqual(primary.read_bytes(), primary_bytes)
+            self.assertEqual(primary.stat().st_mode & 0o222, 0)
+            self.assertTrue(recovery.is_file())
+            self.assertEqual(recovery.stat().st_mode & 0o222, 0)
+            self.assertEqual(
+                outcome["prior_outcomes"],
+                [
+                    {
+                        "path": "attempt_outcome.json",
+                        "sha256": hashlib.sha256(primary_bytes).hexdigest(),
+                        "size": len(primary_bytes),
+                    }
+                ],
+            )
+            ledger = build_candidate_attempt_ledger(
+                campaign_root=campaign,
+                out_path=root / "ledger.json",
+                workspace_root=root,
+            )
+            self.assertEqual(ledger["attempts"][0]["status"], "completed")
+            self.assertEqual(
+                ledger["attempts"][0]["outcome"]["path"],
+                "attempt_outcome.recovery-0001.json",
+            )
+
+    def test_repeated_resume_replays_contiguous_outcome_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "candidate-a"
+            attempt.mkdir()
+            primary = attempt / "attempt_outcome.json"
+            _write_json(
+                primary,
+                _interrupted_outcome("candidate-a"),
+            )
+            primary_bytes = primary.read_bytes()
+            primary_ref = {
+                "path": primary.name,
+                "sha256": hashlib.sha256(primary_bytes).hexdigest(),
+                "size": len(primary_bytes),
+            }
+            recovery = attempt / "attempt_outcome.recovery-0001.json"
+            _write_json(
+                recovery,
+                _interrupted_outcome(
+                    "candidate-a",
+                    prior_outcomes=[primary_ref],
+                ),
+            )
+            recovery_bytes = recovery.read_bytes()
+
+            prior_outcomes, next_outcome = _prepare_outcome_publication(
+                attempt_dir=attempt,
+                attempt_id="candidate-a",
+                resume_existing_attempt=True,
+            )
+
+            self.assertEqual(
+                prior_outcomes,
+                [
+                    primary_ref,
+                    {
+                        "path": recovery.name,
+                        "sha256": hashlib.sha256(recovery_bytes).hexdigest(),
+                        "size": len(recovery_bytes),
+                    },
+                ],
+            )
+            self.assertEqual(
+                next_outcome,
+                attempt / "attempt_outcome.recovery-0002.json",
+            )
+            self.assertEqual(primary.read_bytes(), primary_bytes)
+            self.assertEqual(recovery.read_bytes(), recovery_bytes)
+            self.assertEqual(primary.stat().st_mode & 0o222, 0)
+            self.assertEqual(recovery.stat().st_mode & 0o222, 0)
+
+    def test_resume_rejects_primary_outcome_with_recovery_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "candidate-a"
+            attempt.mkdir()
+            primary = attempt / "attempt_outcome.json"
+            _write_json(
+                primary,
+                _interrupted_outcome(
+                    "candidate-a",
+                    prior_outcomes=[
+                        {
+                            "path": "impossible.json",
+                            "sha256": "0" * 64,
+                            "size": 0,
+                        }
+                    ],
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                Tau3CandidateAttemptError,
+                "primary outcome has recovery lineage",
+            ):
+                _prepare_outcome_publication(
+                    attempt_dir=attempt,
+                    attempt_id="candidate-a",
+                    resume_existing_attempt=True,
+                )
+
+    def test_ledger_fails_closed_on_tampered_recovery_outcome_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            campaign = root / "campaign"
+            outcome = run_candidate_attempt(
+                campaign_root=campaign,
+                attempt_id="candidate-a",
+                workspace_root=root,
+                training_args=[
+                    "--bundle",
+                    str(bundle),
+                    "--iters",
+                    "2",
+                    "--timeout-seconds",
+                    "5",
+                ],
+            )
+            self.assertEqual(outcome["status"], "completed")
+            attempt = campaign / "candidate-a"
+            primary = attempt / "attempt_outcome.json"
+            primary.chmod(0o644)
+            primary_payload = _read_json(primary)
+            primary_payload.update(
+                {
+                    "status": "interrupted",
+                    "interrupted": True,
+                    "exit_code": -signal.SIGTERM,
+                }
+            )
+            _write_json(primary, primary_payload)
+            primary.chmod(0o444)
+            recovery = attempt / "attempt_outcome.recovery-0001.json"
+            _write_json(
+                recovery,
+                {
+                    **outcome,
+                    "prior_outcomes": [
+                        {
+                            "path": "attempt_outcome.json",
+                            "sha256": "0" * 64,
+                            "size": primary.stat().st_size,
+                        }
+                    ],
+                },
+            )
+            recovery.chmod(0o444)
+
+            ledger = build_candidate_attempt_ledger(
+                campaign_root=campaign,
+                out_path=root / "ledger.json",
+                workspace_root=root,
+            )
+
+            attempt_record = ledger["attempts"][0]
+            self.assertEqual(attempt_record["status"], "failed")
+            self.assertIn(
+                "malformed_outcome",
+                attempt_record["failure_reasons"],
+            )
+
+    def test_ledger_fails_closed_on_noncontiguous_recovery_outcome_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            campaign = root / "campaign"
+            outcome = run_candidate_attempt(
+                campaign_root=campaign,
+                attempt_id="candidate-a",
+                workspace_root=root,
+                training_args=[
+                    "--bundle",
+                    str(bundle),
+                    "--iters",
+                    "2",
+                    "--timeout-seconds",
+                    "5",
+                ],
+            )
+            self.assertEqual(outcome["status"], "completed")
+            attempt = campaign / "candidate-a"
+            primary = attempt / "attempt_outcome.json"
+            primary.chmod(0o644)
+            primary_payload = _read_json(primary)
+            primary_payload.update(
+                {
+                    "status": "interrupted",
+                    "interrupted": True,
+                    "exit_code": -signal.SIGTERM,
+                }
+            )
+            _write_json(primary, primary_payload)
+            primary.chmod(0o444)
+            recovery = attempt / "attempt_outcome.recovery-0002.json"
+            _write_json(
+                recovery,
+                {
+                    **outcome,
+                    "prior_outcomes": [
+                        _freeze_regular_file_record(primary, attempt),
+                    ],
+                },
+            )
+            recovery.chmod(0o444)
+
+            ledger = build_candidate_attempt_ledger(
+                campaign_root=campaign,
+                out_path=root / "ledger.json",
+                workspace_root=root,
+            )
+
+            attempt_record = ledger["attempts"][0]
+            self.assertEqual(attempt_record["status"], "failed")
+            self.assertIn(
+                "malformed_outcome",
+                attempt_record["failure_reasons"],
+            )
+
+    def test_ledger_fails_closed_on_inconsistent_interrupted_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "success")
+            bundle = _runner_bundle(root)
+            campaign = root / "campaign"
+            outcome = run_candidate_attempt(
+                campaign_root=campaign,
+                attempt_id="candidate-a",
+                workspace_root=root,
+                training_args=[
+                    "--bundle",
+                    str(bundle),
+                    "--iters",
+                    "2",
+                    "--timeout-seconds",
+                    "5",
+                ],
+            )
+            self.assertEqual(outcome["status"], "completed")
+            primary = campaign / "candidate-a/attempt_outcome.json"
+            primary.chmod(0o644)
+            primary_payload = _read_json(primary)
+            primary_payload["interrupted"] = True
+            _write_json(primary, primary_payload)
+            primary.chmod(0o444)
+
+            ledger = build_candidate_attempt_ledger(
+                campaign_root=campaign,
+                out_path=root / "ledger.json",
+                workspace_root=root,
+            )
+
+            attempt_record = ledger["attempts"][0]
+            self.assertEqual(attempt_record["status"], "failed")
+            self.assertIn(
+                "malformed_outcome",
+                attempt_record["failure_reasons"],
+            )
 
     def test_attempt_lease_remains_exclusive_while_inherited_child_lives(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

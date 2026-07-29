@@ -303,6 +303,14 @@ identity commands, protocol-freeze command, and current 192-capture,
 evidence only: they do not start training, access the sealed evaluation,
 publish weights, or promote a model.
 
+Governed candidate attempts publish a schema-checked, immutable outcome for
+each invocation. If a process-segmented attempt is interrupted after committed
+adapter and optimizer state exists, `--resume-existing-attempt` preserves that
+outcome and all unpublished partials, replays the exact original intent and
+committed chain, and writes the next numbered recovery outcome. Recovery
+outcomes bind every prior outcome by path, size, and SHA-256; completed,
+malformed, noncontiguous, or hash-mismatched chains fail closed.
+
 After a governed MLX candidate finishes, qualification requires a separate,
 coverage-complete loss replay over the exact `valid.jsonl` export. The runner
 loads the receipt-bound base plus adapter locally, conditions on every complete

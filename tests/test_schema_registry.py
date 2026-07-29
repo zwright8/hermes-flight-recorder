@@ -216,6 +216,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_behavior_probes",
             "tau3_benchmark_run",
             "tau3_candidate_attempt_ledger",
+            "tau3_candidate_attempt_outcome",
             "tau3_candidate_identity",
             "tau3_candidate_lock",
             "tau3_candidate_selection",
