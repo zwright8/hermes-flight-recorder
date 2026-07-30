@@ -794,6 +794,47 @@ def _validate_training_exposure(
     return receipt.sha256, ledger_sha256
 
 
+def _validate_candidate_selection_quorum(
+    target: _Target,
+    report: dict[str, Any],
+) -> None:
+    candidates = _list_of_dicts(report.get("candidates"))
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.get("eligible") is True
+    ]
+    recipe_hashes = {
+        str(_nested(candidate, "training_binding", "recipe_sha256") or "")
+        for candidate in eligible
+    }
+    recipe_hashes.discard("")
+    _require(
+        target,
+        report.get("eligible_candidate_count") == len(eligible)
+        and len(eligible) >= 2,
+        "candidate selection must replay at least two qualified candidates",
+    )
+    _require(
+        target,
+        report.get("eligible_recipe_count") == len(recipe_hashes)
+        and len(recipe_hashes) >= 2
+        and all(SHA256_RE.fullmatch(value) for value in recipe_hashes),
+        "candidate selection must replay at least two distinct qualified recipe hashes",
+    )
+    policy = _dict(report.get("selection_policy"))
+    _require(
+        target,
+        policy.get("minimum_qualified_candidates") == 2,
+        "candidate selection policy must require two qualified candidates",
+    )
+    _require(
+        target,
+        policy.get("distinct_qualified_recipes_required") is True,
+        "candidate selection policy must require distinct qualified recipes",
+    )
+
+
 def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, Any]) -> None:
     _require(target, evidence.get("schema_version") == FINAL_SCHEMA_VERSION, f"final evidence schema_version must be {FINAL_SCHEMA_VERSION}")
     _validate_chronology(target, evidence)
@@ -806,7 +847,14 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
     evaluation = _load_json_artifact_ref(root, target, artifacts.get("sealed_evaluation"), "artifacts.sealed_evaluation")
     promotion = _load_json_artifact_ref(root, target, artifacts.get("promotion_preflight"), "artifacts.promotion_preflight")
 
-    _check_loaded_schema(target, selection, "tau3_candidate_selection", "candidate selection")
+    _check_loaded_schema(
+        target,
+        selection,
+        "tau3_candidate_selection_v2",
+        "candidate selection",
+    )
+    if isinstance(selection.payload, dict):
+        _validate_candidate_selection_quorum(target, selection.payload)
     _check_loaded_schema(target, identity, "tau3_candidate_identity", "candidate identity")
     _check_loaded_schema(
         target,

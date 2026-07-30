@@ -108,14 +108,24 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
                 reward=1.0,
                 db_match=True,
             )
+            replicate = _candidate_entry(
+                root,
+                "candidate-b",
+                reward=1.0,
+                db_match=True,
+            )
             lineage = _bind_benchmark_protocol_lineage(
                 root,
-                [base, candidate.development_manifest_path],
+                [
+                    base,
+                    candidate.development_manifest_path,
+                    replicate.development_manifest_path,
+                ],
             )
 
             result = select_tau3_candidate(
                 base_manifest_path=base,
-                candidates=[candidate],
+                candidates=[candidate, replicate],
                 report_path=root / "selection.json",
                 lock_path=root / "candidate-lock.json",
                 benchmark_protocol_lineage_path=lineage,
@@ -626,6 +636,7 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             root = Path(tmp)
             base = _benchmark_manifest(root, "base", reward=0.0, db_match=False)
             candidate = _candidate_entry(root, "candidate-a", reward=1.0, db_match=True)
+            replicate = _candidate_entry(root, "candidate-b", reward=1.0, db_match=True)
             with self.assertRaisesRegex(Tau3CandidateSelectionError, "duplicate"):
                 select_tau3_candidate(
                     base_manifest_path=base,
@@ -642,6 +653,8 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
                 str(base),
                 "--candidate",
                 f"candidate-a={candidate.development_manifest_path},{candidate.training_receipt_path},{candidate.candidate_identity_path}",
+                "--candidate",
+                f"candidate-b={replicate.development_manifest_path},{replicate.training_receipt_path},{replicate.candidate_identity_path}",
                 "--report-out",
                 str(root / "cli-selection.json"),
                 "--lock-out",
@@ -656,21 +669,86 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
     def test_schemas_are_registered(self) -> None:
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("tau3_candidate_selection", names)
+        self.assertIn("tau3_candidate_selection_v2", names)
         self.assertIn("tau3_candidate_lock", names)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             base = _benchmark_manifest(root, "base", reward=0.0, db_match=False)
             candidate = _candidate_entry(root, "candidate-a", reward=1.0, db_match=True)
+            replicate = _candidate_entry(root, "candidate-b", reward=1.0, db_match=True)
             select_tau3_candidate(
                 base_manifest_path=base,
-                candidates=[candidate],
+                candidates=[candidate, replicate],
                 report_path=root / "selection.json",
                 lock_path=root / "lock.json",
                 bootstrap_samples=200,
                 created_at="2026-07-23T00:00:00+00:00",
             )
-            self.assertTrue(check_schema_contract(_read(root / "selection.json"), name_or_id="tau3_candidate_selection")["passed"])
+            self.assertTrue(check_schema_contract(_read(root / "selection.json"), name_or_id="tau3_candidate_selection_v2")["passed"])
             self.assertTrue(check_schema_contract(_read(root / "lock.json"), name_or_id="tau3_candidate_lock")["passed"])
+
+    def test_requires_two_distinct_qualified_recipes_before_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(
+                root,
+                "base",
+                reward=0.0,
+                db_match=False,
+            )
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "at least 2 completed qualified candidates",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "single-selection.json",
+                    lock_path=root / "single-lock.json",
+                    bootstrap_samples=200,
+                )
+
+            replicate = _candidate_entry(
+                root,
+                "candidate-b",
+                reward=1.0,
+                db_match=True,
+            )
+            replicate_receipt = _read(replicate.training_receipt_path)
+            candidate_receipt = _read(candidate.training_receipt_path)
+            replicate_receipt["training_binding"]["recipe"][
+                "recipe_sha256"
+            ] = candidate_receipt["training_binding"]["recipe"][
+                "recipe_sha256"
+            ]
+            _write(replicate.training_receipt_path, replicate_receipt)
+            _rebind_training_receipt(replicate)
+            replicate_identity = _read(replicate.candidate_identity_path)
+            replicate_identity["training_binding"][
+                "recipe_sha256"
+            ] = candidate_receipt["training_binding"]["recipe"][
+                "recipe_sha256"
+            ]
+            _write(replicate.candidate_identity_path, replicate_identity)
+            _rebind_candidate_identity(replicate)
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "2 distinct qualified recipe hashes",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate, replicate],
+                    report_path=root / "duplicate-recipe-selection.json",
+                    lock_path=root / "duplicate-recipe-lock.json",
+                    bootstrap_samples=200,
+                )
 
 
 def _candidate_entry(root: Path, candidate_id: str, *, reward: float, db_match: bool) -> Tau3CandidateEntry:

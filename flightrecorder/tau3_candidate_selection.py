@@ -36,11 +36,12 @@ from .tau3_evaluation import (
     _sha256_file,
 )
 
-TAU3_CANDIDATE_SELECTION_SCHEMA_VERSION = "hfr.tau3_candidate_selection.v1"
+TAU3_CANDIDATE_SELECTION_SCHEMA_VERSION = "hfr.tau3_candidate_selection.v2"
 TAU3_CANDIDATE_LOCK_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v1"
 TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v2"
 BOOTSTRAP_SAMPLES = 10_000
 BOOTSTRAP_SEED = 8_675_309
+MIN_QUALIFIED_CANDIDATES = 2
 RAW_LOCK_FORBIDDEN_KEYS = {
     "path",
     "paths",
@@ -143,6 +144,24 @@ def select_tau3_candidate(
 
     if not eligible:
         raise Tau3CandidateSelectionError("no eligible Tau-3 candidate: " + json.dumps({c["candidate_id"]: c["blocking_reasons"] for c in candidate_reports}, sort_keys=True))
+    if len(eligible) < MIN_QUALIFIED_CANDIDATES:
+        raise Tau3CandidateSelectionError(
+            "candidate lock requires at least "
+            f"{MIN_QUALIFIED_CANDIDATES} completed qualified candidates; "
+            f"got {len(eligible)}"
+        )
+    eligible_recipe_hashes = {
+        str(item["training_binding"].get("recipe_sha256") or "")
+        for item in eligible
+    }
+    if (
+        "" in eligible_recipe_hashes
+        or len(eligible_recipe_hashes) < MIN_QUALIFIED_CANDIDATES
+    ):
+        raise Tau3CandidateSelectionError(
+            "candidate lock requires at least "
+            f"{MIN_QUALIFIED_CANDIDATES} distinct qualified recipe hashes"
+        )
 
     eligible.sort(
         key=lambda item: (
@@ -173,10 +192,13 @@ def select_tau3_candidate(
             "dev_comparators_required": False,
             "sealed_inputs_allowed": False,
             "benchmark_protocol_lineage_required": protocol_lineage is not None,
+            "minimum_qualified_candidates": MIN_QUALIFIED_CANDIDATES,
+            "distinct_qualified_recipes_required": True,
         },
         "base": _private_source_record(base),
         "candidates": candidate_reports,
         "eligible_candidate_count": len(eligible),
+        "eligible_recipe_count": len(eligible_recipe_hashes),
         "selection": {
             "candidate_id": selected["candidate_id"],
             "rank": 1,
@@ -188,7 +210,10 @@ def select_tau3_candidate(
     if protocol_lineage is not None:
         report["benchmark_protocol_lineage"] = protocol_lineage
     report["schema_checked"] = True
-    report_check = check_schema_contract(report, name_or_id="tau3_candidate_selection")
+    report_check = check_schema_contract(
+        report,
+        name_or_id="tau3_candidate_selection_v2",
+    )
     if report_check["passed"] is not True:
         raise Tau3CandidateSelectionError("selection report violates schema: " + "; ".join(report_check["errors"]))
 

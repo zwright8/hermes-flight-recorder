@@ -202,6 +202,14 @@
       "name": "tau3_candidate_selection"
     },
     {
+      "artifact": "tau3_candidate_selection_v2",
+      "artifact_schema_version": "hfr.tau3_candidate_selection.v2",
+      "description": "Private governed Tau-3 development candidate-selection report requiring two distinct qualified recipes.",
+      "filename": "tau3_candidate_selection.v2.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_selection.v2.schema.json",
+      "name": "tau3_candidate_selection_v2"
+    },
+    {
       "artifact": "tau3_candidate_attempt_ledger",
       "artifact_schema_version": "hfr.tau3_candidate_attempt_ledger.v1",
       "description": "Public-safe census ledger for governed Tau-3 candidate training attempts.",

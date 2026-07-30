@@ -954,12 +954,47 @@ def _validate_candidate_selection(
     selected: _Loaded,
     selected_candidate_id: Any,
 ) -> None:
-    _check_schema(target, report, "tau3_candidate_selection")
+    _check_schema(target, report, "tau3_candidate_selection_v2")
     _require(target, not _private_path_hits(report), "candidate selection report must not contain absolute/private paths")
     _require(target, report.get("passed") is True, "candidate selection report must be passed")
     _require(target, report.get("schema_checked") is True, "candidate selection report must set schema_checked=true")
     _require(target, report.get("selected_candidate_id") == selected_candidate_id, "candidate selection selected_candidate_id does not match manifest")
     _require(target, lock.get("development_selection_report_sha256") == selection.sha256, "candidate lock development_selection_report_sha256 does not match selection report")
+    candidates = _list_of_dicts(report.get("candidates"))
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.get("eligible") is True
+    ]
+    recipe_hashes = {
+        str(_nested(candidate, "training_binding", "recipe_sha256") or "")
+        for candidate in eligible
+    }
+    recipe_hashes.discard("")
+    _require(
+        target,
+        report.get("eligible_candidate_count") == len(eligible)
+        and len(eligible) >= 2,
+        "candidate selection must replay at least two qualified candidates",
+    )
+    _require(
+        target,
+        report.get("eligible_recipe_count") == len(recipe_hashes)
+        and len(recipe_hashes) >= 2
+        and all(SHA256_RE.fullmatch(value) for value in recipe_hashes),
+        "candidate selection must replay at least two distinct qualified recipe hashes",
+    )
+    policy = _dict(report.get("selection_policy"))
+    _require(
+        target,
+        policy.get("minimum_qualified_candidates") == 2,
+        "candidate selection policy must require two qualified candidates",
+    )
+    _require(
+        target,
+        policy.get("distinct_qualified_recipes_required") is True,
+        "candidate selection policy must require distinct qualified recipes",
+    )
     if lock.get("schema_version") == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
         lineage = _dict(report.get("benchmark_protocol_lineage"))
         _require(
@@ -983,7 +1018,6 @@ def _validate_candidate_selection(
     chosen = _dict(report.get("selection"))
     _require(target, chosen.get("candidate_id") == selected_candidate_id, "selection candidate_id does not match selected candidate")
     _require(target, chosen.get("candidate_identity_sha256") == lock.get("candidate_identity_sha256"), "selection candidate_identity_sha256 does not match lock")
-    candidates = _list_of_dicts(report.get("candidates"))
     selected_rows = [row for row in candidates if row.get("candidate_id") == selected_candidate_id]
     _require(target, len(selected_rows) == 1, f"selection report must contain exactly one selected candidate row, found {len(selected_rows)}")
     if selected_rows:

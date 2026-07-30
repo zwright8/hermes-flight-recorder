@@ -343,6 +343,27 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
 
             self.assertTrue(result["passed"], json.dumps(result, indent=2))
 
+    def test_final_candidate_selection_replays_distinct_recipe_quorum(
+        self,
+    ) -> None:
+        report = candidate_selection()
+        report["candidates"][1]["training_binding"][
+            "recipe_sha256"
+        ] = report["candidates"][0]["training_binding"][
+            "recipe_sha256"
+        ]
+        target = _Target("candidate_selection", "fixture")
+
+        competitive_v3_module._validate_candidate_selection_quorum(
+            target,
+            report,
+        )
+
+        self.assertIn(
+            "at least two distinct qualified recipe hashes",
+            json.dumps(target.errors),
+        )
+
     def test_final_stage_forwards_complete_v2_authorization_replay(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1997,15 +2018,30 @@ def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
 
 def candidate_selection() -> dict[str, Any]:
     return {
-        "schema_version": "hfr.tau3_candidate_selection.v1",
+        "schema_version": "hfr.tau3_candidate_selection.v2",
         "schema_checked": True,
         "created_at": "2026-07-23T00:40:00Z",
         "passed": True,
         "selected_candidate_id": "candidate-a",
-        "selection_policy": {},
+        "selection_policy": {
+            "minimum_qualified_candidates": 2,
+            "distinct_qualified_recipes_required": True,
+        },
         "base": {},
-        "candidates": [{"candidate_id": "candidate-a"}, {"candidate_id": "candidate-b"}],
+        "candidates": [
+            {
+                "candidate_id": "candidate-a",
+                "eligible": True,
+                "training_binding": {"recipe_sha256": "a" * 64},
+            },
+            {
+                "candidate_id": "candidate-b",
+                "eligible": True,
+                "training_binding": {"recipe_sha256": "b" * 64},
+            },
+        ],
         "eligible_candidate_count": 2,
+        "eligible_recipe_count": 2,
         "selection": {},
     }
 

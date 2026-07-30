@@ -226,6 +226,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_candidate_lock",
             "tau3_candidate_lock_v2",
             "tau3_candidate_selection",
+            "tau3_candidate_selection_v2",
             "tau3_competitive_dataset",
             "tau3_competitive_v3_training_evidence",
             "tau3_competitive_v3_training_run_stage",

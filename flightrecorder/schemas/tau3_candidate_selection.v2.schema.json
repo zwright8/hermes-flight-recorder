@@ -1,0 +1,34 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_candidate_selection.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Private governed Tau-3 development candidate-selection report requiring two distinct qualified recipes.",
+  "properties": {
+    "base": {"type": "object"},
+    "candidates": {"items": {"type": "object"}, "minItems": 2, "type": "array"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "eligible_candidate_count": {"minimum": 2, "type": "integer"},
+    "eligible_recipe_count": {"minimum": 2, "type": "integer"},
+    "passed": {"const": true},
+    "schema_checked": {"const": true},
+    "schema_version": {"const": "hfr.tau3_candidate_selection.v2"},
+    "selected_candidate_id": {"minLength": 1, "type": "string"},
+    "selection": {"type": "object"},
+    "selection_policy": {"type": "object"}
+  },
+  "required": [
+    "schema_version",
+    "schema_checked",
+    "created_at",
+    "passed",
+    "selected_candidate_id",
+    "selection_policy",
+    "base",
+    "candidates",
+    "eligible_candidate_count",
+    "eligible_recipe_count",
+    "selection"
+  ],
+  "title": "Tau-3 Candidate Selection Report v2",
+  "type": "object"
+}

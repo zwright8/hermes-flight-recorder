@@ -344,6 +344,54 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
             self.assertFalse(result["passed"])
             self.assertIn("candidate_selection_report", json.dumps(result))
 
+    def test_training_bundle_replays_two_distinct_qualified_recipes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            manifest_path = root / "manifest.json"
+            manifest = read_json(manifest_path)
+            selection_path = (
+                root
+                / manifest["training"]["candidate_selection_report"]["path"]
+            )
+            selection = read_json(selection_path)
+            selection["candidates"][1]["training_binding"][
+                "recipe_sha256"
+            ] = selection["candidates"][0]["training_binding"][
+                "recipe_sha256"
+            ]
+            write_json(selection_path, selection)
+            selection_sha256 = sha256_file(selection_path)
+            manifest["training"]["candidate_selection_report"][
+                "sha256"
+            ] = selection_sha256
+            lock_path = (
+                root
+                / manifest["training"]["candidate_locks"][0]["path"]
+            )
+            lock = read_json(lock_path)
+            lock[
+                "development_selection_report_sha256"
+            ] = selection_sha256
+            write_json(lock_path, lock)
+            manifest["training"]["candidate_locks"][0][
+                "sha256"
+            ] = sha256_file(lock_path)
+            write_json(manifest_path, manifest)
+
+            result = validate_tau3_training_result_bundle(
+                root,
+                strict=True,
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "at least two distinct qualified recipe hashes",
+                json.dumps(result),
+            )
+
     def test_benchmark_bundle_rejects_skeleton_public_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -894,7 +942,7 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
     identity_ref = development_adapter["candidate_identity"]
     identity = read_json((root / development_adapter_ref["path"]).parent / identity_ref["path"])
     report = {
-        "schema_version": "hfr.tau3_candidate_selection.v1",
+        "schema_version": "hfr.tau3_candidate_selection.v2",
         "schema_checked": True,
         "created_at": "2026-07-23T00:19:00Z",
         "passed": True,
@@ -907,6 +955,8 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
             "confidence_level": 0.95,
             "non_inferiority_margin": 0.03,
             "safety_non_inferiority_margin": 0.01,
+            "minimum_qualified_candidates": 2,
+            "distinct_qualified_recipes_required": True,
         },
         "base": {"arm_id": "base"},
         "candidates": [
@@ -914,6 +964,7 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
                 "candidate_id": "candidate-a",
                 "eligible": True,
                 "metrics": {"macro_pass1": {"candidate": 1.0}},
+                "training_binding": {"recipe_sha256": "a" * 64},
                 "artifacts": {
                     "development_manifest": development_adapter_ref,
                     "training_receipt": receipt_ref,
@@ -923,9 +974,16 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
                     "identity_sha256": tree_value_sha256(identity),
                     "endpoint_model_sha256": identity["endpoint_model_sha256"],
                 },
-            }
+            },
+            {
+                "candidate_id": "candidate-b",
+                "eligible": True,
+                "metrics": {"macro_pass1": {"candidate": 1.0}},
+                "training_binding": {"recipe_sha256": "b" * 64},
+            },
         ],
-        "eligible_candidate_count": 1,
+        "eligible_candidate_count": 2,
+        "eligible_recipe_count": 2,
         "selection": {
             "candidate_id": "candidate-a",
             "rank": 1,

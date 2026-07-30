@@ -384,7 +384,8 @@ receive the same complete evidence set:
 ```bash
 .venv/bin/python scripts/select_tau3_candidate.py \
   --base-manifest <development-base/manifest.json> \
-  --candidate <id=development-manifest,training-receipt,candidate-identity> \
+  --candidate <id-a=development-manifest,training-receipt,candidate-identity> \
+  --candidate <id-b=development-manifest,training-receipt,candidate-identity> \
   --benchmark-protocol-lineage <benchmark-protocol-lineage.json> \
   --report-out <candidate-selection.json> \
   --lock-out <candidate-lock-v2.json>
@@ -406,7 +407,9 @@ The v2 lock fails closed if a training receipt binds the benchmark protocol,
 if the benchmark protocol changes anything outside the four sealed-source
 fields, or if any lineage/custody artifact is omitted or substituted. Legacy
 v1 artifacts remain replayable evidence, but they cannot consume v2 evidence
-or prove the fresh-source authorization path.
+or prove the fresh-source authorization path. The v2 selection report also
+requires at least two completed qualified candidates with distinct governed
+recipe hashes before either lock version can be emitted.
 
 Fresh v2 sealed arms must also pass `--sealed-custodian` to
 `scripts/run_tau3_benchmark_arm.py`. The runner requires a regular executable
