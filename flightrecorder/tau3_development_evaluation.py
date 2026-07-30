@@ -22,6 +22,7 @@ from .tau3_candidate_selection import (
     Tau3CandidateEntry,
     _evaluate_candidate,
     _load_benchmark_manifest,
+    _load_benchmark_protocol_lineage,
 )
 from .tau3_evaluation import DOMAINS, _row_map
 
@@ -55,6 +56,7 @@ def build_tau3_development_evaluation(
     bootstrap_seed: int = BOOTSTRAP_SEED,
     non_inferiority_margin: float = NON_INFERIORITY_MARGIN,
     safety_non_inferiority_margin: float = SAFETY_NON_INFERIORITY_MARGIN,
+    benchmark_protocol_lineage: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write a paired development evaluation and its bound scorecard."""
 
@@ -76,6 +78,11 @@ def build_tau3_development_evaluation(
         entry.development_manifest_path,
         expected_arm="adapter",
     )
+    protocol_lineage = _load_benchmark_protocol_lineage(
+        Path(benchmark_protocol_lineage)
+        if benchmark_protocol_lineage is not None
+        else None
+    )
     candidate = _evaluate_candidate(
         entry,
         base=base,
@@ -83,9 +90,16 @@ def build_tau3_development_evaluation(
         bootstrap_seed=bootstrap_seed,
         non_inferiority_margin=non_inferiority_margin,
         safety_non_inferiority_margin=safety_non_inferiority_margin,
+        protocol_lineage=protocol_lineage,
     )
     trial_data = _development_trials(base, adapter)
-    bindings = _bindings(candidate, base, adapter, trial_data)
+    bindings = _bindings(
+        candidate,
+        base,
+        adapter,
+        trial_data,
+        protocol_lineage=protocol_lineage,
+    )
     checks = _qualification_checks(candidate, trial_data)
     failed = [check for check in checks if check["passed"] is not True]
     safety = _adapter_safety(candidate["metrics"]["safety"])
@@ -149,6 +163,21 @@ def build_tau3_development_evaluation(
         if str(check["id"]).startswith("minimum_")
         and check["passed"] is not True
     )
+    frozen_contract = {
+        "harness_sha256": bindings["harness_sha256"],
+        "protocol_sha256": bindings["protocol_sha256"],
+        "grid_sha256": bindings["grid_sha256"],
+        "base_identity_sha256": bindings["base_identity_sha256"],
+        "evaluator_model_contract_sha256": bindings[
+            "evaluator_model_contract_sha256"
+        ],
+    }
+    for key in (
+        "training_protocol_sha256",
+        "benchmark_protocol_lineage_sha256",
+    ):
+        if key in bindings:
+            frozen_contract[key] = bindings[key]
     scorecard = {
         "schema_version": DEVELOPMENT_SCORECARD_SCHEMA_VERSION,
         "schema_checked": True,
@@ -156,15 +185,7 @@ def build_tau3_development_evaluation(
         "passed": not failed,
         "completed": True,
         "bindings": bindings,
-        "frozen_contract": {
-            "harness_sha256": bindings["harness_sha256"],
-            "protocol_sha256": bindings["protocol_sha256"],
-            "grid_sha256": bindings["grid_sha256"],
-            "base_identity_sha256": bindings["base_identity_sha256"],
-            "evaluator_model_contract_sha256": bindings[
-                "evaluator_model_contract_sha256"
-            ],
-        },
+        "frozen_contract": frozen_contract,
         "development_evaluation": evaluation_ref,
         "metrics": {
             "macro_pass1": macro["adapter"],
@@ -303,6 +324,8 @@ def _bindings(
     base: dict[str, Any],
     adapter: dict[str, Any],
     trial_data: dict[str, Any],
+    *,
+    protocol_lineage: dict[str, Any] | None,
 ) -> dict[str, str]:
     training = candidate["artifacts"]["training_receipt"]
     identity = candidate["candidate_identity"]
@@ -319,6 +342,17 @@ def _bindings(
             "evaluator_model_contract"
         ]["sha256"],
     }
+    if protocol_lineage is not None:
+        values.update(
+            {
+                "training_protocol_sha256": protocol_lineage.get(
+                    "training_protocol_sha256"
+                ),
+                "benchmark_protocol_lineage_sha256": protocol_lineage.get(
+                    "sha256"
+                ),
+            }
+        )
     invalid = sorted(
         key
         for key, value in values.items()
@@ -535,6 +569,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-manifest", type=Path, required=True)
     parser.add_argument("--training-receipt", type=Path, required=True)
     parser.add_argument("--candidate-identity", type=Path, required=True)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
     parser.add_argument(
         "--bootstrap-samples",
         type=int,
@@ -565,6 +600,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate_manifest=args.candidate_manifest,
             training_receipt=args.training_receipt,
             candidate_identity=args.candidate_identity,
+            benchmark_protocol_lineage=args.benchmark_protocol_lineage,
             bootstrap_samples=args.bootstrap_samples,
             bootstrap_seed=args.bootstrap_seed,
             non_inferiority_margin=args.non_inferiority_margin,

@@ -12,8 +12,10 @@ from flightrecorder.tau3_development_evaluation import (
     build_tau3_development_evaluation,
 )
 from tests.test_tau3_candidate_selection import (
+    _bind_benchmark_protocol_lineage,
     _benchmark_manifest,
     _candidate_entry,
+    _sha256,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -128,6 +130,70 @@ class Tau3DevelopmentEvaluationTests(unittest.TestCase):
             self.assertFalse(scorecard["passed"])
             self.assertEqual(scorecard["blockers"]["threshold"], 1)
 
+    def test_binds_separate_training_and_benchmark_protocol_lineage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(
+                root,
+                "base",
+                reward=0.0,
+                db_match=False,
+            )
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            lineage = _bind_benchmark_protocol_lineage(
+                root,
+                [base, candidate.development_manifest_path],
+            )
+
+            result = build_tau3_development_evaluation(
+                reference_root=root,
+                out_dir=root / "qualification",
+                candidate_id="candidate-a",
+                base_manifest=base,
+                candidate_manifest=candidate.development_manifest_path,
+                training_receipt=candidate.training_receipt_path,
+                candidate_identity=candidate.candidate_identity_path,
+                benchmark_protocol_lineage=lineage,
+                created_at="2026-07-30T04:00:00Z",
+                bootstrap_samples=200,
+            )
+
+            self.assertTrue(result["passed"], result)
+            bindings = result["bindings"]
+            self.assertEqual(
+                bindings["training_protocol_sha256"],
+                _sha256(root / "protocol.json"),
+            )
+            self.assertEqual(
+                bindings["protocol_sha256"],
+                _sha256(root / "benchmark-protocol.json"),
+            )
+            self.assertEqual(
+                bindings["benchmark_protocol_lineage_sha256"],
+                _sha256(lineage),
+            )
+            scorecard = json.loads(
+                (
+                    root
+                    / "qualification"
+                    / "development-scorecard.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                scorecard["frozen_contract"][
+                    "benchmark_protocol_lineage_sha256"
+                ],
+                _sha256(lineage),
+            )
+            self.assertNotIn(str(root), json.dumps(scorecard))
+
     def test_cli_writes_the_same_registered_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -142,6 +208,10 @@ class Tau3DevelopmentEvaluationTests(unittest.TestCase):
                 "candidate-a",
                 reward=1.0,
                 db_match=True,
+            )
+            lineage = _bind_benchmark_protocol_lineage(
+                root,
+                [base, candidate.development_manifest_path],
             )
             proc = subprocess.run(
                 [
@@ -165,6 +235,8 @@ class Tau3DevelopmentEvaluationTests(unittest.TestCase):
                     str(candidate.training_receipt_path),
                     "--candidate-identity",
                     str(candidate.candidate_identity_path),
+                    "--benchmark-protocol-lineage",
+                    str(lineage),
                     "--bootstrap-samples",
                     "200",
                 ],
@@ -181,6 +253,19 @@ class Tau3DevelopmentEvaluationTests(unittest.TestCase):
                     / "qualification"
                     / "development-scorecard.json"
                 ).is_file()
+            )
+            scorecard = json.loads(
+                (
+                    root
+                    / "qualification"
+                    / "development-scorecard.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                scorecard["bindings"][
+                    "benchmark_protocol_lineage_sha256"
+                ],
+                _sha256(lineage),
             )
 
 

@@ -1334,6 +1334,50 @@ def _validate_development_qualification(
         _require(target, _nested(scorecard.payload, "bindings", "harness_sha256") == _nested(scorecard.payload, "frozen_contract", "harness_sha256"), f"{label} development scorecard must bind identical frozen harness")
         _require(target, _nested(scorecard.payload, "bindings", "grid_sha256") == _nested(scorecard.payload, "frozen_contract", "grid_sha256"), f"{label} development scorecard must bind identical frozen grid")
         _require(target, _nested(scorecard.payload, "bindings", "base_identity_sha256") == _nested(scorecard.payload, "frozen_contract", "base_identity_sha256"), f"{label} development scorecard must bind identical base")
+        scorecard_bindings = _dict(scorecard.payload.get("bindings"))
+        frozen_contract = _dict(
+            scorecard.payload.get("frozen_contract")
+        )
+        lineage_fields = (
+            "training_protocol_sha256",
+            "benchmark_protocol_lineage_sha256",
+        )
+        lineage_present = [
+            field in scorecard_bindings for field in lineage_fields
+        ]
+        _require(
+            target,
+            len(set(lineage_present)) == 1,
+            (
+                f"{label} development scorecard must bind training protocol "
+                "and benchmark protocol lineage together"
+            ),
+        )
+        if all(lineage_present):
+            _require(
+                target,
+                scorecard_bindings.get("training_protocol_sha256")
+                == _nested(
+                    receipt_ref.payload,
+                    "training_binding",
+                    "protocol",
+                    "sha256",
+                ),
+                (
+                    f"{label} development scorecard training protocol "
+                    "must match training receipt"
+                ),
+            )
+            for field in lineage_fields:
+                _require(
+                    target,
+                    scorecard_bindings.get(field)
+                    == frozen_contract.get(field),
+                    (
+                        f"{label} development scorecard {field} "
+                        "must match frozen contract"
+                    ),
+                )
         _validate_development_evaluation(root, target, scorecard.payload, label, receipt_ref.sha256, adapter_sha256)
     if isinstance(probes.payload, dict):
         if probes.path is not None:

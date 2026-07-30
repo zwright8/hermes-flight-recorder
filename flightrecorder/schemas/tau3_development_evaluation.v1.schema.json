@@ -15,11 +15,13 @@
       "properties": {
         "adapter_tree_sha256": {"$ref": "#/$defs/sha256"},
         "base_identity_sha256": {"$ref": "#/$defs/sha256"},
+        "benchmark_protocol_lineage_sha256": {"$ref": "#/$defs/sha256"},
         "candidate_identity_sha256": {"$ref": "#/$defs/sha256"},
         "evaluator_model_contract_sha256": {"$ref": "#/$defs/sha256"},
         "grid_sha256": {"$ref": "#/$defs/sha256"},
         "harness_sha256": {"$ref": "#/$defs/sha256"},
         "protocol_sha256": {"$ref": "#/$defs/sha256"},
+        "training_protocol_sha256": {"$ref": "#/$defs/sha256"},
         "training_receipt_sha256": {"$ref": "#/$defs/sha256"}
       },
       "required": [

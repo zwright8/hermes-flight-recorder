@@ -438,7 +438,8 @@ provide its own bundle-local exposure refs.
   --base-manifest local/tau3/development-evals/base/manifest.json \
   --candidate-manifest local/tau3/development-evals/<candidate>/manifest.json \
   --training-receipt runs/tau3_competitive_agent_v3/training/candidates/<candidate>/run/training_receipt.json \
-  --candidate-identity runs/tau3_competitive_agent_v3/training/candidates/<candidate>/candidate-identity.json
+  --candidate-identity runs/tau3_competitive_agent_v3/training/candidates/<candidate>/candidate-identity.json \
+  --benchmark-protocol-lineage <benchmark-protocol-lineage.json>
 ```
 
 For a new task such as tool calling, first represent success, safety, tool

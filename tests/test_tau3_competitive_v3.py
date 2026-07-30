@@ -759,6 +759,70 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
             self.assertFalse(result["passed"])
             self.assertIn("development evaluation must include trial-level outcomes", json.dumps(result))
 
+    def test_development_lineage_training_protocol_must_match_receipt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root)
+            eval_path = (
+                root
+                / "training"
+                / "candidate-a"
+                / "development-evaluation.json"
+            )
+            scorecard_path = (
+                root
+                / "training"
+                / "candidate-a"
+                / "development-scorecard.json"
+            )
+            evaluation = read_json(eval_path)
+            scorecard = read_json(scorecard_path)
+            for payload in (evaluation, scorecard):
+                payload["bindings"]["training_protocol_sha256"] = "d" * 64
+                payload["bindings"][
+                    "benchmark_protocol_lineage_sha256"
+                ] = "e" * 64
+            scorecard["frozen_contract"][
+                "training_protocol_sha256"
+            ] = "d" * 64
+            scorecard["frozen_contract"][
+                "benchmark_protocol_lineage_sha256"
+            ] = "e" * 64
+            write_json(eval_path, evaluation)
+            scorecard["development_evaluation"]["sha256"] = sha256_file(
+                eval_path
+            )
+            scorecard["development_evaluation"]["size"] = (
+                eval_path.stat().st_size
+            )
+            write_json(scorecard_path, scorecard)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            training["qualified_candidates"][0][
+                "development_scorecard"
+            ]["sha256"] = sha256_file(scorecard_path)
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "development scorecard training protocol must match "
+                "training receipt",
+                json.dumps(result),
+            )
+
     def test_forged_behavior_probe_summary_does_not_qualify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
