@@ -219,6 +219,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_blind_benchmark_result",
             "tau3_blind_custody_receipt",
             "tau3_blind_generator_validation",
+            "tau3_blind_source_bundle_validation",
             "tau3_candidate_attempt_ledger",
             "tau3_candidate_attempt_outcome",
             "tau3_candidate_identity",

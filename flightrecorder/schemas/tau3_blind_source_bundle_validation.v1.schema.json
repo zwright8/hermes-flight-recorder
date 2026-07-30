@@ -1,0 +1,60 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_source_bundle_validation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hash-only cross-artifact validation receipt for a fresh Tau-3 blind source and exact custodian executable.",
+  "properties": {
+    "domain_counts": {"$ref": "#/$defs/domainCounts"},
+    "fresh_contamination_replay_sha256": {"$ref": "#/$defs/sha256"},
+    "generator_commit_sha": {"$ref": "#/$defs/commitSha"},
+    "generator_script_sha256": {"$ref": "#/$defs/sha256"},
+    "generator_validation_sha256": {"$ref": "#/$defs/sha256"},
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "passed": {"const": true},
+    "raw_payload_included": {"const": false},
+    "schema_version": {
+      "const": "hfr.tau3_blind_source_bundle_validation.v1"
+    },
+    "sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "source_revision": {"$ref": "#/$defs/commitSha"},
+    "task_count": {"const": 100}
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "source_revision",
+    "generator_commit_sha",
+    "task_count",
+    "domain_counts",
+    "sealed_source_manifest_sha256",
+    "generator_validation_sha256",
+    "fresh_contamination_replay_sha256",
+    "generator_script_sha256",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included"
+  ],
+  "title": "Tau-3 Blind Source Bundle Validation",
+  "type": "object",
+  "$defs": {
+    "commitSha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "domainCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {"const": 34},
+        "retail": {"const": 33},
+        "telecom": {"const": 33}
+      },
+      "required": ["airline", "retail", "telecom"],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

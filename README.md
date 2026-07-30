@@ -324,6 +324,32 @@ model, prompt, tool, decoding, budget, metric, training-source, or
 candidate-selection drift fails replay.
 
 ```bash
+PATH="$PWD/local/tau3/venv/bin:$PATH" \
+local/tau3/venv/bin/python scripts/generate_tau3_blind_sealed_source.py prepare \
+  --tau-repo <clean-pinned-tau-checkout> \
+  --source-revision <pinned-tau-commit> \
+  --generator-commit <commit-containing-this-exact-generator> \
+  --training-dataset <final-train.jsonl> \
+  --training-source <hash-only-training-source.json> \
+  --development-source <hash-only-development-source.json> \
+  --retired-sealed-source <retired-hash-only-sealed-source.json> \
+  --sealed-manifest-out <fresh-hash-only-sealed-source.json> \
+  --generator-validation-out <blind-generator-validation.json> \
+  --contamination-out <fresh-contamination-replay.json>
+
+.venv/bin/python scripts/validate_tau3_blind_source_bundle.py \
+  --sealed-source-manifest <fresh-hash-only-sealed-source.json> \
+  --generator-validation <blind-generator-validation.json> \
+  --fresh-contamination-replay <fresh-contamination-replay.json> \
+  --generator-script scripts/generate_tau3_blind_sealed_source.py \
+  --tau-repo <clean-pinned-tau-checkout> \
+  --training-dataset <final-train.jsonl> \
+  --development-source <hash-only-development-source.json> \
+  --retired-sealed-source <retired-hash-only-sealed-source.json> \
+  --expected-source-revision <pinned-tau-commit> \
+  --expected-generator-commit <commit-containing-this-exact-generator> \
+  --out <blind-source-bundle-validation.json>
+
 .venv/bin/python scripts/build_tau3_blind_custody_receipt.py \
   --custody-id <opaque-handle> \
   --sealed-source-manifest <hashes-only-sealed-source.json> \
@@ -343,9 +369,12 @@ candidate-selection drift fails replay.
   --out <benchmark-protocol-lineage.json>
 ```
 
-Both artifacts contain hashes and aggregate counts only. They do not make HFR
-an operating-system isolation boundary, materialize sealed task payloads, or
-authorize sealed access by themselves.
+The generator creates the 34/33/33 airline/retail/telecom task set only in
+memory, independently replays every reference solution twice, and writes no
+task text. Its executable SHA-256 and containing commit are bound before the
+custody receipt is created. All listed artifacts contain hashes and aggregate
+counts only. They do not make HFR an operating-system isolation boundary,
+materialize sealed task payloads, or authorize sealed access by themselves.
 
 Pass the lineage into candidate selection to emit a v2 lock with separate
 training- and benchmark-protocol bindings. Sealed authorization, every sealed

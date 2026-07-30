@@ -242,6 +242,14 @@
       "name": "tau3_blind_generator_validation"
     },
     {
+      "artifact": "tau3_blind_source_bundle_validation",
+      "artifact_schema_version": "hfr.tau3_blind_source_bundle_validation.v1",
+      "description": "Hash-only cross-artifact validation receipt for a fresh Tau-3 blind source and exact custodian executable.",
+      "filename": "tau3_blind_source_bundle_validation.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_source_bundle_validation.v1.schema.json",
+      "name": "tau3_blind_source_bundle_validation"
+    },
+    {
       "artifact": "tau3_fresh_contamination_replay",
       "artifact_schema_version": "hfr.tau3_fresh_contamination_replay.v1",
       "description": "Hash-only disjointness replay across Tau-3 train, development, retired sealed, and fresh sealed sources.",
