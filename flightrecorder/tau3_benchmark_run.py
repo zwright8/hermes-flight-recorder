@@ -293,6 +293,11 @@ def run_tau3_benchmark_arm(
             config,
             tasks_by_domain,
             sealed_task_count=sealed_task_count_manifest["task_count"] if sealed_task_count_manifest is not None else None,
+            sealed_task_count_by_domain=sealed_task_count_manifest.get(
+                "domain_counts"
+            )
+            if sealed_task_count_manifest is not None
+            else None,
         ),
         "extra_binding": config.extra_binding,
     }
@@ -350,6 +355,11 @@ def run_tau3_benchmark_arm(
                 domain=domain,
                 tasks_by_domain=tasks_by_domain,
                 sealed_task_count=sealed_task_count_manifest["task_count"] if sealed_task_count_manifest is not None else None,
+                sealed_task_count_by_domain=sealed_task_count_manifest.get(
+                    "domain_counts"
+                )
+                if sealed_task_count_manifest is not None
+                else None,
             )
             start = time.monotonic()
             try:
@@ -1287,16 +1297,55 @@ def _sealed_task_count_manifest_record(path: Path | None, *, protocol: dict[str,
     entries = payload.get("entries")
     if not isinstance(entries, list) or len(entries) != task_count:
         raise Tau3BenchmarkRunError("sealed task-count manifest task_count mismatch")
-    allowed_entry_keys = {"task_id_sha256", "prompt_sha256", "task_sha256"}
+    legacy_entry_keys = {"task_id_sha256", "prompt_sha256", "task_sha256"}
+    fresh_entry_keys = {*legacy_entry_keys, "domain"}
+    domains: list[str] = []
     for index, entry in enumerate(entries):
-        if not isinstance(entry, dict) or set(entry) != allowed_entry_keys:
+        if not isinstance(entry, dict) or set(entry) not in (
+            legacy_entry_keys,
+            fresh_entry_keys,
+        ):
             raise Tau3BenchmarkRunError(f"sealed task-count manifest entry {index} is not hash-only")
+        domain = entry.get("domain")
+        if domain is not None:
+            if domain not in DOMAINS:
+                raise Tau3BenchmarkRunError(
+                    f"sealed task-count manifest entry {index} has unsupported domain"
+                )
+            domains.append(str(domain))
+        elif domains:
+            raise Tau3BenchmarkRunError(
+                "sealed task-count manifest must label either every entry or no entries by domain"
+            )
+    if domains and len(domains) != task_count:
+        raise Tau3BenchmarkRunError(
+            "sealed task-count manifest must label either every entry or no entries by domain"
+        )
+    declared_domain_counts = payload.get("domain_counts")
+    domain_counts: dict[str, int] | None = None
+    if domains:
+        replayed_domain_counts = {
+            domain: domains.count(domain) for domain in DOMAINS
+        }
+        if declared_domain_counts != replayed_domain_counts:
+            raise Tau3BenchmarkRunError(
+                "sealed task-count manifest domain_counts do not replay from entries"
+            )
+        domain_counts = replayed_domain_counts
+    elif declared_domain_counts is not None:
+        raise Tau3BenchmarkRunError(
+            "sealed task-count manifest domain_counts require domain-labeled entries"
+        )
     digest = _sha256(path)
     split_hashes = _protocol_split_hashes(protocol)
     sealed_manifest = _dict(protocol.get("sealed_manifest"))
     if digest != split_hashes.get("sealed") or digest != sealed_manifest.get("manifest_sha256"):
         raise Tau3BenchmarkRunError("sealed task-count manifest sha256 does not match protocol sealed split")
-    return {"task_count": task_count, "sha256": digest}
+    return {
+        "task_count": task_count,
+        "domain_counts": domain_counts,
+        "sha256": digest,
+    }
 
 
 def _sealed_task_count_binding(staged_ref: dict[str, Any] | None, count_record: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -1306,6 +1355,8 @@ def _sealed_task_count_binding(staged_ref: dict[str, Any] | None, count_record: 
         raise Tau3BenchmarkRunError("sealed mode requires a staged sealed task-count manifest")
     record = dict(staged_ref)
     record["task_count"] = count_record["task_count"]
+    if count_record.get("domain_counts") is not None:
+        record["domain_counts"] = count_record["domain_counts"]
     record["hashes_only"] = True
     return record
 
@@ -1320,6 +1371,7 @@ def _task_selection_record(
     tasks_by_domain: dict[str, list[str]] | None,
     *,
     sealed_task_count: int | None = None,
+    sealed_task_count_by_domain: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     if config.mode == "sealed":
         if sealed_task_count is None:
@@ -1330,7 +1382,7 @@ def _task_selection_record(
             "task_payload_accessed": False,
             "domains": list(config.domains),
             "sealed_task_count": sealed_task_count,
-            "task_count_by_domain": None,
+            "task_count_by_domain": sealed_task_count_by_domain,
         }
     assert tasks_by_domain is not None
     return {
@@ -1548,12 +1600,15 @@ def _command_timeout_seconds(
     domain: str,
     tasks_by_domain: dict[str, list[str]] | None,
     sealed_task_count: int | None = None,
+    sealed_task_count_by_domain: dict[str, int] | None = None,
 ) -> int:
     """Bound the whole Tau command without confusing it with the per-task timeout."""
 
     task_count: Any
     if tasks_by_domain is not None:
         task_count = len(tasks_by_domain.get(domain, ()))
+    elif sealed_task_count_by_domain is not None:
+        task_count = sealed_task_count_by_domain.get(domain)
     else:
         task_count = sealed_task_count
     if not isinstance(task_count, int) or isinstance(task_count, bool) or task_count < 1:

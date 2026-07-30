@@ -312,6 +312,16 @@
     "sealed_task_count_manifest_ref": {
       "additionalProperties": false,
       "properties": {
+        "domain_counts": {
+          "additionalProperties": false,
+          "properties": {
+            "airline": {"minimum": 1, "type": "integer"},
+            "retail": {"minimum": 1, "type": "integer"},
+            "telecom": {"minimum": 1, "type": "integer"}
+          },
+          "required": ["airline", "retail", "telecom"],
+          "type": ["object", "null"]
+        },
         "hashes_only": {"const": true},
         "path": {"$ref": "#/$defs/output_relative_path"},
         "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},

@@ -53,6 +53,21 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             ),
             60030,
         )
+        self.assertEqual(
+            _command_timeout_seconds(
+                protocol={"sealed_manifest": {}},
+                config=config,
+                domain="airline",
+                tasks_by_domain=None,
+                sealed_task_count=100,
+                sealed_task_count_by_domain={
+                    "airline": 34,
+                    "retail": 33,
+                    "telecom": 33,
+                },
+            ),
+            20430,
+        )
 
         with self.assertRaisesRegex(Tau3BenchmarkRunError, "positive command task count"):
             _command_timeout_seconds(protocol={"sealed_manifest": {"task_count": 100}}, config=config, domain="airline", tasks_by_domain=None)
@@ -680,6 +695,151 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         sealed_task_count_manifest=payload_manifest,
                         sealed_authorization=authorization,
                         sealed_authorization_sha256=self._sha256(authorization),
+                        candidate_lock=lock,
+                        candidate_lock_sha256=self._sha256(lock),
+                        timeout_seconds=2,
+                    ),
+                )
+
+    def test_fresh_sealed_manifest_replays_public_domain_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            adapter = self._adapter(root)
+            domain_counts = {
+                "airline": 34,
+                "retail": 33,
+                "telecom": 33,
+            }
+            sealed_manifest = self._sealed_source_manifest(
+                root,
+                task_count=100,
+                domain_counts=domain_counts,
+            )
+            protocol = self._protocol(
+                root,
+                sealed_manifest=sealed_manifest,
+            )
+            lock = self._candidate_lock(
+                root,
+                adapter=adapter,
+                protocol=protocol,
+            )
+            authorization = self._sealed_authorization(
+                root,
+                lock=lock,
+                protocol=protocol,
+                sealed_manifest=sealed_manifest,
+            )
+
+            manifest = run_tau3_benchmark_arm(
+                out_dir=root / "sealed-fresh",
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                agent=self._endpoint(
+                    "local/adapter",
+                    18080,
+                    adapter_path=adapter,
+                ),
+                user=self._endpoint("local/user", 18081),
+                reviewer=self._endpoint("local/reviewer", 18082),
+                config=Tau3BenchmarkConfig(
+                    mode="sealed",
+                    arm_id="adapter",
+                    protocol_path=protocol,
+                    sealed_task_count_manifest=sealed_manifest,
+                    sealed_authorization=authorization,
+                    sealed_authorization_sha256=self._sha256(
+                        authorization
+                    ),
+                    candidate_lock=lock,
+                    candidate_lock_sha256=self._sha256(lock),
+                    timeout_seconds=2,
+                ),
+            )
+
+            self.assertEqual(
+                manifest["sealed_task_count_manifest"]["domain_counts"],
+                domain_counts,
+            )
+            self.assertEqual(
+                manifest["task_selection"]["task_count_by_domain"],
+                domain_counts,
+            )
+
+    def test_fresh_sealed_manifest_rejects_domain_count_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=1.0)
+            adapter = self._adapter(root)
+            sealed_manifest = self._sealed_source_manifest(
+                root,
+                task_count=100,
+                domain_counts={
+                    "airline": 34,
+                    "retail": 33,
+                    "telecom": 33,
+                },
+            )
+            payload = json.loads(
+                sealed_manifest.read_text(encoding="utf-8")
+            )
+            payload["domain_counts"] = {
+                "airline": 33,
+                "retail": 34,
+                "telecom": 33,
+            }
+            sealed_manifest.write_text(
+                json.dumps(payload) + "\n",
+                encoding="utf-8",
+            )
+            protocol = self._protocol(
+                root,
+                sealed_manifest=sealed_manifest,
+            )
+            lock = self._candidate_lock(
+                root,
+                adapter=adapter,
+                protocol=protocol,
+            )
+            authorization = self._sealed_authorization(
+                root,
+                lock=lock,
+                protocol=protocol,
+                sealed_manifest=sealed_manifest,
+            )
+
+            with self.assertRaisesRegex(
+                Tau3BenchmarkRunError,
+                "domain_counts do not replay",
+            ):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "sealed-domain-drift",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=self._endpoint(
+                        "local/adapter",
+                        18080,
+                        adapter_path=adapter,
+                    ),
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint(
+                        "local/reviewer",
+                        18082,
+                    ),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        sealed_authorization_sha256=self._sha256(
+                            authorization
+                        ),
                         candidate_lock=lock,
                         candidate_lock_sha256=self._sha256(lock),
                         timeout_seconds=2,
@@ -1410,15 +1570,37 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             ).encode("utf-8")
         ).hexdigest()
 
-    def _sealed_source_manifest(self, root: Path, *, task_count: int, entry_extra: dict[str, object] | None = None) -> Path:
+    def _sealed_source_manifest(
+        self,
+        root: Path,
+        *,
+        task_count: int,
+        entry_extra: dict[str, object] | None = None,
+        domain_counts: dict[str, int] | None = None,
+    ) -> Path:
         path = root / f"sealed-{len(list(root.glob('sealed-*.json')))}.json"
         entries = []
+        domains = (
+            [
+                domain
+                for domain in ("airline", "retail", "telecom")
+                for _ in range(domain_counts[domain])
+            ]
+            if domain_counts is not None
+            else [None] * task_count
+        )
+        if len(domains) != task_count:
+            raise AssertionError(
+                "test fixture domain counts must sum to task_count"
+            )
         for index in range(task_count):
             entry: dict[str, object] = {
                 "task_id_sha256": hashlib_sha256(f"task-id-{index}".encode("utf-8")).hexdigest(),
                 "prompt_sha256": hashlib_sha256(f"prompt-{index}".encode("utf-8")).hexdigest(),
                 "task_sha256": hashlib_sha256(f"task-{index}".encode("utf-8")).hexdigest(),
             }
+            if domains[index] is not None:
+                entry["domain"] = domains[index]
             if entry_extra is not None:
                 entry.update(entry_extra)
             entries.append(entry)
@@ -1429,6 +1611,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             "task_count": task_count,
             "entries": entries,
         }
+        if domain_counts is not None:
+            payload["domain_counts"] = domain_counts
         path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
         return path
 
