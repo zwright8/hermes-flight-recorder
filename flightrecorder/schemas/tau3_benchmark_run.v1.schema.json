@@ -92,6 +92,13 @@
         {"type": "null"}
       ]
     },
+    "development_screening": {
+      "anyOf": [
+        {"$ref": "#/$defs/development_screening_ref"},
+        {"type": "null"}
+      ]
+    },
+    "candidate_eligible": {"type": "boolean"},
     "sealed_task_count_manifest": {
       "anyOf": [
         {"$ref": "#/$defs/sealed_task_count_manifest_ref"},
@@ -320,6 +327,29 @@
         "size": {"minimum": 0, "type": "integer"}
       },
       "required": ["path", "sha256", "size"],
+      "type": "object"
+    },
+    "development_screening_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size": {"minimum": 1, "type": "integer"},
+        "selected_task_set_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "candidate_eligible": {"const": false},
+        "qualification_requires_full_development": {"const": true}
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "selected_task_set_sha256",
+        "candidate_eligible",
+        "qualification_requires_full_development"
+      ],
       "type": "object"
     },
     "candidate_identity_ref": {

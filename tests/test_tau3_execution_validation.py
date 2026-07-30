@@ -149,6 +149,37 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
 
             self.assertTrue(result["passed"], result)
 
+    def test_benchmark_bundle_rejects_screening_as_development_qualification(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            manifest_path = root / "manifest.json"
+            manifest = read_json(manifest_path)
+            arm_ref = manifest["benchmark"]["development_arms"][0]
+            arm_path = root / arm_ref["path"]
+            arm = read_json(arm_path)
+            arm["candidate_eligible"] = False
+            prelaunch_path = arm_path.parent / arm["prelaunch_receipt"]["path"]
+            prelaunch = read_json(prelaunch_path)
+            prelaunch["candidate_eligible"] = False
+            write_json(prelaunch_path, prelaunch)
+            arm["prelaunch_receipt"]["sha256"] = sha256_file(prelaunch_path)
+            arm["prelaunch_receipt"]["size"] = prelaunch_path.stat().st_size
+            write_json(arm_path, arm)
+            arm_ref["sha256"] = sha256_file(arm_path)
+            arm_ref["size"] = arm_path.stat().st_size
+            write_json(manifest_path, manifest)
+
+            result = validate_tau3_benchmark_result_bundle(root, strict=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "development qualification arms must be candidate-eligible",
+                json.dumps(result),
+            )
+
     def test_benchmark_bundle_rejects_evaluator_model_contract_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

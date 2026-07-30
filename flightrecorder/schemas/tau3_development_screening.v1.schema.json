@@ -1,0 +1,97 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_development_screening.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "hfr.tau3_development_screening.v1"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "algorithm": {"const": "domain-minimum-content-hash-v1"},
+    "source_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "development_source": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"minimum": 1, "type": "integer"},
+        "task_count": {"minimum": 3, "type": "integer"},
+        "domain_counts": {
+          "additionalProperties": false,
+          "properties": {
+            "airline": {"minimum": 1, "type": "integer"},
+            "retail": {"minimum": 1, "type": "integer"},
+            "telecom": {"minimum": 1, "type": "integer"}
+          },
+          "required": ["airline", "retail", "telecom"],
+          "type": "object"
+        }
+      },
+      "required": ["sha256", "size", "task_count", "domain_counts"],
+      "type": "object"
+    },
+    "domains": {"const": ["airline", "retail", "telecom"]},
+    "seeds": {"const": [101, 202, 303, 404]},
+    "tasks_per_domain": {"const": 1},
+    "task_count": {"const": 3},
+    "expected_run_count": {"const": 12},
+    "selected_tasks": {
+      "items": {"$ref": "#/$defs/selected_task"},
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "selected_task_set_sha256": {"$ref": "#/$defs/sha256"},
+    "candidate_eligible": {"const": false},
+    "selection_locked": {"const": true},
+    "qualification_requires_full_development": {"const": true},
+    "sealed_payload_accessed": {"const": false},
+    "sealed_task_ids_materialized": {"const": false}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "algorithm",
+    "source_revision",
+    "development_source",
+    "domains",
+    "seeds",
+    "tasks_per_domain",
+    "task_count",
+    "expected_run_count",
+    "selected_tasks",
+    "selected_task_set_sha256",
+    "candidate_eligible",
+    "selection_locked",
+    "qualification_requires_full_development",
+    "sealed_payload_accessed",
+    "sealed_task_ids_materialized"
+  ],
+  "title": "Tau-3 Development Screening Plan",
+  "type": "object",
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "selected_task": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {"enum": ["airline", "retail", "telecom"]},
+        "raw_id": {"minLength": 1, "type": "string"},
+        "raw_id_sha256": {"$ref": "#/$defs/sha256"},
+        "task_sha256": {"$ref": "#/$defs/sha256"},
+        "prompt_sha256": {"$ref": "#/$defs/sha256"},
+        "family_id": {"$ref": "#/$defs/sha256"},
+        "selection_key_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "domain",
+        "raw_id",
+        "raw_id_sha256",
+        "task_sha256",
+        "prompt_sha256",
+        "family_id",
+        "selection_key_sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

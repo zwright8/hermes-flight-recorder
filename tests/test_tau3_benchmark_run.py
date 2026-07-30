@@ -22,6 +22,9 @@ from flightrecorder.tau3_benchmark_run import (
     _tau2_argv,
     run_tau3_benchmark_arm,
 )
+from flightrecorder.tau3_development_screening import (
+    build_tau3_development_screening,
+)
 from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
 from flightrecorder.tau3_sealed_authorization import validate_tau3_sealed_authorization
 
@@ -135,6 +138,58 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 ),
             )
             self.assertEqual(resumed["run_count"], 12)
+
+    def test_development_screening_is_bound_and_non_qualifying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            source = self._development_source(root)
+            protocol = self._protocol(root, source=source)
+            screening = root / "screening.json"
+            screening_payload = build_tau3_development_screening(
+                development_source=source,
+                out_path=screening,
+                created_at="2026-07-22T00:00:00Z",
+            )
+            tau2 = self._fake_tau2(root, reward=0.0)
+            endpoint = self._endpoint("local/base", 18080)
+
+            manifest = run_tau3_benchmark_arm(
+                out_dir=root / "screen",
+                tau_repo=repo,
+                tau_venv_bin=tau2,
+                expected_tau_revision=self.revision,
+                agent=endpoint,
+                user=self._endpoint("local/user", 18081),
+                reviewer=self._endpoint("local/reviewer", 18082),
+                config=Tau3BenchmarkConfig(
+                    mode="development",
+                    arm_id="base",
+                    protocol_path=protocol,
+                    source_split=source,
+                    development_screening=screening,
+                    timeout_seconds=2,
+                ),
+                created_at="2026-07-22T00:00:00Z",
+            )
+
+            self.assertFalse(manifest["candidate_eligible"])
+            self.assertEqual(
+                manifest["development_screening"][
+                    "selected_task_set_sha256"
+                ],
+                screening_payload["selected_task_set_sha256"],
+            )
+            self.assertTrue(
+                manifest["development_screening"][
+                    "qualification_requires_full_development"
+                ]
+            )
+            self.assertEqual(
+                manifest["development_screening"]["path"],
+                "inputs/development_screening.json",
+            )
+            self.assertEqual(manifest["success_count"], 12)
 
     def test_benchmark_binds_exact_frozen_evaluator_model(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -82,6 +82,14 @@
       "name": "tau3_benchmark_run"
     },
     {
+      "artifact": "tau3_development_screening",
+      "artifact_schema_version": "hfr.tau3_development_screening.v1",
+      "description": "Create-once deterministic cross-domain Tau-3 development screening plan that is explicitly ineligible for candidate qualification.",
+      "filename": "tau3_development_screening.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_development_screening.v1.schema.json",
+      "name": "tau3_development_screening"
+    },
+    {
       "artifact": "tau3_blind_benchmark_result",
       "artifact_schema_version": "hfr.tau3_blind_benchmark_result.v1",
       "description": "Hash-only domain/seed benchmark result emitted by a pinned blind custodian for fresh sealed Tau-3 evaluation.",

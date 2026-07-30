@@ -231,6 +231,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_competitive_v3_training_run_stage",
             "tau3_conversation_import",
             "tau3_development_evaluation",
+            "tau3_development_screening",
             "tau3_development_scorecard",
             "tau3_evaluation",
             "tau3_fresh_contamination_replay",

@@ -220,6 +220,35 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             self.assertFalse((root / "selection.json").exists())
             self.assertFalse((root / "candidate-lock.json").exists())
 
+    def test_rejects_non_qualifying_development_screening(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(root, "base", reward=0.0, db_match=False)
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            manifest = _read(candidate.development_manifest_path)
+            manifest["candidate_eligible"] = False
+            manifest["development_screening"] = {
+                "candidate_eligible": False,
+            }
+            _write(candidate.development_manifest_path, manifest)
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "development screening is not candidate-eligible",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "selection.json",
+                    lock_path=root / "candidate-lock.json",
+                    bootstrap_samples=200,
+                )
+
     def test_rejects_tampered_raw_result_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -1056,6 +1056,8 @@ def _validate_benchmark_arm_refs(
             "config",
             "candidate_lock",
             "candidate_identity",
+            "development_screening",
+            "candidate_eligible",
             "training_protocol",
             "benchmark_protocol_lineage",
             "blind_custody_receipt",
@@ -1324,6 +1326,16 @@ def _validate_development_grid(target: _Target, arms: list[_Loaded], manifest: d
         expected = {(domain, seed) for domain in DOMAINS for seed in SEEDS}
         _require(target, combo == expected, f"development {payload.get('arm_id')} does not contain the exact 3x4 domain/seed grid")
         _require(target, payload.get("candidate_lock") is None, "development arms must not use a sealed candidate lock")
+        _require(
+            target,
+            payload.get("development_screening") is None,
+            "development qualification arms must not use a screening plan",
+        )
+        _require(
+            target,
+            payload.get("candidate_eligible") is not False,
+            "development qualification arms must be candidate-eligible",
+        )
         if payload.get("arm_id") == "adapter":
             identity = _dict(payload.get("candidate_identity"))
             identity_sha = identity.get("sha256")

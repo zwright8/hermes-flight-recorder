@@ -411,6 +411,13 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
     manifest = _load_json_object(path)
     if manifest.get("mode") == "sealed":
         raise Tau3CandidateSelectionError(f"{path}: sealed-mode benchmark input is forbidden")
+    if (
+        manifest.get("candidate_eligible") is False
+        or manifest.get("development_screening") is not None
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{path}: development screening is not candidate-eligible"
+        )
     if _sealed_flags_present(manifest):
         raise Tau3CandidateSelectionError(f"{path}: sealed access flags are present")
     schema = check_schema_contract(manifest, name_or_id="tau3_benchmark_run")
@@ -627,6 +634,8 @@ def _load_prelaunch_record(manifest_path: Path, manifest: dict[str, Any]) -> dic
         "config",
         "task_selection",
         "candidate_identity",
+        "development_screening",
+        "candidate_eligible",
     ):
         if payload.get(key) != manifest.get(key):
             raise Tau3CandidateSelectionError(f"{manifest_path}: prelaunch receipt {key} mismatch")

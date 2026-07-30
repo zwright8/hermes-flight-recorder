@@ -462,7 +462,31 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   --dataset runs/tau3_competitive_agent_v3/dataset/valid.jsonl \
   --training-receipt local/tau3/candidate-attempts/<candidate>/run/training_receipt.json \
   --protocol runs/tau3_competitive_agent_v3/evidence/protocol.json \
-  --model-identity local/tau3/identities/base.json
+    --model-identity local/tau3/identities/base.json
+```
+
+Before full development qualification, preregister a small cross-domain screen
+from the immutable development source. The create-once plan selects exactly one
+task per domain by content hash while retaining all four frozen seeds. It is
+explicitly candidate-ineligible; candidate selection independently requires
+the complete source-task × seed product, so screening receipts cannot be
+recast as qualification evidence.
+
+```bash
+.venv/bin/python scripts/build_tau3_development_screening.py build \
+  --development-source local/tau3/source-v1/development.json \
+  --out local/tau3/development-screening/competitive-v3/plan.json
+
+.venv/bin/python scripts/build_tau3_development_screening.py validate \
+  --screening local/tau3/development-screening/competitive-v3/plan.json \
+  --development-source local/tau3/source-v1/development.json
+
+.venv/bin/python scripts/run_tau3_benchmark_arm.py \
+  --mode development \
+  --source-split local/tau3/source-v1/development.json \
+  --development-screening \
+    local/tau3/development-screening/competitive-v3/plan.json \
+  <frozen-arm-and-loopback-endpoint-arguments>
 ```
 
 Development and sealed benchmark arms also require

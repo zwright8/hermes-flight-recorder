@@ -19,6 +19,10 @@ from urllib.parse import urlparse
 
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_development_screening import (
+    Tau3DevelopmentScreeningError,
+    selected_tasks_by_domain,
+)
 from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
 
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
@@ -61,6 +65,7 @@ class Tau3BenchmarkConfig:
     max_errors: int = 10
     domains: tuple[str, ...] = DOMAINS
     source_split: Path | None = None
+    development_screening: Path | None = None
     sealed_task_count_manifest: Path | None = None
     sealed_authorization: Path | None = None
     sealed_authorization_sha256: str | None = None
@@ -139,6 +144,19 @@ def run_tau3_benchmark_arm(
     )
     _require_revision(repo, expected_tau_revision)
     tasks_by_domain = _development_tasks_by_domain(config.source_split, expected_tau_revision) if config.mode == "development" else None
+    screening_payload: dict[str, Any] | None = None
+    if config.development_screening is not None:
+        assert config.source_split is not None
+        try:
+            tasks_by_domain = selected_tasks_by_domain(
+                screening=config.development_screening,
+                development_source=config.source_split,
+            )
+        except Tau3DevelopmentScreeningError as exc:
+            raise Tau3BenchmarkRunError(
+                f"development screening plan is invalid: {exc}"
+            ) from exc
+        screening_payload = _read_json(config.development_screening)
     sealed_task_count_manifest = (
         _sealed_task_count_manifest_record(config.sealed_task_count_manifest, protocol=protocol, expected_revision=expected_tau_revision)
         if config.mode == "sealed"
@@ -167,6 +185,17 @@ def run_tau3_benchmark_arm(
     source_ref = (
         _stage_input_file(config.source_split, out, "inputs/development_source.json", "development source")
         if config.mode == "development" and config.source_split is not None
+        else None
+    )
+    development_screening_ref = (
+        _stage_input_file(
+            config.development_screening,
+            out,
+            "inputs/development_screening.json",
+            "development screening",
+        )
+        if config.mode == "development"
+        and config.development_screening is not None
         else None
     )
     sealed_task_count_ref = (
@@ -307,6 +336,20 @@ def run_tau3_benchmark_arm(
         "reviewer": _endpoint_record(reviewer),
         "config": _config_record(config),
         "source": source_ref,
+        "development_screening": (
+            {
+                **development_screening_ref,
+                "selected_task_set_sha256": screening_payload[
+                    "selected_task_set_sha256"
+                ],
+                "candidate_eligible": False,
+                "qualification_requires_full_development": True,
+            }
+            if development_screening_ref is not None
+            and screening_payload is not None
+            else None
+        ),
+        "candidate_eligible": config.development_screening is None,
         "sealed_task_count_manifest": _sealed_task_count_binding(sealed_task_count_ref, sealed_task_count_manifest),
         "sealed_authorization": sealed_authorization,
         "candidate_identity": candidate_identity,
@@ -612,6 +655,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tau-venv-bin", type=Path, required=True)
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--source-split", type=Path)
+    parser.add_argument("--development-screening", type=Path)
     parser.add_argument("--sealed-task-count-manifest", type=Path)
     parser.add_argument("--sealed-authorization", type=Path)
     parser.add_argument("--sealed-authorization-sha256")
@@ -659,6 +703,7 @@ def main(argv: list[str] | None = None) -> int:
                 protocol_path=args.protocol_path,
                 evaluator_model_contract=args.evaluator_model_contract,
                 source_split=args.source_split,
+                development_screening=args.development_screening,
                 sealed_task_count_manifest=args.sealed_task_count_manifest,
                 sealed_authorization=args.sealed_authorization,
                 sealed_authorization_sha256=args.sealed_authorization_sha256,
@@ -1976,6 +2021,20 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         raise Tau3BenchmarkRunError("seeds must be exactly 101,202,303,404 in frozen order")
     if config.domains != DOMAINS:
         raise Tau3BenchmarkRunError("domains must be exactly airline,retail,telecom in frozen order")
+    if (
+        config.development_screening is not None
+        and config.mode != "development"
+    ):
+        raise Tau3BenchmarkRunError(
+            "development screening is only allowed in development mode"
+        )
+    if (
+        config.development_screening is not None
+        and config.source_split is None
+    ):
+        raise Tau3BenchmarkRunError(
+            "development screening requires the full development source"
+        )
     if config.max_steps != 30:
         raise Tau3BenchmarkRunError("max_steps must be exactly 30")
     if config.max_errors != 10:
