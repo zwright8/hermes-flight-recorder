@@ -501,6 +501,8 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
             arm=expected_arm,
             expected_tau_revision=str(manifest.get("tau_revision") or ""),
         )
+        for row in extracted:
+            row["benchmark_seed"] = receipt.get("seed")
         source_errors.extend(extraction_errors)
         domain = str(harness.get("domain_name") or "")
         if domain in harness_by_domain and harness_by_domain[domain] != harness:
@@ -668,32 +670,31 @@ def _validate_complete_development_task_grid(
     task_keys: set[tuple[str, str]] = set()
     for task in source_tasks:
         domain = task.get("domain") if isinstance(task, dict) else None
-        task_sha256 = (
-            task.get("task_sha256") if isinstance(task, dict) else None
-        )
+        raw_id = task.get("raw_id") if isinstance(task, dict) else None
         if (
             not isinstance(domain, str)
             or not domain
-            or not _sha256_value(task_sha256)
+            or not isinstance(raw_id, str)
+            or not raw_id
         ):
             raise Tau3CandidateSelectionError(
                 f"{manifest_path}: development source task identity is invalid"
             )
-        key = (domain, str(task_sha256))
+        key = (domain, canonical_sha256(raw_id))
         if key in task_keys:
             raise Tau3CandidateSelectionError(
                 f"{manifest_path}: development source task identity is duplicated"
             )
         task_keys.add(key)
     expected = {
-        (domain, task_sha256, 0, seed)
-        for domain, task_sha256 in task_keys
+        (domain, task_id_sha256, 0, seed)
+        for domain, task_id_sha256 in task_keys
         for seed in seeds
     }
     actual: set[tuple[str, str, int, int]] = set()
     for row in rows:
         trial = row.get("trial")
-        seed = row.get("seed")
+        seed = row.get("benchmark_seed")
         if (
             not isinstance(trial, int)
             or isinstance(trial, bool)
@@ -706,7 +707,7 @@ def _validate_complete_development_task_grid(
         actual.add(
             (
                 str(row.get("domain") or ""),
-                str(row.get("task_sha256") or ""),
+                str(row.get("task_id_sha256") or ""),
                 trial,
                 seed,
             )

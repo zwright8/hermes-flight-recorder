@@ -285,9 +285,8 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             receipt = _read(receipt_path)
             result_path = Path(receipt["result_path"])
             result = _read(result_path)
-            result["tasks"][0]["user_scenario"]["instructions"] = (
-                "substituted"
-            )
+            result["tasks"][0]["id"] = "substituted"
+            result["simulations"][0]["task_id"] = "substituted"
             _write(result_path, result)
             copied_result_path = manifest_path.parent / ref["result_path"]
             _write(copied_result_path, result)
