@@ -1,0 +1,80 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_generator_validation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hash-only validation receipt for a fresh blind Tau-3 sealed-task generator.",
+  "properties": {
+    "created_at": {"minLength": 1, "type": "string"},
+    "domain_counts": {"$ref": "#/$defs/domainCounts"},
+    "generator_source": {
+      "additionalProperties": false,
+      "properties": {
+        "commit_sha": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "script_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": ["commit_sha", "script_sha256"],
+      "type": "object"
+    },
+    "golden_replay": {
+      "additionalProperties": false,
+      "properties": {
+        "failed_task_count": {"const": 0},
+        "passed": {"const": true},
+        "passed_task_count": {"const": 100},
+        "replayed_task_count": {"const": 100},
+        "state_check_failure_count": {"const": 0}
+      },
+      "required": [
+        "passed",
+        "replayed_task_count",
+        "passed_task_count",
+        "failed_task_count",
+        "state_check_failure_count"
+      ],
+      "type": "object"
+    },
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "passed": {"const": true},
+    "prompt_hashes_unique": {"const": true},
+    "raw_payload_included": {"const": false},
+    "schema_validation_passed": {"const": true},
+    "schema_version": {"const": "hfr.tau3_blind_generator_validation.v1"},
+    "sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "source_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "task_count": {"const": 100},
+    "task_hashes_unique": {"const": true}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "source_revision",
+    "sealed_source_manifest_sha256",
+    "task_count",
+    "domain_counts",
+    "generator_source",
+    "golden_replay",
+    "schema_validation_passed",
+    "task_hashes_unique",
+    "prompt_hashes_unique",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included"
+  ],
+  "title": "Tau-3 Blind Generator Validation",
+  "type": "object",
+  "$defs": {
+    "domainCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {"minimum": 1, "type": "integer"},
+        "retail": {"minimum": 1, "type": "integer"},
+        "telecom": {"minimum": 1, "type": "integer"}
+      },
+      "required": ["airline", "retail", "telecom"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

@@ -311,6 +311,42 @@ committed chain, and writes the next numbered recovery outcome. Recovery
 outcomes bind every prior outcome by path, size, and SHA-256; completed,
 malformed, noncontiguous, or hash-mismatched chains fail closed.
 
+If a sealed source must be retired before evaluation, do not rewrite the
+training protocol or substitute another on-disk test split. A replacement
+source first emits a registered hashes-only generator validation, a
+train/development/retired-source disjointness replay, and a 100-task
+airline/retail/telecom sealed-source manifest with balanced public domain
+counts. The custody builder binds those three artifacts plus the retirement
+incident into a create-once receipt. The protocol-lineage builder then permits
+exactly four changes: the sealed hash in the Tau revision, the split source
+manifest, the sealed split record, and the sealed manifest. Any harness,
+model, prompt, tool, decoding, budget, metric, training-source, or
+candidate-selection drift fails replay.
+
+```bash
+.venv/bin/python scripts/build_tau3_blind_custody_receipt.py \
+  --custody-id <opaque-handle> \
+  --sealed-source-manifest <hashes-only-sealed-source.json> \
+  --generator-validation <blind-generator-validation.json> \
+  --fresh-contamination-replay <fresh-contamination-replay.json> \
+  --retired-source-incident-sha256 <sha256> \
+  --out <blind-custody-receipt.json>
+
+.venv/bin/python scripts/build_tau3_benchmark_protocol_lineage.py \
+  --training-protocol <immutable-training-protocol.json> \
+  --benchmark-protocol <fresh-sealed-benchmark-protocol.json> \
+  --custody-receipt <blind-custody-receipt.json> \
+  --sealed-source-manifest <hashes-only-sealed-source.json> \
+  --generator-validation <blind-generator-validation.json> \
+  --fresh-contamination-replay <fresh-contamination-replay.json> \
+  --retired-source-incident-sha256 <sha256> \
+  --out <benchmark-protocol-lineage.json>
+```
+
+Both artifacts contain hashes and aggregate counts only. They do not make HFR
+an operating-system isolation boundary, materialize sealed task payloads, or
+authorize sealed access by themselves.
+
 After a governed MLX candidate finishes, qualification requires a separate,
 coverage-complete loss replay over the exact `valid.jsonl` export. The runner
 loads the receipt-bound base plus adapter locally, conditions on every complete

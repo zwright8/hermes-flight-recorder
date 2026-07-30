@@ -1,0 +1,68 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_fresh_contamination_replay.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hash-only disjointness replay across Tau-3 train, development, retired sealed, and fresh sealed sources.",
+  "properties": {
+    "created_at": {"minLength": 1, "type": "string"},
+    "development_source_sha256": {"$ref": "#/$defs/sha256"},
+    "fresh_sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "overlaps": {
+      "additionalProperties": false,
+      "properties": {
+        "development_family": {"const": 0},
+        "development_prompt": {"const": 0},
+        "development_task": {"const": 0},
+        "development_task_id": {"const": 0},
+        "retired_sealed_family": {"const": 0},
+        "retired_sealed_prompt": {"const": 0},
+        "retired_sealed_task": {"const": 0},
+        "retired_sealed_task_id": {"const": 0},
+        "training_family": {"const": 0},
+        "training_prompt": {"const": 0},
+        "training_task": {"const": 0},
+        "training_task_id": {"const": 0}
+      },
+      "required": [
+        "training_task",
+        "training_task_id",
+        "training_prompt",
+        "training_family",
+        "development_task",
+        "development_task_id",
+        "development_prompt",
+        "development_family",
+        "retired_sealed_task",
+        "retired_sealed_task_id",
+        "retired_sealed_prompt",
+        "retired_sealed_family"
+      ],
+      "type": "object"
+    },
+    "passed": {"const": true},
+    "raw_payload_included": {"const": false},
+    "retired_sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "schema_version": {"const": "hfr.tau3_fresh_contamination_replay.v1"},
+    "training_dataset_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "training_dataset_sha256",
+    "development_source_sha256",
+    "retired_sealed_source_manifest_sha256",
+    "fresh_sealed_source_manifest_sha256",
+    "overlaps",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included"
+  ],
+  "title": "Tau-3 Fresh Contamination Replay",
+  "type": "object",
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

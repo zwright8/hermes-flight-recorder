@@ -9,6 +9,16 @@
     "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "hashes_only": {"const": true},
     "task_count": {"type": "integer", "minimum": 1},
+    "domain_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["airline", "retail", "telecom"],
+      "properties": {
+        "airline": {"type": "integer", "minimum": 1},
+        "retail": {"type": "integer", "minimum": 1},
+        "telecom": {"type": "integer", "minimum": 1}
+      }
+    },
     "entries": {
       "type": "array",
       "minItems": 1,
@@ -17,6 +27,7 @@
         "additionalProperties": false,
         "required": ["task_id_sha256", "prompt_sha256", "task_sha256"],
         "properties": {
+          "domain": {"enum": ["airline", "retail", "telecom"]},
           "task_id_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

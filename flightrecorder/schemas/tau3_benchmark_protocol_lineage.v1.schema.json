@@ -1,0 +1,93 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_benchmark_protocol_lineage.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hash-only proof that a benchmark protocol differs from its training protocol only in fresh sealed-source bindings.",
+  "properties": {
+    "allowed_delta": {
+      "additionalProperties": false,
+      "properties": {
+        "change_count": {"const": 4},
+        "changes_sha256": {"$ref": "#/$defs/sha256"},
+        "paths": {
+          "const": [
+            "sealed_manifest",
+            "split_manifest.source_manifest",
+            "split_manifest.splits.sealed",
+            "tau_revision.split_hashes.sealed"
+          ]
+        }
+      },
+      "required": ["paths", "change_count", "changes_sha256"],
+      "type": "object"
+    },
+    "benchmark_protocol_sha256": {"$ref": "#/$defs/sha256"},
+    "created_at": {"minLength": 1, "type": "string"},
+    "fresh_bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "blind_custody_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "fresh_contamination_replay_sha256": {"$ref": "#/$defs/sha256"},
+        "retired_source_incident_sha256": {"$ref": "#/$defs/sha256"},
+        "sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "blind_custody_receipt_sha256",
+        "sealed_source_manifest_sha256",
+        "fresh_contamination_replay_sha256",
+        "retired_source_incident_sha256"
+      ],
+      "type": "object"
+    },
+    "frozen_fields_sha256": {"$ref": "#/$defs/sha256"},
+    "gates": {
+      "additionalProperties": false,
+      "properties": {
+        "benchmark_protocol_schema_passed": {"const": true},
+        "custody_receipt_replayed": {"const": true},
+        "exact_sealed_only_delta": {"const": true},
+        "fresh_contamination_replay_passed": {"const": true},
+        "fresh_source_bound_everywhere": {"const": true},
+        "retired_source_not_reused": {"const": true},
+        "training_protocol_schema_passed": {"const": true}
+      },
+      "required": [
+        "training_protocol_schema_passed",
+        "benchmark_protocol_schema_passed",
+        "exact_sealed_only_delta",
+        "fresh_source_bound_everywhere",
+        "custody_receipt_replayed",
+        "fresh_contamination_replay_passed",
+        "retired_source_not_reused"
+      ],
+      "type": "object"
+    },
+    "hashes_only": {"const": true},
+    "lineage_sha256": {"$ref": "#/$defs/sha256"},
+    "local_paths_included": {"const": false},
+    "passed": {"const": true},
+    "raw_payload_included": {"const": false},
+    "schema_version": {"const": "hfr.tau3_benchmark_protocol_lineage.v1"},
+    "training_protocol_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "training_protocol_sha256",
+    "benchmark_protocol_sha256",
+    "frozen_fields_sha256",
+    "allowed_delta",
+    "fresh_bindings",
+    "gates",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "lineage_sha256"
+  ],
+  "title": "Tau-3 Benchmark Protocol Lineage",
+  "type": "object",
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

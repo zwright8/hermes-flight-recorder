@@ -1,0 +1,74 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_custody_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Create-once hash-only custody receipt for one fresh blind Tau-3 sealed set.",
+  "properties": {
+    "created_at": {"minLength": 1, "type": "string"},
+    "custody": {
+      "additionalProperties": false,
+      "properties": {
+        "consumed": {"const": false},
+        "hashes_only": {"const": true},
+        "local_paths_included": {"const": false},
+        "one_shot_prepared": {"const": true},
+        "payload_lifetime": {"const": "blocking_custodian_memory_only"},
+        "raw_payload_included": {"const": false},
+        "retired_source_used": {"const": false},
+        "searchable_plaintext_persisted": {"const": false}
+      },
+      "required": [
+        "hashes_only",
+        "local_paths_included",
+        "raw_payload_included",
+        "searchable_plaintext_persisted",
+        "retired_source_used",
+        "payload_lifetime",
+        "one_shot_prepared",
+        "consumed"
+      ],
+      "type": "object"
+    },
+    "custody_id_hash": {"$ref": "#/$defs/sha256"},
+    "domain_counts": {"$ref": "#/$defs/domainCounts"},
+    "entries_sha256": {"$ref": "#/$defs/sha256"},
+    "fresh_contamination_replay_sha256": {"$ref": "#/$defs/sha256"},
+    "generator_validation_sha256": {"$ref": "#/$defs/sha256"},
+    "receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "retired_source_incident_sha256": {"$ref": "#/$defs/sha256"},
+    "schema_version": {"const": "hfr.tau3_blind_custody_receipt.v1"},
+    "sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "source_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "task_count": {"const": 100}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "custody_id_hash",
+    "source_revision",
+    "sealed_source_manifest_sha256",
+    "entries_sha256",
+    "task_count",
+    "domain_counts",
+    "generator_validation_sha256",
+    "fresh_contamination_replay_sha256",
+    "retired_source_incident_sha256",
+    "custody",
+    "receipt_sha256"
+  ],
+  "title": "Tau-3 Blind Custody Receipt",
+  "type": "object",
+  "$defs": {
+    "domainCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "airline": {"minimum": 1, "type": "integer"},
+        "retail": {"minimum": 1, "type": "integer"},
+        "telecom": {"minimum": 1, "type": "integer"}
+      },
+      "required": ["airline", "retail", "telecom"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}
