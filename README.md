@@ -409,7 +409,9 @@ fields, or if any lineage/custody artifact is omitted or substituted. Legacy
 v1 artifacts remain replayable evidence, but they cannot consume v2 evidence
 or prove the fresh-source authorization path. The v2 selection report also
 requires at least two completed qualified candidates with distinct governed
-recipe hashes before either lock version can be emitted.
+recipe hashes before either lock version can be emitted. Each eligible row
+must independently replay the 0.10 macro Pass-1, 0.05 gain over base, and 0.05
+Pass-1 floor in every domain.
 
 Fresh v2 sealed arms must also pass `--sealed-custodian` to
 `scripts/run_tau3_benchmark_arm.py`. The runner requires a regular executable

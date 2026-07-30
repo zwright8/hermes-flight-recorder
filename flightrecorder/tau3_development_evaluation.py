@@ -17,6 +17,9 @@ from .schema_registry import check_schema_contract
 from .tau3_candidate_selection import (
     BOOTSTRAP_SAMPLES,
     BOOTSTRAP_SEED,
+    MIN_DOMAIN_PASS1,
+    MIN_MACRO_GAIN,
+    MIN_MACRO_PASS1,
     NON_INFERIORITY_MARGIN,
     SAFETY_NON_INFERIORITY_MARGIN,
     Tau3CandidateEntry,
@@ -32,9 +35,6 @@ DEVELOPMENT_EVALUATION_SCHEMA_VERSION = (
 DEVELOPMENT_SCORECARD_SCHEMA_VERSION = (
     "hfr.tau3_development_scorecard.v1"
 )
-MIN_MACRO_PASS1 = 0.10
-MIN_MACRO_GAIN = 0.05
-MIN_DOMAIN_PASS1 = 0.05
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 

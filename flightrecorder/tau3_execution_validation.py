@@ -995,6 +995,43 @@ def _validate_candidate_selection(
         policy.get("distinct_qualified_recipes_required") is True,
         "candidate selection policy must require distinct qualified recipes",
     )
+    _require(
+        target,
+        policy.get("minimum_macro_pass1") == 0.10
+        and policy.get("minimum_macro_gain") == 0.05
+        and policy.get("minimum_per_domain_pass1") == 0.05,
+        "candidate selection policy must preserve development score floors",
+    )
+    for candidate in eligible:
+        candidate_id = str(candidate.get("candidate_id") or "<unknown>")
+        macro = _dict(_nested(candidate, "metrics", "macro_pass1"))
+        candidate_macro = _number(macro.get("candidate"))
+        base_macro = _number(macro.get("base"))
+        per_domain = _dict(
+            _nested(
+                candidate,
+                "metrics",
+                "per_domain_pass1",
+                "candidate",
+            )
+        )
+        _require(
+            target,
+            candidate_macro is not None
+            and base_macro is not None
+            and candidate_macro >= 0.10
+            and candidate_macro - base_macro >= 0.05,
+            f"{candidate_id} must replay the development macro and gain floors",
+        )
+        _require(
+            target,
+            all(
+                _number(per_domain.get(domain)) is not None
+                and float(per_domain[domain]) >= 0.05
+                for domain in DOMAINS
+            ),
+            f"{candidate_id} must replay every development domain floor",
+        )
     if lock.get("schema_version") == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
         lineage = _dict(report.get("benchmark_protocol_lineage"))
         _require(
@@ -1764,6 +1801,13 @@ def _nested(value: dict[str, Any], *keys: str) -> Any:
     for key in keys:
         current = _dict(current).get(key)
     return current
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _require(target: _Target, condition: bool, error: str) -> None:

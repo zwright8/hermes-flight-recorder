@@ -42,6 +42,9 @@ TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v2"
 BOOTSTRAP_SAMPLES = 10_000
 BOOTSTRAP_SEED = 8_675_309
 MIN_QUALIFIED_CANDIDATES = 2
+MIN_MACRO_PASS1 = 0.10
+MIN_MACRO_GAIN = 0.05
+MIN_DOMAIN_PASS1 = 0.05
 RAW_LOCK_FORBIDDEN_KEYS = {
     "path",
     "paths",
@@ -194,6 +197,9 @@ def select_tau3_candidate(
             "benchmark_protocol_lineage_required": protocol_lineage is not None,
             "minimum_qualified_candidates": MIN_QUALIFIED_CANDIDATES,
             "distinct_qualified_recipes_required": True,
+            "minimum_macro_pass1": MIN_MACRO_PASS1,
+            "minimum_macro_gain": MIN_MACRO_GAIN,
+            "minimum_per_domain_pass1": MIN_DOMAIN_PASS1,
         },
         "base": _private_source_record(base),
         "candidates": candidate_reports,
@@ -378,6 +384,16 @@ def _evaluate_candidate(
     }
     effects = {}
     if paired:
+        candidate_macro = float(metrics["macro_pass1"]["candidate"])
+        base_macro = float(metrics["macro_pass1"]["base"])
+        if candidate_macro < MIN_MACRO_PASS1:
+            errors.append("minimum_macro_pass1")
+        if candidate_macro - base_macro < MIN_MACRO_GAIN:
+            errors.append("minimum_macro_gain")
+        candidate_domains = metrics["per_domain_pass1"]["candidate"]
+        for domain in DOMAINS:
+            if float(candidate_domains[domain]) < MIN_DOMAIN_PASS1:
+                errors.append(f"minimum_{domain}_pass1")
         effects["base"] = _arm_effect(
             maps["candidate"],
             maps["base"],

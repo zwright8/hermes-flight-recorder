@@ -14,6 +14,7 @@ import flightrecorder.tau3_competitive_v3 as competitive_v3_module
 from flightrecorder.tau3_competitive_dataset import build_tau3_competitive_dataset, validate_tau3_competitive_dataset_bundle
 from flightrecorder.tau3_competitive_v3 import (
     DATASET_SCHEMA_VERSION,
+    DOMAINS,
     FINAL_SCHEMA_VERSION,
     PLAN_SCHEMA_VERSION,
     PUBLICATION_SCHEMA_VERSION,
@@ -362,6 +363,25 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
         self.assertIn(
             "at least two distinct qualified recipe hashes",
             json.dumps(target.errors),
+        )
+
+        below_floor = candidate_selection()
+        below_floor["candidates"][0]["metrics"]["macro_pass1"][
+            "candidate"
+        ] = 0.09
+        threshold_target = _Target(
+            "candidate_selection",
+            "threshold-fixture",
+        )
+
+        competitive_v3_module._validate_candidate_selection_quorum(
+            threshold_target,
+            below_floor,
+        )
+
+        self.assertIn(
+            "development macro and gain floors",
+            json.dumps(threshold_target.errors),
         )
 
     def test_final_stage_forwards_complete_v2_authorization_replay(self) -> None:
@@ -2026,6 +2046,9 @@ def candidate_selection() -> dict[str, Any]:
         "selection_policy": {
             "minimum_qualified_candidates": 2,
             "distinct_qualified_recipes_required": True,
+            "minimum_macro_pass1": 0.10,
+            "minimum_macro_gain": 0.05,
+            "minimum_per_domain_pass1": 0.05,
         },
         "base": {},
         "candidates": [
@@ -2033,11 +2056,27 @@ def candidate_selection() -> dict[str, Any]:
                 "candidate_id": "candidate-a",
                 "eligible": True,
                 "training_binding": {"recipe_sha256": "a" * 64},
+                "metrics": {
+                    "macro_pass1": {"candidate": 1.0, "base": 0.0},
+                    "per_domain_pass1": {
+                        "candidate": {
+                            domain: 1.0 for domain in DOMAINS
+                        }
+                    },
+                },
             },
             {
                 "candidate_id": "candidate-b",
                 "eligible": True,
                 "training_binding": {"recipe_sha256": "b" * 64},
+                "metrics": {
+                    "macro_pass1": {"candidate": 1.0, "base": 0.0},
+                    "per_domain_pass1": {
+                        "candidate": {
+                            domain: 1.0 for domain in DOMAINS
+                        }
+                    },
+                },
             },
         ],
         "eligible_candidate_count": 2,

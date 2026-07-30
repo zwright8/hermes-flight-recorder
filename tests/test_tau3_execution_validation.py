@@ -957,13 +957,24 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
             "safety_non_inferiority_margin": 0.01,
             "minimum_qualified_candidates": 2,
             "distinct_qualified_recipes_required": True,
+            "minimum_macro_pass1": 0.10,
+            "minimum_macro_gain": 0.05,
+            "minimum_per_domain_pass1": 0.05,
         },
         "base": {"arm_id": "base"},
         "candidates": [
             {
                 "candidate_id": "candidate-a",
                 "eligible": True,
-                "metrics": {"macro_pass1": {"candidate": 1.0}},
+                "metrics": {
+                    "macro_pass1": {"candidate": 1.0, "base": 0.0},
+                    "per_domain_pass1": {
+                        "candidate": {
+                            domain: 1.0 for domain in DOMAINS
+                        },
+                        "base": {domain: 0.0 for domain in DOMAINS},
+                    },
+                },
                 "training_binding": {"recipe_sha256": "a" * 64},
                 "artifacts": {
                     "development_manifest": development_adapter_ref,
@@ -978,7 +989,15 @@ def build_candidate_selection_report(root: Path, receipt_ref: dict[str, str], de
             {
                 "candidate_id": "candidate-b",
                 "eligible": True,
-                "metrics": {"macro_pass1": {"candidate": 1.0}},
+                "metrics": {
+                    "macro_pass1": {"candidate": 1.0, "base": 0.0},
+                    "per_domain_pass1": {
+                        "candidate": {
+                            domain: 1.0 for domain in DOMAINS
+                        },
+                        "base": {domain: 0.0 for domain in DOMAINS},
+                    },
+                },
                 "training_binding": {"recipe_sha256": "b" * 64},
             },
         ],

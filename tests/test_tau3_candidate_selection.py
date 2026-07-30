@@ -750,6 +750,40 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
                     bootstrap_samples=200,
                 )
 
+    def test_rejects_candidates_below_rubric_score_floors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(
+                root,
+                "base",
+                reward=0.0,
+                db_match=False,
+            )
+            candidates = [
+                _candidate_entry(
+                    root,
+                    candidate_id,
+                    reward=0.0,
+                    db_match=True,
+                )
+                for candidate_id in ("candidate-a", "candidate-b")
+            ]
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "minimum_macro_gain.*minimum_macro_pass1",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=candidates,
+                    report_path=root / "selection.json",
+                    lock_path=root / "lock.json",
+                    bootstrap_samples=200,
+                )
+
+            self.assertFalse((root / "selection.json").exists())
+            self.assertFalse((root / "lock.json").exists())
+
 
 def _candidate_entry(root: Path, candidate_id: str, *, reward: float, db_match: bool) -> Tau3CandidateEntry:
     protocol_sha = _ensure_protocol(root)
