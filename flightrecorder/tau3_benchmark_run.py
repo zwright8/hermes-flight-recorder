@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -21,12 +22,16 @@ from .schema_registry import check_schema_contract
 from .tau3_sealed_authorization import Tau3SealedAuthorizationError, validate_tau3_sealed_authorization
 
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
+TAU3_BLIND_BENCHMARK_RESULT_SCHEMA_VERSION = (
+    "hfr.tau3_blind_benchmark_result.v1"
+)
 TAU3_PROTOCOL_CONFIG_SCHEMA_VERSION = "hfr.tau3_protocol_config.v1"
 DOMAINS = ("airline", "retail", "telecom")
 DEFAULT_SEEDS = (101, 202, 303, 404)
 REQUIRED_ARMS = ("adapter", "base", "comparator_1", "comparator_2")
 CONTEXT_WINDOW = 16384
 PROMPT_TOKEN_CEILING = CONTEXT_WINDOW
+MAX_BLIND_RESULT_BYTES = 4 * 1024 * 1024
 
 
 class Tau3BenchmarkRunError(ValueError):
@@ -69,6 +74,7 @@ class Tau3BenchmarkConfig:
     generator_validation: Path | None = None
     fresh_contamination_replay: Path | None = None
     retired_source_incident_sha256: str | None = None
+    sealed_custodian: Path | None = None
     save_prefix: str = "hfr-benchmark"
     command_timeout_padding_seconds: int = 30
     extra_binding: dict[str, Any] = field(default_factory=dict)
@@ -135,6 +141,15 @@ def run_tau3_benchmark_arm(
     tasks_by_domain = _development_tasks_by_domain(config.source_split, expected_tau_revision) if config.mode == "development" else None
     sealed_task_count_manifest = (
         _sealed_task_count_manifest_record(config.sealed_task_count_manifest, protocol=protocol, expected_revision=expected_tau_revision)
+        if config.mode == "sealed"
+        else None
+    )
+    blind_custodian = (
+        _blind_custodian_binding(
+            config,
+            sealed_task_count_manifest=sealed_task_count_manifest,
+            expected_revision=expected_tau_revision,
+        )
         if config.mode == "sealed"
         else None
     )
@@ -227,6 +242,23 @@ def run_tau3_benchmark_arm(
         and config.fresh_contamination_replay is not None
         else None
     )
+    staged_blind_custodian = (
+        _stage_executable_file(
+            config.sealed_custodian,
+            out,
+            "inputs/blind_custodian",
+            "sealed custodian",
+        )
+        if blind_custodian is not None
+        and config.sealed_custodian is not None
+        else None
+    )
+    if staged_blind_custodian is not None:
+        assert blind_custodian is not None
+        _require_staged_custodian(
+            staged_blind_custodian,
+            expected_sha256=str(blind_custodian["sha256"]),
+        )
     candidate_lock = _candidate_lock_record(config, candidate_lock_ref) if config.mode == "sealed" else None
     if (
         config.mode == "sealed"
@@ -284,6 +316,7 @@ def run_tau3_benchmark_arm(
         "blind_custody_receipt": custody_receipt_ref,
         "blind_generator_validation": generator_validation_ref,
         "fresh_contamination_replay": fresh_contamination_replay_ref,
+        "blind_custodian": blind_custodian,
         "retired_source_incident_sha256": (
             config.retired_source_incident_sha256
             if config.mode == "sealed"
@@ -298,6 +331,7 @@ def run_tau3_benchmark_arm(
             )
             if sealed_task_count_manifest is not None
             else None,
+            fresh_blind_custodian=blind_custodian is not None,
         ),
         "extra_binding": config.extra_binding,
     }
@@ -330,25 +364,77 @@ def run_tau3_benchmark_arm(
         for seed in config.seeds:
             receipt_path = out / f"run-{domain}-seed{seed}.json"
             save_to = f"{config.save_prefix}/{out.name}/{config.mode}-{config.arm_id}-{domain}-seed{seed}"
-            argv = _tau2_argv(
-                tau2=tau2,
-                domain=domain,
-                seed=seed,
-                save_to=save_to,
-                agent=agent,
-                user=user,
-                reviewer=reviewer,
-                config=config,
-                task_ids=tasks_by_domain[domain] if tasks_by_domain is not None else None,
-            )
+            copied_result_rel = _copied_result_relative_path(domain, seed)
+            copied_result_path = out / copied_result_rel
+            if blind_custodian is not None:
+                assert sealed_task_count_manifest is not None
+                if staged_blind_custodian is None:
+                    raise Tau3BenchmarkRunError(
+                        "staged blind custodian is missing"
+                    )
+                _require_staged_custodian(
+                    staged_blind_custodian,
+                    expected_sha256=str(blind_custodian["sha256"]),
+                )
+                argv = [str(staged_blind_custodian), "run"]
+                command = _blind_custodian_command_record(
+                    domain=domain,
+                    seed=seed,
+                    custodian_sha256=str(blind_custodian["sha256"]),
+                )
+                result_path = copied_result_path
+                input_text = json.dumps(
+                    _blind_custodian_request(
+                        domain=domain,
+                        seed=seed,
+                        output_path=copied_result_path,
+                        tau_repo=repo,
+                        tau_venv_bin=tau2,
+                        expected_tau_revision=expected_tau_revision,
+                        sealed_source_manifest=config.sealed_task_count_manifest,
+                        sealed_source_sha256=str(
+                            sealed_task_count_manifest["sha256"]
+                        ),
+                        agent=agent,
+                        user=user,
+                        reviewer=reviewer,
+                        config=config,
+                    ),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            else:
+                argv = _tau2_argv(
+                    tau2=tau2,
+                    domain=domain,
+                    seed=seed,
+                    save_to=save_to,
+                    agent=agent,
+                    user=user,
+                    reviewer=reviewer,
+                    config=config,
+                    task_ids=tasks_by_domain[domain]
+                    if tasks_by_domain is not None
+                    else None,
+                )
+                command = _redact_argv(argv)
+                result_path = (
+                    repo / "data" / "simulations" / save_to / "results.json"
+                )
+                input_text = None
             if receipt_path.exists():
                 receipt = _read_json(receipt_path)
-                _validate_task_receipt(receipt, receipt_path=receipt_path, command=_redact_argv(argv))
+                _validate_task_receipt(
+                    receipt,
+                    receipt_path=receipt_path,
+                    command=command,
+                )
                 receipts.append(receipt)
                 continue
-            result_path = repo / "data" / "simulations" / save_to / "results.json"
             if result_path.exists():
-                raise Tau3BenchmarkRunError(f"refusing existing raw Tau output without receipt: {result_path}")
+                raise Tau3BenchmarkRunError(
+                    f"refusing existing benchmark output without receipt: {result_path}"
+                )
             command_timeout_seconds = _command_timeout_seconds(
                 protocol=protocol,
                 config=config,
@@ -366,11 +452,20 @@ def run_tau3_benchmark_arm(
                 proc = subprocess.run(
                     argv,
                     cwd=repo,
-                    env=_reviewer_environment(reviewer),
+                    env=(
+                        _blind_custodian_environment(
+                            reviewer,
+                            tau2=tau2,
+                        )
+                        if blind_custodian is not None
+                        else _reviewer_environment(reviewer)
+                    ),
+                    input=input_text,
                     text=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     timeout=command_timeout_seconds,
+                    umask=0o077 if blind_custodian is not None else -1,
                 )
                 exit_code = proc.returncode
                 stdout = proc.stdout
@@ -383,16 +478,37 @@ def run_tau3_benchmark_arm(
                 timed_out = True
             duration = time.monotonic() - start
             has_result = result_path.is_file()
+            result_summary: dict[str, Any] | None
             try:
-                result_summary = _result_summary(result_path) if has_result else None
+                if has_result and blind_custodian is not None:
+                    assert sealed_task_count_manifest is not None
+                    result_summary = _blind_result_summary(
+                        result_path,
+                        domain=domain,
+                        seed=seed,
+                        expected_revision=expected_tau_revision,
+                        sealed_source_sha256=str(
+                            sealed_task_count_manifest["sha256"]
+                        ),
+                        sealed_task_triplets=sealed_task_count_manifest[
+                            "task_hash_triplets_by_domain"
+                        ][domain],
+                        user=user,
+                        reviewer=reviewer,
+                    )
+                else:
+                    result_summary = (
+                        _result_summary(result_path) if has_result else None
+                    )
             except (OSError, Tau3BenchmarkRunError) as exc:
                 result_summary = None
                 stderr = f"{stderr}\nresult validation failed: {exc}"
-            copied_result_rel = _copied_result_relative_path(domain, seed)
-            copied_result_path = out / copied_result_rel
-            if copied_result_path.exists():
+            if (
+                blind_custodian is None
+                and copied_result_path.exists()
+            ):
                 raise Tau3BenchmarkRunError(f"refusing existing copied Tau output without receipt: {copied_result_path}")
-            if has_result:
+            if has_result and blind_custodian is None:
                 _copy_file_new(result_path, copied_result_path)
             valid_result = isinstance(result_summary, dict) and _valid_result_summary(result_summary)
             status = "completed" if exit_code == 0 and has_result and valid_result else ("timeout" if timed_out else "failed")
@@ -411,7 +527,7 @@ def run_tau3_benchmark_arm(
                 "arm_id": config.arm_id,
                 "domain": domain,
                 "seed": seed,
-                "command": _redact_argv(argv),
+                "command": command,
                 "result_path": copied_result_rel if has_result else None,
                 "result_sha256": _sha256(copied_result_path) if has_result else None,
                 "result_summary": result_summary,
@@ -419,8 +535,23 @@ def run_tau3_benchmark_arm(
                 "timed_out": timed_out,
                 "duration_seconds": round(duration, 6),
                 "terminal_status": status,
-                "stdout_tail": _redact(stdout)[-1000:],
-                "stderr_tail": _redact(stderr)[-1000:],
+                "stdout_tail": (
+                    ""
+                    if blind_custodian is not None
+                    else _redact(stdout)[-1000:]
+                ),
+                "stderr_tail": (
+                    ""
+                    if blind_custodian is not None
+                    else _redact(stderr)[-1000:]
+                ),
+                "stdout_sha256": hashlib.sha256(
+                    stdout.encode("utf-8")
+                ).hexdigest(),
+                "stderr_sha256": hashlib.sha256(
+                    stderr.encode("utf-8")
+                ).hexdigest(),
+                "blind_custodian_executed": blind_custodian is not None,
                 "training_started": False,
                 "sealed_payload_accessed": False,
                 "sealed_task_ids_materialized": False,
@@ -494,6 +625,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generator-validation", type=Path)
     parser.add_argument("--fresh-contamination-replay", type=Path)
     parser.add_argument("--retired-source-incident-sha256")
+    parser.add_argument("--sealed-custodian", type=Path)
     parser.add_argument("--agent-model", required=True)
     parser.add_argument("--agent-api-base", required=True)
     parser.add_argument("--agent-adapter-path", type=Path)
@@ -542,6 +674,7 @@ def main(argv: list[str] | None = None) -> int:
                 retired_source_incident_sha256=(
                     args.retired_source_incident_sha256
                 ),
+                sealed_custodian=args.sealed_custodian,
                 seeds=_parse_int_csv(args.seeds, "seeds"),
                 domains=_parse_str_csv(args.domains, "domains"),
                 timeout_seconds=args.timeout_seconds,
@@ -645,6 +778,347 @@ def _endpoint_args(endpoint: Tau3BenchmarkEndpoint) -> dict[str, Any]:
     if endpoint.adapter_path is not None:
         args["extra_body"] = {"adapters": str(endpoint.adapter_path.resolve(strict=True))}
     return args
+
+
+def _blind_custodian_binding(
+    config: Tau3BenchmarkConfig,
+    *,
+    sealed_task_count_manifest: dict[str, Any] | None,
+    expected_revision: str,
+) -> dict[str, Any] | None:
+    if config.sealed_custodian is None:
+        return None
+    if config.generator_validation is None:
+        raise Tau3BenchmarkRunError(
+            "blind custodian requires generator validation"
+        )
+    if sealed_task_count_manifest is None:
+        raise Tau3BenchmarkRunError(
+            "blind custodian requires a sealed source manifest"
+        )
+    if sealed_task_count_manifest.get("domain_counts") is None:
+        raise Tau3BenchmarkRunError(
+            "blind custodian requires domain-labeled fresh sealed entries"
+        )
+
+    custodian = config.sealed_custodian
+    if path_has_symlink_component(custodian, include_leaf=True):
+        raise Tau3BenchmarkRunError(
+            f"sealed custodian must not contain symlink components: {custodian}"
+        )
+    if not custodian.is_file():
+        raise Tau3BenchmarkRunError(
+            f"sealed custodian executable does not exist: {custodian}"
+        )
+    if not os.access(custodian, os.X_OK):
+        raise Tau3BenchmarkRunError(
+            f"sealed custodian is not executable: {custodian}"
+        )
+
+    validation = _read_json(config.generator_validation)
+    schema = check_schema_contract(
+        validation,
+        name_or_id="tau3_blind_generator_validation",
+    )
+    if schema.get("passed") is not True:
+        raise Tau3BenchmarkRunError(
+            "blind generator validation schema failed: "
+            + "; ".join(str(error) for error in schema.get("errors", []))
+        )
+    if validation.get("source_revision") != expected_revision:
+        raise Tau3BenchmarkRunError(
+            "blind generator validation source revision mismatch"
+        )
+    if (
+        validation.get("sealed_source_manifest_sha256")
+        != sealed_task_count_manifest["sha256"]
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind generator validation sealed source hash mismatch"
+        )
+    if (
+        validation.get("task_count")
+        != sealed_task_count_manifest["task_count"]
+        or validation.get("domain_counts")
+        != sealed_task_count_manifest["domain_counts"]
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind generator validation task coverage mismatch"
+        )
+    source = _dict(validation.get("generator_source"))
+    digest = _sha256(custodian)
+    if source.get("script_sha256") != digest:
+        raise Tau3BenchmarkRunError(
+            "sealed custodian sha256 does not match blind generator validation"
+        )
+    return {
+        "contract": "hfr.tau3_blind_custodian.stdin.v1",
+        "result_schema_version": (
+            TAU3_BLIND_BENCHMARK_RESULT_SCHEMA_VERSION
+        ),
+        "sha256": digest,
+        "generator_commit_sha": source.get("commit_sha"),
+        "path_included": False,
+    }
+
+
+def _blind_custodian_command_record(
+    *,
+    domain: str,
+    seed: int,
+    custodian_sha256: str,
+) -> list[str]:
+    return [
+        "sealed-custodian",
+        "run",
+        "--contract",
+        "hfr.tau3_blind_custodian.stdin.v1",
+        "--custodian-sha256",
+        custodian_sha256,
+        "--domain",
+        domain,
+        "--seed",
+        str(seed),
+    ]
+
+
+def _blind_custodian_request(
+    *,
+    domain: str,
+    seed: int,
+    output_path: Path,
+    tau_repo: Path,
+    tau_venv_bin: Path,
+    expected_tau_revision: str,
+    sealed_source_manifest: Path | None,
+    sealed_source_sha256: str,
+    agent: Tau3BenchmarkEndpoint,
+    user: Tau3BenchmarkEndpoint,
+    reviewer: Tau3BenchmarkEndpoint,
+    config: Tau3BenchmarkConfig,
+) -> dict[str, Any]:
+    if sealed_source_manifest is None:
+        raise Tau3BenchmarkRunError(
+            "blind custodian request requires sealed source manifest"
+        )
+    return {
+        "schema_version": "hfr.tau3_blind_custodian_request.v1",
+        "result_schema_version": (
+            TAU3_BLIND_BENCHMARK_RESULT_SCHEMA_VERSION
+        ),
+        "source_revision": expected_tau_revision,
+        "sealed_source_manifest": {
+            "path": str(sealed_source_manifest.resolve(strict=True)),
+            "sha256": sealed_source_sha256,
+        },
+        "domain": domain,
+        "seed": seed,
+        "output_path": str(output_path.resolve(strict=False)),
+        "tau": {
+            "repo": str(tau_repo),
+            "venv_bin": str(
+                tau_venv_bin.resolve(strict=True).parent
+            ),
+            "runner": str(tau_venv_bin.resolve(strict=True)),
+        },
+        "agent": {
+            "implementation": "llm_agent",
+            "model": agent.model,
+            "llm_args": _endpoint_args(agent),
+        },
+        "user": {
+            "implementation": "user_simulator",
+            "model": user.model,
+            "llm_args": _endpoint_args(user),
+        },
+        "reviewer": {
+            "model": reviewer.model,
+            "api_base": reviewer.api_base,
+        },
+        "harness": {
+            "num_trials": 1,
+            "max_steps": config.max_steps,
+            "max_errors": config.max_errors,
+            "timeout_seconds": config.timeout_seconds,
+            "max_concurrency": 1,
+            "max_retries": 0,
+            "hallucination_retries": 0,
+            "auto_resume": False,
+            "auto_review": True,
+            "review_mode": "full",
+            "communication_protocol_enforced": True,
+            "context_window": CONTEXT_WINDOW,
+            "test_time_search": False,
+        },
+    }
+
+
+def _blind_result_summary(
+    path: Path,
+    *,
+    domain: str,
+    seed: int,
+    expected_revision: str,
+    sealed_source_sha256: str,
+    sealed_task_triplets: set[tuple[str, str, str]],
+    user: Tau3BenchmarkEndpoint,
+    reviewer: Tau3BenchmarkEndpoint,
+) -> dict[str, Any]:
+    if path_has_symlink_component(path, include_leaf=True):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result must not contain symlink components"
+        )
+    if path.stat().st_size > MAX_BLIND_RESULT_BYTES:
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result exceeds the bounded hash-only size"
+        )
+    if path.stat().st_mode & 0o777 != 0o600:
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result must use private mode 0600"
+        )
+    payload = _read_json(path)
+    schema = check_schema_contract(
+        payload,
+        name_or_id="tau3_blind_benchmark_result",
+    )
+    if schema.get("passed") is not True:
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result schema failed: "
+            + "; ".join(str(error) for error in schema.get("errors", []))
+        )
+    if payload.get("source_revision") != expected_revision:
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result source revision mismatch"
+        )
+    if (
+        payload.get("sealed_source_manifest_sha256")
+        != sealed_source_sha256
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result sealed source hash mismatch"
+        )
+    if (
+        payload.get("domain") != domain
+        or payload.get("run_seed") != seed
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result domain/run-seed mismatch"
+        )
+    simulations = payload.get("simulations")
+    if not isinstance(simulations, list):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result simulations must be a list"
+        )
+    if (
+        payload.get("task_count") != len(sealed_task_triplets)
+        or len(simulations) != len(sealed_task_triplets)
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result task count mismatch"
+        )
+
+    observed: set[tuple[str, str, str]] = set()
+    for index, simulation in enumerate(simulations):
+        if not isinstance(simulation, dict):
+            raise Tau3BenchmarkRunError(
+                f"blind benchmark simulation {index} is not an object"
+            )
+        if simulation.get("seed") != _tau_trial_seed(seed):
+            raise Tau3BenchmarkRunError(
+                f"blind benchmark simulation {index} derived seed mismatch"
+            )
+        triplet = (
+            str(simulation.get("task_id_sha256") or ""),
+            str(simulation.get("prompt_sha256") or ""),
+            str(simulation.get("task_sha256") or ""),
+        )
+        if triplet in observed:
+            raise Tau3BenchmarkRunError(
+                "blind benchmark result contains duplicate task rows"
+            )
+        observed.add(triplet)
+        _validate_blind_safety(simulation, index=index)
+    if observed != sealed_task_triplets:
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result task hashes do not exactly match "
+            "the sealed source manifest"
+        )
+
+    harness = _dict(payload.get("harness"))
+    if (
+        harness.get("git_commit") != expected_revision
+        or harness.get("domain_name") != domain
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result harness source/domain mismatch"
+        )
+    if (
+        _nested(harness, "user", "llm_sha256")
+        != _canonical_sha256(user.model)
+        or harness.get("review_model_sha256")
+        != _canonical_sha256(reviewer.model)
+    ):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result evaluator model mismatch"
+        )
+    summary = _result_summary(path)
+    if not _valid_result_summary(summary):
+        raise Tau3BenchmarkRunError(
+            "blind benchmark result summary is incomplete or exceeds "
+            "the frozen context window"
+        )
+    return summary
+
+
+def _validate_blind_safety(
+    simulation: dict[str, Any],
+    *,
+    index: int,
+) -> None:
+    reward_info = _dict(simulation.get("reward_info"))
+    reward_basis = reward_info.get("reward_basis")
+    bases = (
+        [str(value) for value in reward_basis]
+        if isinstance(reward_basis, list)
+        else []
+    )
+    db_check = reward_info.get("db_check")
+    safety = _dict(simulation.get("safety"))
+    policy_provable = safety.get("policy_provable")
+    policy_violation = safety.get("policy_violation")
+    if (
+        policy_provable is True
+        and not isinstance(policy_violation, bool)
+    ) or (policy_provable is False and policy_violation is not None):
+        raise Tau3BenchmarkRunError(
+            f"blind benchmark simulation {index} policy safety is "
+            "not internally consistent"
+        )
+    if "DB" in bases:
+        if not isinstance(db_check, dict) or not isinstance(
+            db_check.get("db_match"), bool
+        ):
+            raise Tau3BenchmarkRunError(
+                f"blind benchmark simulation {index} lacks a provable "
+                "DB check"
+            )
+        expected_harm = db_check["db_match"] is False
+        if safety.get("harmful_mutation") is not expected_harm:
+            raise Tau3BenchmarkRunError(
+                f"blind benchmark simulation {index} harmful-mutation "
+                "flag does not replay"
+            )
+    elif db_check is not None or safety.get("harmful_mutation") is not None:
+        raise Tau3BenchmarkRunError(
+            f"blind benchmark simulation {index} reports DB safety "
+            "without a DB reward basis"
+        )
+
+
+def _tau_trial_seed(run_seed: int) -> int:
+    """Replay Tau's first per-trial seed for one-trial domain runs."""
+
+    return random.Random(run_seed).randint(0, 1000000)
 
 
 def _development_tasks_by_domain(path: Path | None, expected_revision: str) -> dict[str, list[str]]:
@@ -1300,6 +1774,9 @@ def _sealed_task_count_manifest_record(path: Path | None, *, protocol: dict[str,
     legacy_entry_keys = {"task_id_sha256", "prompt_sha256", "task_sha256"}
     fresh_entry_keys = {*legacy_entry_keys, "domain"}
     domains: list[str] = []
+    task_hash_triplets_by_domain: dict[
+        str, set[tuple[str, str, str]]
+    ] = {domain: set() for domain in DOMAINS}
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or set(entry) not in (
             legacy_entry_keys,
@@ -1313,6 +1790,17 @@ def _sealed_task_count_manifest_record(path: Path | None, *, protocol: dict[str,
                     f"sealed task-count manifest entry {index} has unsupported domain"
                 )
             domains.append(str(domain))
+            triplet = (
+                str(entry["task_id_sha256"]),
+                str(entry["prompt_sha256"]),
+                str(entry["task_sha256"]),
+            )
+            if triplet in task_hash_triplets_by_domain[str(domain)]:
+                raise Tau3BenchmarkRunError(
+                    "sealed task-count manifest contains a duplicate "
+                    f"hash triplet for {domain}"
+                )
+            task_hash_triplets_by_domain[str(domain)].add(triplet)
         elif domains:
             raise Tau3BenchmarkRunError(
                 "sealed task-count manifest must label either every entry or no entries by domain"
@@ -1345,6 +1833,7 @@ def _sealed_task_count_manifest_record(path: Path | None, *, protocol: dict[str,
         "task_count": task_count,
         "domain_counts": domain_counts,
         "sha256": digest,
+        "task_hash_triplets_by_domain": task_hash_triplets_by_domain,
     }
 
 
@@ -1372,12 +1861,20 @@ def _task_selection_record(
     *,
     sealed_task_count: int | None = None,
     sealed_task_count_by_domain: dict[str, int] | None = None,
+    fresh_blind_custodian: bool = False,
 ) -> dict[str, Any]:
     if config.mode == "sealed":
         if sealed_task_count is None:
             raise Tau3BenchmarkRunError("sealed mode requires a validated task count")
         return {
-            "official_split": "test",
+            "official_split": (
+                "fresh_generated" if fresh_blind_custodian else "test"
+            ),
+            "source_contract": (
+                "pinned_blind_custodian_v1"
+                if fresh_blind_custodian
+                else "official_tau_test_split"
+            ),
             "task_ids_in_command": False,
             "task_payload_accessed": False,
             "domains": list(config.domains),
@@ -1500,6 +1997,19 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         raise Tau3BenchmarkRunError(
             "fresh sealed lineage evidence must be provided as one complete set"
         )
+    fresh_lineage_complete = config.mode == "sealed" and all(
+        value is not None for value in fresh_lineage_inputs
+    )
+    if fresh_lineage_complete and config.sealed_custodian is None:
+        raise Tau3BenchmarkRunError(
+            "fresh sealed lineage requires --sealed-custodian; refusing "
+            "fallback to the retired Tau test split"
+        )
+    if not fresh_lineage_complete and config.sealed_custodian is not None:
+        raise Tau3BenchmarkRunError(
+            "--sealed-custodian is only allowed with the complete fresh "
+            "sealed lineage evidence set"
+        )
     if (
         config.retired_source_incident_sha256 is not None
         and not re.fullmatch(
@@ -1553,6 +2063,22 @@ def _reviewer_environment(reviewer: Tau3BenchmarkEndpoint) -> dict[str, str]:
     }
     env["OPENAI_API_BASE"] = reviewer.api_base
     env["OPENAI_API_KEY"] = "local"
+    return env
+
+
+def _blind_custodian_environment(
+    reviewer: Tau3BenchmarkEndpoint,
+    *,
+    tau2: Path,
+) -> dict[str, str]:
+    env = _reviewer_environment(reviewer)
+    tau_bin = tau2.resolve(strict=True).parent
+    current_path = env.get("PATH", "")
+    env["PATH"] = (
+        str(tau_bin)
+        if not current_path
+        else str(tau_bin) + os.pathsep + current_path
+    )
     return env
 
 
@@ -1775,6 +2301,44 @@ def _stage_input_file(source: Path, output_root: Path, rel: str, label: str) -> 
     else:
         _copy_file_new(source, destination)
     return {"path": rel, "size": source.stat().st_size, "sha256": source_sha256}
+
+
+def _stage_executable_file(
+    source: Path,
+    output_root: Path,
+    rel: str,
+    label: str,
+) -> Path:
+    record = _stage_input_file(source, output_root, rel, label)
+    destination = _resolve_output_relative_path(
+        str(record["path"]),
+        output_root,
+    )
+    expected_mode = 0o500
+    actual_mode = destination.stat().st_mode & 0o777
+    if actual_mode == 0o600:
+        destination.chmod(expected_mode)
+    elif actual_mode != expected_mode:
+        raise Tau3BenchmarkRunError(
+            f"staged {label} mode drifted: {rel}"
+        )
+    return destination
+
+
+def _require_staged_custodian(
+    path: Path,
+    *,
+    expected_sha256: str,
+) -> None:
+    if (
+        path_has_symlink_component(path, include_leaf=True)
+        or not path.is_file()
+        or path.stat().st_mode & 0o777 != 0o500
+        or _sha256(path) != expected_sha256
+    ):
+        raise Tau3BenchmarkRunError(
+            "staged sealed custodian drifted before execution"
+        )
 
 
 def _output_file_record(path: Path, output_root: Path) -> dict[str, Any]:

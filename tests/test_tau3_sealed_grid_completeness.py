@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import random
 import subprocess
 import sys
 import tempfile
@@ -86,6 +87,67 @@ class Tau3SealedGridCompletenessTests(unittest.TestCase):
             self.assertTrue(
                 artifact["gates"]["blind_custody_binding_replayed"]
             )
+
+    def test_v2_grid_rejects_blind_result_hash_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = build_v2_grid_fixture(root)
+            result = (
+                root
+                / "sealed"
+                / "adapter"
+                / "results"
+                / "airline"
+                / "seed-101"
+                / "results.json"
+            )
+            mutate_json(
+                result,
+                lambda payload: payload["simulations"][0].__setitem__(
+                    "prompt_sha256", "0" * 64
+                ),
+            )
+            receipt_path = (
+                root
+                / "sealed"
+                / "adapter"
+                / "run-airline-seed101.json"
+            )
+            receipt = read_json(receipt_path)
+            receipt["result_sha256"] = sha256_file(result)
+            write_json(receipt_path, receipt)
+            refresh_arm_manifest_ref(
+                root,
+                "adapter",
+                "airline",
+                101,
+            )
+
+            with self.assertRaisesRegex(
+                Tau3SealedGridCompletenessError,
+                "do not exactly match",
+            ):
+                build_tau3_sealed_grid_completeness(
+                    arm_manifests=fixture["arm_manifests"],
+                    candidate_lock=fixture["candidate_lock"],
+                    protocol=fixture["protocol"],
+                    sealed_source_manifest=fixture["sealed_source"],
+                    sealed_authorization=fixture["authorization"],
+                    training_protocol=fixture["training_protocol"],
+                    benchmark_protocol_lineage=fixture[
+                        "benchmark_protocol_lineage"
+                    ],
+                    custody_receipt=fixture["custody_receipt"],
+                    generator_validation=fixture[
+                        "generator_validation"
+                    ],
+                    fresh_contamination_replay=fixture[
+                        "fresh_contamination_replay"
+                    ],
+                    retired_source_incident_sha256=INCIDENT_SHA,
+                    expected_tau_revision="a" * 40,
+                    out=root / "must-fail.json",
+                )
 
     def test_rejects_99_and_101_tasks(self) -> None:
         for count in (99, 101):
@@ -659,12 +721,42 @@ def build_arm(
     copy_json(lock_path, arm_dir / "candidate-lock.json")
     copy_json(sealed_source_path, arm_dir / "sealed-source.json")
     copy_json(authorization_path, arm_dir / "authorization.json")
+    sealed_source = read_json(sealed_source_path)
+    fresh_blind = isinstance(
+        sealed_source.get("domain_counts"), dict
+    )
     run_receipts = []
     for domain in REQUIRED_DOMAINS:
         for seed in REQUIRED_SEEDS:
             result_rel = f"results/{domain}/seed-{seed}/results.json"
             result_path = arm_dir / result_rel
-            write_json(result_path, {"simulations": [{"task_id": task_id, "seed": seed} for task_id in tasks_by_domain[domain]]})
+            if fresh_blind:
+                entries = [
+                    entry
+                    for entry in sealed_source["entries"]
+                    if entry["domain"] == domain
+                ]
+                write_json(
+                    result_path,
+                    blind_result(
+                        domain,
+                        seed,
+                        entries,
+                        sealed_source_sha256=sha256_file(
+                            sealed_source_path
+                        ),
+                    ),
+                )
+            else:
+                write_json(
+                    result_path,
+                    {
+                        "simulations": [
+                            {"task_id": task_id, "seed": seed}
+                            for task_id in tasks_by_domain[domain]
+                        ]
+                    },
+                )
             receipt = {
                 "schema_version": "hfr.tau3_benchmark_run.v1",
                 "phase": "domain_seed",
@@ -727,12 +819,19 @@ def build_arm(
         "candidate_lock": ref("candidate-lock.json", arm_dir / "candidate-lock.json"),
         "candidate_identity": None,
         "task_selection": {
-            "official_split": "test",
+            "official_split": (
+                "fresh_generated" if fresh_blind else "test"
+            ),
+            "source_contract": (
+                "pinned_blind_custodian_v1"
+                if fresh_blind
+                else "official_tau_test_split"
+            ),
             "task_ids_in_command": False,
             "task_payload_accessed": False,
             "domains": list(REQUIRED_DOMAINS),
             "sealed_task_count": 100,
-            "task_count_by_domain": None,
+            "task_count_by_domain": sealed_source.get("domain_counts"),
         },
         "prelaunch_receipt": ref("prelaunch_receipt.json", prelaunch_path),
         "run_count": 12,
@@ -744,7 +843,95 @@ def build_arm(
         "sealed_payload_accessed": False,
         "sealed_task_ids_materialized": False,
     }
+    if fresh_blind:
+        manifest["blind_custodian"] = {
+            "contract": "hfr.tau3_blind_custodian.stdin.v1",
+            "result_schema_version": (
+                "hfr.tau3_blind_benchmark_result.v1"
+            ),
+            "sha256": "3" * 64,
+            "generator_commit_sha": "3" * 40,
+            "path_included": False,
+        }
     return write_json(arm_dir / "manifest.json", manifest)
+
+
+def blind_result(
+    domain: str,
+    seed: int,
+    entries: list[dict[str, Any]],
+    *,
+    sealed_source_sha256: str,
+) -> dict[str, Any]:
+    decoding = {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "num_retries": 0,
+    }
+    return {
+        "schema_version": "hfr.tau3_blind_benchmark_result.v1",
+        "created_at": "2026-07-23T01:00:00Z",
+        "source_revision": "a" * 40,
+        "sealed_source_manifest_sha256": sealed_source_sha256,
+        "domain": domain,
+        "run_seed": seed,
+        "task_count": len(entries),
+        "hashes_only": True,
+        "local_paths_included": False,
+        "raw_payload_included": False,
+        "harness": {
+            "git_commit": "a" * 40,
+            "max_steps": 30,
+            "max_errors": 10,
+            "num_trials": 1,
+            "max_retries": 0,
+            "auto_resume": False,
+            "auto_review": True,
+            "review_mode": "full",
+            "review_model_sha256": "b" * 64,
+            "hallucination_retries": 0,
+            "text_streaming_config_sha256": "c" * 64,
+            "retrieval_config_sha256": "d" * 64,
+            "domain_name": domain,
+            "policy_sha256": "e" * 64,
+            "agent": {
+                "implementation": "llm_agent",
+                "llm_args": decoding,
+            },
+            "user": {
+                "implementation": "user_simulator",
+                "llm_sha256": "f" * 64,
+                "llm_args": decoding,
+            },
+        },
+        "simulations": [
+            {
+                "task_id_sha256": entry["task_id_sha256"],
+                "prompt_sha256": entry["prompt_sha256"],
+                "task_sha256": entry["task_sha256"],
+                "trial": 0,
+                "seed": tau_trial_seed(seed),
+                "termination_reason": "user_stop",
+                "reward_info": {
+                    "reward": 1.0,
+                    "reward_basis": ["DB"],
+                    "db_check": {"db_match": True},
+                },
+                "safety": {
+                    "policy_provable": True,
+                    "policy_violation": False,
+                    "harmful_mutation": False,
+                },
+                "usage": {"prompt_tokens": 42},
+            }
+            for entry in entries
+        ],
+    }
+
+
+def tau_trial_seed(run_seed: int) -> int:
+    return random.Random(run_seed).randint(0, 1000000)
 
 
 def rewrite_result_tasks(root: Path, arm: str, domain: str, seed: int, task_ids: list[str]) -> None:

@@ -15,6 +15,7 @@ from flightrecorder.tau3_benchmark_run import (
     Tau3BenchmarkConfig,
     Tau3BenchmarkEndpoint,
     Tau3BenchmarkRunError,
+    _blind_custodian_environment,
     _command_timeout_seconds,
     _development_tasks_by_domain,
     _reviewer_environment,
@@ -421,6 +422,227 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     ),
                 )
             self.assertNotEqual(self._sha256(authorization), self._sha256(source_auth_mutated / "inputs" / "sealed_authorization.json"))
+
+    def test_fresh_sealed_uses_hash_pinned_blind_custodian(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            tau2 = self._fake_tau2(root, reward=0.0)
+            adapter = self._adapter(root)
+            domain_counts = {
+                "airline": 34,
+                "retail": 33,
+                "telecom": 33,
+            }
+            sealed_manifest = self._sealed_source_manifest(
+                root,
+                task_count=100,
+                domain_counts=domain_counts,
+            )
+            protocol = self._protocol(
+                root,
+                sealed_manifest=sealed_manifest,
+            )
+            lock = self._candidate_lock(
+                root,
+                adapter=adapter,
+                protocol=protocol,
+            )
+            authorization = self._sealed_authorization(
+                root,
+                lock=lock,
+                protocol=protocol,
+                sealed_manifest=sealed_manifest,
+            )
+            custodian = self._fake_blind_custodian(root)
+            generator_validation = root / "generator-validation.json"
+            generator_validation.write_text(
+                json.dumps(
+                    {
+                        "schema_version": (
+                            "hfr.tau3_blind_generator_validation.v1"
+                        ),
+                        "created_at": "2026-07-22T00:00:00Z",
+                        "passed": True,
+                        "source_revision": self.revision,
+                        "sealed_source_manifest_sha256": self._sha256(
+                            sealed_manifest
+                        ),
+                        "task_count": 100,
+                        "domain_counts": domain_counts,
+                        "generator_source": {
+                            "commit_sha": "7" * 40,
+                            "script_sha256": self._sha256(custodian),
+                        },
+                        "golden_replay": {
+                            "passed": True,
+                            "replayed_task_count": 100,
+                            "passed_task_count": 100,
+                            "failed_task_count": 0,
+                            "state_check_failure_count": 0,
+                        },
+                        "schema_validation_passed": True,
+                        "task_hashes_unique": True,
+                        "prompt_hashes_unique": True,
+                        "hashes_only": True,
+                        "local_paths_included": False,
+                        "raw_payload_included": False,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fresh_inputs = []
+            for name in (
+                "training-protocol",
+                "benchmark-protocol-lineage",
+                "custody-receipt",
+                "fresh-contamination-replay",
+            ):
+                path = root / f"{name}.json"
+                path.write_text("{}\n", encoding="utf-8")
+                fresh_inputs.append(path)
+            endpoint = self._endpoint(
+                "local/adapter",
+                18080,
+                adapter_path=adapter,
+            )
+            auth_record = {
+                "sha256": self._sha256(authorization),
+                "size": authorization.stat().st_size,
+                "authorized": True,
+                "candidate_lock_sha256": self._sha256(lock),
+                "protocol_sha256": self._sha256(protocol),
+                "sealed_source_sha256": self._sha256(sealed_manifest),
+                "task_count": 100,
+                "arms": [
+                    "adapter",
+                    "base",
+                    "comparator_1",
+                    "comparator_2",
+                ],
+                "seeds": [101, 202, 303, 404],
+                "training_protocol_sha256": self._sha256(
+                    fresh_inputs[0]
+                ),
+                "benchmark_protocol_lineage_sha256": self._sha256(
+                    fresh_inputs[1]
+                ),
+                "blind_custody_receipt_sha256": self._sha256(
+                    fresh_inputs[2]
+                ),
+            }
+
+            with patch(
+                "flightrecorder.tau3_benchmark_run."
+                "validate_tau3_sealed_authorization",
+                return_value=auth_record,
+            ):
+                manifest = run_tau3_benchmark_arm(
+                    out_dir=root / "fresh-sealed-out",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=self._endpoint("local/user", 18081),
+                    reviewer=self._endpoint(
+                        "local/reviewer", 18082
+                    ),
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="adapter",
+                        protocol_path=protocol,
+                        sealed_task_count_manifest=sealed_manifest,
+                        sealed_authorization=authorization,
+                        candidate_lock=lock,
+                        training_protocol=fresh_inputs[0],
+                        benchmark_protocol_lineage=fresh_inputs[1],
+                        custody_receipt=fresh_inputs[2],
+                        generator_validation=generator_validation,
+                        fresh_contamination_replay=fresh_inputs[3],
+                        retired_source_incident_sha256="9" * 64,
+                        sealed_custodian=custodian,
+                        timeout_seconds=2,
+                    ),
+                )
+
+            self.assertEqual(manifest["success_count"], 12)
+            self.assertEqual(
+                manifest["task_selection"]["official_split"],
+                "fresh_generated",
+            )
+            self.assertEqual(
+                manifest["blind_custodian"]["sha256"],
+                self._sha256(custodian),
+            )
+            receipt = json.loads(
+                (
+                    root
+                    / "fresh-sealed-out"
+                    / "run-airline-seed101.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(receipt["command"][0], "sealed-custodian")
+            self.assertNotIn("--task-split-name", receipt["command"])
+            result = json.loads(
+                (
+                    root
+                    / "fresh-sealed-out"
+                    / receipt["result_path"]
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                result["schema_version"],
+                "hfr.tau3_blind_benchmark_result.v1",
+            )
+            self.assertEqual(
+                (
+                    root
+                    / "fresh-sealed-out"
+                    / receipt["result_path"]
+                ).stat().st_mode
+                & 0o777,
+                0o600,
+            )
+            self.assertNotIn("tasks", result)
+            self.assertNotIn("messages", json.dumps(result))
+
+    def test_fresh_sealed_refuses_retired_split_without_custodian(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._repo(root)
+            endpoint = self._endpoint("local/base", 18080)
+            placeholders = [
+                root / f"fresh-{index}.json" for index in range(5)
+            ]
+            for path in placeholders:
+                path.write_text("{}\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                Tau3BenchmarkRunError,
+                "refusing fallback to the retired Tau test split",
+            ):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "must-fail",
+                    tau_repo=repo,
+                    tau_venv_bin=root / "unused-tau2",
+                    expected_tau_revision=self.revision,
+                    agent=endpoint,
+                    user=endpoint,
+                    reviewer=endpoint,
+                    config=Tau3BenchmarkConfig(
+                        mode="sealed",
+                        arm_id="base",
+                        protocol_path=placeholders[0],
+                        training_protocol=placeholders[0],
+                        benchmark_protocol_lineage=placeholders[1],
+                        custody_receipt=placeholders[2],
+                        generator_validation=placeholders[3],
+                        fresh_contamination_replay=placeholders[4],
+                        retired_source_incident_sha256="9" * 64,
+                    ),
+                )
 
     def test_sealed_rejects_evaluator_not_bound_by_candidate_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1463,6 +1685,33 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
         self.assertNotIn("HF_TOKEN", env)
         self.assertEqual(env["PATH"], "/bin")
 
+    def test_blind_custodian_environment_prepends_pinned_tau_venv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tau_bin = Path(tmp) / "venv" / "bin"
+            tau_bin.mkdir(parents=True)
+            tau2 = tau_bin / "tau2"
+            tau2.write_text("#!/bin/sh\n", encoding="utf-8")
+            endpoint = self._endpoint("local/reviewer", 18082)
+            with patch.dict(
+                "os.environ",
+                {
+                    "OPENAI_API_KEY": "secret",
+                    "HF_TOKEN": "secret",
+                    "PATH": "/bin",
+                },
+                clear=True,
+            ):
+                env = _blind_custodian_environment(
+                    endpoint,
+                    tau2=tau2,
+                )
+        self.assertEqual(
+            env["PATH"],
+            str(tau_bin.resolve()) + os.pathsep + "/bin",
+        )
+        self.assertNotIn("HF_TOKEN", env)
+        self.assertEqual(env["OPENAI_API_KEY"], "local")
+
     def _repo(self, root: Path) -> Path:
         repo = root / "tau"
         repo.mkdir()
@@ -1764,6 +2013,34 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             "row={'reward_info':{'reward':reward}}\n"
             "row.update(usage_row)\n"
             "json.dump({'simulations':[row]}, open(out/'results.json','w'))\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def _fake_blind_custodian(self, root: Path) -> Path:
+        path = root / "blind-custodian"
+        path.write_text(
+            "#!/usr/bin/env python3\n"
+            "import hashlib, json, pathlib, random, sys\n"
+            "request=json.load(sys.stdin)\n"
+            "assert pathlib.Path(request['tau']['runner']).parent==pathlib.Path(request['tau']['venv_bin'])\n"
+            "manifest=json.load(open(request['sealed_source_manifest']['path']))\n"
+            "domain=request['domain']\n"
+            "seed=request['seed']\n"
+            "trial_seed=random.Random(seed).randint(0,1000000)\n"
+            "entries=[row for row in manifest['entries'] if row['domain']==domain]\n"
+            "def digest(value):\n"
+            " data=json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()\n"
+            " return hashlib.sha256(data).hexdigest()\n"
+            "args={'temperature':0.0,'top_p':1.0,'max_tokens':1024,'num_retries':0}\n"
+            "sims=[]\n"
+            "for row in entries:\n"
+            " sims.append({'task_id_sha256':row['task_id_sha256'],'prompt_sha256':row['prompt_sha256'],'task_sha256':row['task_sha256'],'trial':0,'seed':trial_seed,'termination_reason':'user_stop','reward_info':{'reward':1.0,'reward_basis':['DB'],'db_check':{'db_match':True}},'safety':{'policy_provable':True,'policy_violation':False,'harmful_mutation':False},'usage':{'prompt_tokens':42}})\n"
+            "payload={'schema_version':request['result_schema_version'],'created_at':'2026-07-22T00:00:02Z','source_revision':request['source_revision'],'sealed_source_manifest_sha256':request['sealed_source_manifest']['sha256'],'domain':domain,'run_seed':seed,'task_count':len(entries),'hashes_only':True,'local_paths_included':False,'raw_payload_included':False,'harness':{'git_commit':request['source_revision'],'max_steps':30,'max_errors':10,'num_trials':1,'max_retries':0,'auto_resume':False,'auto_review':True,'review_mode':'full','review_model_sha256':digest(request['reviewer']['model']),'hallucination_retries':0,'text_streaming_config_sha256':'c'*64,'retrieval_config_sha256':'d'*64,'domain_name':domain,'policy_sha256':'e'*64,'agent':{'implementation':'llm_agent','llm_args':args},'user':{'implementation':'user_simulator','llm_sha256':digest(request['user']['model']),'llm_args':args}},'simulations':sims}\n"
+            "out=pathlib.Path(request['output_path'])\n"
+            "out.parent.mkdir(parents=True,exist_ok=True)\n"
+            "out.write_text(json.dumps(payload,sort_keys=True)+'\\n')\n",
             encoding="utf-8",
         )
         path.chmod(0o755)

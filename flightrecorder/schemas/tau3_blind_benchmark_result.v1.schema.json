@@ -1,0 +1,202 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_benchmark_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hash-only result emitted by the pinned blind custodian for one fresh sealed Tau-3 domain and seed.",
+  "properties": {
+    "created_at": {"minLength": 1, "type": "string"},
+    "domain": {"enum": ["airline", "retail", "telecom"]},
+    "harness": {"$ref": "#/$defs/harness"},
+    "hashes_only": {"const": true},
+    "local_paths_included": {"const": false},
+    "raw_payload_included": {"const": false},
+    "schema_version": {"const": "hfr.tau3_blind_benchmark_result.v1"},
+    "sealed_source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "run_seed": {"enum": [101, 202, 303, 404]},
+    "simulations": {
+      "items": {"$ref": "#/$defs/simulation"},
+      "minItems": 1,
+      "type": "array"
+    },
+    "source_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "task_count": {"minimum": 1, "type": "integer"}
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "source_revision",
+    "sealed_source_manifest_sha256",
+    "domain",
+    "run_seed",
+    "task_count",
+    "hashes_only",
+    "local_paths_included",
+    "raw_payload_included",
+    "harness",
+    "simulations"
+  ],
+  "title": "Tau-3 Blind Benchmark Result",
+  "type": "object",
+  "$defs": {
+    "dbCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "db_match": {"type": "boolean"}
+      },
+      "required": ["db_match"],
+      "type": "object"
+    },
+    "decodingArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {"const": 1024},
+        "num_retries": {"const": 0},
+        "temperature": {"const": 0.0},
+        "top_p": {"const": 1.0}
+      },
+      "required": ["temperature", "top_p", "max_tokens", "num_retries"],
+      "type": "object"
+    },
+    "harness": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "additionalProperties": false,
+          "properties": {
+            "implementation": {"const": "llm_agent"},
+            "llm_args": {"$ref": "#/$defs/decodingArgs"}
+          },
+          "required": ["implementation", "llm_args"],
+          "type": "object"
+        },
+        "auto_resume": {"const": false},
+        "auto_review": {"const": true},
+        "domain_name": {"enum": ["airline", "retail", "telecom"]},
+        "git_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "hallucination_retries": {"const": 0},
+        "max_errors": {"const": 10},
+        "max_retries": {"const": 0},
+        "max_steps": {"const": 30},
+        "num_trials": {"const": 1},
+        "policy_sha256": {"$ref": "#/$defs/sha256"},
+        "retrieval_config_sha256": {"$ref": "#/$defs/sha256"},
+        "review_mode": {"const": "full"},
+        "review_model_sha256": {"$ref": "#/$defs/sha256"},
+        "text_streaming_config_sha256": {"$ref": "#/$defs/sha256"},
+        "user": {
+          "additionalProperties": false,
+          "properties": {
+            "implementation": {"const": "user_simulator"},
+            "llm_args": {"$ref": "#/$defs/decodingArgs"},
+            "llm_sha256": {"$ref": "#/$defs/sha256"}
+          },
+          "required": ["implementation", "llm_sha256", "llm_args"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "git_commit",
+        "max_steps",
+        "max_errors",
+        "num_trials",
+        "max_retries",
+        "auto_resume",
+        "auto_review",
+        "review_mode",
+        "review_model_sha256",
+        "hallucination_retries",
+        "text_streaming_config_sha256",
+        "retrieval_config_sha256",
+        "domain_name",
+        "policy_sha256",
+        "agent",
+        "user"
+      ],
+      "type": "object"
+    },
+    "rewardInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "db_check": {
+          "anyOf": [
+            {"$ref": "#/$defs/dbCheck"},
+            {"type": "null"}
+          ]
+        },
+        "reward": {"maximum": 1.0, "minimum": 0.0, "type": "number"},
+        "reward_basis": {
+          "items": {
+            "enum": [
+              "DB",
+              "ENV_ASSERTION",
+              "NL_ASSERTION",
+              "ACTION",
+              "COMMUNICATE"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": ["reward", "reward_basis", "db_check"],
+      "type": "object"
+    },
+    "safety": {
+      "additionalProperties": false,
+      "properties": {
+        "harmful_mutation": {"type": ["boolean", "null"]},
+        "policy_provable": {"type": "boolean"},
+        "policy_violation": {"type": ["boolean", "null"]}
+      },
+      "required": ["policy_provable", "policy_violation", "harmful_mutation"],
+      "type": "object"
+    },
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "simulation": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt_sha256": {"$ref": "#/$defs/sha256"},
+        "reward_info": {"$ref": "#/$defs/rewardInfo"},
+        "safety": {"$ref": "#/$defs/safety"},
+        "seed": {"maximum": 1000000, "minimum": 0, "type": "integer"},
+        "task_id_sha256": {"$ref": "#/$defs/sha256"},
+        "task_sha256": {"$ref": "#/$defs/sha256"},
+        "termination_reason": {
+          "enum": [
+            "user_stop",
+            "agent_stop",
+            "max_steps",
+            "timeout",
+            "too_many_errors",
+            "agent_error",
+            "user_error",
+            "infrastructure_error",
+            "context_window_exceeded",
+            "unexpected_error"
+          ]
+        },
+        "trial": {"const": 0},
+        "usage": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt_tokens": {"minimum": 0, "type": "integer"}
+          },
+          "required": ["prompt_tokens"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "task_id_sha256",
+        "task_sha256",
+        "prompt_sha256",
+        "trial",
+        "seed",
+        "termination_reason",
+        "reward_info",
+        "safety",
+        "usage"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -216,6 +216,7 @@ class SchemaRegistryTests(unittest.TestCase):
             "tau3_behavior_probes",
             "tau3_benchmark_run",
             "tau3_benchmark_protocol_lineage",
+            "tau3_blind_benchmark_result",
             "tau3_blind_custody_receipt",
             "tau3_blind_generator_validation",
             "tau3_candidate_attempt_ledger",

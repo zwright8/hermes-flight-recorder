@@ -63,6 +63,35 @@ class Tau3EvaluationTests(unittest.TestCase):
             ):
                 self.assertNotIn(f'"{forbidden}"', encoded)
 
+    def test_builds_from_registered_hash_only_blind_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            arms = _write_all_blind_results(root)
+
+            report = analyze_tau3_evaluation(
+                arm_result_paths=arms,
+                mode="sealed",
+                expected_tau_revision=REV,
+                bootstrap_samples=200,
+                bootstrap_seed=7,
+                created_at="2026-07-22T00:00:00+00:00",
+            )
+
+            self.assertTrue(report["passed"], report["blocking_reasons"])
+            self.assertTrue(report["promotion_ready"])
+            self.assertEqual(
+                report["metrics"]["macro_pass1"]["adapter"], 1.0
+            )
+            self.assertTrue(
+                check_schema_file(
+                    arms["adapter"][0],
+                    "tau3_blind_benchmark_result",
+                )["passed"]
+            )
+            encoded = json.dumps(report, sort_keys=True)
+            self.assertNotIn('"tasks"', encoded)
+            self.assertNotIn('"messages"', encoded)
+
     def test_rejects_non_identical_harness(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -356,6 +385,128 @@ def _write_all_results(root: Path) -> dict[str, list[Path]]:
             _write(path, _result(domain, rows))
             arms[arm].append(path)
     return arms
+
+
+def _write_all_blind_results(root: Path) -> dict[str, list[Path]]:
+    arms: dict[str, list[Path]] = {
+        arm: [] for arm in REQUIRED_ARMS
+    }
+    for arm in REQUIRED_ARMS:
+        for domain in ("airline", "retail", "telecom"):
+            path = root / arm / f"{domain}.json"
+            simulations = []
+            for index in range(2):
+                if arm == "adapter":
+                    reward, db_match = 1.0, True
+                elif arm == "base":
+                    reward, db_match = 0.0, False
+                else:
+                    reward, db_match = 0.0, True
+                simulations.append(
+                    _blind_simulation(
+                        domain,
+                        index,
+                        reward=reward,
+                        db_match=db_match,
+                    )
+                )
+            _write(path, _blind_result(domain, simulations))
+            arms[arm].append(path)
+    return arms
+
+
+def _blind_result(
+    domain: str,
+    simulations: list[dict],
+) -> dict:
+    return {
+        "schema_version": "hfr.tau3_blind_benchmark_result.v1",
+        "created_at": "2026-07-22T00:00:00Z",
+        "source_revision": REV,
+        "sealed_source_manifest_sha256": "a" * 64,
+        "domain": domain,
+        "run_seed": 101,
+        "task_count": len(simulations),
+        "hashes_only": True,
+        "local_paths_included": False,
+        "raw_payload_included": False,
+        "harness": {
+            "git_commit": REV,
+            "max_steps": 30,
+            "max_errors": 10,
+            "num_trials": 1,
+            "max_retries": 0,
+            "auto_resume": False,
+            "auto_review": True,
+            "review_mode": "full",
+            "review_model_sha256": "b" * 64,
+            "hallucination_retries": 0,
+            "text_streaming_config_sha256": "c" * 64,
+            "retrieval_config_sha256": "d" * 64,
+            "domain_name": domain,
+            "policy_sha256": "e" * 64,
+            "agent": {
+                "implementation": "llm_agent",
+                "llm_args": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                    "max_tokens": 1024,
+                    "num_retries": 0,
+                },
+            },
+            "user": {
+                "implementation": "user_simulator",
+                "llm_sha256": "f" * 64,
+                "llm_args": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                    "max_tokens": 1024,
+                    "num_retries": 0,
+                },
+            },
+        },
+        "simulations": simulations,
+    }
+
+
+def _blind_simulation(
+    domain: str,
+    index: int,
+    *,
+    reward: float,
+    db_match: bool,
+) -> dict:
+    return {
+        "task_id_sha256": _hash(f"{domain}-id-{index}"),
+        "task_sha256": _hash(f"{domain}-task-{index}"),
+        "prompt_sha256": _hash(f"{domain}-prompt-{index}"),
+        "trial": 0,
+        "seed": _tau_trial_seed(101),
+        "termination_reason": "user_stop",
+        "reward_info": {
+            "reward": reward,
+            "reward_basis": ["DB", "COMMUNICATE"],
+            "db_check": {"db_match": db_match},
+        },
+        "safety": {
+            "policy_provable": True,
+            "policy_violation": False,
+            "harmful_mutation": not db_match,
+        },
+        "usage": {"prompt_tokens": 42},
+    }
+
+
+def _hash(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _tau_trial_seed(run_seed: int) -> int:
+    import random
+
+    return random.Random(run_seed).randint(0, 1000000)
 
 
 def _result(domain: str, simulations: list[dict]) -> dict:

@@ -379,6 +379,36 @@ fields, or if any lineage/custody artifact is omitted or substituted. Legacy
 v1 artifacts remain replayable evidence, but they cannot consume v2 evidence
 or prove the fresh-source authorization path.
 
+Fresh v2 sealed arms must also pass `--sealed-custodian` to
+`scripts/run_tau3_benchmark_arm.py`. The runner requires a regular executable
+whose SHA-256 exactly matches
+`blind-generator-validation.json.generator_source.script_sha256`; there is no
+fallback to Tau's retired on-disk `test` split. For each frozen domain and seed,
+HFR sends one local request to the custodian over stdin and accepts only a
+registered `hfr.tau3_blind_benchmark_result.v1` file. That result contains
+task, prompt, and task-payload hashes plus normalized rewards, safety verdicts,
+usage, and harness bindings—never task text, messages, policies, tool payloads,
+local paths, or provider data. Each file binds the preregistered run seed and
+the deterministic per-trial seed derived by the pinned Tau runner. The HFR
+runner and sealed-grid replay independently require the returned hash triples
+to exactly equal the domain-labeled fresh sealed manifest.
+
+```bash
+.venv/bin/python scripts/run_tau3_benchmark_arm.py \
+  --mode sealed \
+  --sealed-custodian <executable-pinned-blind-generator> \
+  --sealed-task-count-manifest <hashes-only-sealed-source.json> \
+  --sealed-authorization <sealed-authorization-v2.json> \
+  --candidate-lock <candidate-lock-v2.json> \
+  --training-protocol <immutable-training-protocol.json> \
+  --benchmark-protocol-lineage <benchmark-protocol-lineage.json> \
+  --custody-receipt <blind-custody-receipt.json> \
+  --generator-validation <blind-generator-validation.json> \
+  --fresh-contamination-replay <fresh-contamination-replay.json> \
+  --retired-source-incident-sha256 <sha256> \
+  <frozen-arm-and-loopback-endpoint-arguments>
+```
+
 After a governed MLX candidate finishes, qualification requires a separate,
 coverage-complete loss replay over the exact `valid.jsonl` export. The runner
 loads the receipt-bound base plus adapter locally, conditions on every complete

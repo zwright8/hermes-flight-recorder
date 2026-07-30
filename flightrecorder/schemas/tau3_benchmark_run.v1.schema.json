@@ -104,6 +104,12 @@
         {"type": "null"}
       ]
     },
+    "blind_custodian": {
+      "anyOf": [
+        {"$ref": "#/$defs/blind_custodian_ref"},
+        {"type": "null"}
+      ]
+    },
     "candidate_lock": {
       "anyOf": [
         {"$ref": "#/$defs/output_file_ref"},
@@ -234,6 +240,24 @@
   "title": "Tau-3 Benchmark Arm Run Receipt",
   "type": "object",
   "$defs": {
+    "blind_custodian_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": {"const": "hfr.tau3_blind_custodian.stdin.v1"},
+        "generator_commit_sha": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "path_included": {"const": false},
+        "result_schema_version": {"const": "hfr.tau3_blind_benchmark_result.v1"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+      },
+      "required": [
+        "contract",
+        "result_schema_version",
+        "sha256",
+        "generator_commit_sha",
+        "path_included"
+      ],
+      "type": "object"
+    },
     "endpoint": {
       "additionalProperties": false,
       "properties": {

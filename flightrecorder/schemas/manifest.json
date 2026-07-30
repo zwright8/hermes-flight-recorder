@@ -82,6 +82,14 @@
       "name": "tau3_benchmark_run"
     },
     {
+      "artifact": "tau3_blind_benchmark_result",
+      "artifact_schema_version": "hfr.tau3_blind_benchmark_result.v1",
+      "description": "Hash-only domain/seed benchmark result emitted by a pinned blind custodian for fresh sealed Tau-3 evaluation.",
+      "filename": "tau3_blind_benchmark_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/tau3_blind_benchmark_result.v1.schema.json",
+      "name": "tau3_blind_benchmark_result"
+    },
+    {
       "artifact": "tau3_generation_retry_source",
       "artifact_schema_version": "hfr.tau3_generation_retry_source.v1",
       "description": "Hash-bound retry source manifest for Tau-3 tasks lacking reward-1 normal teacher generation results.",

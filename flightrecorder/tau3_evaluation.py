@@ -288,6 +288,17 @@ def _extract_result_rows(
     arm: str,
     expected_tau_revision: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+    if (
+        payload.get("schema_version")
+        == "hfr.tau3_blind_benchmark_result.v1"
+    ):
+        return _extract_blind_result_rows(
+            payload,
+            path=path,
+            arm=arm,
+            expected_tau_revision=expected_tau_revision,
+        )
+
     errors: list[str] = []
     info_raw = payload.get("info")
     info: dict[str, Any] = dict(info_raw) if isinstance(info_raw, dict) else {}
@@ -354,6 +365,183 @@ def _extract_result_rows(
                 "harmful_mutation": bool(db_evaluated and db_match is False),
                 "policy_provable": policy_provable,
                 "policy_violation": policy_violation,
+            }
+        )
+    if not rows:
+        errors.append(f"{arm}:{path}: no simulations")
+    return rows, harness, errors
+
+
+def _extract_blind_result_rows(
+    payload: dict[str, Any],
+    *,
+    path: Path,
+    arm: str,
+    expected_tau_revision: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+    errors: list[str] = []
+    schema = check_schema_contract(
+        payload,
+        name_or_id="tau3_blind_benchmark_result",
+    )
+    if schema.get("passed") is not True:
+        errors.extend(
+            f"{arm}:{path}: blind result schema: {error}"
+            for error in schema.get("errors", [])
+        )
+    if payload.get("source_revision") != expected_tau_revision:
+        errors.append(f"{arm}:{path}: git revision mismatch")
+
+    harness_raw = payload.get("harness")
+    harness = (
+        dict(harness_raw) if isinstance(harness_raw, dict) else {}
+    )
+    _validate_harness(harness, arm=arm, path=path, errors=errors)
+    domain = str(payload.get("domain") or "")
+    if domain not in DOMAINS:
+        errors.append(f"{arm}:{path}: unsupported domain {domain!r}")
+    if harness.get("git_commit") != expected_tau_revision:
+        errors.append(f"{arm}:{path}: harness git revision mismatch")
+    if harness.get("domain_name") != domain:
+        errors.append(f"{arm}:{path}: harness domain mismatch")
+
+    simulations_raw = payload.get("simulations")
+    simulations = (
+        list(simulations_raw)
+        if isinstance(simulations_raw, list)
+        else []
+    )
+    if payload.get("task_count") != len(simulations):
+        errors.append(f"{arm}:{path}: blind result task count mismatch")
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int]] = set()
+    for index, sim_raw in enumerate(simulations):
+        if not isinstance(sim_raw, dict):
+            errors.append(
+                f"{arm}:{path}: simulation {index} is not an object"
+            )
+            continue
+        sim = dict(sim_raw)
+        reward_info_raw = sim.get("reward_info")
+        reward_info = (
+            dict(reward_info_raw)
+            if isinstance(reward_info_raw, dict)
+            else {}
+        )
+        reward = _number(reward_info.get("reward"))
+        trial = sim.get("trial")
+        seed = sim.get("seed")
+        if not isinstance(trial, int) or not isinstance(seed, int):
+            errors.append(
+                f"{arm}:{path}: simulation {index} missing integer "
+                "trial/seed"
+            )
+        task_id_sha256 = str(sim.get("task_id_sha256") or "")
+        task_sha256 = str(sim.get("task_sha256") or "")
+        row_key = (
+            task_sha256,
+            int(trial) if isinstance(trial, int) else -1,
+            int(seed) if isinstance(seed, int) else -1,
+        )
+        if row_key in seen:
+            errors.append(
+                f"{arm}:{path}: duplicate blind simulation key at "
+                f"index {index}"
+            )
+        seen.add(row_key)
+
+        db_check_raw = reward_info.get("db_check")
+        db_check = (
+            dict(db_check_raw)
+            if isinstance(db_check_raw, dict)
+            else {}
+        )
+        db_match = db_check.get("db_match")
+        reward_basis = _reward_basis(
+            reward_info.get("reward_basis")
+        )
+        db_evaluated = "DB" in reward_basis
+        if db_evaluated and not isinstance(db_match, bool):
+            errors.append(
+                f"{arm}:{path}: simulation {index} missing provable "
+                "db_check.db_match for DB reward basis"
+            )
+        safety_raw = sim.get("safety")
+        safety = (
+            dict(safety_raw) if isinstance(safety_raw, dict) else {}
+        )
+        policy_provable = safety.get("policy_provable")
+        policy_violation = safety.get("policy_violation")
+        harmful_mutation = safety.get("harmful_mutation")
+        if not isinstance(policy_provable, bool):
+            errors.append(
+                f"{arm}:{path}: simulation {index} policy safety "
+                "is not provable"
+            )
+        if policy_provable is True and not isinstance(
+            policy_violation, bool
+        ):
+            errors.append(
+                f"{arm}:{path}: simulation {index} missing policy "
+                "verdict"
+            )
+        if policy_provable is False and policy_violation is not None:
+            errors.append(
+                f"{arm}:{path}: simulation {index} has an unprovable "
+                "policy verdict"
+            )
+        if db_evaluated:
+            expected_harm = db_match is False
+            if harmful_mutation is not expected_harm:
+                errors.append(
+                    f"{arm}:{path}: simulation {index} harmful "
+                    "mutation verdict mismatch"
+                )
+        elif harmful_mutation is not None:
+            errors.append(
+                f"{arm}:{path}: simulation {index} has DB safety "
+                "without a DB reward basis"
+            )
+
+        rows.append(
+            {
+                "arm": arm,
+                "domain": domain,
+                "task_id_sha256": task_id_sha256,
+                "task_sha256": task_sha256,
+                "trial": (
+                    int(trial) if isinstance(trial, int) else -1
+                ),
+                "seed": int(seed) if isinstance(seed, int) else -1,
+                "result_sha256": canonical_sha256(sim),
+                "source_file_sha256": _sha256_file(path),
+                "pass1": 1.0 if reward >= 1.0 else 0.0,
+                "reward": reward,
+                "termination_reason": str(
+                    sim.get("termination_reason") or ""
+                ),
+                "db_match": (
+                    db_match if isinstance(db_match, bool) else None
+                ),
+                "db_evaluated": db_evaluated,
+                "safety_provable": bool(
+                    policy_provable
+                    and (
+                        not db_evaluated
+                        or isinstance(db_match, bool)
+                    )
+                ),
+                "harmful_mutation": (
+                    harmful_mutation
+                    if isinstance(harmful_mutation, bool)
+                    else False
+                ),
+                "policy_provable": bool(policy_provable),
+                "policy_violation": (
+                    policy_violation
+                    if isinstance(policy_violation, bool)
+                    else None
+                ),
             }
         )
     if not rows:

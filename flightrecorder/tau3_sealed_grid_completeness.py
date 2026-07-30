@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import random
 import re
 import sys
 from dataclasses import dataclass
@@ -377,6 +378,11 @@ def _load_arm(
             payload=payload,
             authorization=authorization.payload,
         )
+        _validate_arm_v2_blind_custodian(
+            base=base,
+            payload=payload,
+            authorization=authorization.payload,
+        )
     if staged_lock.payload != candidate_lock.payload:
         raise Tau3SealedGridCompletenessError(f"{arm_id} staged candidate lock payload does not match replayed candidate lock")
     lock_time = _parse_time(candidate_lock.payload.get("created_at"))
@@ -413,10 +419,20 @@ def _load_arm(
         if receipt_time is None or receipt_time <= lock_time:
             raise Tau3SealedGridCompletenessError(f"{arm_id} {domain}/{seed} run receipt chronology does not replay")
         result_rel = receipt.get("result_path")
-        result_artifact = _read_json_ref(receipt_artifact.path.parent, {"path": result_rel}, receipt.get("result_sha256"), "raw result")
+        result_artifact = _read_json_ref(receipt_artifact.path.parent, {"path": result_rel}, receipt.get("result_sha256"), "benchmark result")
         if result_artifact.sha256 != record.get("result_sha256"):
-            raise Tau3SealedGridCompletenessError(f"{arm_id} {domain}/{seed} raw result hash mismatch")
-        task_hashes = _task_hashes_from_result(result_artifact, expected_domain=domain, expected_seed=seed)
+            raise Tau3SealedGridCompletenessError(f"{arm_id} {domain}/{seed} benchmark result hash mismatch")
+        task_hashes = _task_hashes_from_result(
+            result_artifact,
+            expected_domain=domain,
+            expected_seed=seed,
+            sealed_source=sealed.payload,
+            sealed_source_sha256=sealed.sha256,
+            require_blind=(
+                authorization.payload.get("schema_version")
+                == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION
+            ),
+        )
         if task_hashes & task_hashes_by_seed[seed]:
             raise Tau3SealedGridCompletenessError(f"{arm_id} seed {seed} contains duplicate sealed task rows")
         task_hashes_by_seed[seed].update(task_hashes)
@@ -483,12 +499,149 @@ def _validate_arm_v2_lineage_refs(
         )
 
 
-def _task_hashes_from_result(artifact: _JsonArtifact, *, expected_domain: str, expected_seed: int) -> set[str]:
+def _validate_arm_v2_blind_custodian(
+    *,
+    base: Path,
+    payload: dict[str, Any],
+    authorization: dict[str, Any],
+) -> None:
+    custody = _dict(authorization.get("blind_custody"))
+    validation = _read_json_ref(
+        base,
+        payload.get("blind_generator_validation"),
+        custody.get("generator_validation_sha256"),
+        "blind generator validation",
+    )
+    check = check_schema_contract(
+        validation.payload,
+        name_or_id="tau3_blind_generator_validation",
+    )
+    if check.get("passed") is not True:
+        raise Tau3SealedGridCompletenessError(
+            "staged blind generator validation violates schema"
+        )
+    source = _dict(validation.payload.get("generator_source"))
+    binding = _dict(payload.get("blind_custodian"))
+    expected = {
+        "contract": "hfr.tau3_blind_custodian.stdin.v1",
+        "result_schema_version": (
+            "hfr.tau3_blind_benchmark_result.v1"
+        ),
+        "sha256": source.get("script_sha256"),
+        "generator_commit_sha": source.get("commit_sha"),
+        "path_included": False,
+    }
+    if binding != expected:
+        raise Tau3SealedGridCompletenessError(
+            "v2 arm blind custodian binding does not replay the "
+            "validated generator"
+        )
+
+
+def _task_hashes_from_result(
+    artifact: _JsonArtifact,
+    *,
+    expected_domain: str,
+    expected_seed: int,
+    sealed_source: dict[str, Any] | None = None,
+    sealed_source_sha256: str | None = None,
+    require_blind: bool = False,
+) -> set[str]:
     payload = artifact.payload
+    if (
+        payload.get("schema_version")
+        == "hfr.tau3_blind_benchmark_result.v1"
+    ):
+        check = check_schema_contract(
+            payload,
+            name_or_id="tau3_blind_benchmark_result",
+        )
+        if check.get("passed") is not True:
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result violates schema: "
+                + "; ".join(check["errors"])
+            )
+        if (
+            payload.get("domain") != expected_domain
+            or payload.get("run_seed") != expected_seed
+        ):
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result domain/run-seed mismatch"
+            )
+        if (
+            sealed_source is None
+            or sealed_source_sha256 is None
+            or payload.get("sealed_source_manifest_sha256")
+            != sealed_source_sha256
+            or payload.get("source_revision")
+            != sealed_source.get("source_revision")
+        ):
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result sealed source binding mismatch"
+            )
+        harness = _dict(payload.get("harness"))
+        if (
+            harness.get("git_commit")
+            != sealed_source.get("source_revision")
+            or harness.get("domain_name") != expected_domain
+        ):
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result harness source/domain mismatch"
+            )
+        simulations = payload.get("simulations")
+        if (
+            not isinstance(simulations, list)
+            or not simulations
+            or payload.get("task_count") != len(simulations)
+        ):
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result task count mismatch"
+            )
+        observed_triplets: set[tuple[str, str, str]] = set()
+        task_hashes: set[str] = set()
+        for index, simulation in enumerate(simulations):
+            if not isinstance(simulation, dict):
+                raise Tau3SealedGridCompletenessError(
+                    "blind benchmark simulation row must be an object"
+                )
+            if simulation.get("seed") != _tau_trial_seed(
+                expected_seed
+            ):
+                raise Tau3SealedGridCompletenessError(
+                    "blind benchmark simulation derived seed mismatch"
+                )
+            triplet = (
+                str(simulation.get("task_id_sha256") or ""),
+                str(simulation.get("prompt_sha256") or ""),
+                str(simulation.get("task_sha256") or ""),
+            )
+            if triplet in observed_triplets:
+                raise Tau3SealedGridCompletenessError(
+                    "duplicate task row in blind benchmark result "
+                    f"at index {index}"
+                )
+            observed_triplets.add(triplet)
+            task_hashes.add(triplet[0])
+        expected_triplets = _sealed_task_triplets_for_domain(
+            sealed_source,
+            expected_domain,
+        )
+        if observed_triplets != expected_triplets:
+            raise Tau3SealedGridCompletenessError(
+                "blind benchmark result task hashes do not exactly "
+                "match its sealed source domain"
+            )
+        return task_hashes
+
+    if require_blind:
+        raise Tau3SealedGridCompletenessError(
+            "v2 fresh sealed arms require registered hash-only blind "
+            "benchmark results"
+        )
     simulations = payload.get("simulations")
     if not isinstance(simulations, list) or not simulations:
         raise Tau3SealedGridCompletenessError("raw result simulations must be a non-empty list")
-    task_hashes: set[str] = set()
+    legacy_task_hashes: set[str] = set()
     for index, simulation in enumerate(simulations):
         if not isinstance(simulation, dict):
             raise Tau3SealedGridCompletenessError("raw result simulation row must be an object")
@@ -498,10 +651,52 @@ def _task_hashes_from_result(artifact: _JsonArtifact, *, expected_domain: str, e
         if not isinstance(task_id, str) or not task_id:
             raise Tau3SealedGridCompletenessError("raw result simulation missing task_id")
         digest = hashlib.sha256(f"{expected_domain}:{task_id}".encode("utf-8")).hexdigest()
-        if digest in task_hashes:
+        if digest in legacy_task_hashes:
             raise Tau3SealedGridCompletenessError(f"duplicate task row in raw result at index {index}")
-        task_hashes.add(digest)
-    return task_hashes
+        legacy_task_hashes.add(digest)
+    return legacy_task_hashes
+
+
+def _sealed_task_triplets_for_domain(
+    payload: dict[str, Any],
+    domain: str,
+) -> set[tuple[str, str, str]]:
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise Tau3SealedGridCompletenessError(
+            "sealed source entries must be a list"
+        )
+    matching: set[tuple[str, str, str]] = set()
+    for entry in entries:
+        record = _dict(entry)
+        if record.get("domain") != domain:
+            continue
+        triplet = (
+            str(record.get("task_id_sha256") or ""),
+            str(record.get("prompt_sha256") or ""),
+            str(record.get("task_sha256") or ""),
+        )
+        if not all(SHA256_RE.fullmatch(value) for value in triplet):
+            raise Tau3SealedGridCompletenessError(
+                "sealed source domain entry contains invalid hashes"
+            )
+        if triplet in matching:
+            raise Tau3SealedGridCompletenessError(
+                "sealed source domain contains duplicate task hashes"
+            )
+        matching.add(triplet)
+    if not matching:
+        raise Tau3SealedGridCompletenessError(
+            "blind benchmark result requires domain-labeled sealed "
+            "source entries"
+        )
+    return matching
+
+
+def _tau_trial_seed(run_seed: int) -> int:
+    """Replay Tau's first per-trial seed for one-trial domain runs."""
+
+    return random.Random(run_seed).randint(0, 1000000)
 
 
 def _replay_authorization(
