@@ -145,7 +145,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             evaluator = self._evaluator_contract(root)
             tau2 = self._fake_tau2(root, reward=0.0)
             evaluator_endpoint = self._endpoint(
-                "local/evaluator",
+                "openai/local/evaluator",
                 18081,
             )
 
@@ -195,6 +195,15 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 receipt["evaluator_model_contract_sha256"],
                 self._sha256(evaluator),
             )
+            command = receipt["command"]
+            self.assertEqual(
+                command[command.index("--user-llm") + 1],
+                "openai/local/evaluator",
+            )
+            self.assertEqual(
+                command[command.index("--review-model") + 1],
+                "openai/local/evaluator",
+            )
 
             with self.assertRaisesRegex(
                 Tau3BenchmarkRunError,
@@ -208,6 +217,28 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                     agent=self._endpoint("local/base", 18080),
                     user=self._endpoint("local/other", 18081),
                     reviewer=evaluator_endpoint,
+                    config=Tau3BenchmarkConfig(
+                        mode="development",
+                        arm_id="base",
+                        protocol_path=protocol,
+                        evaluator_model_contract=evaluator,
+                        source_split=source,
+                        timeout_seconds=2,
+                    ),
+                )
+
+            with self.assertRaisesRegex(
+                Tau3BenchmarkRunError,
+                "openai/ loopback transport prefix",
+            ):
+                run_tau3_benchmark_arm(
+                    out_dir=root / "unroutable-evaluator",
+                    tau_repo=repo,
+                    tau_venv_bin=tau2,
+                    expected_tau_revision=self.revision,
+                    agent=self._endpoint("local/base", 18080),
+                    user=self._endpoint("local/evaluator", 18081),
+                    reviewer=self._endpoint("local/evaluator", 18081),
                     config=Tau3BenchmarkConfig(
                         mode="development",
                         arm_id="base",
@@ -677,7 +708,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 filename="substituted-evaluator-contract.json",
             )
             substituted_endpoint = self._endpoint(
-                "local/substituted-evaluator",
+                "openai/local/substituted-evaluator",
                 18081,
             )
 

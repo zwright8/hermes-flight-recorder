@@ -1281,10 +1281,15 @@ def _validate_evaluator_endpoints(
         )
         or ""
     )
-    if user.model != model_id or reviewer.model != model_id:
+    expected_transport_model = f"openai/{model_id}"
+    if (
+        user.model != expected_transport_model
+        or reviewer.model != expected_transport_model
+    ):
         raise Tau3BenchmarkRunError(
             "user simulator and reviewer endpoints must use the exact "
-            "frozen evaluator model_id"
+            "frozen evaluator model_id through the openai/ loopback "
+            "transport prefix"
         )
     if user.model != reviewer.model:
         raise Tau3BenchmarkRunError(
