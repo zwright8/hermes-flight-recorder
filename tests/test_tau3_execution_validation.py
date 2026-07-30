@@ -172,6 +172,44 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
                 json.dumps(result),
             )
 
+    def test_benchmark_bundle_rejects_unprefixed_evaluator_endpoint_hash(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            manifest_path = root / "manifest.json"
+            manifest = read_json(manifest_path)
+            arm_ref = manifest["benchmark"]["sealed_arms"][0]
+            arm_path = root / arm_ref["path"]
+            arm = read_json(arm_path)
+            evaluator = read_json(root / "evaluator-model-contract.json")
+            model_id = evaluator["roles"]["user_simulator"]["model_identity"][
+                "model_id"
+            ]
+            logical_model_sha256 = sha256_text(model_id)
+            for endpoint in ("user_simulator", "reviewer"):
+                arm[endpoint]["model_sha256"] = logical_model_sha256
+            prelaunch_path = arm_path.parent / arm["prelaunch_receipt"]["path"]
+            prelaunch = read_json(prelaunch_path)
+            for endpoint in ("user_simulator", "reviewer"):
+                prelaunch[endpoint]["model_sha256"] = logical_model_sha256
+            write_json(prelaunch_path, prelaunch)
+            arm["prelaunch_receipt"]["sha256"] = sha256_file(prelaunch_path)
+            arm["prelaunch_receipt"]["size"] = prelaunch_path.stat().st_size
+            write_json(arm_path, arm)
+            arm_ref["sha256"] = sha256_file(arm_path)
+            arm_ref["size"] = arm_path.stat().st_size
+            write_json(manifest_path, manifest)
+
+            result = validate_tau3_benchmark_result_bundle(root, strict=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "endpoint model does not match the frozen evaluator model",
+                json.dumps(result),
+            )
+
     def test_training_bundle_fails_on_tampered_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1100,7 +1138,7 @@ def endpoint() -> dict[str, Any]:
 def evaluator_endpoint(model_id: str) -> dict[str, Any]:
     return {
         **endpoint(),
-        "model_sha256": sha256_text(model_id),
+        "model_sha256": sha256_text(f"openai/{model_id}"),
     }
 
 

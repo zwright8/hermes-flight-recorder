@@ -742,6 +742,9 @@ def _load_evaluator_model_contract_record(
     endpoint_model_sha256 = hashlib.sha256(
         model_id.encode("utf-8")
     ).hexdigest()
+    endpoint_transport_model_sha256 = hashlib.sha256(
+        f"openai/{model_id}".encode("utf-8")
+    ).hexdigest()
     if (
         record.get("model_identity_sha256") != identity_sha256
         or record.get("endpoint_model_sha256") != endpoint_model_sha256
@@ -756,7 +759,10 @@ def _load_evaluator_model_contract_record(
         endpoint_map: dict[str, Any] = (
             endpoint if isinstance(endpoint, dict) else {}
         )
-        if endpoint_map.get("model_sha256") != endpoint_model_sha256:
+        if (
+            endpoint_map.get("model_sha256")
+            != endpoint_transport_model_sha256
+        ):
             raise Tau3CandidateSelectionError(
                 f"{manifest_path}: {key} endpoint does not use the frozen evaluator"
             )

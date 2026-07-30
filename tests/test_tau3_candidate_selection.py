@@ -318,6 +318,56 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
             self.assertFalse((root / "selection.json").exists())
             self.assertFalse((root / "candidate-lock.json").exists())
 
+    def test_rejects_unprefixed_evaluator_endpoint_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(
+                root,
+                "base",
+                reward=0.0,
+                db_match=False,
+            )
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            manifest_path = candidate.development_manifest_path
+            manifest = _read(manifest_path)
+            evaluator = _read(manifest_path.parent / "evaluator-model-contract.json")
+            model_id = evaluator["roles"]["user_simulator"]["model_identity"][
+                "model_id"
+            ]
+            logical_model_sha256 = _hash(model_id)
+            for endpoint in ("user_simulator", "reviewer"):
+                manifest[endpoint]["model_sha256"] = logical_model_sha256
+            prelaunch_path = manifest_path.parent / "prelaunch_receipt.json"
+            prelaunch = _read(prelaunch_path)
+            for endpoint in ("user_simulator", "reviewer"):
+                prelaunch[endpoint]["model_sha256"] = logical_model_sha256
+            _write(prelaunch_path, prelaunch)
+            manifest["prelaunch_receipt"] = _file_ref(
+                prelaunch_path,
+                prelaunch_path.name,
+            )
+            _write(manifest_path, manifest)
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "endpoint does not use the frozen evaluator",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "selection.json",
+                    lock_path=root / "candidate-lock.json",
+                    bootstrap_samples=200,
+                )
+
+            self.assertFalse((root / "selection.json").exists())
+            self.assertFalse((root / "candidate-lock.json").exists())
+
     def test_rejects_rewritten_prelaunch_source_and_receipt_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -735,6 +785,9 @@ def _benchmark_manifest(
     evaluator_identity = evaluator["roles"]["user_simulator"]
     evaluator_model_id = evaluator_identity["model_identity"]["model_id"]
     evaluator_model_sha256 = _hash(evaluator_model_id)
+    evaluator_transport_model_sha256 = _hash(
+        f"openai/{evaluator_model_id}"
+    )
     evaluator_ref = {
         **_file_ref(
             staged_evaluator,
@@ -816,11 +869,11 @@ def _benchmark_manifest(
         "agent": _endpoint("agent"),
         "user_simulator": _evaluator_endpoint(
             "user",
-            evaluator_model_sha256,
+            evaluator_transport_model_sha256,
         ),
         "reviewer": _evaluator_endpoint(
             "reviewer",
-            evaluator_model_sha256,
+            evaluator_transport_model_sha256,
         ),
         "config": {
             "agent": "llm_agent",
@@ -1187,6 +1240,7 @@ def _replace_evaluator_model(
         evaluator["roles"][role]["model_identity_sha256"] = identity_sha256
     _write(evaluator_path, evaluator)
     model_sha256 = _hash(model_id)
+    transport_model_sha256 = _hash(f"openai/{model_id}")
     binding = {
         **_file_ref(
             evaluator_path,
@@ -1199,7 +1253,7 @@ def _replace_evaluator_model(
     }
     manifest["evaluator_model_contract"] = binding
     for endpoint in ("user_simulator", "reviewer"):
-        manifest[endpoint]["model_sha256"] = model_sha256
+        manifest[endpoint]["model_sha256"] = transport_model_sha256
     for record in manifest["run_receipts"]:
         receipt_path = manifest_path.parent / record["path"]
         receipt = _read(receipt_path)
@@ -1210,7 +1264,7 @@ def _replace_evaluator_model(
     prelaunch = _read(prelaunch_path)
     prelaunch["evaluator_model_contract"] = binding
     for endpoint in ("user_simulator", "reviewer"):
-        prelaunch[endpoint]["model_sha256"] = model_sha256
+        prelaunch[endpoint]["model_sha256"] = transport_model_sha256
     _write(prelaunch_path, prelaunch)
     manifest["prelaunch_receipt"] = _file_ref(
         prelaunch_path,

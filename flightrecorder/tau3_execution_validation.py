@@ -518,6 +518,9 @@ def _validate_evaluator_model_contract(loaded: _Loaded) -> dict[str, str]:
         "endpoint_model_sha256": hashlib.sha256(
             model_id.encode("utf-8")
         ).hexdigest(),
+        "endpoint_transport_model_sha256": hashlib.sha256(
+            f"openai/{model_id}".encode("utf-8")
+        ).hexdigest(),
     }
 
 
@@ -1105,7 +1108,7 @@ def _validate_benchmark_arm_refs(
         _require(
             evaluator.target,
             _dict(payload.get(endpoint_key)).get("model_sha256")
-            == evaluator_binding.get("endpoint_model_sha256"),
+            == evaluator_binding.get("endpoint_transport_model_sha256"),
             f"benchmark {endpoint_key} endpoint model does not match the frozen evaluator model",
         )
     if payload.get("mode") == "development":
