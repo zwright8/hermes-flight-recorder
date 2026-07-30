@@ -733,6 +733,43 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
                 json.dumps(result),
             )
 
+    def test_diversity_counts_only_development_qualified_candidates(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            training["qualified_candidates"][1].pop("behavior_probes")
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            rendered = json.dumps(result)
+            self.assertIn(
+                "at least two candidates must pass development qualification gates",
+                rendered,
+            )
+            self.assertIn(
+                "qualified candidates must prove recipe diversity",
+                rendered,
+            )
+            self.assertIn(
+                "qualified candidates must bind distinct adapter fingerprints",
+                rendered,
+            )
+
     def test_below_threshold_development_scorecard_does_not_qualify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

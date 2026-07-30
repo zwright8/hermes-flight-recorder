@@ -676,12 +676,20 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
         )
         recipe_sha256 = _nested(receipt_ref.payload, "training_binding", "recipe", "recipe_sha256")
         adapter_sha256 = _nested(receipt_ref.payload, "adapter", "tree_sha256")
-        if _validate_development_qualification(root, target, candidate, label, receipt_ref, adapter_sha256):
+        qualified = _validate_development_qualification(
+            root,
+            target,
+            candidate,
+            label,
+            receipt_ref,
+            adapter_sha256,
+        )
+        if qualified:
             qualified_count += 1
-        if isinstance(recipe_sha256, str):
-            recipe_hashes.add(recipe_sha256)
-        if isinstance(adapter_sha256, str):
-            adapter_hashes.add(adapter_sha256)
+            if isinstance(recipe_sha256, str):
+                recipe_hashes.add(recipe_sha256)
+            if isinstance(adapter_sha256, str):
+                adapter_hashes.add(adapter_sha256)
     _require(target, len(candidate_ids) >= 2, "qualified candidates must be distinct")
     _require(target, qualified_count >= 2, "at least two candidates must pass development qualification gates")
     _require(target, len(recipe_hashes) >= 2, "qualified candidates must prove recipe diversity")
