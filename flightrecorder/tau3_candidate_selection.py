@@ -507,6 +507,12 @@ def _load_benchmark_manifest(path: Path, *, expected_arm: str) -> dict[str, Any]
         run_receipts.append({"path": str(receipt_path), "sha256": receipt_sha256, "result_sha256": result_sha256})
     if source_errors:
         raise Tau3CandidateSelectionError(f"{path}: benchmark raw results invalid: " + "; ".join(source_errors))
+    _validate_complete_development_task_grid(
+        manifest_path=path,
+        manifest=manifest,
+        source=source,
+        rows=rows,
+    )
     return {
         "path": path,
         "sha256": _sha256_file(path),
@@ -627,6 +633,83 @@ def _load_prelaunch_record(manifest_path: Path, manifest: dict[str, Any]) -> dic
     if _sealed_flags_present(payload):
         raise Tau3CandidateSelectionError(f"{manifest_path}: prelaunch receipt sealed access flags are present")
     return {"path": str(path), "sha256": digest}
+
+
+def _validate_complete_development_task_grid(
+    *,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    source: dict[str, Any],
+    rows: list[dict[str, Any]],
+) -> None:
+    config = manifest.get("config")
+    seeds = config.get("seeds") if isinstance(config, dict) else None
+    if not isinstance(seeds, list) or not all(
+        isinstance(seed, int) and not isinstance(seed, bool)
+        for seed in seeds
+    ):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: benchmark seed grid is invalid"
+        )
+    source_tasks = source.get("tasks")
+    if not isinstance(source_tasks, list):
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: development source tasks are unavailable"
+        )
+    task_keys: set[tuple[str, str]] = set()
+    for task in source_tasks:
+        domain = task.get("domain") if isinstance(task, dict) else None
+        task_sha256 = (
+            task.get("task_sha256") if isinstance(task, dict) else None
+        )
+        if (
+            not isinstance(domain, str)
+            or not domain
+            or not _sha256_value(task_sha256)
+        ):
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: development source task identity is invalid"
+            )
+        key = (domain, str(task_sha256))
+        if key in task_keys:
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: development source task identity is duplicated"
+            )
+        task_keys.add(key)
+    expected = {
+        (domain, task_sha256, 0, seed)
+        for domain, task_sha256 in task_keys
+        for seed in seeds
+    }
+    actual: set[tuple[str, str, int, int]] = set()
+    for row in rows:
+        trial = row.get("trial")
+        seed = row.get("seed")
+        if (
+            not isinstance(trial, int)
+            or isinstance(trial, bool)
+            or not isinstance(seed, int)
+            or isinstance(seed, bool)
+        ):
+            raise Tau3CandidateSelectionError(
+                f"{manifest_path}: development result trial/seed is invalid"
+            )
+        actual.add(
+            (
+                str(row.get("domain") or ""),
+                str(row.get("task_sha256") or ""),
+                trial,
+                seed,
+            )
+        )
+    if len(actual) != len(rows) or actual != expected:
+        missing = len(expected - actual)
+        unexpected = len(actual - expected)
+        raise Tau3CandidateSelectionError(
+            f"{manifest_path}: development task grid is incomplete or "
+            f"substituted (expected={len(expected)}, actual={len(actual)}, "
+            f"missing={missing}, unexpected={unexpected})"
+        )
 
 
 def _load_protocol_record(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -800,7 +883,11 @@ def _load_development_source_record(manifest_path: Path, manifest: dict[str, Any
     split_hash = _protocol_development_split_sha256(protocol["payload"])
     if split_hash is not None and split_hash != digest:
         raise Tau3CandidateSelectionError(f"{manifest_path}: development source sha256 does not match protocol split binding")
-    return {"path": str(path), "sha256": digest}
+    return {
+        "path": str(path),
+        "sha256": digest,
+        "tasks": [dict(task) for task in tasks if isinstance(task, dict)],
+    }
 
 
 def _protocol_development_split_sha256(protocol: dict[str, Any]) -> str | None:

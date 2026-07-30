@@ -239,6 +239,48 @@ class Tau3CandidateSelectionTests(unittest.TestCase):
                     bootstrap_samples=200,
                 )
 
+    def test_rejects_substituted_development_task_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = _benchmark_manifest(root, "base", reward=0.0, db_match=False)
+            candidate = _candidate_entry(
+                root,
+                "candidate-a",
+                reward=1.0,
+                db_match=True,
+            )
+            manifest_path = candidate.development_manifest_path
+            manifest = _read(manifest_path)
+            ref = manifest["run_receipts"][0]
+            receipt_path = manifest_path.parent / ref["path"]
+            receipt = _read(receipt_path)
+            result_path = Path(receipt["result_path"])
+            result = _read(result_path)
+            result["tasks"][0]["user_scenario"]["instructions"] = (
+                "substituted"
+            )
+            _write(result_path, result)
+            copied_result_path = manifest_path.parent / ref["result_path"]
+            _write(copied_result_path, result)
+            result_sha256 = _sha256(result_path)
+            receipt["result_sha256"] = result_sha256
+            _write(receipt_path, receipt)
+            ref["result_sha256"] = result_sha256
+            ref["receipt_sha256"] = _sha256(receipt_path)
+            _write(manifest_path, manifest)
+
+            with self.assertRaisesRegex(
+                Tau3CandidateSelectionError,
+                "development task grid is incomplete or substituted",
+            ):
+                select_tau3_candidate(
+                    base_manifest_path=base,
+                    candidates=[candidate],
+                    report_path=root / "selection.json",
+                    lock_path=root / "candidate-lock.json",
+                    bootstrap_samples=200,
+                )
+
     def test_rejects_run_ref_domain_seed_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -703,9 +745,9 @@ def _ensure_protocol(root: Path) -> str:
     source = root / "development.json"
     if not source.exists():
         tasks = [
-            ("airline", "air-1", "1" * 64, "a" * 64, "b" * 64),
-            ("retail", "ret-1", "2" * 64, "c" * 64, "d" * 64),
-            ("telecom", "tel-1", "3" * 64, "e" * 64, "f" * 64),
+            ("airline", "1" * 64, "b" * 64),
+            ("retail", "2" * 64, "d" * 64),
+            ("telecom", "3" * 64, "f" * 64),
         ]
         _write(
             source,
@@ -718,17 +760,19 @@ def _ensure_protocol(root: Path) -> str:
                 "salt_sha256": "0" * 64,
                 "task_count": len(tasks),
                 "family_count": len(tasks),
-                "family_ids": [item[2] for item in tasks],
+                "family_ids": [item[1] for item in tasks],
                 "tasks": [
                     {
                         "domain": domain,
-                        "raw_id": raw_id,
-                        "raw_id_sha256": _hash(raw_id),
-                        "task_sha256": task_sha,
+                        "raw_id": f"{domain}-task",
+                        "raw_id_sha256": _hash(f"{domain}-task"),
+                        "task_sha256": _canonical_sha256(
+                            _fixture_task(domain)
+                        ),
                         "prompt_sha256": prompt_sha,
                         "family_id": family_id,
                     }
-                    for domain, raw_id, family_id, task_sha, prompt_sha in tasks
+                    for domain, family_id, prompt_sha in tasks
                 ],
             },
         )
@@ -1125,6 +1169,7 @@ def _fingerprint_kind(rel: str) -> str:
 
 def _result(domain: str, seed: int, *, reward: float, db_match: bool) -> dict[str, Any]:
     task_id = f"{domain}-task"
+    task = _fixture_task(domain)
     return {
         "timestamp": "2026-07-23T00:00:00",
         "info": {
@@ -1139,7 +1184,7 @@ def _result(domain: str, seed: int, *, reward: float, db_match: bool) -> dict[st
             "agent_info": {"implementation": "llm_agent", "llm": "candidate-model", "llm_args": _llm_args()},
             "environment_info": {"domain_name": domain, "policy": f"{domain} policy", "tool_defs": [{"name": "tool"}]},
         },
-        "tasks": [{"id": task_id, "user_scenario": {"instructions": "raw"}, "evaluation_criteria": {"assertions": ["raw"]}}],
+        "tasks": [task],
         "simulations": [
             {
                 "id": f"sim-{task_id}",
@@ -1153,6 +1198,14 @@ def _result(domain: str, seed: int, *, reward: float, db_match: bool) -> dict[st
                 "review": {"errors": []},
             }
         ],
+    }
+
+
+def _fixture_task(domain: str) -> dict[str, Any]:
+    return {
+        "id": f"{domain}-task",
+        "user_scenario": {"instructions": "raw"},
+        "evaluation_criteria": {"assertions": ["raw"]},
     }
 
 
