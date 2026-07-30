@@ -467,11 +467,14 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 
 Development and sealed benchmark arms also require
 `--evaluator-model-contract`. The runner rejects user-simulator or reviewer
-endpoints whose model string differs from that frozen contract, stages the
-contract into every arm, and binds its digest into prelaunch, final, and
-domain/seed receipts. Strict benchmark-result validation independently replays
-the canonical evaluator identity and requires the same binding across every
-arm. `build_tau3_execution_bundle.py` requires the same
+endpoints unless both use the exact `openai/<frozen-model-id>` loopback
+transport spelling. LiteLLM removes only that transport prefix before sending
+the frozen logical model ID to the governed local server; other providers,
+aliases, and a bare unroutable ID fail closed. The runner stages the contract
+into every arm and binds its digest into prelaunch, final, and domain/seed
+receipts. Strict benchmark-result validation independently replays the
+canonical evaluator identity and requires the same binding across every arm.
+`build_tau3_execution_bundle.py` requires the same
 `--evaluator-model-contract` input and copies it into the portable private
 bundle. Development selection records its digest in the candidate lock, so a
 sealed arm fails before task access if its evaluator contract differs from the
