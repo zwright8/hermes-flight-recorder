@@ -808,8 +808,28 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
 
     _check_loaded_schema(target, selection, "tau3_candidate_selection", "candidate selection")
     _check_loaded_schema(target, identity, "tau3_candidate_identity", "candidate identity")
-    _check_loaded_schema(target, lock, "tau3_candidate_lock", "candidate lock")
-    _check_loaded_schema(target, authorization, "tau3_sealed_authorization", "sealed authorization")
+    _check_loaded_schema(
+        target,
+        lock,
+        (
+            "tau3_candidate_lock_v2"
+            if _nested(lock.payload, "schema_version")
+            == "hfr.tau3_candidate_lock.v2"
+            else "tau3_candidate_lock"
+        ),
+        "candidate lock",
+    )
+    _check_loaded_schema(
+        target,
+        authorization,
+        (
+            "tau3_sealed_authorization_v2"
+            if _nested(authorization.payload, "schema_version")
+            == "hfr.tau3_sealed_authorization.v2"
+            else "tau3_sealed_authorization"
+        ),
+        "sealed authorization",
+    )
     _check_loaded_schema(target, grid, "tau3_sealed_grid_completeness", "sealed grid completeness")
     _check_loaded_schema(target, promotion, "tau3_promotion_publication_preflight", "promotion preflight")
     if evaluation.path is not None:
@@ -827,6 +847,30 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
             _require(target, bindings.get("authorization_sha256") == authorization.sha256, "sealed grid must bind authorization sha256")
         if lock.sha256 is not None:
             _require(target, bindings.get("candidate_lock_sha256") == lock.sha256, "sealed grid must bind candidate lock sha256")
+        if (
+            isinstance(authorization.payload, dict)
+            and authorization.payload.get("schema_version")
+            == "hfr.tau3_sealed_authorization.v2"
+            and isinstance(lock.payload, dict)
+        ):
+            _require(
+                target,
+                bindings.get("training_protocol_sha256")
+                == lock.payload.get("training_protocol_sha256"),
+                "sealed grid must bind v2 training protocol sha256",
+            )
+            _require(
+                target,
+                bindings.get("protocol_sha256")
+                == lock.payload.get("benchmark_protocol_sha256"),
+                "sealed grid must bind v2 benchmark protocol sha256",
+            )
+            _require(
+                target,
+                bindings.get("benchmark_protocol_lineage_sha256")
+                == lock.payload.get("benchmark_protocol_lineage_sha256"),
+                "sealed grid must bind v2 benchmark protocol lineage sha256",
+            )
     if isinstance(lock.payload, dict):
         if selection.sha256 is not None:
             _require(target, lock.payload.get("development_selection_report_sha256") == selection.sha256, "candidate lock must bind selection report sha256")
@@ -841,6 +885,46 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
         sealed_source = _load_ref_path(root, target, auth_inputs.get("sealed_source_manifest"), "sealed_authorization_validation.sealed_source_manifest")
         seeds = tuple(int(seed) for seed in auth_inputs.get("seeds", []) if isinstance(seed, int))
         if protocol is not None and sealed_source is not None:
+            v2 = (
+                isinstance(authorization.payload, dict)
+                and authorization.payload.get("schema_version")
+                == "hfr.tau3_sealed_authorization.v2"
+            )
+            v2_paths: dict[str, Path | None] = {}
+            if v2:
+                _require(
+                    target,
+                    isinstance(lock.payload, dict)
+                    and lock.payload.get("schema_version")
+                    == "hfr.tau3_candidate_lock.v2",
+                    "v2 sealed authorization requires a v2 candidate lock",
+                )
+                for key in (
+                    "training_protocol",
+                    "benchmark_protocol_lineage",
+                    "custody_receipt",
+                    "generator_validation",
+                    "fresh_contamination_replay",
+                ):
+                    v2_paths[key] = _load_ref_path(
+                        root,
+                        target,
+                        auth_inputs.get(key),
+                        f"sealed_authorization_validation.{key}",
+                    )
+                retired_source_incident_sha256 = auth_inputs.get(
+                    "retired_source_incident_sha256"
+                )
+                _require_sha(
+                    target,
+                    retired_source_incident_sha256,
+                    (
+                        "sealed_authorization_validation."
+                        "retired_source_incident_sha256"
+                    ),
+                )
+            else:
+                retired_source_incident_sha256 = None
             try:
                 auth_result = validate_tau3_sealed_authorization(
                     authorization_path=authorization.path,
@@ -851,8 +935,49 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
                     seeds=seeds,
                     expected_tau_revision=str(auth_inputs.get("expected_tau_revision") or ""),
                     expected_authorization_sha256=authorization.sha256,
+                    training_protocol_path=v2_paths.get("training_protocol"),
+                    benchmark_protocol_lineage_path=v2_paths.get(
+                        "benchmark_protocol_lineage"
+                    ),
+                    custody_receipt_path=v2_paths.get("custody_receipt"),
+                    generator_validation_path=v2_paths.get(
+                        "generator_validation"
+                    ),
+                    fresh_contamination_replay_path=v2_paths.get(
+                        "fresh_contamination_replay"
+                    ),
+                    retired_source_incident_sha256=(
+                        str(retired_source_incident_sha256)
+                        if isinstance(retired_source_incident_sha256, str)
+                        else None
+                    ),
                 )
                 _require(target, auth_result.get("authorized") is True, "sealed authorization replay must authorize")
+                if v2 and isinstance(grid.payload, dict):
+                    bindings = _dict(grid.payload.get("bindings"))
+                    for result_key, binding_key in (
+                        (
+                            "training_protocol_sha256",
+                            "training_protocol_sha256",
+                        ),
+                        (
+                            "benchmark_protocol_lineage_sha256",
+                            "benchmark_protocol_lineage_sha256",
+                        ),
+                        (
+                            "blind_custody_receipt_sha256",
+                            "blind_custody_receipt_sha256",
+                        ),
+                    ):
+                        _require(
+                            target,
+                            auth_result.get(result_key)
+                            == bindings.get(binding_key),
+                            (
+                                "sealed authorization replay "
+                                f"{result_key} must match sealed grid"
+                            ),
+                        )
             except (Tau3SealedAuthorizationError, OSError, ValueError, json.JSONDecodeError) as exc:
                 target.errors.append(f"sealed authorization does not replay: {exc}")
     elif authorization.path is not None:
@@ -1437,7 +1562,7 @@ def _development_trial_replay(payload: dict[str, Any]) -> dict[str, Any]:
     if missing:
         errors.append(f"development grid missing {len(missing)} trial(s)")
     count = len(trials)
-    metrics = {
+    metrics: dict[str, Any] = {
         "macro_pass1": {
             "adapter": adapter_total / count if count else 0.0,
             "base": base_total / count if count else 0.0,

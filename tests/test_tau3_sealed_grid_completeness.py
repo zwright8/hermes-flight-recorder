@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import subprocess
@@ -10,6 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
+from flightrecorder.tau3_benchmark_protocol_lineage import (
+    create_tau3_benchmark_protocol_lineage,
+    create_tau3_blind_custody_receipt,
+)
 from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
 import flightrecorder.tau3_sealed_grid_completeness as sealed_grid
 from flightrecorder.tau3_sealed_grid_completeness import (
@@ -19,6 +24,7 @@ from flightrecorder.tau3_sealed_grid_completeness import (
     Tau3SealedGridCompletenessError,
     build_tau3_sealed_grid_completeness,
 )
+from tests.test_tau3_benchmark_protocol_lineage import INCIDENT_SHA
 
 
 class Tau3SealedGridCompletenessTests(unittest.TestCase):
@@ -45,6 +51,41 @@ class Tau3SealedGridCompletenessTests(unittest.TestCase):
             self.assertNotIn("airline-0", rendered)
             self.assertNotIn(str(root), rendered)
             self.assertNotIn("reward", rendered)
+
+    def test_builds_v2_grid_with_dual_protocol_and_blind_custody_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = build_v2_grid_fixture(root)
+
+            artifact = build_tau3_sealed_grid_completeness(
+                arm_manifests=fixture["arm_manifests"],
+                candidate_lock=fixture["candidate_lock"],
+                protocol=fixture["protocol"],
+                sealed_source_manifest=fixture["sealed_source"],
+                sealed_authorization=fixture["authorization"],
+                training_protocol=fixture["training_protocol"],
+                benchmark_protocol_lineage=fixture["benchmark_protocol_lineage"],
+                custody_receipt=fixture["custody_receipt"],
+                generator_validation=fixture["generator_validation"],
+                fresh_contamination_replay=fixture["fresh_contamination_replay"],
+                retired_source_incident_sha256=INCIDENT_SHA,
+                expected_tau_revision="a" * 40,
+                out=root / "v2-completeness.json",
+                created_at="2026-07-30T00:30:00Z",
+            )
+
+            self.assertTrue(artifact["passed"])
+            self.assertEqual(
+                artifact["bindings"]["training_protocol_sha256"],
+                sha256_file(fixture["training_protocol"]),
+            )
+            self.assertEqual(
+                artifact["bindings"]["benchmark_protocol_lineage_sha256"],
+                sha256_file(fixture["benchmark_protocol_lineage"]),
+            )
+            self.assertTrue(
+                artifact["gates"]["blind_custody_binding_replayed"]
+            )
 
     def test_rejects_99_and_101_tasks(self) -> None:
         for count in (99, 101):
@@ -293,6 +334,250 @@ def build_grid_fixture(root: Path) -> dict[str, Any]:
         for arm in REQUIRED_ARMS
     ]
     return {"sealed_source": sealed_source_path, "authorization": authorization_path, "candidate_lock": lock_path, "protocol": protocol_path, "arm_manifests": arm_paths}
+
+
+def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
+    tasks_by_domain = {
+        "airline": [f"airline-{index}" for index in range(34)],
+        "retail": [f"retail-{index}" for index in range(33)],
+        "telecom": [f"telecom-{index}" for index in range(33)],
+    }
+    sealed_source = {
+        "schema_version": "hfr.tau3_sealed_source_manifest.v1",
+        "source_revision": "a" * 40,
+        "hashes_only": True,
+        "task_count": 100,
+        "domain_counts": {"airline": 34, "retail": 33, "telecom": 33},
+        "entries": [
+            {
+                "domain": domain,
+                "task_id_sha256": task_hash(domain, task_id),
+                "prompt_sha256": sha256_text(f"prompt:{domain}:{task_id}"),
+                "task_sha256": sha256_text(f"task:{domain}:{task_id}"),
+            }
+            for domain in REQUIRED_DOMAINS
+            for task_id in tasks_by_domain[domain]
+        ],
+    }
+    sealed_source_path = write_json(root / "sealed-source.json", sealed_source)
+    fresh_sha256 = sha256_file(sealed_source_path)
+    retired_sha256 = "7" * 64
+
+    training_protocol = protocol_payload(sealed_source_path)
+    training_protocol["tau_revision"]["split_hashes"]["sealed"] = retired_sha256
+    training_protocol["split_manifest"]["source_manifest"] = {
+        "local_path": "custody/retired-source.json",
+        "sha256": "6" * 64,
+    }
+    training_protocol["split_manifest"]["splits"]["sealed"] = {
+        "local_path": "custody/retired-sealed.json",
+        "sealed": True,
+        "sha256": retired_sha256,
+    }
+    training_protocol["sealed_manifest"] = {
+        "access_count": 0,
+        "manifest_sha256": retired_sha256,
+        "prompt_template_hashes": ["5" * 64],
+    }
+    training_protocol_path = write_json(
+        root / "training-protocol.json",
+        training_protocol,
+    )
+    benchmark_protocol = copy.deepcopy(training_protocol)
+    benchmark_protocol["tau_revision"]["split_hashes"]["sealed"] = fresh_sha256
+    benchmark_protocol["split_manifest"]["source_manifest"] = {
+        "local_path": "custody/fresh-source.json",
+        "sha256": "4" * 64,
+    }
+    benchmark_protocol["split_manifest"]["splits"]["sealed"] = {
+        "local_path": "custody/fresh-sealed.json",
+        "sealed": True,
+        "sha256": fresh_sha256,
+    }
+    benchmark_protocol["sealed_manifest"] = {
+        "access_count": 0,
+        "manifest_sha256": fresh_sha256,
+        "leakage_blocking_hashes": sorted(
+            {
+                entry[key]
+                for entry in sealed_source["entries"]
+                for key in (
+                    "task_id_sha256",
+                    "prompt_sha256",
+                    "task_sha256",
+                )
+            }
+        ),
+        "prompt_template_hashes": sorted(
+            entry["prompt_sha256"] for entry in sealed_source["entries"]
+        ),
+    }
+    benchmark_protocol_path = write_json(
+        root / "benchmark-protocol.json",
+        benchmark_protocol,
+    )
+
+    generator_path = write_json(
+        root / "generator-validation.json",
+        {
+            "schema_version": "hfr.tau3_blind_generator_validation.v1",
+            "created_at": "2026-07-30T00:00:00Z",
+            "passed": True,
+            "source_revision": "a" * 40,
+            "sealed_source_manifest_sha256": fresh_sha256,
+            "task_count": 100,
+            "domain_counts": {"airline": 34, "retail": 33, "telecom": 33},
+            "generator_source": {
+                "commit_sha": "3" * 40,
+                "script_sha256": "3" * 64,
+            },
+            "golden_replay": {
+                "passed": True,
+                "replayed_task_count": 100,
+                "passed_task_count": 100,
+                "failed_task_count": 0,
+                "state_check_failure_count": 0,
+            },
+            "schema_validation_passed": True,
+            "task_hashes_unique": True,
+            "prompt_hashes_unique": True,
+            "hashes_only": True,
+            "local_paths_included": False,
+            "raw_payload_included": False,
+        },
+    )
+    contamination_path = write_json(
+        root / "fresh-contamination.json",
+        {
+            "schema_version": "hfr.tau3_fresh_contamination_replay.v1",
+            "created_at": "2026-07-30T00:00:01Z",
+            "passed": True,
+            "training_dataset_sha256": "1" * 64,
+            "development_source_sha256": "2" * 64,
+            "retired_sealed_source_manifest_sha256": retired_sha256,
+            "fresh_sealed_source_manifest_sha256": fresh_sha256,
+            "overlaps": {
+                f"{source}_{kind}": 0
+                for source in ("training", "development", "retired_sealed")
+                for kind in ("task", "task_id", "prompt", "family")
+            },
+            "hashes_only": True,
+            "local_paths_included": False,
+            "raw_payload_included": False,
+        },
+    )
+    custody_path = root / "custody.json"
+    create_tau3_blind_custody_receipt(
+        custody_id="opaque-grid-v2",
+        sealed_source_manifest=sealed_source_path,
+        generator_validation=generator_path,
+        fresh_contamination_replay=contamination_path,
+        retired_source_incident_sha256=INCIDENT_SHA,
+        out=custody_path,
+        created_at="2026-07-30T00:01:00Z",
+    )
+    lineage_path = root / "benchmark-protocol-lineage.json"
+    create_tau3_benchmark_protocol_lineage(
+        training_protocol=training_protocol_path,
+        benchmark_protocol=benchmark_protocol_path,
+        custody_receipt=custody_path,
+        sealed_source_manifest=sealed_source_path,
+        generator_validation=generator_path,
+        fresh_contamination_replay=contamination_path,
+        retired_source_incident_sha256=INCIDENT_SHA,
+        out=lineage_path,
+        created_at="2026-07-30T00:02:00Z",
+    )
+
+    lock = candidate_lock_payload(benchmark_protocol_path)
+    lock.update(
+        {
+            "schema_version": "hfr.tau3_candidate_lock.v2",
+            "evaluator_model_contract_sha256": "0" * 64,
+            "training_protocol_sha256": sha256_file(training_protocol_path),
+            "training_protocol_signature": sha256_file(training_protocol_path),
+            "benchmark_protocol_sha256": sha256_file(benchmark_protocol_path),
+            "benchmark_protocol_signature": sha256_file(benchmark_protocol_path),
+            "benchmark_protocol_lineage_sha256": sha256_file(lineage_path),
+        }
+    )
+    lock.pop("protocol_sha256")
+    lock.pop("protocol_signature")
+    lock_path = write_json(root / "candidate-lock.json", lock)
+    authorization_path = root / "authorization.json"
+    create_tau3_sealed_authorization(
+        candidate_lock=lock_path,
+        protocol=benchmark_protocol_path,
+        sealed_source_manifest=sealed_source_path,
+        out=authorization_path,
+        created_at="2026-07-30T00:03:00Z",
+        training_protocol=training_protocol_path,
+        benchmark_protocol_lineage=lineage_path,
+        custody_receipt=custody_path,
+        generator_validation=generator_path,
+        fresh_contamination_replay=contamination_path,
+        retired_source_incident_sha256=INCIDENT_SHA,
+    )
+    arm_paths = [
+        build_arm(
+            root,
+            arm,
+            tasks_by_domain,
+            protocol_path=benchmark_protocol_path,
+            lock_path=lock_path,
+            sealed_source_path=sealed_source_path,
+            authorization_path=authorization_path,
+        )
+        for arm in REQUIRED_ARMS
+    ]
+    for arm_path in arm_paths:
+        arm_dir = arm_path.parent
+        staged = {
+            "training_protocol": (
+                training_protocol_path,
+                "training-protocol.json",
+            ),
+            "benchmark_protocol_lineage": (
+                lineage_path,
+                "benchmark-protocol-lineage.json",
+            ),
+            "blind_custody_receipt": (custody_path, "custody.json"),
+            "blind_generator_validation": (
+                generator_path,
+                "generator-validation.json",
+            ),
+            "fresh_contamination_replay": (
+                contamination_path,
+                "fresh-contamination.json",
+            ),
+        }
+        arm_manifest = read_json(arm_path)
+        for key, (source, name) in staged.items():
+            copy_json(source, arm_dir / name)
+            arm_manifest[key] = ref(name, arm_dir / name)
+        arm_manifest["retired_source_incident_sha256"] = INCIDENT_SHA
+        arm_manifest["sealed_authorization"].update(
+            {
+                "training_protocol_sha256": sha256_file(
+                    training_protocol_path
+                ),
+                "benchmark_protocol_lineage_sha256": sha256_file(lineage_path),
+                "blind_custody_receipt_sha256": sha256_file(custody_path),
+            }
+        )
+        write_json(arm_path, arm_manifest)
+    return {
+        "sealed_source": sealed_source_path,
+        "authorization": authorization_path,
+        "candidate_lock": lock_path,
+        "protocol": benchmark_protocol_path,
+        "training_protocol": training_protocol_path,
+        "benchmark_protocol_lineage": lineage_path,
+        "custody_receipt": custody_path,
+        "generator_validation": generator_path,
+        "fresh_contamination_replay": contamination_path,
+        "arm_manifests": arm_paths,
+    }
 
 
 def protocol_payload(sealed_source_path: Path) -> dict[str, Any]:

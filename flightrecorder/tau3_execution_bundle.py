@@ -58,6 +58,8 @@ def build_tau3_execution_bundle(
     public_report: str | Path,
     expected_source_hashes: Mapping[str, str] | None = None,
     make_read_only: bool = True,
+    training_protocol: str | Path | None = None,
+    benchmark_protocol_lineage: str | Path | None = None,
 ) -> dict[str, Any]:
     """Copy portable Tau-3 evidence into a fresh execution bundle directory."""
 
@@ -71,7 +73,23 @@ def build_tau3_execution_bundle(
     out = Path(out_dir)
     _require_fresh_output(out)
     expected = dict(expected_source_hashes or {})
+    if (training_protocol is None) != (benchmark_protocol_lineage is None):
+        raise Tau3ExecutionBundleError(
+            "training_protocol and benchmark_protocol_lineage must be provided together"
+        )
     _check_expected_hash("protocol", Path(protocol), expected)
+    if training_protocol is not None:
+        assert benchmark_protocol_lineage is not None
+        _check_expected_hash(
+            "training_protocol",
+            Path(training_protocol),
+            expected,
+        )
+        _check_expected_hash(
+            "benchmark_protocol_lineage",
+            Path(benchmark_protocol_lineage),
+            expected,
+        )
     _check_expected_hash(
         "evaluator_model_contract",
         Path(evaluator_model_contract),
@@ -96,6 +114,26 @@ def build_tau3_execution_bundle(
     out.mkdir(mode=0o700)
     try:
         protocol_ref = _copy_file(Path(protocol), out / "protocol.json", out, expected_sha=expected.get("protocol"))
+        training_protocol_ref = (
+            _copy_file(
+                Path(training_protocol),
+                out / "training-protocol.json",
+                out,
+                expected_sha=expected.get("training_protocol"),
+            )
+            if training_protocol is not None
+            else None
+        )
+        benchmark_protocol_lineage_ref = (
+            _copy_file(
+                Path(benchmark_protocol_lineage),
+                out / "benchmark-protocol-lineage.json",
+                out,
+                expected_sha=expected.get("benchmark_protocol_lineage"),
+            )
+            if benchmark_protocol_lineage is not None
+            else None
+        )
         evaluator_model_contract_ref = _copy_file(
             Path(evaluator_model_contract),
             out / "evaluator-model-contract.json",
@@ -160,6 +198,14 @@ def build_tau3_execution_bundle(
                 "public_report": report_ref,
             },
         }
+        if (
+            training_protocol_ref is not None
+            and benchmark_protocol_lineage_ref is not None
+        ):
+            manifest["training_protocol"] = training_protocol_ref
+            manifest["benchmark_protocol_lineage"] = (
+                benchmark_protocol_lineage_ref
+            )
         _reject_private_manifest_paths(manifest)
         _write_manifest(out / "manifest.json", manifest)
         _verify_manifest_refs(out, manifest)
@@ -315,6 +361,10 @@ def _verify_manifest_refs(root: Path, manifest: dict[str, Any]) -> None:
         *manifest["benchmark"]["sealed_arms"],
         manifest["benchmark"]["public_report"],
     ]
+    for key in ("training_protocol", "benchmark_protocol_lineage"):
+        ref = manifest.get(key)
+        if isinstance(ref, dict):
+            refs.append(ref)
     for ref in refs:
         path = root / ref["path"]
         if not path.is_file():

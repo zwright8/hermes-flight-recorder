@@ -343,6 +343,50 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
 
             self.assertTrue(result["passed"], json.dumps(result, indent=2))
 
+    def test_final_stage_forwards_complete_v2_authorization_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root)
+            expected = upgrade_final_fixture_to_v2_stub(root)
+            replay = {
+                "authorized": True,
+                "training_protocol_sha256": expected["training_protocol_sha256"],
+                "benchmark_protocol_lineage_sha256": expected[
+                    "benchmark_protocol_lineage_sha256"
+                ],
+                "blind_custody_receipt_sha256": expected[
+                    "blind_custody_receipt_sha256"
+                ],
+            }
+            with mock.patch.object(
+                competitive_v3_module,
+                "_check_loaded_schema",
+            ), mock.patch.object(
+                competitive_v3_module,
+                "validate_tau3_sealed_authorization",
+                return_value=replay,
+            ) as authorization_replay:
+                result = validate_tau3_competitive_v3_bundle(
+                    root,
+                    strict=True,
+                    stage="final",
+                )
+
+            self.assertTrue(result["passed"], json.dumps(result, indent=2))
+            kwargs = authorization_replay.call_args.kwargs
+            for key in (
+                "training_protocol_path",
+                "benchmark_protocol_lineage_path",
+                "custody_receipt_path",
+                "generator_validation_path",
+                "fresh_contamination_replay_path",
+            ):
+                self.assertIsNotNone(kwargs[key])
+            self.assertEqual(
+                kwargs["retired_source_incident_sha256"],
+                "f" * 64,
+            )
+
     def test_final_stage_rejects_unsupported_competitive_claim(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1742,6 +1786,149 @@ def build_publication_evidence(root: Path) -> dict[str, str]:
             },
         },
     )
+
+
+def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
+    final_path = root / "final-evidence.json"
+    final = read_json(final_path)
+    artifacts = final["artifacts"]
+    lock_path = root / artifacts["candidate_lock"]["path"]
+    lock = read_json(lock_path)
+    training_protocol_sha256 = "1" * 64
+    benchmark_protocol_sha256 = "2" * 64
+    benchmark_protocol_lineage_sha256 = "3" * 64
+    blind_custody_receipt_sha256 = "4" * 64
+    lock.update(
+        {
+            "schema_version": "hfr.tau3_candidate_lock.v2",
+            "evaluator_model_contract_sha256": "5" * 64,
+            "training_protocol_sha256": training_protocol_sha256,
+            "training_protocol_signature": training_protocol_sha256,
+            "benchmark_protocol_sha256": benchmark_protocol_sha256,
+            "benchmark_protocol_signature": benchmark_protocol_sha256,
+            "benchmark_protocol_lineage_sha256": (
+                benchmark_protocol_lineage_sha256
+            ),
+        }
+    )
+    lock.pop("protocol_sha256")
+    lock.pop("protocol_signature")
+    write_json(lock_path, lock)
+    artifacts["candidate_lock"]["sha256"] = sha256_file(lock_path)
+
+    authorization_path = root / artifacts["sealed_authorization"]["path"]
+    authorization = read_json(authorization_path)
+    authorization["schema_version"] = "hfr.tau3_sealed_authorization.v2"
+    authorization["candidate_lock"] = {
+        "sha256": artifacts["candidate_lock"]["sha256"],
+        "created_at": lock["created_at"],
+        "training_protocol_sha256": training_protocol_sha256,
+        "training_protocol_signature": training_protocol_sha256,
+        "benchmark_protocol_sha256": benchmark_protocol_sha256,
+        "benchmark_protocol_signature": benchmark_protocol_sha256,
+        "benchmark_protocol_lineage_sha256": (
+            benchmark_protocol_lineage_sha256
+        ),
+        "sealed_access_authorized": True,
+    }
+    authorization["protocol_lineage"] = {
+        "sha256": benchmark_protocol_lineage_sha256,
+        "training_protocol_sha256": training_protocol_sha256,
+        "benchmark_protocol_sha256": benchmark_protocol_sha256,
+    }
+    write_json(authorization_path, authorization)
+    artifacts["sealed_authorization"]["sha256"] = sha256_file(
+        authorization_path
+    )
+
+    grid_path = root / artifacts["sealed_grid_completeness"]["path"]
+    grid = read_json(grid_path)
+    grid["bindings"].update(
+        {
+            "authorization_sha256": artifacts["sealed_authorization"][
+                "sha256"
+            ],
+            "candidate_lock_sha256": artifacts["candidate_lock"]["sha256"],
+            "protocol_sha256": benchmark_protocol_sha256,
+            "training_protocol_sha256": training_protocol_sha256,
+            "benchmark_protocol_lineage_sha256": (
+                benchmark_protocol_lineage_sha256
+            ),
+            "blind_custody_receipt_sha256": (
+                blind_custody_receipt_sha256
+            ),
+        }
+    )
+    write_json(grid_path, grid)
+    artifacts["sealed_grid_completeness"]["sha256"] = sha256_file(grid_path)
+
+    promotion_path = root / artifacts["promotion_preflight"]["path"]
+    promotion = read_json(promotion_path)
+    promotion["evidence_bindings"]["candidate_lock"]["sha256"] = artifacts[
+        "candidate_lock"
+    ]["sha256"]
+    write_json(promotion_path, promotion)
+    artifacts["promotion_preflight"]["sha256"] = sha256_file(promotion_path)
+    publication_path = root / "publication-preflight.json"
+    publication = read_json(publication_path)
+    post_path = root / publication["artifacts"]["post_publication"]["path"]
+    post = read_json(post_path)
+    post["preflight"]["sha256"] = artifacts["promotion_preflight"]["sha256"]
+    post["record_sha256"] = canonical_sha256(
+        {key: value for key, value in post.items() if key != "record_sha256"}
+    )
+    post_path.chmod(0o644)
+    write_json(post_path, post)
+    publication["artifacts"]["post_publication"]["sha256"] = sha256_file(
+        post_path
+    )
+    publication["artifacts"]["promotion_preflight"]["sha256"] = artifacts[
+        "promotion_preflight"
+    ]["sha256"]
+    parity_path = root / publication["artifacts"]["source_parity"]["path"]
+    parity = read_json(parity_path)
+    parity["artifact_hash_bindings"]["post_publication_record_sha256"] = (
+        sha256_file(post_path)
+    )
+    parity["artifact_hash_bindings"]["promotion_preflight_sha256"] = artifacts[
+        "promotion_preflight"
+    ]["sha256"]
+    write_json(parity_path, parity)
+    publication["artifacts"]["source_parity"]["sha256"] = sha256_file(
+        parity_path
+    )
+    write_json(publication_path, publication)
+
+    input_refs: dict[str, dict[str, str]] = {}
+    for key in (
+        "training_protocol",
+        "benchmark_protocol_lineage",
+        "custody_receipt",
+        "generator_validation",
+        "fresh_contamination_replay",
+    ):
+        path = root / "final" / f"{key}.json"
+        write_json(path, {"fixture": key})
+        input_refs[key] = ref_for(root, path)
+    final["sealed_authorization_validation"].update(input_refs)
+    final["sealed_authorization_validation"][
+        "retired_source_incident_sha256"
+    ] = "f" * 64
+    write_json(final_path, final)
+    plan_path = root / "competitive_v3_plan.json"
+    plan = read_json(plan_path)
+    plan["evidence_refs"]["final"]["sha256"] = sha256_file(final_path)
+    plan["evidence_refs"]["publication"]["sha256"] = sha256_file(
+        publication_path
+    )
+    write_json(plan_path, plan)
+    return {
+        "training_protocol_sha256": training_protocol_sha256,
+        "benchmark_protocol_lineage_sha256": (
+            benchmark_protocol_lineage_sha256
+        ),
+        "blind_custody_receipt_sha256": blind_custody_receipt_sha256,
+    }
 
 
 def candidate_selection() -> dict[str, Any]:

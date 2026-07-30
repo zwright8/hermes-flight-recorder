@@ -118,6 +118,70 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
             with self.assertRaisesRegex(Tau3ExecutionBundleError, "source hash mismatch"):
                 self._assemble(source, root / "bundle", expected_source_hashes={"protocol": "0" * 64})
 
+    def test_copies_paired_training_protocol_and_benchmark_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            build_execution_bundle(source)
+            training_protocol = source / "training-protocol.json"
+            training_protocol.write_text(
+                (source / "protocol.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            lineage = source / "benchmark-protocol-lineage.json"
+            lineage.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.tau3_benchmark_protocol_lineage.v1",
+                        "passed": True,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            out = root / "bundle"
+            manifest = self._assemble(
+                source,
+                out,
+                training_protocol=training_protocol,
+                benchmark_protocol_lineage=lineage,
+            )
+
+            self.assertEqual(
+                manifest["training_protocol"]["path"],
+                "training-protocol.json",
+            )
+            self.assertEqual(
+                manifest["benchmark_protocol_lineage"]["path"],
+                "benchmark-protocol-lineage.json",
+            )
+            self.assertEqual(
+                manifest["training_protocol"]["sha256"],
+                sha256_file(training_protocol),
+            )
+            self.assertEqual(
+                manifest["benchmark_protocol_lineage"]["sha256"],
+                sha256_file(lineage),
+            )
+
+    def test_rejects_unpaired_training_protocol_or_benchmark_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            build_execution_bundle(source)
+
+            with self.assertRaisesRegex(
+                Tau3ExecutionBundleError,
+                "must be provided together",
+            ):
+                self._assemble(
+                    source,
+                    root / "bundle",
+                    training_protocol=source / "protocol.json",
+                )
+
     @unittest.skipIf(os.name == "nt", "symlink behavior differs on Windows")
     def test_rejects_symlink_in_source_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -190,6 +254,8 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
         *,
         public_report: Path | None = None,
         expected_source_hashes: dict[str, str] | None = None,
+        training_protocol: Path | None = None,
+        benchmark_protocol_lineage: Path | None = None,
     ) -> dict[str, Any]:
         return build_tau3_execution_bundle(
             out_dir=out,
@@ -205,6 +271,8 @@ class Tau3ExecutionBundleTests(unittest.TestCase):
             sealed_arm_dirs=self._arms(source, "sealed"),
             public_report=public_report or source / "public-evaluation-report.json",
             expected_source_hashes=expected_source_hashes,
+            training_protocol=training_protocol,
+            benchmark_protocol_lineage=benchmark_protocol_lineage,
         )
 
     def _arms(self, source: Path, mode: str) -> list[ArmInput]:

@@ -10,6 +10,8 @@ manifest layout:
   "schema_version": "hfr.tau3_execution_bundle.v1",
   "code_revision": {"flight_recorder_git_commit": "...40 hex...", "tracked_worktree_clean": true},
   "protocol": {"path": "protocol.json", "sha256": "..."},
+  "training_protocol": {"path": "training-protocol.json", "sha256": "..."},
+  "benchmark_protocol_lineage": {"path": "benchmark-protocol-lineage.json", "sha256": "..."},
   "evaluator_model_contract": {"path": "evaluator-model-contract.json", "sha256": "..."},
   "training": {
     "selected_candidate_id": "candidate-a",
@@ -27,11 +29,14 @@ manifest layout:
 
 All manifest file references must be relative paths below the bundle root and
 must include SHA-256 digests. Candidate locks use the registered public-safe
-``hfr.tau3_candidate_lock.v1`` schema: they are hash-only selector outputs that
-bind one selected final training receipt to the adapter tree, recipe, base
-model, dataset, protocol, candidate identity, endpoint model, and development
-selection evidence before sealed evidence exists. The validator links the
-top-level selected receipt reference to ``training_receipt_sha256``.
+``hfr.tau3_candidate_lock.v1`` or ``hfr.tau3_candidate_lock.v2`` schema: they
+are hash-only selector outputs that bind one selected final training receipt
+to the adapter tree, recipe, base model, dataset, protocol, candidate identity,
+endpoint model, and development selection evidence before sealed evidence
+exists. Version 2 additionally binds separate training and fresh sealed
+benchmark protocols through a public-safe lineage artifact. The validator
+links the top-level selected receipt reference to
+``training_receipt_sha256``.
 
 ```
 {
@@ -74,9 +79,14 @@ from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
 from .tau3_mlx_training import validate_tau3_process_segments
 from .tau3_evaluation import analyze_tau3_evaluation
+from .tau3_sealed_authorization import (
+    Tau3SealedAuthorizationError,
+    validate_tau3_sealed_authorization,
+)
 
 EXECUTION_BUNDLE_SCHEMA_VERSION = "hfr.tau3_execution_bundle.v1"
 CANDIDATE_LOCK_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v1"
+CANDIDATE_LOCK_V2_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v2"
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 TAU3_MLX_TRAINING_RUN_SCHEMA_VERSION = "hfr.tau3_mlx_training_run.v1"
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
@@ -119,6 +129,28 @@ def validate_tau3_training_result_bundle(bundle: str | Path, *, strict: bool = F
     targets = [manifest_target]
     protocol = _load_ref_target(root, manifest.get("protocol"), "protocol")
     targets.append(protocol.target)
+    training_protocol = (
+        _load_ref_target(
+            root,
+            manifest.get("training_protocol"),
+            "training_protocol",
+        )
+        if isinstance(manifest.get("training_protocol"), dict)
+        else protocol
+    )
+    if training_protocol is not protocol:
+        targets.append(training_protocol.target)
+    protocol_lineage = (
+        _load_ref_target(
+            root,
+            manifest.get("benchmark_protocol_lineage"),
+            "benchmark_protocol_lineage",
+        )
+        if isinstance(manifest.get("benchmark_protocol_lineage"), dict)
+        else None
+    )
+    if protocol_lineage is not None:
+        targets.append(protocol_lineage.target)
     training = manifest.get("training") if isinstance(manifest.get("training"), dict) else {}
     if not training:
         targets.append(_missing_target(root, "training", "manifest missing training object"))
@@ -151,7 +183,15 @@ def validate_tau3_training_result_bundle(bundle: str | Path, *, strict: bool = F
     targets.append(lock.target)
     selected_candidate_id = training.get("selected_candidate_id")
     if isinstance(lock.payload, dict):
-        _validate_candidate_lock(lock.target, lock.payload, selected=selected, protocol=protocol, selected_candidate_id=selected_candidate_id)
+        _validate_candidate_lock(
+            lock.target,
+            lock.payload,
+            selected=selected,
+            benchmark_protocol=protocol,
+            training_protocol=training_protocol,
+            protocol_lineage=protocol_lineage,
+            selected_candidate_id=selected_candidate_id,
+        )
         if isinstance(selected_candidate_id, str) and selected_candidate_id:
             _require(lock.target, lock.payload.get("selected_candidate_id_hash") == _canonical_sha256(selected_candidate_id), "candidate lock selected_candidate_id_hash does not match selected_candidate_id")
         if isinstance(selection.payload, dict):
@@ -730,9 +770,22 @@ def _validate_training_telemetry(target: _Target, path: Path, receipt: dict[str,
     target.details.update({"event_count": event_count, "train_loss_count": len(observed_train_losses), "validation_loss_count": len(observed_validation_losses)})
 
 
-def _validate_candidate_lock(target: _Target, lock: dict[str, Any], *, selected: _Loaded, protocol: _Loaded, selected_candidate_id: Any) -> None:
-    _check_schema(target, lock, "tau3_candidate_lock")
-    _require(target, lock.get("schema_version") == CANDIDATE_LOCK_SCHEMA_VERSION, f"candidate lock schema_version must be {CANDIDATE_LOCK_SCHEMA_VERSION}")
+def _validate_candidate_lock(
+    target: _Target,
+    lock: dict[str, Any],
+    *,
+    selected: _Loaded,
+    benchmark_protocol: _Loaded,
+    training_protocol: _Loaded,
+    protocol_lineage: _Loaded | None,
+    selected_candidate_id: Any,
+) -> None:
+    version = lock.get("schema_version")
+    if version == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+        _check_schema(target, lock, "tau3_candidate_lock_v2")
+    else:
+        _check_schema(target, lock, "tau3_candidate_lock")
+        _require(target, version == CANDIDATE_LOCK_SCHEMA_VERSION, f"candidate lock schema_version must be {CANDIDATE_LOCK_SCHEMA_VERSION}")
     _require(target, not _private_path_hits(lock), "candidate lock must not contain absolute/private paths")
     _require(target, _parse_time(lock.get("created_at")) is not None, "candidate lock missing parseable created_at")
     _require(target, lock.get("hashes_only") is True, "candidate lock must be hashes_only")
@@ -745,7 +798,6 @@ def _validate_candidate_lock(target: _Target, lock: dict[str, Any], *, selected:
     dataset = _dict(binding.get("dataset"))
     recipe = _dict(binding.get("recipe"))
     expected = {
-        "protocol_sha256": protocol.sha256 or _nested(binding, "protocol", "sha256"),
         "adapter_tree_sha256": adapter.get("tree_sha256"),
         "recipe_sha256": recipe.get("recipe_sha256"),
         "base_identity_sha256": model.get("identity_sha256"),
@@ -753,8 +805,56 @@ def _validate_candidate_lock(target: _Target, lock: dict[str, Any], *, selected:
         "dataset_manifest_sha256": dataset.get("manifest_sha256"),
         "dataset_files_sha256": dataset.get("files_sha256"),
         "source_binding_sha256": dataset.get("source_binding_sha256"),
-        "protocol_signature": _nested(binding, "protocol", "protocol_signature"),
     }
+    if version == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+        _require(
+            target,
+            _nested(binding, "protocol", "protocol_signature")
+            == _protocol_signature_sha256(training_protocol),
+            "selected receipt training protocol signature does not replay",
+        )
+        expected.update(
+            {
+                "training_protocol_sha256": (
+                    training_protocol.sha256
+                    or _nested(binding, "protocol", "sha256")
+                ),
+                "training_protocol_signature": _nested(
+                    binding,
+                    "protocol",
+                    "protocol_signature",
+                ),
+                "benchmark_protocol_sha256": benchmark_protocol.sha256,
+                "benchmark_protocol_signature": _protocol_signature_sha256(
+                    benchmark_protocol
+                ),
+                "benchmark_protocol_lineage_sha256": (
+                    protocol_lineage.sha256
+                    if protocol_lineage is not None
+                    else None
+                ),
+            }
+        )
+        _validate_protocol_lineage(
+            target,
+            protocol_lineage,
+            training_protocol=training_protocol,
+            benchmark_protocol=benchmark_protocol,
+        )
+    else:
+        expected.update(
+            {
+                "protocol_sha256": (
+                    benchmark_protocol.sha256
+                    or _nested(binding, "protocol", "sha256")
+                ),
+                "protocol_signature": _nested(
+                    binding,
+                    "protocol",
+                    "protocol_signature",
+                ),
+            }
+        )
     _require(target, lock.get("training_receipt_sha256") == selected.sha256, "candidate lock training_receipt_sha256 does not match selected receipt")
     if isinstance(selected_candidate_id, str) and selected_candidate_id:
         _require(target, lock.get("selected_candidate_id_hash") == _canonical_sha256(selected_candidate_id), "candidate lock selected_candidate_id_hash mismatch")
@@ -762,6 +862,72 @@ def _validate_candidate_lock(target: _Target, lock: dict[str, Any], *, selected:
         _require(target, isinstance(value, str) and bool(SHA256_RE.fullmatch(value)), f"selected receipt missing {key} source field")
         _require(target, lock.get(key) == value, f"candidate lock {key} mismatch")
     target.details["selected_candidate_id_hash"] = lock.get("selected_candidate_id_hash")
+
+
+def _validate_protocol_lineage(
+    target: _Target,
+    lineage: _Loaded | None,
+    *,
+    training_protocol: _Loaded,
+    benchmark_protocol: _Loaded,
+) -> None:
+    _require(
+        target,
+        lineage is not None,
+        "v2 candidate lock requires benchmark protocol lineage",
+    )
+    if lineage is None or not isinstance(lineage.payload, dict):
+        return
+    payload = lineage.payload
+    _check_schema(
+        lineage.target,
+        payload,
+        "tau3_benchmark_protocol_lineage",
+    )
+    _require(
+        lineage.target,
+        payload.get("schema_version")
+        == "hfr.tau3_benchmark_protocol_lineage.v1",
+        "benchmark protocol lineage schema_version mismatch",
+    )
+    seal = payload.get("lineage_sha256")
+    unsealed = {
+        key: value
+        for key, value in payload.items()
+        if key != "lineage_sha256"
+    }
+    _require(
+        lineage.target,
+        seal == _canonical_sha256(unsealed),
+        "benchmark protocol lineage self-seal mismatch",
+    )
+    _require(
+        lineage.target,
+        payload.get("training_protocol_sha256") == training_protocol.sha256,
+        "benchmark protocol lineage training protocol mismatch",
+    )
+    _require(
+        lineage.target,
+        payload.get("benchmark_protocol_sha256") == benchmark_protocol.sha256,
+        "benchmark protocol lineage benchmark protocol mismatch",
+    )
+    _require(
+        lineage.target,
+        payload.get("passed") is True
+        and all(
+            value is True
+            for value in _dict(payload.get("gates")).values()
+        ),
+        "benchmark protocol lineage gates did not pass",
+    )
+
+
+def _protocol_signature_sha256(protocol: _Loaded) -> str | None:
+    payload = protocol.payload if isinstance(protocol.payload, dict) else {}
+    signature = payload.get("protocol_signature")
+    if isinstance(signature, str) and SHA256_RE.fullmatch(signature):
+        return signature
+    return protocol.sha256
 
 
 def _load_candidate_selection_report(root: Path, record: Any, manifest_target: _Target) -> _Loaded:
@@ -791,6 +957,26 @@ def _validate_candidate_selection(
     _require(target, report.get("schema_checked") is True, "candidate selection report must set schema_checked=true")
     _require(target, report.get("selected_candidate_id") == selected_candidate_id, "candidate selection selected_candidate_id does not match manifest")
     _require(target, lock.get("development_selection_report_sha256") == selection.sha256, "candidate lock development_selection_report_sha256 does not match selection report")
+    if lock.get("schema_version") == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+        lineage = _dict(report.get("benchmark_protocol_lineage"))
+        _require(
+            target,
+            lineage.get("sha256")
+            == lock.get("benchmark_protocol_lineage_sha256"),
+            "selection benchmark protocol lineage does not match lock",
+        )
+        _require(
+            target,
+            lineage.get("training_protocol_sha256")
+            == lock.get("training_protocol_sha256"),
+            "selection training protocol does not match lock",
+        )
+        _require(
+            target,
+            lineage.get("benchmark_protocol_sha256")
+            == lock.get("benchmark_protocol_sha256"),
+            "selection benchmark protocol does not match lock",
+        )
     chosen = _dict(report.get("selection"))
     _require(target, chosen.get("candidate_id") == selected_candidate_id, "selection candidate_id does not match selected candidate")
     _require(target, chosen.get("candidate_identity_sha256") == lock.get("candidate_identity_sha256"), "selection candidate_identity_sha256 does not match lock")
@@ -867,6 +1053,12 @@ def _validate_benchmark_arm_refs(
             "config",
             "candidate_lock",
             "candidate_identity",
+            "training_protocol",
+            "benchmark_protocol_lineage",
+            "blind_custody_receipt",
+            "blind_generator_validation",
+            "fresh_contamination_replay",
+            "retired_source_incident_sha256",
         ):
             _require(prelaunch.target, prelaunch.payload.get(key) == payload.get(key), f"benchmark prelaunch {key} does not match final manifest")
     evaluator = _receipt_nested_file(
@@ -925,11 +1117,170 @@ def _validate_benchmark_arm_refs(
             if isinstance(candidate_identity.payload, dict):
                 _validate_development_candidate_identity(candidate_identity.target, payload, candidate_identity.payload)
     if payload.get("mode") == "sealed":
+        protocol = _receipt_nested_file(
+            root,
+            base,
+            payload,
+            "protocol",
+            "sealed_protocol",
+        )
+        sealed_source = _receipt_nested_file(
+            root,
+            base,
+            payload,
+            "sealed_task_count_manifest",
+            "sealed_source_manifest",
+        )
+        authorization = _receipt_nested_file(
+            root,
+            base,
+            payload,
+            "sealed_authorization",
+            "sealed_authorization",
+        )
         candidate_lock = _receipt_nested_file(root, base, payload, "candidate_lock", "sealed_candidate_lock")
-        targets.append(candidate_lock.target)
+        targets.extend(
+            [
+                protocol.target,
+                sealed_source.target,
+                authorization.target,
+                candidate_lock.target,
+            ]
+        )
         if isinstance(candidate_lock.payload, dict) and payload.get("arm_id") == "adapter":
             _validate_sealed_adapter_identity(candidate_lock.target, payload, candidate_lock.payload)
+        lineage_inputs: dict[str, _Loaded] = {}
+        for key, target_type in (
+            ("training_protocol", "sealed_training_protocol"),
+            (
+                "benchmark_protocol_lineage",
+                "sealed_benchmark_protocol_lineage",
+            ),
+            ("blind_custody_receipt", "sealed_blind_custody_receipt"),
+            (
+                "blind_generator_validation",
+                "sealed_blind_generator_validation",
+            ),
+            (
+                "fresh_contamination_replay",
+                "sealed_fresh_contamination_replay",
+            ),
+        ):
+            if isinstance(payload.get(key), dict):
+                lineage_inputs[key] = _receipt_nested_file(
+                    root,
+                    base,
+                    payload,
+                    key,
+                    target_type,
+                )
+                targets.append(lineage_inputs[key].target)
+        lock_version = _dict(candidate_lock.payload).get("schema_version")
+        if lock_version == CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+            for key in (
+                "training_protocol",
+                "benchmark_protocol_lineage",
+                "blind_custody_receipt",
+                "blind_generator_validation",
+                "fresh_contamination_replay",
+            ):
+                _require(
+                    candidate_lock.target,
+                    key in lineage_inputs,
+                    f"v2 sealed arm missing {key}",
+                )
+            _require(
+                candidate_lock.target,
+                isinstance(payload.get("retired_source_incident_sha256"), str)
+                and bool(
+                    SHA256_RE.fullmatch(
+                        str(payload.get("retired_source_incident_sha256"))
+                    )
+                ),
+                "v2 sealed arm missing retired source incident sha256",
+            )
+        if (
+            protocol.path is not None
+            and sealed_source.path is not None
+            and authorization.path is not None
+            and candidate_lock.path is not None
+        ):
+            try:
+                replay = validate_tau3_sealed_authorization(
+                    authorization_path=authorization.path,
+                    candidate_lock_path=candidate_lock.path,
+                    protocol_path=protocol.path,
+                    sealed_source_manifest_path=sealed_source.path,
+                    arm_id=str(payload.get("arm_id") or ""),
+                    seeds=tuple(
+                        int(seed)
+                        for seed in _dict(payload.get("config")).get(
+                            "seeds",
+                            [],
+                        )
+                        if isinstance(seed, int)
+                    ),
+                    expected_tau_revision=str(payload.get("tau_revision") or ""),
+                    expected_authorization_sha256=authorization.sha256,
+                    training_protocol_path=_loaded_path(
+                        lineage_inputs.get("training_protocol")
+                    ),
+                    benchmark_protocol_lineage_path=_loaded_path(
+                        lineage_inputs.get("benchmark_protocol_lineage")
+                    ),
+                    custody_receipt_path=_loaded_path(
+                        lineage_inputs.get("blind_custody_receipt")
+                    ),
+                    generator_validation_path=_loaded_path(
+                        lineage_inputs.get("blind_generator_validation")
+                    ),
+                    fresh_contamination_replay_path=_loaded_path(
+                        lineage_inputs.get("fresh_contamination_replay")
+                    ),
+                    retired_source_incident_sha256=(
+                        str(payload.get("retired_source_incident_sha256"))
+                        if lock_version == CANDIDATE_LOCK_V2_SCHEMA_VERSION
+                        else None
+                    ),
+                )
+            except (
+                Tau3SealedAuthorizationError,
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                authorization.target.errors.append(
+                    f"sealed authorization replay failed: {exc}"
+                )
+            else:
+                binding = _dict(payload.get("sealed_authorization"))
+                for key in (
+                    "sha256",
+                    "authorized",
+                    "candidate_lock_sha256",
+                    "protocol_sha256",
+                    "sealed_source_sha256",
+                    "task_count",
+                    "arms",
+                    "seeds",
+                    "training_protocol_sha256",
+                    "benchmark_protocol_lineage_sha256",
+                    "blind_custody_receipt_sha256",
+                ):
+                    if key in replay:
+                        _require(
+                            authorization.target,
+                            binding.get(key) == replay.get(key),
+                            (
+                                "sealed authorization arm binding mismatch "
+                                f"for {key}"
+                            ),
+                        )
     return targets
+
+
+def _loaded_path(loaded: _Loaded | None) -> Path | None:
+    return loaded.path if loaded is not None else None
 
 
 def _validate_development_candidate_identity(target: _Target, arm: dict[str, Any], identity: dict[str, Any]) -> None:

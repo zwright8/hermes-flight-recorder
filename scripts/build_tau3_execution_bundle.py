@@ -31,6 +31,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Explicit attestation that the supplied git revision had a clean tracked worktree.",
     )
     parser.add_argument("--protocol", type=Path, required=True)
+    parser.add_argument("--training-protocol", type=Path)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
     parser.add_argument(
         "--evaluator-model-contract",
         type=Path,
@@ -48,7 +50,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help=(
-            "Optional source hash guard as label=sha256. Labels: protocol, evaluator_model_contract, "
+            "Optional source hash guard as label=sha256. Labels: protocol, training_protocol, "
+            "benchmark_protocol_lineage, evaluator_model_contract, "
             "candidate_selection_report, candidate_lock, public_report, candidate:<id>, "
             "development:<arm>, sealed:<arm>."
         ),
@@ -66,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
             flight_recorder_git_commit=args.git_commit,
             tracked_worktree_clean=args.tracked_worktree_clean,
             protocol=args.protocol,
+            training_protocol=args.training_protocol,
+            benchmark_protocol_lineage=args.benchmark_protocol_lineage,
             evaluator_model_contract=args.evaluator_model_contract,
             selected_candidate_id=args.selected_candidate_id,
             candidate_dirs=[parse_candidate_arg(item) for item in args.candidate],

@@ -28,8 +28,6 @@ TAU3_POST_PUBLICATION_RECORD_SCHEMA_VERSION = "hfr.tau3_post_publication_record.
 KNOWN_SCHEMA_BY_INPUT = {
     "sealed_public_evaluation_report": "tau3_evaluation",
     "sealed_grid_completeness": "tau3_sealed_grid_completeness",
-    "sealed_authorization": "tau3_sealed_authorization",
-    "candidate_lock": "tau3_candidate_lock",
     "postlock_attempt_ledger": "tau3_candidate_attempt_ledger",
 }
 
@@ -346,7 +344,7 @@ def _read_json_artifact(path: Path, label: str) -> _JsonArtifact:
         raise Tau3PromotionPreflightError(f"{label} must contain a JSON object")
     schema_passed = True
     schema_errors: tuple[str, ...] = ()
-    schema_name = KNOWN_SCHEMA_BY_INPUT.get(label)
+    schema_name = _schema_name_for_input(label, payload)
     if schema_name is not None:
         try:
             result = check_schema_contract(payload, name_or_id=schema_name)
@@ -372,7 +370,6 @@ def _predicate_results(artifacts: dict[str, _JsonArtifact]) -> dict[str, bool]:
     authorization = artifacts["sealed_authorization"].payload
     lock = artifacts["candidate_lock"].payload
     ledger = artifacts["postlock_attempt_ledger"].payload
-    lineage = artifacts["protocol_lineage_attestation"].payload
     readiness = artifacts["readiness_validation"].payload
     budget = artifacts["budget_evidence"].payload
     license_evidence = artifacts["license_evidence"].payload
@@ -386,8 +383,15 @@ def _predicate_results(artifacts: dict[str, _JsonArtifact]) -> dict[str, bool]:
         "sealed_grid_complete": schema_ok["sealed_grid_completeness"] and grid.get("passed") is True and grid.get("status") == "complete",
         "sealed_authorization_valid": schema_ok["sealed_authorization"] and authorization.get("authorized") is True,
         "candidate_lock_bound": schema_ok["candidate_lock"] and lock.get("sealed_access_authorized") is True,
-        "postlock_attempt_ledger_bound": schema_ok["postlock_attempt_ledger"] and _ledger_binds_lock(ledger, artifacts["candidate_lock"].sha256),
-        "protocol_lineage_attestation_passed": lineage.get("schema_version") == "hfr.tau3_protocol_lineage_attestation.v1" and lineage.get("passed") is True,
+        "postlock_attempt_ledger_bound": schema_ok["postlock_attempt_ledger"]
+        and _ledger_binds_lock(
+            ledger,
+            artifacts["candidate_lock"].sha256,
+            candidate_lock=lock,
+        ),
+        "protocol_lineage_attestation_passed": _protocol_lineage_passed(
+            artifacts,
+        ),
         "readiness_validation_passed": _generic_passed(readiness, "readiness_validation"),
         "budget_passed": _generic_passed(budget, "budget"),
         "license_passed": _generic_passed(license_evidence, "license"),
@@ -410,23 +414,54 @@ def _predicate_results(artifacts: dict[str, _JsonArtifact]) -> dict[str, bool]:
 
 
 def _hash_bindings_replay(artifacts: dict[str, _JsonArtifact]) -> bool:
-    grid = artifacts["sealed_grid_completeness"].payload.get("bindings", {})
+    grid = _dict(
+        artifacts["sealed_grid_completeness"].payload.get("bindings")
+    )
     auth = artifacts["sealed_authorization"].payload
+    lock = artifacts["candidate_lock"].payload
     ledger = artifacts["postlock_attempt_ledger"].payload
-    return (
-        isinstance(grid, dict)
-        and grid.get("authorization_sha256") == artifacts["sealed_authorization"].sha256
+    auth_lock = _dict(auth.get("candidate_lock"))
+    ledger_lock = _dict(ledger.get("lock"))
+    common = (
+        grid.get("authorization_sha256")
+        == artifacts["sealed_authorization"].sha256
         and grid.get("candidate_lock_sha256") == artifacts["candidate_lock"].sha256
-        and auth.get("candidate_lock", {}).get("sha256") == artifacts["candidate_lock"].sha256
-        and ledger.get("lock", {}).get("sha256") == artifacts["candidate_lock"].sha256
+        and auth_lock.get("sha256") == artifacts["candidate_lock"].sha256
+        and ledger_lock.get("sha256") == artifacts["candidate_lock"].sha256
+    )
+    if not common or lock.get("schema_version") != "hfr.tau3_candidate_lock.v2":
+        return common
+    auth_protocol = _dict(auth.get("protocol"))
+    auth_lineage = _dict(auth.get("protocol_lineage"))
+    return (
+        auth.get("schema_version") == "hfr.tau3_sealed_authorization.v2"
+        and auth_lock.get("training_protocol_sha256")
+        == lock.get("training_protocol_sha256")
+        and auth_lock.get("benchmark_protocol_sha256")
+        == lock.get("benchmark_protocol_sha256")
+        and auth_lock.get("benchmark_protocol_lineage_sha256")
+        == lock.get("benchmark_protocol_lineage_sha256")
+        and auth_protocol.get("sha256") == lock.get("benchmark_protocol_sha256")
+        and auth_lineage.get("sha256")
+        == lock.get("benchmark_protocol_lineage_sha256")
+        and grid.get("protocol_sha256") == lock.get("benchmark_protocol_sha256")
+        and grid.get("training_protocol_sha256")
+        == lock.get("training_protocol_sha256")
+        and grid.get("benchmark_protocol_lineage_sha256")
+        == lock.get("benchmark_protocol_lineage_sha256")
     )
 
 
-def _ledger_binds_lock(ledger: dict[str, Any], lock_sha256: str) -> bool:
-    lock = ledger.get("lock")
-    if not isinstance(lock, dict) or lock.get("sha256") != lock_sha256:
+def _ledger_binds_lock(
+    ledger: dict[str, Any],
+    lock_sha256: str,
+    *,
+    candidate_lock: dict[str, Any],
+) -> bool:
+    lock_ref = ledger.get("lock")
+    if not isinstance(lock_ref, dict) or lock_ref.get("sha256") != lock_sha256:
         return False
-    lock_created_at = _parse_time(lock.get("created_at"))
+    lock_created_at = _parse_time(lock_ref.get("created_at"))
     ledger_created_at = _parse_time(ledger.get("created_at"))
     if lock_created_at is None or ledger_created_at is None or ledger_created_at <= lock_created_at:
         return False
@@ -437,17 +472,97 @@ def _ledger_binds_lock(ledger: dict[str, Any], lock_sha256: str) -> bool:
             ref = attempt.get(ref_key)
             if ref is not None and not isinstance(ref, dict):
                 return False
+        protocol_sha_key = (
+            "training_protocol_sha256"
+            if candidate_lock.get("schema_version")
+            == "hfr.tau3_candidate_lock.v2"
+            else "protocol_sha256"
+        )
+        protocol_signature_key = (
+            "training_protocol_signature"
+            if candidate_lock.get("schema_version")
+            == "hfr.tau3_candidate_lock.v2"
+            else "protocol_signature"
+        )
+        attempt_bindings = _dict(attempt.get("bindings"))
         for binding_key, lock_key in (
-            ("protocol_sha256", "protocol_sha256"),
-            ("protocol_signature", "protocol_signature"),
+            ("protocol_sha256", protocol_sha_key),
+            ("protocol_signature", protocol_signature_key),
             ("dataset_manifest_sha256", "dataset_manifest_sha256"),
             ("dataset_files_sha256", "dataset_files_sha256"),
             ("adapter_tree_sha256", "adapter_tree_sha256"),
         ):
-            value = attempt.get("bindings", {}).get(binding_key)
-            if value is not None and lock.get(lock_key) is not None and value != lock.get(lock_key):
+            value = attempt_bindings.get(binding_key)
+            if (
+                value is not None
+                and candidate_lock.get(lock_key) is not None
+                and value != candidate_lock.get(lock_key)
+            ):
                 return False
     return True
+
+
+def _schema_name_for_input(label: str, payload: dict[str, Any]) -> str | None:
+    version = payload.get("schema_version")
+    if label == "candidate_lock":
+        return (
+            "tau3_candidate_lock_v2"
+            if version == "hfr.tau3_candidate_lock.v2"
+            else "tau3_candidate_lock"
+        )
+    if label == "sealed_authorization":
+        return (
+            "tau3_sealed_authorization_v2"
+            if version == "hfr.tau3_sealed_authorization.v2"
+            else "tau3_sealed_authorization"
+        )
+    if (
+        label == "protocol_lineage_attestation"
+        and version == "hfr.tau3_benchmark_protocol_lineage.v1"
+    ):
+        return "tau3_benchmark_protocol_lineage"
+    return KNOWN_SCHEMA_BY_INPUT.get(label)
+
+
+def _protocol_lineage_passed(
+    artifacts: dict[str, _JsonArtifact],
+) -> bool:
+    lineage_artifact = artifacts["protocol_lineage_attestation"]
+    lineage = lineage_artifact.payload
+    if (
+        lineage.get("schema_version")
+        == "hfr.tau3_protocol_lineage_attestation.v1"
+    ):
+        return lineage.get("passed") is True
+    if (
+        lineage.get("schema_version")
+        != "hfr.tau3_benchmark_protocol_lineage.v1"
+        or lineage.get("passed") is not True
+        or lineage_artifact.schema_passed is not True
+    ):
+        return False
+    lock = artifacts["candidate_lock"].payload
+    authorization = artifacts["sealed_authorization"].payload
+    grid = _dict(
+        artifacts["sealed_grid_completeness"].payload.get("bindings")
+    )
+    auth_lineage = _dict(authorization.get("protocol_lineage"))
+    return (
+        lock.get("schema_version") == "hfr.tau3_candidate_lock.v2"
+        and lock.get("benchmark_protocol_lineage_sha256")
+        == lineage_artifact.sha256
+        and lock.get("training_protocol_sha256")
+        == lineage.get("training_protocol_sha256")
+        and lock.get("benchmark_protocol_sha256")
+        == lineage.get("benchmark_protocol_sha256")
+        and auth_lineage.get("sha256") == lineage_artifact.sha256
+        and auth_lineage.get("training_protocol_sha256")
+        == lineage.get("training_protocol_sha256")
+        and auth_lineage.get("benchmark_protocol_sha256")
+        == lineage.get("benchmark_protocol_sha256")
+        and grid.get("benchmark_protocol_lineage_sha256")
+        == lineage_artifact.sha256
+    )
 
 
 def _candidate_beats_base(evaluation: dict[str, Any]) -> bool:
@@ -466,10 +581,15 @@ def _candidate_beats_strongest_comparator(evaluation: dict[str, Any]) -> bool:
 
 def _strongest_comparator_ci_excludes_zero(evaluation: dict[str, Any]) -> bool:
     macro = evaluation.get("metrics", {}).get("macro_pass1", {})
-    comparator_values = {arm: _number(macro.get(arm)) for arm in ("comparator_1", "comparator_2")}
-    if any(value is None for value in comparator_values.values()):
+    comparator_1 = _number(macro.get("comparator_1"))
+    comparator_2 = _number(macro.get("comparator_2"))
+    if comparator_1 is None or comparator_2 is None:
         return False
-    strongest = max(comparator_values, key=lambda arm: comparator_values[arm] if comparator_values[arm] is not None else -1.0)
+    comparator_values = {
+        "comparator_1": comparator_1,
+        "comparator_2": comparator_2,
+    }
+    strongest = max(comparator_values, key=comparator_values.__getitem__)
     effect = evaluation.get("effects", {}).get(strongest, {}).get("domain_stratified_macro_pass1", {})
     interval = effect.get("confidence_interval", {})
     return _number(effect.get("mean_difference")) is not None and effect["mean_difference"] > 0 and _number(interval.get("lower")) is not None and interval["lower"] > 0
@@ -578,6 +698,10 @@ def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _parse_time(value: Any) -> datetime | None:

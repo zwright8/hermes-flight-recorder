@@ -326,6 +326,8 @@
       "properties": {
         "arms": {"const": ["adapter", "base", "comparator_1", "comparator_2"]},
         "authorized": {"const": true},
+        "benchmark_protocol_lineage_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "blind_custody_receipt_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
         "candidate_lock_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
         "path": {"$ref": "#/$defs/output_relative_path"},
         "protocol_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
@@ -333,7 +335,8 @@
         "seeds": {"const": [101, 202, 303, 404]},
         "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
         "size": {"minimum": 0, "type": "integer"},
-        "task_count": {"const": 100}
+        "task_count": {"const": 100},
+        "training_protocol_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
       },
       "required": [
         "path",

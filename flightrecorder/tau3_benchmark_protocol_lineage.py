@@ -245,18 +245,7 @@ def validate_tau3_benchmark_protocol_lineage(
 ) -> dict[str, Any]:
     """Replay a stored benchmark-protocol lineage against every bound artifact."""
 
-    lineage_record = _read_json_artifact(Path(lineage), "benchmark protocol lineage")
-    _check_schema(
-        lineage_record.payload,
-        "tau3_benchmark_protocol_lineage",
-        "benchmark protocol lineage",
-    )
-    _assert_hash_only_public_artifact(lineage_record.payload, "benchmark protocol lineage")
-    _validate_receipt_self_seal(
-        lineage_record.payload,
-        field="lineage_sha256",
-        label="benchmark protocol lineage",
-    )
+    lineage_record = _validated_lineage_record(Path(lineage))
     evidence = _replay_benchmark_protocol_lineage(
         training_protocol=training_protocol,
         benchmark_protocol=benchmark_protocol,
@@ -271,8 +260,6 @@ def validate_tau3_benchmark_protocol_lineage(
             raise Tau3BenchmarkProtocolLineageError(
                 f"benchmark protocol lineage {key} does not replay"
             )
-    if any(value is not True for value in _dict(lineage_record.payload.get("gates")).values()):
-        raise Tau3BenchmarkProtocolLineageError("benchmark protocol lineage gate is not true")
     return {
         "schema_version": "hfr.tau3_benchmark_protocol_lineage_validation.v1",
         "passed": True,
@@ -286,6 +273,40 @@ def validate_tau3_benchmark_protocol_lineage(
             "sealed_source_manifest_sha256"
         ],
     }
+
+
+def inspect_tau3_benchmark_protocol_lineage(
+    *,
+    lineage: str | Path,
+) -> dict[str, Any]:
+    """Validate the immutable public lineage record without authorizing access."""
+
+    lineage_record = _validated_lineage_record(Path(lineage))
+    return {
+        "schema_version": "hfr.tau3_benchmark_protocol_lineage_inspection.v1",
+        "passed": True,
+        "sha256": lineage_record.sha256,
+        "training_protocol_sha256": lineage_record.payload["training_protocol_sha256"],
+        "benchmark_protocol_sha256": lineage_record.payload["benchmark_protocol_sha256"],
+    }
+
+
+def _validated_lineage_record(path: Path) -> _JsonArtifact:
+    lineage_record = _read_json_artifact(path, "benchmark protocol lineage")
+    _check_schema(
+        lineage_record.payload,
+        "tau3_benchmark_protocol_lineage",
+        "benchmark protocol lineage",
+    )
+    _assert_hash_only_public_artifact(lineage_record.payload, "benchmark protocol lineage")
+    _validate_receipt_self_seal(
+        lineage_record.payload,
+        field="lineage_sha256",
+        label="benchmark protocol lineage",
+    )
+    if any(value is not True for value in _dict(lineage_record.payload.get("gates")).values()):
+        raise Tau3BenchmarkProtocolLineageError("benchmark protocol lineage gate is not true")
+    return lineage_record
 
 
 def _replay_benchmark_protocol_lineage(

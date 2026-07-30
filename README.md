@@ -347,6 +347,38 @@ Both artifacts contain hashes and aggregate counts only. They do not make HFR
 an operating-system isolation boundary, materialize sealed task payloads, or
 authorize sealed access by themselves.
 
+Pass the lineage into candidate selection to emit a v2 lock with separate
+training- and benchmark-protocol bindings. Sealed authorization, every sealed
+arm, the grid-completeness replay, and the private execution bundle must then
+receive the same complete evidence set:
+
+```bash
+.venv/bin/python scripts/select_tau3_candidate.py \
+  --base-manifest <development-base/manifest.json> \
+  --candidate <id=development-manifest,training-receipt,candidate-identity> \
+  --benchmark-protocol-lineage <benchmark-protocol-lineage.json> \
+  --report-out <candidate-selection.json> \
+  --lock-out <candidate-lock-v2.json>
+
+.venv/bin/python scripts/build_tau3_sealed_authorization.py \
+  --candidate-lock <candidate-lock-v2.json> \
+  --protocol <fresh-sealed-benchmark-protocol.json> \
+  --training-protocol <immutable-training-protocol.json> \
+  --benchmark-protocol-lineage <benchmark-protocol-lineage.json> \
+  --sealed-source-manifest <hashes-only-sealed-source.json> \
+  --custody-receipt <blind-custody-receipt.json> \
+  --generator-validation <blind-generator-validation.json> \
+  --fresh-contamination-replay <fresh-contamination-replay.json> \
+  --retired-source-incident-sha256 <sha256> \
+  --out <sealed-authorization-v2.json>
+```
+
+The v2 lock fails closed if a training receipt binds the benchmark protocol,
+if the benchmark protocol changes anything outside the four sealed-source
+fields, or if any lineage/custody artifact is omitted or substituted. Legacy
+v1 artifacts remain replayable evidence, but they cannot consume v2 evidence
+or prove the fresh-source authorization path.
+
 After a governed MLX candidate finishes, qualification requires a separate,
 coverage-complete loss replay over the exact `valid.jsonl` export. The runner
 loads the receipt-bound base plus adapter locally, conditions on every complete

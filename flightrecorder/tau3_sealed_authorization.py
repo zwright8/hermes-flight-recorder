@@ -16,9 +16,15 @@ from typing import Any
 from .atomic_json import atomic_write_json_cas
 from .path_safety import path_has_symlink_component
 from .schema_registry import check_schema_contract
+from .tau3_benchmark_protocol_lineage import (
+    Tau3BenchmarkProtocolLineageError,
+    validate_tau3_benchmark_protocol_lineage,
+)
 
 TAU3_SEALED_AUTHORIZATION_SCHEMA_VERSION = "hfr.tau3_sealed_authorization.v1"
+TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION = "hfr.tau3_sealed_authorization.v2"
 TAU3_CANDIDATE_LOCK_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v1"
+TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v2"
 TAU3_PROTOCOL_CONFIG_SCHEMA_VERSION = "hfr.tau3_protocol_config.v1"
 TAU3_SEALED_SOURCE_SCHEMA_VERSION = "hfr.tau3_sealed_source_manifest.v1"
 
@@ -70,6 +76,12 @@ def create_tau3_sealed_authorization(
     sealed_source_manifest: str | Path,
     out: str | Path,
     created_at: str | None = None,
+    training_protocol: str | Path | None = None,
+    benchmark_protocol_lineage: str | Path | None = None,
+    custody_receipt: str | Path | None = None,
+    generator_validation: str | Path | None = None,
+    fresh_contamination_replay: str | Path | None = None,
+    retired_source_incident_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Create a public-safe authorization artifact only when every gate passes."""
 
@@ -88,26 +100,75 @@ def create_tau3_sealed_authorization(
     sealed_sha256 = sealed_record.sha256
     created = created_at or _now_utc()
 
-    _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
-    _validate_protocol(protocol_payload, protocol_sha256=protocol_sha256, candidate_lock_sha256=lock_sha256, sealed_sha256=sealed_sha256)
+    v2_context = None
+    if lock.get("schema_version") == TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+        v2_context = _validate_v2_protocol_and_custody(
+            lock=lock,
+            benchmark_protocol=protocol_record,
+            training_protocol=training_protocol,
+            benchmark_protocol_lineage=benchmark_protocol_lineage,
+            custody_receipt=custody_receipt,
+            sealed_source_manifest=sealed_record,
+            generator_validation=generator_validation,
+            fresh_contamination_replay=fresh_contamination_replay,
+            retired_source_incident_sha256=retired_source_incident_sha256,
+        )
+    else:
+        _reject_v2_evidence_for_legacy_lock(
+            training_protocol=training_protocol,
+            benchmark_protocol_lineage=benchmark_protocol_lineage,
+            custody_receipt=custody_receipt,
+            generator_validation=generator_validation,
+            fresh_contamination_replay=fresh_contamination_replay,
+            retired_source_incident_sha256=retired_source_incident_sha256,
+        )
+        _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
+    _validate_protocol(
+        protocol_payload,
+        protocol_sha256=protocol_sha256,
+        candidate_lock_sha256=lock_sha256,
+        sealed_sha256=sealed_sha256,
+    )
     _validate_sealed_source(sealed, protocol_payload, sealed_sha256=sealed_sha256)
     _require_chronology(str(lock["created_at"]), created)
 
-    authorization = _authorization_payload(
-        lock=lock,
-        lock_sha256=lock_sha256,
-        protocol=protocol_payload,
-        protocol_sha256=protocol_sha256,
-        sealed_sha256=sealed_sha256,
-        created_at=created,
+    authorization = (
+        _authorization_payload_v2(
+            lock=lock,
+            lock_sha256=lock_sha256,
+            protocol=protocol_payload,
+            protocol_sha256=protocol_sha256,
+            sealed=sealed,
+            sealed_sha256=sealed_sha256,
+            created_at=created,
+            context=v2_context,
+        )
+        if v2_context is not None
+        else _authorization_payload(
+            lock=lock,
+            lock_sha256=lock_sha256,
+            protocol=protocol_payload,
+            protocol_sha256=protocol_sha256,
+            sealed_sha256=sealed_sha256,
+            created_at=created,
+        )
     )
     _assert_public_safe(authorization)
-    schema = check_schema_contract(authorization, name_or_id="tau3_sealed_authorization")
+    schema_name = (
+        "tau3_sealed_authorization_v2"
+        if v2_context is not None
+        else "tau3_sealed_authorization"
+    )
+    schema = check_schema_contract(authorization, name_or_id=schema_name)
     if schema.get("passed") is not True:
         raise Tau3SealedAuthorizationError("authorization violates registered schema: " + "; ".join(str(error) for error in schema.get("errors", [])))
     atomic_write_json_cas(target, authorization, expected_sha256=None, new_file_mode=0o444)
-    return {
-        "schema_version": "hfr.tau3_sealed_authorization_result.v1",
+    result = {
+        "schema_version": (
+            "hfr.tau3_sealed_authorization_result.v2"
+            if v2_context is not None
+            else "hfr.tau3_sealed_authorization_result.v1"
+        ),
         "out": str(target),
         "authorization_sha256": _sha256(target),
         "candidate_lock_sha256": lock_sha256,
@@ -115,6 +176,21 @@ def create_tau3_sealed_authorization(
         "sealed_source_sha256": sealed_sha256,
         "authorized": True,
     }
+    if v2_context is not None:
+        result.update(
+            {
+                "training_protocol_sha256": v2_context[
+                    "training_protocol_sha256"
+                ],
+                "benchmark_protocol_lineage_sha256": v2_context[
+                    "protocol_lineage_sha256"
+                ],
+                "blind_custody_receipt_sha256": v2_context[
+                    "custody_receipt_sha256"
+                ],
+            }
+        )
+    return result
 
 
 def validate_tau3_sealed_authorization(
@@ -127,6 +203,12 @@ def validate_tau3_sealed_authorization(
     seeds: tuple[int, ...],
     expected_tau_revision: str,
     expected_authorization_sha256: str | None = None,
+    training_protocol_path: str | Path | None = None,
+    benchmark_protocol_lineage_path: str | Path | None = None,
+    custody_receipt_path: str | Path | None = None,
+    generator_validation_path: str | Path | None = None,
+    fresh_contamination_replay_path: str | Path | None = None,
+    retired_source_incident_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Replay authorization bindings before a sealed benchmark arm can start."""
 
@@ -138,7 +220,16 @@ def validate_tau3_sealed_authorization(
     if expected_authorization_sha256 is not None and expected_authorization_sha256 != auth_sha256:
         raise Tau3SealedAuthorizationError("sealed authorization sha256 mismatch")
     auth = auth_record.payload
-    schema = check_schema_contract(auth, name_or_id="tau3_sealed_authorization")
+    auth_version = auth.get("schema_version")
+    if auth_version == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION:
+        schema_name = "tau3_sealed_authorization_v2"
+    elif auth_version == TAU3_SEALED_AUTHORIZATION_SCHEMA_VERSION:
+        schema_name = "tau3_sealed_authorization"
+    else:
+        raise Tau3SealedAuthorizationError(
+            "sealed authorization schema_version mismatch"
+        )
+    schema = check_schema_contract(auth, name_or_id=schema_name)
     if schema.get("passed") is not True:
         raise Tau3SealedAuthorizationError("sealed authorization violates registered schema: " + "; ".join(str(error) for error in schema.get("errors", [])))
     if auth.get("authorized") is not True:
@@ -151,7 +242,33 @@ def validate_tau3_sealed_authorization(
     lock_sha256 = lock_record.sha256
     protocol_sha256 = protocol_record.sha256
     sealed_sha256 = sealed_record.sha256
-    _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
+    v2_context = None
+    if auth_version == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION:
+        if lock.get("schema_version") != TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+            raise Tau3SealedAuthorizationError(
+                "v2 authorization requires a v2 candidate lock"
+            )
+        v2_context = _validate_v2_protocol_and_custody(
+            lock=lock,
+            benchmark_protocol=protocol_record,
+            training_protocol=training_protocol_path,
+            benchmark_protocol_lineage=benchmark_protocol_lineage_path,
+            custody_receipt=custody_receipt_path,
+            sealed_source_manifest=sealed_record,
+            generator_validation=generator_validation_path,
+            fresh_contamination_replay=fresh_contamination_replay_path,
+            retired_source_incident_sha256=retired_source_incident_sha256,
+        )
+    else:
+        _reject_v2_evidence_for_legacy_lock(
+            training_protocol=training_protocol_path,
+            benchmark_protocol_lineage=benchmark_protocol_lineage_path,
+            custody_receipt=custody_receipt_path,
+            generator_validation=generator_validation_path,
+            fresh_contamination_replay=fresh_contamination_replay_path,
+            retired_source_incident_sha256=retired_source_incident_sha256,
+        )
+        _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
     _validate_protocol(protocol_payload, protocol_sha256=protocol_sha256, candidate_lock_sha256=lock_sha256, sealed_sha256=sealed_sha256)
     _validate_sealed_source(sealed, protocol_payload, sealed_sha256=sealed_sha256)
 
@@ -166,21 +283,45 @@ def validate_tau3_sealed_authorization(
         _require_chronology(str(lock["created_at"]), str(auth.get("created_at") or ""))
     except Tau3SealedAuthorizationError as exc:
         errors.append(str(exc))
-    expected = _authorization_payload(
-        lock=lock,
-        lock_sha256=lock_sha256,
-        protocol=protocol_payload,
-        protocol_sha256=protocol_sha256,
-        sealed_sha256=sealed_sha256,
-        created_at=str(auth.get("created_at") or ""),
+    expected = (
+        _authorization_payload_v2(
+            lock=lock,
+            lock_sha256=lock_sha256,
+            protocol=protocol_payload,
+            protocol_sha256=protocol_sha256,
+            sealed=sealed,
+            sealed_sha256=sealed_sha256,
+            created_at=str(auth.get("created_at") or ""),
+            context=v2_context,
+        )
+        if v2_context is not None
+        else _authorization_payload(
+            lock=lock,
+            lock_sha256=lock_sha256,
+            protocol=protocol_payload,
+            protocol_sha256=protocol_sha256,
+            sealed_sha256=sealed_sha256,
+            created_at=str(auth.get("created_at") or ""),
+        )
     )
     expected["sha256"] = auth_sha256
-    for key in ("candidate_lock", "protocol", "sealed_source", "frozen_contract", "model_identity_refs", "gates", "budget"):
+    replay_keys = [
+        "candidate_lock",
+        "protocol",
+        "sealed_source",
+        "frozen_contract",
+        "model_identity_refs",
+        "gates",
+        "budget",
+    ]
+    if v2_context is not None:
+        replay_keys.extend(["protocol_lineage", "blind_custody"])
+    for key in replay_keys:
         if auth.get(key) != expected.get(key):
             errors.append(f"{key} binding does not replay")
     if errors:
         raise Tau3SealedAuthorizationError("; ".join(errors))
-    return {
+    result = {
         "path": "",
         "size": auth_record.size,
         "sha256": auth_sha256,
@@ -192,6 +333,21 @@ def validate_tau3_sealed_authorization(
         "arms": list(REQUIRED_ARMS),
         "seeds": list(REQUIRED_SEEDS),
     }
+    if v2_context is not None:
+        result.update(
+            {
+                "training_protocol_sha256": v2_context[
+                    "training_protocol_sha256"
+                ],
+                "benchmark_protocol_lineage_sha256": v2_context[
+                    "protocol_lineage_sha256"
+                ],
+                "blind_custody_receipt_sha256": v2_context[
+                    "custody_receipt_sha256"
+                ],
+            }
+        )
+    return result
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -199,6 +355,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-lock", type=Path, required=True)
     parser.add_argument("--protocol", type=Path, required=True)
     parser.add_argument("--sealed-source-manifest", type=Path, required=True)
+    parser.add_argument("--training-protocol", type=Path)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
+    parser.add_argument("--custody-receipt", type=Path)
+    parser.add_argument("--generator-validation", type=Path)
+    parser.add_argument("--fresh-contamination-replay", type=Path)
+    parser.add_argument("--retired-source-incident-sha256")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--created-at")
     return parser
@@ -213,12 +375,250 @@ def main(argv: list[str] | None = None) -> int:
             sealed_source_manifest=args.sealed_source_manifest,
             out=args.out,
             created_at=args.created_at,
+            training_protocol=args.training_protocol,
+            benchmark_protocol_lineage=args.benchmark_protocol_lineage,
+            custody_receipt=args.custody_receipt,
+            generator_validation=args.generator_validation,
+            fresh_contamination_replay=args.fresh_contamination_replay,
+            retired_source_incident_sha256=args.retired_source_incident_sha256,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+def _validate_v2_protocol_and_custody(
+    *,
+    lock: dict[str, Any],
+    benchmark_protocol: _JsonArtifact,
+    training_protocol: str | Path | None,
+    benchmark_protocol_lineage: str | Path | None,
+    custody_receipt: str | Path | None,
+    sealed_source_manifest: _JsonArtifact,
+    generator_validation: str | Path | None,
+    fresh_contamination_replay: str | Path | None,
+    retired_source_incident_sha256: str | None,
+) -> dict[str, Any]:
+    training_path = _required_v2_path(training_protocol, "training protocol")
+    lineage_path = _required_v2_path(
+        benchmark_protocol_lineage,
+        "benchmark protocol lineage",
+    )
+    custody_path = _required_v2_path(custody_receipt, "blind custody receipt")
+    generator_path = _required_v2_path(
+        generator_validation,
+        "blind generator validation",
+    )
+    contamination_path = _required_v2_path(
+        fresh_contamination_replay,
+        "fresh contamination replay",
+    )
+    if (
+        not isinstance(retired_source_incident_sha256, str)
+        or not HEX64_RE.fullmatch(retired_source_incident_sha256)
+    ):
+        raise Tau3SealedAuthorizationError(
+            "v2 authorization requires a lowercase retired source incident SHA-256"
+        )
+
+    training_record = _read_json_artifact(training_path, "training protocol")
+    lineage_record = _read_json_artifact(
+        lineage_path,
+        "benchmark protocol lineage",
+    )
+    custody_record = _read_json_artifact(custody_path, "blind custody receipt")
+    generator_record = _read_json_artifact(
+        generator_path,
+        "blind generator validation",
+    )
+    contamination_record = _read_json_artifact(
+        contamination_path,
+        "fresh contamination replay",
+    )
+    try:
+        replay = validate_tau3_benchmark_protocol_lineage(
+            lineage=lineage_path,
+            training_protocol=training_path,
+            benchmark_protocol=benchmark_protocol.path,
+            custody_receipt=custody_path,
+            sealed_source_manifest=sealed_source_manifest.path,
+            generator_validation=generator_path,
+            fresh_contamination_replay=contamination_path,
+            retired_source_incident_sha256=retired_source_incident_sha256,
+        )
+    except Tau3BenchmarkProtocolLineageError as exc:
+        raise Tau3SealedAuthorizationError(
+            f"benchmark protocol lineage replay failed: {exc}"
+        ) from exc
+    if replay.get("passed") is not True:
+        raise Tau3SealedAuthorizationError(
+            "benchmark protocol lineage replay did not pass"
+        )
+    _validate_candidate_lock_v2(
+        lock,
+        training_protocol=training_record,
+        benchmark_protocol=benchmark_protocol,
+        protocol_lineage=lineage_record,
+    )
+    return {
+        "training_protocol_sha256": training_record.sha256,
+        "benchmark_protocol_sha256": benchmark_protocol.sha256,
+        "protocol_lineage_sha256": lineage_record.sha256,
+        "custody_receipt_sha256": custody_record.sha256,
+        "generator_validation_sha256": generator_record.sha256,
+        "fresh_contamination_replay_sha256": contamination_record.sha256,
+        "retired_source_incident_sha256": retired_source_incident_sha256,
+    }
+
+
+def _required_v2_path(value: str | Path | None, label: str) -> Path:
+    if value is None:
+        raise Tau3SealedAuthorizationError(
+            f"v2 authorization requires {label}"
+        )
+    return Path(value)
+
+
+def _reject_v2_evidence_for_legacy_lock(
+    *,
+    training_protocol: str | Path | None,
+    benchmark_protocol_lineage: str | Path | None,
+    custody_receipt: str | Path | None,
+    generator_validation: str | Path | None,
+    fresh_contamination_replay: str | Path | None,
+    retired_source_incident_sha256: str | None,
+) -> None:
+    if any(
+        value is not None
+        for value in (
+            training_protocol,
+            benchmark_protocol_lineage,
+            custody_receipt,
+            generator_validation,
+            fresh_contamination_replay,
+            retired_source_incident_sha256,
+        )
+    ):
+        raise Tau3SealedAuthorizationError(
+            "fresh protocol-lineage evidence requires a v2 candidate lock"
+        )
+
+
+def _authorization_payload_v2(
+    *,
+    lock: dict[str, Any],
+    lock_sha256: str,
+    protocol: dict[str, Any],
+    protocol_sha256: str,
+    sealed: dict[str, Any],
+    sealed_sha256: str,
+    created_at: str,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    revision = str(_dict(protocol.get("tau_revision")).get("revision") or "")
+    return {
+        "schema_version": TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION,
+        "created_at": created_at,
+        "authorized": True,
+        "hashes_only": True,
+        "local_paths_included": False,
+        "raw_payload_included": False,
+        "candidate_lock": {
+            "sha256": lock_sha256,
+            "created_at": str(lock["created_at"]),
+            "training_protocol_sha256": str(lock["training_protocol_sha256"]),
+            "training_protocol_signature": str(
+                lock["training_protocol_signature"]
+            ),
+            "benchmark_protocol_sha256": str(
+                lock["benchmark_protocol_sha256"]
+            ),
+            "benchmark_protocol_signature": str(
+                lock["benchmark_protocol_signature"]
+            ),
+            "benchmark_protocol_lineage_sha256": str(
+                lock["benchmark_protocol_lineage_sha256"]
+            ),
+            "sealed_access_authorized": True,
+        },
+        "protocol": {
+            "role": "fresh_sealed_benchmark",
+            "sha256": protocol_sha256,
+            "signature_sha256": str(lock["benchmark_protocol_signature"]),
+            "signature_provenance": "candidate_lock.benchmark_protocol_signature",
+            "tau_revision": revision,
+        },
+        "protocol_lineage": {
+            "sha256": context["protocol_lineage_sha256"],
+            "training_protocol_sha256": context["training_protocol_sha256"],
+            "benchmark_protocol_sha256": context[
+                "benchmark_protocol_sha256"
+            ],
+        },
+        "blind_custody": {
+            "receipt_sha256": context["custody_receipt_sha256"],
+            "generator_validation_sha256": context[
+                "generator_validation_sha256"
+            ],
+            "fresh_contamination_replay_sha256": context[
+                "fresh_contamination_replay_sha256"
+            ],
+            "retired_source_incident_sha256": context[
+                "retired_source_incident_sha256"
+            ],
+        },
+        "sealed_source": {
+            "manifest_sha256": sealed_sha256,
+            "task_count": REQUIRED_SEALED_TASK_COUNT,
+            "domain_counts": _dict(sealed.get("domain_counts")),
+            "hashes_only": True,
+        },
+        "frozen_contract": {
+            "arms": list(REQUIRED_ARMS),
+            "seeds": list(REQUIRED_SEEDS),
+            "domains": list(REQUIRED_DOMAINS),
+            "context_window": CONTEXT_WINDOW,
+            "tool_contract_sha256": _canonical_sha256(
+                _tool_contract(protocol)
+            ),
+            "prompt_context_decoding_sha256": _canonical_sha256(
+                _prompt_context_decoding_contract(protocol)
+            ),
+            "harness_sha256": _canonical_sha256(
+                _harness_contract(protocol)
+            ),
+            "no_test_time_search": True,
+        },
+        "model_identity_refs": _model_identity_refs(lock, protocol),
+        "gates": {
+            "candidate_lock_valid": True,
+            "chronology_lock_before_authorization": True,
+            "protocol_binding_valid": True,
+            "fresh_protocol_lineage_replayed": True,
+            "blind_custody_replayed": True,
+            "retired_source_not_reused": True,
+            "fresh_domain_balance_passed": True,
+            "sealed_source_hash_only": True,
+            "sealed_task_count_is_100": True,
+            "seeds_exact": True,
+            "arms_exact": True,
+            "harness_tool_prompt_context_decoding_no_search_identical": True,
+            "model_identity_equivalence_refs_present": True,
+            "contamination_gate_passed": True,
+            "redaction_gate_passed": True,
+            "license_gate_passed": True,
+            "safety_gate_passed": True,
+            "budget_gate_passed": True,
+            "public_artifact_contains_no_local_paths": True,
+        },
+        "budget": {
+            "sha256": _canonical_sha256(_dict(protocol.get("budget"))),
+            "declared": True,
+            "passed": True,
+        },
+    }
 
 
 def _authorization_payload(
@@ -299,6 +699,68 @@ def _validate_candidate_lock(lock: dict[str, Any], *, protocol_sha256: str) -> N
     for key in ("protocol_signature", "candidate_identity_sha256", "adapter_tree_sha256"):
         if not isinstance(lock.get(key), str) or not HEX64_RE.fullmatch(str(lock.get(key))):
             raise Tau3SealedAuthorizationError(f"candidate lock missing {key}")
+
+
+def _validate_candidate_lock_v2(
+    lock: dict[str, Any],
+    *,
+    training_protocol: _JsonArtifact,
+    benchmark_protocol: _JsonArtifact,
+    protocol_lineage: _JsonArtifact,
+) -> None:
+    schema = check_schema_contract(lock, name_or_id="tau3_candidate_lock_v2")
+    if schema.get("passed") is not True:
+        raise Tau3SealedAuthorizationError(
+            "v2 candidate lock violates registered schema: "
+            + "; ".join(str(error) for error in schema.get("errors", []))
+        )
+    if lock.get("schema_version") != TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION:
+        raise Tau3SealedAuthorizationError(
+            "v2 candidate lock schema_version mismatch"
+        )
+    expected = {
+        "training_protocol_sha256": training_protocol.sha256,
+        "training_protocol_signature": _protocol_signature_sha256(
+            training_protocol.payload,
+            training_protocol.sha256,
+        ),
+        "benchmark_protocol_sha256": benchmark_protocol.sha256,
+        "benchmark_protocol_signature": _protocol_signature_sha256(
+            benchmark_protocol.payload,
+            benchmark_protocol.sha256,
+        ),
+        "benchmark_protocol_lineage_sha256": protocol_lineage.sha256,
+    }
+    for key, value in expected.items():
+        if lock.get(key) != value:
+            raise Tau3SealedAuthorizationError(
+                f"v2 candidate lock {key} mismatch"
+            )
+    if lock.get("sealed_access_authorized") is not True:
+        raise Tau3SealedAuthorizationError(
+            "v2 candidate lock does not authorize sealed access"
+        )
+    for key in (
+        "candidate_identity_sha256",
+        "adapter_tree_sha256",
+        "endpoint_model_sha256",
+    ):
+        if not isinstance(lock.get(key), str) or not HEX64_RE.fullmatch(
+            str(lock.get(key))
+        ):
+            raise Tau3SealedAuthorizationError(
+                f"v2 candidate lock missing {key}"
+            )
+
+
+def _protocol_signature_sha256(
+    protocol: dict[str, Any],
+    protocol_sha256: str,
+) -> str:
+    signature = protocol.get("protocol_signature")
+    if isinstance(signature, str) and HEX64_RE.fullmatch(signature):
+        return signature
+    return protocol_sha256
 
 
 def _validate_protocol(protocol: dict[str, Any], *, protocol_sha256: str, candidate_lock_sha256: str, sealed_sha256: str) -> None:

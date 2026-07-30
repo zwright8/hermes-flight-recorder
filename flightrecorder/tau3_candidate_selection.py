@@ -17,6 +17,10 @@ from .atomic_json import atomic_write_json_cas
 from .path_safety import path_has_symlink_component
 from .repeated_eval import canonical_sha256
 from .schema_registry import check_schema_contract
+from .tau3_benchmark_protocol_lineage import (
+    Tau3BenchmarkProtocolLineageError,
+    inspect_tau3_benchmark_protocol_lineage,
+)
 from .tau3_mlx_training import validate_tau3_process_segments
 from .tau3_evaluation import (
     DOMAINS,
@@ -34,6 +38,7 @@ from .tau3_evaluation import (
 
 TAU3_CANDIDATE_SELECTION_SCHEMA_VERSION = "hfr.tau3_candidate_selection.v1"
 TAU3_CANDIDATE_LOCK_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v1"
+TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION = "hfr.tau3_candidate_lock.v2"
 BOOTSTRAP_SAMPLES = 10_000
 BOOTSTRAP_SEED = 8_675_309
 RAW_LOCK_FORBIDDEN_KEYS = {
@@ -81,6 +86,7 @@ def select_tau3_candidate(
     bootstrap_seed: int = BOOTSTRAP_SEED,
     non_inferiority_margin: float = NON_INFERIORITY_MARGIN,
     safety_non_inferiority_margin: float = SAFETY_NON_INFERIORITY_MARGIN,
+    benchmark_protocol_lineage_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Select exactly one development candidate and atomically write its lock."""
 
@@ -105,7 +111,20 @@ def select_tau3_candidate(
     if duplicate_ids:
         raise Tau3CandidateSelectionError("duplicate candidate_id(s): " + ", ".join(duplicate_ids))
 
+    protocol_lineage = _load_benchmark_protocol_lineage(
+        Path(benchmark_protocol_lineage_path)
+        if benchmark_protocol_lineage_path is not None
+        else None
+    )
     base = _load_benchmark_manifest(Path(base_manifest_path), expected_arm="base")
+    if (
+        protocol_lineage is not None
+        and base["protocol"]["sha256"]
+        != protocol_lineage["benchmark_protocol_sha256"]
+    ):
+        raise Tau3CandidateSelectionError(
+            "base development manifest does not bind the lineage benchmark protocol"
+        )
     candidate_reports = []
     eligible = []
     for entry in entries:
@@ -116,6 +135,7 @@ def select_tau3_candidate(
             bootstrap_seed=bootstrap_seed,
             non_inferiority_margin=non_inferiority_margin,
             safety_non_inferiority_margin=safety_non_inferiority_margin,
+            protocol_lineage=protocol_lineage,
         )
         candidate_reports.append(candidate)
         if candidate["eligible"]:
@@ -152,6 +172,7 @@ def select_tau3_candidate(
             "tie_break": ["higher_macro_pass1", "candidate_id_lexicographic", "candidate_identity_canonical_sha256"],
             "dev_comparators_required": False,
             "sealed_inputs_allowed": False,
+            "benchmark_protocol_lineage_required": protocol_lineage is not None,
         },
         "base": _private_source_record(base),
         "candidates": candidate_reports,
@@ -164,6 +185,8 @@ def select_tau3_candidate(
             "candidate_identity_canonical_sha256": selected["candidate_identity"]["identity_sha256"],
         },
     }
+    if protocol_lineage is not None:
+        report["benchmark_protocol_lineage"] = protocol_lineage
     report["schema_checked"] = True
     report_check = check_schema_contract(report, name_or_id="tau3_candidate_selection")
     if report_check["passed"] is not True:
@@ -174,9 +197,19 @@ def select_tau3_candidate(
         json.dump(report, handle, indent=2, sort_keys=True)
         handle.write("\n")
     report_sha256 = _sha256_file(report_out)
-    lock = _candidate_lock(selected, report_sha256=report_sha256, created_at=created)
+    lock = _candidate_lock(
+        selected,
+        report_sha256=report_sha256,
+        created_at=created,
+        protocol_lineage=protocol_lineage,
+    )
     _assert_lock_public_safe(lock)
-    lock_check = check_schema_contract(lock, name_or_id="tau3_candidate_lock")
+    lock_schema_name = (
+        "tau3_candidate_lock_v2"
+        if protocol_lineage is not None
+        else "tau3_candidate_lock"
+    )
+    lock_check = check_schema_contract(lock, name_or_id=lock_schema_name)
     if lock_check["passed"] is not True:
         raise Tau3CandidateSelectionError("candidate lock violates schema: " + "; ".join(lock_check["errors"]))
     lock_digest = atomic_write_json_cas(lock_out, lock, expected_sha256=None, new_file_mode=0o444)
@@ -187,6 +220,7 @@ def select_tau3_candidate(
         "report_sha256": report_sha256,
         "lock_path": str(lock_out),
         "lock_sha256": lock_digest,
+        "lock_schema_version": lock["schema_version"],
         "eligible_candidate_count": len(eligible),
     }
 
@@ -200,6 +234,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bootstrap-seed", type=int, default=BOOTSTRAP_SEED)
     parser.add_argument("--non-inferiority-margin", type=float, default=NON_INFERIORITY_MARGIN)
     parser.add_argument("--safety-non-inferiority-margin", type=float, default=SAFETY_NON_INFERIORITY_MARGIN)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
     parser.add_argument(
         "--candidate",
         action="append",
@@ -221,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_seed=args.bootstrap_seed,
             non_inferiority_margin=args.non_inferiority_margin,
             safety_non_inferiority_margin=args.safety_non_inferiority_margin,
+            benchmark_protocol_lineage_path=args.benchmark_protocol_lineage,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
@@ -237,6 +273,7 @@ def _evaluate_candidate(
     bootstrap_seed: int,
     non_inferiority_margin: float,
     safety_non_inferiority_margin: float,
+    protocol_lineage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     candidate = _load_benchmark_manifest(entry.development_manifest_path, expected_arm="adapter")
@@ -250,11 +287,24 @@ def _evaluate_candidate(
         endpoint_model_sha256=_nested(candidate["manifest"], "arm_identity", "endpoint_model_sha256"),
     )
 
-    if candidate["manifest"].get("protocol_sha256") != base["manifest"].get("protocol_sha256"):
+    benchmark_protocol_sha256 = (
+        protocol_lineage["benchmark_protocol_sha256"]
+        if protocol_lineage is not None
+        else base["manifest"].get("protocol_sha256")
+    )
+    training_protocol_sha256 = (
+        protocol_lineage["training_protocol_sha256"]
+        if protocol_lineage is not None
+        else base["manifest"].get("protocol_sha256")
+    )
+    if candidate["manifest"].get("protocol_sha256") != benchmark_protocol_sha256:
         errors.append("protocol_sha256_mismatch")
     if candidate["manifest"].get("tau_revision") != base["manifest"].get("tau_revision"):
         errors.append("tau_revision_mismatch")
-    if _nested(training["payload"], "training_binding", "protocol", "sha256") != base["manifest"].get("protocol_sha256"):
+    if (
+        _nested(training["payload"], "training_binding", "protocol", "sha256")
+        != training_protocol_sha256
+    ):
         errors.append("training_protocol_sha256_mismatch")
     identical_evaluator = (
         candidate["evaluator_model_contract"]
@@ -348,6 +398,10 @@ def _evaluate_candidate(
             **candidate["evaluator_model_contract"],
         },
         "endpoint_model_sha256": _nested(candidate["manifest"], "arm_identity", "endpoint_model_sha256"),
+        "development_protocol_signature": _protocol_signature(
+            candidate["protocol"]["payload"],
+            candidate["protocol"]["sha256"],
+        ),
         "metrics": metrics,
         "effects": effects,
     }
@@ -526,6 +580,23 @@ def _load_training_receipt(path: Path) -> dict[str, Any]:
     if schema["passed"] is not True:
         raise Tau3CandidateSelectionError(f"{path}: training receipt schema failed: " + "; ".join(schema["errors"]))
     return {"path": path, "payload": payload, "record": {"path": str(path), "sha256": _sha256_file(path), "terminal_status": payload.get("terminal_status")}}
+
+
+def _load_benchmark_protocol_lineage(path: Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    try:
+        inspected = inspect_tau3_benchmark_protocol_lineage(lineage=path)
+    except Tau3BenchmarkProtocolLineageError as exc:
+        raise Tau3CandidateSelectionError(
+            f"benchmark protocol lineage is invalid: {exc}"
+        ) from exc
+    return {
+        "sha256": inspected["sha256"],
+        "training_protocol_sha256": inspected["training_protocol_sha256"],
+        "benchmark_protocol_sha256": inspected["benchmark_protocol_sha256"],
+        "passed": True,
+    }
 
 
 def _load_prelaunch_record(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -1054,11 +1125,26 @@ def _training_binding_summary(receipt: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _candidate_lock(selected: dict[str, Any], *, report_sha256: str, created_at: str) -> dict[str, Any]:
+def _protocol_signature(protocol: dict[str, Any], protocol_sha256: str) -> str:
+    signature = protocol.get("protocol_signature")
+    return str(signature) if _sha256_value(signature) else protocol_sha256
+
+
+def _candidate_lock(
+    selected: dict[str, Any],
+    *,
+    report_sha256: str,
+    created_at: str,
+    protocol_lineage: dict[str, Any] | None,
+) -> dict[str, Any]:
     summary = selected["training_binding"]
     identity_file_hash = selected["candidate_identity"]["sha256"]
     lock = {
-        "schema_version": TAU3_CANDIDATE_LOCK_SCHEMA_VERSION,
+        "schema_version": (
+            TAU3_CANDIDATE_LOCK_V2_SCHEMA_VERSION
+            if protocol_lineage is not None
+            else TAU3_CANDIDATE_LOCK_SCHEMA_VERSION
+        ),
         "created_at": created_at,
         "selected_candidate_id_hash": canonical_sha256(selected["candidate_id"]),
         "candidate_identity_sha256": identity_file_hash,
@@ -1076,13 +1162,34 @@ def _candidate_lock(selected: dict[str, Any], *, report_sha256: str, created_at:
         "dataset_manifest_sha256": summary.get("dataset_manifest_sha256"),
         "dataset_files_sha256": summary.get("dataset_files_sha256"),
         "source_binding_sha256": summary.get("source_binding_sha256"),
-        "protocol_sha256": summary.get("protocol_sha256"),
-        "protocol_signature": summary.get("protocol_signature"),
         "hashes_only": True,
         "sealed_access_authorized": True,
         "local_paths_included": False,
         "raw_payload_included": False,
     }
+    if protocol_lineage is None:
+        lock.update(
+            {
+                "protocol_sha256": summary.get("protocol_sha256"),
+                "protocol_signature": summary.get("protocol_signature"),
+            }
+        )
+    else:
+        lock.update(
+            {
+                "training_protocol_sha256": summary.get("protocol_sha256"),
+                "training_protocol_signature": summary.get("protocol_signature"),
+                "benchmark_protocol_sha256": protocol_lineage.get(
+                    "benchmark_protocol_sha256"
+                ),
+                "benchmark_protocol_signature": selected.get(
+                    "development_protocol_signature"
+                ),
+                "benchmark_protocol_lineage_sha256": protocol_lineage.get(
+                    "sha256"
+                ),
+            }
+        )
     missing = sorted(key for key, value in lock.items() if key.endswith("sha256") and not value)
     if missing:
         raise Tau3CandidateSelectionError("candidate lock missing hash binding(s): " + ", ".join(missing))

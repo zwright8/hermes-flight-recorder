@@ -22,6 +22,7 @@ TAU3_SEALED_GRID_COMPLETENESS_SCHEMA_VERSION = "hfr.tau3_sealed_grid_completenes
 TAU3_BENCHMARK_RUN_SCHEMA_VERSION = "hfr.tau3_benchmark_run.v1"
 TAU3_SEALED_SOURCE_SCHEMA_VERSION = "hfr.tau3_sealed_source_manifest.v1"
 TAU3_SEALED_AUTHORIZATION_SCHEMA_VERSION = "hfr.tau3_sealed_authorization.v1"
+TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION = "hfr.tau3_sealed_authorization.v2"
 
 REQUIRED_ARMS = ("adapter", "base", "comparator_1", "comparator_2")
 REQUIRED_SEEDS = (101, 202, 303, 404)
@@ -86,6 +87,12 @@ def build_tau3_sealed_grid_completeness(
     expected_tau_revision: str,
     out: str | Path,
     created_at: str | None = None,
+    training_protocol: str | Path | None = None,
+    benchmark_protocol_lineage: str | Path | None = None,
+    custody_receipt: str | Path | None = None,
+    generator_validation: str | Path | None = None,
+    fresh_contamination_replay: str | Path | None = None,
+    retired_source_incident_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Write a public-safe completeness artifact for the final sealed 4x4 Tau-3 grid."""
 
@@ -103,6 +110,28 @@ def build_tau3_sealed_grid_completeness(
         sealed_source_manifest_path=Path(sealed_source_manifest),
         authorization=authorization,
         expected_tau_revision=expected_tau_revision,
+        training_protocol_path=(
+            Path(training_protocol) if training_protocol is not None else None
+        ),
+        benchmark_protocol_lineage_path=(
+            Path(benchmark_protocol_lineage)
+            if benchmark_protocol_lineage is not None
+            else None
+        ),
+        custody_receipt_path=(
+            Path(custody_receipt) if custody_receipt is not None else None
+        ),
+        generator_validation_path=(
+            Path(generator_validation)
+            if generator_validation is not None
+            else None
+        ),
+        fresh_contamination_replay_path=(
+            Path(fresh_contamination_replay)
+            if fresh_contamination_replay is not None
+            else None
+        ),
+        retired_source_incident_sha256=retired_source_incident_sha256,
     )
     candidate_lock_artifact = _read_json_artifact(Path(candidate_lock), "candidate lock")
 
@@ -149,7 +178,7 @@ def build_tau3_sealed_grid_completeness(
     if auth_hashes != {authorization.sha256}:
         raise Tau3SealedGridCompletenessError("sealed arm authorization hashes do not exactly match authorization artifact")
 
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": TAU3_SEALED_GRID_COMPLETENESS_SCHEMA_VERSION,
         "created_at": created_at or _now_utc(),
         "passed": True,
@@ -200,6 +229,34 @@ def build_tau3_sealed_grid_completeness(
             "public_payload_safe": True,
         },
     }
+    if (
+        authorization.payload.get("schema_version")
+        == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION
+    ):
+        payload["bindings"].update(
+            {
+                "training_protocol_sha256": authorization_replay[
+                    "training_protocol_sha256"
+                ],
+                "benchmark_protocol_lineage_sha256": authorization_replay[
+                    "benchmark_protocol_lineage_sha256"
+                ],
+                "blind_custody_receipt_sha256": authorization_replay[
+                    "blind_custody_receipt_sha256"
+                ],
+                "generator_validation_sha256": _dict(
+                    authorization.payload.get("blind_custody")
+                ).get("generator_validation_sha256"),
+                "fresh_contamination_replay_sha256": _dict(
+                    authorization.payload.get("blind_custody")
+                ).get("fresh_contamination_replay_sha256"),
+                "retired_source_incident_sha256": _dict(
+                    authorization.payload.get("blind_custody")
+                ).get("retired_source_incident_sha256"),
+            }
+        )
+        payload["gates"]["fresh_protocol_lineage_binding_replayed"] = True
+        payload["gates"]["blind_custody_binding_replayed"] = True
     _assert_public_safe(payload)
     schema = check_schema_contract(payload, name_or_id="tau3_sealed_grid_completeness")
     if schema.get("passed") is not True:
@@ -215,6 +272,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--protocol", type=Path, required=True)
     parser.add_argument("--sealed-source-manifest", type=Path, required=True)
     parser.add_argument("--sealed-authorization", type=Path, required=True)
+    parser.add_argument("--training-protocol", type=Path)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
+    parser.add_argument("--custody-receipt", type=Path)
+    parser.add_argument("--generator-validation", type=Path)
+    parser.add_argument("--fresh-contamination-replay", type=Path)
+    parser.add_argument("--retired-source-incident-sha256")
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--created-at")
@@ -233,6 +296,14 @@ def main(argv: list[str] | None = None) -> int:
             expected_tau_revision=args.expected_tau_revision,
             out=args.out,
             created_at=args.created_at,
+            training_protocol=args.training_protocol,
+            benchmark_protocol_lineage=args.benchmark_protocol_lineage,
+            custody_receipt=args.custody_receipt,
+            generator_validation=args.generator_validation,
+            fresh_contamination_replay=args.fresh_contamination_replay,
+            retired_source_incident_sha256=(
+                args.retired_source_incident_sha256
+            ),
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps(_stable_cli_error(exc), sort_keys=True), file=sys.stderr)
@@ -297,6 +368,15 @@ def _load_arm(
     staged_lock = _read_json_ref(base, payload.get("candidate_lock"), lock_sha, "candidate lock")
     _read_json_ref(base, payload.get("sealed_authorization"), auth_sha, "sealed authorization")
     _read_json_ref(base, payload.get("sealed_task_count_manifest"), sealed_source_sha, "sealed source manifest")
+    if (
+        authorization.payload.get("schema_version")
+        == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION
+    ):
+        _validate_arm_v2_lineage_refs(
+            base=base,
+            payload=payload,
+            authorization=authorization.payload,
+        )
     if staged_lock.payload != candidate_lock.payload:
         raise Tau3SealedGridCompletenessError(f"{arm_id} staged candidate lock payload does not match replayed candidate lock")
     lock_time = _parse_time(candidate_lock.payload.get("created_at"))
@@ -356,6 +436,53 @@ def _load_arm(
     )
 
 
+def _validate_arm_v2_lineage_refs(
+    *,
+    base: Path,
+    payload: dict[str, Any],
+    authorization: dict[str, Any],
+) -> None:
+    lock = _dict(authorization.get("candidate_lock"))
+    lineage = _dict(authorization.get("protocol_lineage"))
+    custody = _dict(authorization.get("blind_custody"))
+    expected = (
+        (
+            "training_protocol",
+            lock.get("training_protocol_sha256"),
+            "training protocol",
+        ),
+        (
+            "benchmark_protocol_lineage",
+            lineage.get("sha256"),
+            "benchmark protocol lineage",
+        ),
+        (
+            "blind_custody_receipt",
+            custody.get("receipt_sha256"),
+            "blind custody receipt",
+        ),
+        (
+            "blind_generator_validation",
+            custody.get("generator_validation_sha256"),
+            "blind generator validation",
+        ),
+        (
+            "fresh_contamination_replay",
+            custody.get("fresh_contamination_replay_sha256"),
+            "fresh contamination replay",
+        ),
+    )
+    for key, sha256, label in expected:
+        _read_json_ref(base, payload.get(key), sha256, label)
+    if (
+        payload.get("retired_source_incident_sha256")
+        != custody.get("retired_source_incident_sha256")
+    ):
+        raise Tau3SealedGridCompletenessError(
+            "arm retired source incident binding mismatch"
+        )
+
+
 def _task_hashes_from_result(artifact: _JsonArtifact, *, expected_domain: str, expected_seed: int) -> set[str]:
     payload = artifact.payload
     simulations = payload.get("simulations")
@@ -385,6 +512,12 @@ def _replay_authorization(
     sealed_source_manifest_path: Path,
     authorization: _JsonArtifact,
     expected_tau_revision: str,
+    training_protocol_path: Path | None,
+    benchmark_protocol_lineage_path: Path | None,
+    custody_receipt_path: Path | None,
+    generator_validation_path: Path | None,
+    fresh_contamination_replay_path: Path | None,
+    retired_source_incident_sha256: str | None,
 ) -> dict[str, Any]:
     last_record: dict[str, Any] | None = None
     for arm_id in REQUIRED_ARMS:
@@ -398,6 +531,18 @@ def _replay_authorization(
                 seeds=REQUIRED_SEEDS,
                 expected_tau_revision=expected_tau_revision,
                 expected_authorization_sha256=authorization.sha256,
+                training_protocol_path=training_protocol_path,
+                benchmark_protocol_lineage_path=(
+                    benchmark_protocol_lineage_path
+                ),
+                custody_receipt_path=custody_receipt_path,
+                generator_validation_path=generator_validation_path,
+                fresh_contamination_replay_path=(
+                    fresh_contamination_replay_path
+                ),
+                retired_source_incident_sha256=(
+                    retired_source_incident_sha256
+                ),
             )
         except Tau3SealedAuthorizationError as exc:
             raise Tau3SealedGridCompletenessError("sealed authorization replay failed") from exc
@@ -418,6 +563,20 @@ def _compare_authorization_replay(auth: dict[str, Any], record: dict[str, Any]) 
         "arms": list(REQUIRED_ARMS),
         "seeds": list(REQUIRED_SEEDS),
     }
+    if auth.get("schema_version") == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION:
+        expected.update(
+            {
+                "training_protocol_sha256": _dict(
+                    auth.get("protocol_lineage")
+                ).get("training_protocol_sha256"),
+                "benchmark_protocol_lineage_sha256": _dict(
+                    auth.get("protocol_lineage")
+                ).get("sha256"),
+                "blind_custody_receipt_sha256": _dict(
+                    auth.get("blind_custody")
+                ).get("receipt_sha256"),
+            }
+        )
     for key, value in expected.items():
         if record.get(key) != value:
             raise Tau3SealedGridCompletenessError("sealed authorization replay binding mismatch")
@@ -435,6 +594,13 @@ def _validate_arm_authorization_ref(payload: dict[str, Any], replay: dict[str, A
         "arms": list(REQUIRED_ARMS),
         "seeds": list(REQUIRED_SEEDS),
     }
+    for key in (
+        "training_protocol_sha256",
+        "benchmark_protocol_lineage_sha256",
+        "blind_custody_receipt_sha256",
+    ):
+        if key in replay:
+            expected[key] = replay[key]
     for key, value in expected.items():
         if ref.get(key) != value:
             raise Tau3SealedGridCompletenessError("arm sealed authorization reference binding mismatch")
@@ -510,11 +676,20 @@ def _validate_sealed_source(sealed: _JsonArtifact) -> None:
 
 
 def _validate_authorization(authorization: _JsonArtifact, sealed: _JsonArtifact) -> None:
-    check = check_schema_contract(authorization.payload, name_or_id="tau3_sealed_authorization")
+    version = authorization.payload.get("schema_version")
+    if version == TAU3_SEALED_AUTHORIZATION_V2_SCHEMA_VERSION:
+        schema_name = "tau3_sealed_authorization_v2"
+    elif version == TAU3_SEALED_AUTHORIZATION_SCHEMA_VERSION:
+        schema_name = "tau3_sealed_authorization"
+    else:
+        raise Tau3SealedGridCompletenessError(
+            "sealed authorization schema_version mismatch"
+        )
+    check = check_schema_contract(authorization.payload, name_or_id=schema_name)
     if check.get("passed") is not True:
         raise Tau3SealedGridCompletenessError("sealed authorization violates schema: " + "; ".join(check["errors"]))
     payload = authorization.payload
-    if payload.get("schema_version") != TAU3_SEALED_AUTHORIZATION_SCHEMA_VERSION or payload.get("authorized") is not True:
+    if payload.get("authorized") is not True:
         raise Tau3SealedGridCompletenessError("sealed authorization is not authorized")
     frozen = _dict(payload.get("frozen_contract"))
     if frozen.get("arms") != list(REQUIRED_ARMS) or frozen.get("seeds") != list(REQUIRED_SEEDS) or frozen.get("domains") != list(REQUIRED_DOMAINS):

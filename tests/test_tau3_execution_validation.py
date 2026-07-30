@@ -63,6 +63,35 @@ class Tau3ExecutionValidationTests(unittest.TestCase):
             self.assertTrue(result["passed"], result)
             self.assertEqual(result["schema_version"], "hfr.validation.v1")
 
+    def test_training_bundle_passes_with_dual_protocol_v2_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            upgrade_training_bundle_to_v2_lock(root)
+
+            result = validate_tau3_training_result_bundle(root, strict=True)
+
+            self.assertTrue(result["passed"], result)
+
+    def test_training_bundle_rejects_tampered_dual_protocol_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_execution_bundle(root)
+            upgrade_training_bundle_to_v2_lock(root)
+            lineage_path = root / "benchmark-protocol-lineage.json"
+            lineage = read_json(lineage_path)
+            lineage["benchmark_protocol_sha256"] = "0" * 64
+            write_json(lineage_path, lineage)
+            manifest_path = root / "manifest.json"
+            manifest = read_json(manifest_path)
+            manifest["benchmark_protocol_lineage"]["sha256"] = sha256_file(lineage_path)
+            write_json(manifest_path, manifest)
+
+            result = validate_tau3_training_result_bundle(root, strict=True)
+
+            self.assertFalse(result["passed"])
+            self.assertIn("lineage", json.dumps(result))
+
     def test_training_bundle_passes_with_relocated_real_mlx_runner_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -413,6 +442,138 @@ def build_execution_bundle(root: Path) -> None:
         },
     }
     write_json(root / "manifest.json", manifest)
+
+
+def upgrade_training_bundle_to_v2_lock(root: Path) -> None:
+    manifest_path = root / "manifest.json"
+    manifest = read_json(manifest_path)
+    benchmark_protocol_ref = manifest["protocol"]
+    benchmark_protocol_sha256 = benchmark_protocol_ref["sha256"]
+    training_protocol = read_json(root / benchmark_protocol_ref["path"])
+    training_protocol["sealed_manifest"] = {
+        "access_count": 0,
+        "manifest_sha256": "7" * 64,
+        "prompt_template_hashes": ["8" * 64],
+    }
+    training_protocol["split_manifest"]["source_manifest"] = "7" * 64
+    training_protocol["split_manifest"]["splits"]["sealed"] = {
+        "sha256": "7" * 64,
+        "sealed": True,
+    }
+    training_protocol["tau_revision"]["split_hashes"]["sealed"] = "7" * 64
+    training_protocol_ref = write_hashed_json(
+        root,
+        "training-protocol.json",
+        training_protocol,
+    )
+
+    receipt_path = root / manifest["training"]["selected_receipt"]["path"]
+    receipt = read_json(receipt_path)
+    training_protocol_binding = receipt["training_binding"]["protocol"]
+    training_protocol_binding.update(
+        {
+            "path": "training-protocol.json",
+            "sha256": training_protocol_ref["sha256"],
+            "protocol_signature": training_protocol_ref["sha256"],
+        }
+    )
+    prelaunch_path = receipt_path.parent / receipt["prelaunch_receipt"]["path"]
+    prelaunch = read_json(prelaunch_path)
+    prelaunch["training_binding"]["protocol"] = dict(training_protocol_binding)
+    write_json(prelaunch_path, prelaunch)
+    receipt["prelaunch_receipt"]["sha256"] = sha256_file(prelaunch_path)
+    receipt["prelaunch_receipt"]["size"] = prelaunch_path.stat().st_size
+    write_json(receipt_path, receipt)
+    receipt_ref = {
+        "path": manifest["training"]["selected_receipt"]["path"],
+        "sha256": sha256_file(receipt_path),
+    }
+    manifest["training"]["selected_receipt"] = receipt_ref
+    manifest["training"]["candidate_receipts"] = [
+        {**receipt_ref, "candidate_id": "candidate-a"}
+    ]
+
+    lineage = {
+        "schema_version": "hfr.tau3_benchmark_protocol_lineage.v1",
+        "created_at": "2026-07-23T00:18:00Z",
+        "passed": True,
+        "training_protocol_sha256": training_protocol_ref["sha256"],
+        "benchmark_protocol_sha256": benchmark_protocol_sha256,
+        "frozen_fields_sha256": "9" * 64,
+        "allowed_delta": {
+            "paths": [
+                "sealed_manifest",
+                "split_manifest.source_manifest",
+                "split_manifest.splits.sealed",
+                "tau_revision.split_hashes.sealed",
+            ],
+            "change_count": 4,
+            "changes_sha256": "a" * 64,
+        },
+        "fresh_bindings": {
+            "blind_custody_receipt_sha256": "b" * 64,
+            "sealed_source_manifest_sha256": "c" * 64,
+            "fresh_contamination_replay_sha256": "d" * 64,
+            "retired_source_incident_sha256": "e" * 64,
+        },
+        "gates": {
+            "training_protocol_schema_passed": True,
+            "benchmark_protocol_schema_passed": True,
+            "exact_sealed_only_delta": True,
+            "fresh_source_bound_everywhere": True,
+            "custody_receipt_replayed": True,
+            "fresh_contamination_replay_passed": True,
+            "retired_source_not_reused": True,
+        },
+        "hashes_only": True,
+        "local_paths_included": False,
+        "raw_payload_included": False,
+    }
+    lineage["lineage_sha256"] = tree_value_sha256(lineage)
+    lineage_ref = write_hashed_json(
+        root,
+        "benchmark-protocol-lineage.json",
+        lineage,
+    )
+
+    selection_path = root / manifest["training"]["candidate_selection_report"]["path"]
+    selection = read_json(selection_path)
+    selection["benchmark_protocol_lineage"] = {
+        "sha256": lineage_ref["sha256"],
+        "training_protocol_sha256": training_protocol_ref["sha256"],
+        "benchmark_protocol_sha256": benchmark_protocol_sha256,
+        "passed": True,
+    }
+    selection["candidates"][0]["artifacts"]["training_receipt"] = receipt_ref
+    write_json(selection_path, selection)
+    selection_ref = {
+        "path": manifest["training"]["candidate_selection_report"]["path"],
+        "sha256": sha256_file(selection_path),
+    }
+    manifest["training"]["candidate_selection_report"] = selection_ref
+
+    lock_path = root / manifest["training"]["candidate_locks"][0]["path"]
+    lock = read_json(lock_path)
+    lock["schema_version"] = "hfr.tau3_candidate_lock.v2"
+    lock["training_receipt_sha256"] = receipt_ref["sha256"]
+    lock["development_selection_report_sha256"] = selection_ref["sha256"]
+    lock["training_protocol_sha256"] = training_protocol_ref["sha256"]
+    lock["training_protocol_signature"] = training_protocol_ref["sha256"]
+    lock["benchmark_protocol_sha256"] = benchmark_protocol_sha256
+    lock["benchmark_protocol_signature"] = benchmark_protocol_sha256
+    lock["benchmark_protocol_lineage_sha256"] = lineage_ref["sha256"]
+    lock.pop("protocol_sha256")
+    lock.pop("protocol_signature")
+    write_json(lock_path, lock)
+    manifest["training"]["candidate_locks"] = [
+        {
+            "path": manifest["training"]["candidate_locks"][0]["path"],
+            "sha256": sha256_file(lock_path),
+        }
+    ]
+    manifest["training_protocol"] = training_protocol_ref
+    manifest["benchmark_protocol_lineage"] = lineage_ref
+    write_json(manifest_path, manifest)
 
 
 def build_training_receipts(root: Path, protocol_ref: dict[str, str]) -> dict[str, str]:

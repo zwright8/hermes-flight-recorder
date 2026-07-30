@@ -13,6 +13,7 @@ from flightrecorder.tau3_promotion_preflight import (
     TAU3_POST_PUBLICATION_RECORD_SCHEMA_VERSION,
     TAU3_PROMOTION_PREFLIGHT_SCHEMA_VERSION,
     Tau3PromotionPreflightError,
+    _ledger_binds_lock,
     build_tau3_post_publication_record,
     build_tau3_promotion_preflight,
 )
@@ -67,6 +68,72 @@ class Tau3PromotionPreflightTests(unittest.TestCase):
             self.assertIn("required_evaluation_checks_passed", decision["blocking_reasons"])
             self.assertTrue(check_schema_contract(decision, name_or_id="tau3_promotion_publication_preflight")["passed"])
 
+    def test_v2_dual_protocol_lineage_can_unlock_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = make_fixture(root, promoted=True)
+            upgrade_fixture_to_v2(paths)
+
+            decision = build_tau3_promotion_preflight(
+                **paths,
+                out=root / "v2-preflight.json",
+                created_at="2026-07-30T03:00:00Z",
+            )
+
+            self.assertTrue(decision["allowed"], decision["blocking_reasons"])
+            self.assertEqual(
+                decision["evidence_bindings"][
+                    "protocol_lineage_attestation"
+                ]["schema_version"],
+                "hfr.tau3_benchmark_protocol_lineage.v1",
+            )
+
+    def test_v2_attempt_ledger_compares_training_not_benchmark_protocol(self) -> None:
+        training_sha = _sha("1")
+        benchmark_sha = _sha("2")
+        lock_sha = _sha("3")
+        candidate_lock_payload = {
+            "schema_version": "hfr.tau3_candidate_lock.v2",
+            "training_protocol_sha256": training_sha,
+            "training_protocol_signature": _sha("4"),
+            "benchmark_protocol_sha256": benchmark_sha,
+            "benchmark_protocol_signature": _sha("5"),
+        }
+        ledger = {
+            "created_at": "2026-07-30T00:01:00Z",
+            "lock": {
+                "created_at": "2026-07-30T00:00:00Z",
+                "sha256": lock_sha,
+            },
+            "attempts": [
+                {
+                    "intent": None,
+                    "outcome": None,
+                    "training_receipt": None,
+                    "bindings": {
+                        "protocol_sha256": training_sha,
+                        "protocol_signature": _sha("4"),
+                    },
+                }
+            ],
+        }
+
+        self.assertTrue(
+            _ledger_binds_lock(
+                ledger,
+                lock_sha,
+                candidate_lock=candidate_lock_payload,
+            )
+        )
+        ledger["attempts"][0]["bindings"]["protocol_sha256"] = benchmark_sha
+        self.assertFalse(
+            _ledger_binds_lock(
+                ledger,
+                lock_sha,
+                candidate_lock=candidate_lock_payload,
+            )
+        )
+
     def test_missing_required_evaluation_check_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -82,6 +149,23 @@ class Tau3PromotionPreflightTests(unittest.TestCase):
 
             self.assertFalse(decision["allowed"])
             self.assertIn("required_evaluation_checks_passed", decision["blocking_reasons"])
+
+    def test_malformed_nested_hash_bindings_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = make_fixture(root, promoted=True)
+            authorization = _read_json(paths["sealed_authorization"])
+            authorization["candidate_lock"] = []
+            _write_json(paths["sealed_authorization"], authorization)
+
+            decision = build_tau3_promotion_preflight(
+                **paths,
+                out=root / "malformed-bindings.json",
+            )
+
+            self.assertFalse(decision["allowed"])
+            self.assertIn("schema_contracts_passed", decision["blocking_reasons"])
+            self.assertIn("hash_bindings_replay", decision["blocking_reasons"])
 
     def test_rejects_raw_sealed_or_private_identifier_input(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -238,6 +322,158 @@ def make_fixture(root: Path, *, promoted: bool) -> dict[str, Path]:
         "contamination_evidence": contamination_path,
         "redaction_evidence": redaction_path,
     }
+
+
+def upgrade_fixture_to_v2(paths: dict[str, Path]) -> None:
+    training_protocol_sha256 = _sha("8")
+    benchmark_protocol_sha256 = _sha("a")
+    lineage = {
+        "schema_version": "hfr.tau3_benchmark_protocol_lineage.v1",
+        "created_at": "2026-07-30T00:00:00Z",
+        "passed": True,
+        "training_protocol_sha256": training_protocol_sha256,
+        "benchmark_protocol_sha256": benchmark_protocol_sha256,
+        "frozen_fields_sha256": _sha("b"),
+        "allowed_delta": {
+            "paths": [
+                "sealed_manifest",
+                "split_manifest.source_manifest",
+                "split_manifest.splits.sealed",
+                "tau_revision.split_hashes.sealed",
+            ],
+            "change_count": 4,
+            "changes_sha256": _sha("c"),
+        },
+        "fresh_bindings": {
+            "blind_custody_receipt_sha256": _sha("d"),
+            "sealed_source_manifest_sha256": _sha("a"),
+            "fresh_contamination_replay_sha256": _sha("e"),
+            "retired_source_incident_sha256": _sha("f"),
+        },
+        "gates": {
+            "training_protocol_schema_passed": True,
+            "benchmark_protocol_schema_passed": True,
+            "exact_sealed_only_delta": True,
+            "fresh_source_bound_everywhere": True,
+            "custody_receipt_replayed": True,
+            "fresh_contamination_replay_passed": True,
+            "retired_source_not_reused": True,
+        },
+        "hashes_only": True,
+        "local_paths_included": False,
+        "raw_payload_included": False,
+    }
+    lineage["lineage_sha256"] = _canonical_sha256(lineage)
+    _write_json(paths["protocol_lineage_attestation"], lineage)
+    lineage_sha256 = _file_sha(paths["protocol_lineage_attestation"])
+
+    lock = _read_json(paths["candidate_lock"])
+    lock.update(
+        {
+            "schema_version": "hfr.tau3_candidate_lock.v2",
+            "evaluator_model_contract_sha256": _sha("0"),
+            "training_protocol_sha256": training_protocol_sha256,
+            "training_protocol_signature": _sha("9"),
+            "benchmark_protocol_sha256": benchmark_protocol_sha256,
+            "benchmark_protocol_signature": _sha("b"),
+            "benchmark_protocol_lineage_sha256": lineage_sha256,
+        }
+    )
+    lock.pop("protocol_sha256")
+    lock.pop("protocol_signature")
+    _write_json(paths["candidate_lock"], lock)
+    lock_sha256 = _file_sha(paths["candidate_lock"])
+
+    authorization_payload = _read_json(paths["sealed_authorization"])
+    authorization_payload.update(
+        {
+            "schema_version": "hfr.tau3_sealed_authorization.v2",
+            "candidate_lock": {
+                "sha256": lock_sha256,
+                "created_at": lock["created_at"],
+                "training_protocol_sha256": training_protocol_sha256,
+                "training_protocol_signature": _sha("9"),
+                "benchmark_protocol_sha256": benchmark_protocol_sha256,
+                "benchmark_protocol_signature": _sha("b"),
+                "benchmark_protocol_lineage_sha256": lineage_sha256,
+                "sealed_access_authorized": True,
+            },
+            "protocol": {
+                "role": "fresh_sealed_benchmark",
+                "sha256": benchmark_protocol_sha256,
+                "signature_sha256": _sha("b"),
+                "signature_provenance": (
+                    "candidate_lock.benchmark_protocol_signature"
+                ),
+                "tau_revision": "1" * 40,
+            },
+            "protocol_lineage": {
+                "sha256": lineage_sha256,
+                "training_protocol_sha256": training_protocol_sha256,
+                "benchmark_protocol_sha256": benchmark_protocol_sha256,
+            },
+            "blind_custody": {
+                "receipt_sha256": _sha("d"),
+                "generator_validation_sha256": _sha("c"),
+                "fresh_contamination_replay_sha256": _sha("e"),
+                "retired_source_incident_sha256": _sha("f"),
+            },
+        }
+    )
+    authorization_payload["sealed_source"]["domain_counts"] = {
+        "airline": 34,
+        "retail": 33,
+        "telecom": 33,
+    }
+    authorization_payload["gates"].update(
+        {
+            "fresh_protocol_lineage_replayed": True,
+            "blind_custody_replayed": True,
+            "retired_source_not_reused": True,
+            "fresh_domain_balance_passed": True,
+        }
+    )
+    _write_json(paths["sealed_authorization"], authorization_payload)
+    authorization_sha256 = _file_sha(paths["sealed_authorization"])
+
+    grid = _read_json(paths["sealed_grid_completeness"])
+    grid["bindings"].update(
+        {
+            "authorization_sha256": authorization_sha256,
+            "candidate_lock_sha256": lock_sha256,
+            "protocol_sha256": benchmark_protocol_sha256,
+            "training_protocol_sha256": training_protocol_sha256,
+            "benchmark_protocol_lineage_sha256": lineage_sha256,
+            "blind_custody_receipt_sha256": _sha("d"),
+            "generator_validation_sha256": _sha("c"),
+            "fresh_contamination_replay_sha256": _sha("e"),
+            "retired_source_incident_sha256": _sha("f"),
+        }
+    )
+    grid["gates"].update(
+        {
+            "fresh_protocol_lineage_binding_replayed": True,
+            "blind_custody_binding_replayed": True,
+        }
+    )
+    _write_json(paths["sealed_grid_completeness"], grid)
+
+    ledger = _read_json(paths["postlock_attempt_ledger"])
+    ledger["lock"]["sha256"] = lock_sha256
+    _write_json(paths["postlock_attempt_ledger"], ledger)
+
+
+def _canonical_sha256(value: Any) -> str:
+    import hashlib
+
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _file_sha(path: Path) -> str:

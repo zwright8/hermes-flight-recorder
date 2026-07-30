@@ -63,6 +63,12 @@ class Tau3BenchmarkConfig:
     candidate_identity_sha256: str | None = None
     candidate_lock: Path | None = None
     candidate_lock_sha256: str | None = None
+    training_protocol: Path | None = None
+    benchmark_protocol_lineage: Path | None = None
+    custody_receipt: Path | None = None
+    generator_validation: Path | None = None
+    fresh_contamination_replay: Path | None = None
+    retired_source_incident_sha256: str | None = None
     save_prefix: str = "hfr-benchmark"
     command_timeout_padding_seconds: int = 30
     extra_binding: dict[str, Any] = field(default_factory=dict)
@@ -168,6 +174,59 @@ def run_tau3_benchmark_arm(
         if config.mode == "sealed" and config.candidate_lock is not None
         else None
     )
+    training_protocol_ref = (
+        _stage_input_file(
+            config.training_protocol,
+            out,
+            "inputs/training_protocol.json",
+            "training protocol",
+        )
+        if config.mode == "sealed" and config.training_protocol is not None
+        else None
+    )
+    benchmark_protocol_lineage_ref = (
+        _stage_input_file(
+            config.benchmark_protocol_lineage,
+            out,
+            "inputs/benchmark_protocol_lineage.json",
+            "benchmark protocol lineage",
+        )
+        if config.mode == "sealed"
+        and config.benchmark_protocol_lineage is not None
+        else None
+    )
+    custody_receipt_ref = (
+        _stage_input_file(
+            config.custody_receipt,
+            out,
+            "inputs/blind_custody_receipt.json",
+            "blind custody receipt",
+        )
+        if config.mode == "sealed" and config.custody_receipt is not None
+        else None
+    )
+    generator_validation_ref = (
+        _stage_input_file(
+            config.generator_validation,
+            out,
+            "inputs/blind_generator_validation.json",
+            "blind generator validation",
+        )
+        if config.mode == "sealed"
+        and config.generator_validation is not None
+        else None
+    )
+    fresh_contamination_replay_ref = (
+        _stage_input_file(
+            config.fresh_contamination_replay,
+            out,
+            "inputs/fresh_contamination_replay.json",
+            "fresh contamination replay",
+        )
+        if config.mode == "sealed"
+        and config.fresh_contamination_replay is not None
+        else None
+    )
     candidate_lock = _candidate_lock_record(config, candidate_lock_ref) if config.mode == "sealed" else None
     if (
         config.mode == "sealed"
@@ -220,6 +279,16 @@ def run_tau3_benchmark_arm(
         "sealed_authorization": sealed_authorization,
         "candidate_identity": candidate_identity,
         "candidate_lock": candidate_lock,
+        "training_protocol": training_protocol_ref,
+        "benchmark_protocol_lineage": benchmark_protocol_lineage_ref,
+        "blind_custody_receipt": custody_receipt_ref,
+        "blind_generator_validation": generator_validation_ref,
+        "fresh_contamination_replay": fresh_contamination_replay_ref,
+        "retired_source_incident_sha256": (
+            config.retired_source_incident_sha256
+            if config.mode == "sealed"
+            else None
+        ),
         "task_selection": _task_selection_record(
             config,
             tasks_by_domain,
@@ -409,6 +478,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-identity-sha256")
     parser.add_argument("--candidate-lock", type=Path)
     parser.add_argument("--candidate-lock-sha256")
+    parser.add_argument("--training-protocol", type=Path)
+    parser.add_argument("--benchmark-protocol-lineage", type=Path)
+    parser.add_argument("--custody-receipt", type=Path)
+    parser.add_argument("--generator-validation", type=Path)
+    parser.add_argument("--fresh-contamination-replay", type=Path)
+    parser.add_argument("--retired-source-incident-sha256")
     parser.add_argument("--agent-model", required=True)
     parser.add_argument("--agent-api-base", required=True)
     parser.add_argument("--agent-adapter-path", type=Path)
@@ -449,6 +524,14 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_identity_sha256=args.candidate_identity_sha256,
                 candidate_lock=args.candidate_lock,
                 candidate_lock_sha256=args.candidate_lock_sha256,
+                training_protocol=args.training_protocol,
+                benchmark_protocol_lineage=args.benchmark_protocol_lineage,
+                custody_receipt=args.custody_receipt,
+                generator_validation=args.generator_validation,
+                fresh_contamination_replay=args.fresh_contamination_replay,
+                retired_source_incident_sha256=(
+                    args.retired_source_incident_sha256
+                ),
                 seeds=_parse_int_csv(args.seeds, "seeds"),
                 domains=_parse_str_csv(args.domains, "domains"),
                 timeout_seconds=args.timeout_seconds,
@@ -1126,12 +1209,32 @@ def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[
             seeds=config.seeds,
             expected_tau_revision=expected_tau_revision,
             expected_authorization_sha256=str(staged_ref["sha256"]),
+            training_protocol_path=config.training_protocol,
+            benchmark_protocol_lineage_path=config.benchmark_protocol_lineage,
+            custody_receipt_path=config.custody_receipt,
+            generator_validation_path=config.generator_validation,
+            fresh_contamination_replay_path=config.fresh_contamination_replay,
+            retired_source_incident_sha256=(
+                config.retired_source_incident_sha256
+            ),
         )
     except Tau3SealedAuthorizationError as exc:
         raise Tau3BenchmarkRunError(str(exc)) from exc
     result = dict(staged_ref)
-    for key in ("authorized", "candidate_lock_sha256", "protocol_sha256", "sealed_source_sha256", "task_count", "arms", "seeds"):
-        result[key] = record[key]
+    for key in (
+        "authorized",
+        "candidate_lock_sha256",
+        "protocol_sha256",
+        "sealed_source_sha256",
+        "task_count",
+        "arms",
+        "seeds",
+        "training_protocol_sha256",
+        "benchmark_protocol_lineage_sha256",
+        "blind_custody_receipt_sha256",
+    ):
+        if key in record:
+            result[key] = record[key]
     return result
 
 
@@ -1325,6 +1428,36 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         raise Tau3BenchmarkRunError("max_errors must be exactly 10")
     if not 1 <= config.timeout_seconds <= 7200:
         raise Tau3BenchmarkRunError("timeout_seconds must be between 1 and 7200")
+    fresh_lineage_inputs = (
+        config.training_protocol,
+        config.benchmark_protocol_lineage,
+        config.custody_receipt,
+        config.generator_validation,
+        config.fresh_contamination_replay,
+        config.retired_source_incident_sha256,
+    )
+    if config.mode == "development" and any(
+        value is not None for value in fresh_lineage_inputs
+    ):
+        raise Tau3BenchmarkRunError(
+            "development mode must not receive fresh sealed lineage evidence"
+        )
+    if config.mode == "sealed" and any(
+        value is not None for value in fresh_lineage_inputs
+    ) and not all(value is not None for value in fresh_lineage_inputs):
+        raise Tau3BenchmarkRunError(
+            "fresh sealed lineage evidence must be provided as one complete set"
+        )
+    if (
+        config.retired_source_incident_sha256 is not None
+        and not re.fullmatch(
+            r"[0-9a-f]{64}",
+            config.retired_source_incident_sha256,
+        )
+    ):
+        raise Tau3BenchmarkRunError(
+            "retired source incident sha256 must be lowercase SHA-256"
+        )
     if config.mode == "development" and config.candidate_lock is not None:
         raise Tau3BenchmarkRunError("development mode must not receive a candidate lock")
     if config.mode == "development" and config.sealed_task_count_manifest is not None:
