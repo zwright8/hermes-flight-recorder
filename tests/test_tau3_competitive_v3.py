@@ -770,6 +770,40 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
                 rendered,
             )
 
+    def test_final_lock_must_select_from_strict_qualified_cohort(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_complete_bundle(root)
+            training_path = root / "training-evidence.json"
+            training = read_json(training_path)
+            training["qualified_candidates"][0]["candidate_id"] = (
+                "other-candidate-a"
+            )
+            training["qualified_candidates"][1]["candidate_id"] = (
+                "other-candidate-b"
+            )
+            write_json(training_path, training)
+            plan = read_json(root / "competitive_v3_plan.json")
+            plan["evidence_refs"]["training"]["sha256"] = sha256_file(
+                training_path
+            )
+            write_json(root / "competitive_v3_plan.json", plan)
+
+            result = validate_tau3_competitive_v3_bundle(
+                root,
+                strict=True,
+                stage="final",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertIn(
+                "locked candidate must belong to the strict "
+                "development-qualified training cohort",
+                json.dumps(result),
+            )
+
     def test_below_threshold_development_scorecard_does_not_qualify(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2118,7 +2152,11 @@ def candidate_selection() -> dict[str, Any]:
         ],
         "eligible_candidate_count": 2,
         "eligible_recipe_count": 2,
-        "selection": {},
+        "selection": {
+            "candidate_id": "candidate-a",
+            "rank": 1,
+            "macro_pass1": 1.0,
+        },
     }
 
 
@@ -2126,7 +2164,7 @@ def candidate_lock(identity_sha: str, selection_sha: str, receipt_sha: str, adap
     return {
         "schema_version": "hfr.tau3_candidate_lock.v1",
         "created_at": "2026-07-23T00:50:00Z",
-        "selected_candidate_id_hash": "0" * 64,
+        "selected_candidate_id_hash": canonical_sha256("candidate-a"),
         "candidate_identity_sha256": identity_sha,
         "development_selection_report_sha256": selection_sha,
         "development_benchmark_manifest_sha256": "1" * 64,

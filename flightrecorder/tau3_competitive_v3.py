@@ -272,6 +272,7 @@ def validate_tau3_competitive_v3_bundle(
         raise ValueError(f"stage must be one of {', '.join(STAGES)}")
     root = Path(bundle)
     targets: list[_Target] = []
+    qualified_training_candidates: dict[str, dict[str, str]] = {}
     plan = _load_plan(root)
     targets.append(plan.target)
     if isinstance(plan.payload, dict):
@@ -285,12 +286,21 @@ def validate_tau3_competitive_v3_bundle(
         training = _load_stage_ref(root, plan.payload, "training", TRAINING_SCHEMA_VERSION)
         targets.append(training.target)
         if isinstance(training.payload, dict):
-            _validate_training_evidence(root, training.target, training.payload)
+            qualified_training_candidates = _validate_training_evidence(
+                root,
+                training.target,
+                training.payload,
+            )
     if stage == "final":
         final = _load_stage_ref(root, plan.payload, "final", FINAL_SCHEMA_VERSION)
         targets.append(final.target)
         if isinstance(final.payload, dict):
-            _validate_final_evidence(root, final.target, final.payload)
+            _validate_final_evidence(
+                root,
+                final.target,
+                final.payload,
+                qualified_training_candidates=qualified_training_candidates,
+            )
         publication = _load_stage_ref(root, plan.payload, "publication", PUBLICATION_SCHEMA_VERSION)
         targets.append(publication.target)
         if isinstance(publication.payload, dict):
@@ -606,7 +616,11 @@ def _list_strings(value: Any) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
-def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str, Any]) -> None:
+def _validate_training_evidence(
+    root: Path,
+    target: _Target,
+    evidence: dict[str, Any],
+) -> dict[str, dict[str, str]]:
     _require(target, evidence.get("schema_version") == TRAINING_SCHEMA_VERSION, f"training evidence schema_version must be {TRAINING_SCHEMA_VERSION}")
     _check_registered_schema(
         target,
@@ -629,6 +643,7 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
     candidate_ids: set[str] = set()
     recipe_hashes: set[str] = set()
     adapter_hashes: set[str] = set()
+    qualified_candidates: dict[str, dict[str, str]] = {}
     qualified_count = 0
     for candidate in candidates:
         label = str(candidate.get("candidate_id") or "candidate")
@@ -690,10 +705,21 @@ def _validate_training_evidence(root: Path, target: _Target, evidence: dict[str,
                 recipe_hashes.add(recipe_sha256)
             if isinstance(adapter_sha256, str):
                 adapter_hashes.add(adapter_sha256)
+            if (
+                isinstance(receipt_ref.sha256, str)
+                and isinstance(recipe_sha256, str)
+                and isinstance(adapter_sha256, str)
+            ):
+                qualified_candidates[label] = {
+                    "training_receipt_sha256": receipt_ref.sha256,
+                    "recipe_sha256": recipe_sha256,
+                    "adapter_tree_sha256": adapter_sha256,
+                }
     _require(target, len(candidate_ids) >= 2, "qualified candidates must be distinct")
     _require(target, qualified_count >= 2, "at least two candidates must pass development qualification gates")
     _require(target, len(recipe_hashes) >= 2, "qualified candidates must prove recipe diversity")
     _require(target, len(adapter_hashes) >= 2, "qualified candidates must bind distinct adapter fingerprints")
+    return qualified_candidates
 
 
 def _validate_training_exposure(
@@ -807,11 +833,70 @@ def _validate_candidate_selection_quorum(
     report: dict[str, Any],
 ) -> None:
     candidates = _list_of_dicts(report.get("candidates"))
+    candidate_ids = [
+        str(candidate.get("candidate_id") or "")
+        for candidate in candidates
+    ]
     eligible = [
         candidate
         for candidate in candidates
         if candidate.get("eligible") is True
     ]
+    selected_candidate_id = report.get("selected_candidate_id")
+    selected = _dict(report.get("selection"))
+    selected_rows = [
+        candidate
+        for candidate in eligible
+        if candidate.get("candidate_id") == selected_candidate_id
+    ]
+    _require(
+        target,
+        report.get("passed") is True,
+        "candidate selection report must have passed=true",
+    )
+    _require(
+        target,
+        all(candidate_ids)
+        and len(candidate_ids) == len(set(candidate_ids)),
+        "candidate selection candidate identifiers must be nonempty and distinct",
+    )
+    _require(
+        target,
+        isinstance(selected_candidate_id, str)
+        and bool(selected_candidate_id)
+        and len(selected_rows) == 1,
+        "candidate selection must select exactly one eligible candidate",
+    )
+    _require(
+        target,
+        selected.get("candidate_id") == selected_candidate_id
+        and selected.get("rank") == 1,
+        "candidate selection summary must bind the selected rank-one candidate",
+    )
+    ranked_eligible = sorted(
+        eligible,
+        key=lambda candidate: (
+            -float(
+                _number(
+                    _nested(
+                        candidate,
+                        "metrics",
+                        "macro_pass1",
+                        "candidate",
+                    )
+                )
+                or 0.0
+            ),
+            str(candidate.get("candidate_id") or ""),
+        ),
+    )
+    _require(
+        target,
+        bool(ranked_eligible)
+        and ranked_eligible[0].get("candidate_id")
+        == selected_candidate_id,
+        "candidate selection must replay the frozen rank ordering",
+    )
     recipe_hashes = {
         str(_nested(candidate, "training_binding", "recipe_sha256") or "")
         for candidate in eligible
@@ -880,7 +965,13 @@ def _validate_candidate_selection_quorum(
         )
 
 
-def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, Any]) -> None:
+def _validate_final_evidence(
+    root: Path,
+    target: _Target,
+    evidence: dict[str, Any],
+    *,
+    qualified_training_candidates: dict[str, dict[str, str]],
+) -> None:
     _require(target, evidence.get("schema_version") == FINAL_SCHEMA_VERSION, f"final evidence schema_version must be {FINAL_SCHEMA_VERSION}")
     _validate_chronology(target, evidence)
     artifacts = _dict(evidence.get("artifacts"))
@@ -969,6 +1060,13 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
             _require(target, lock.payload.get("development_selection_report_sha256") == selection.sha256, "candidate lock must bind selection report sha256")
         if identity.sha256 is not None:
             _require(target, lock.payload.get("candidate_identity_sha256") == identity.sha256, "candidate lock must bind identity sha256")
+    _validate_locked_candidate_training_binding(
+        target,
+        selection=selection.payload,
+        identity=identity.payload,
+        lock=lock.payload,
+        qualified_training_candidates=qualified_training_candidates,
+    )
     if isinstance(identity.payload, dict) and isinstance(lock.payload, dict):
         _require(target, identity.payload.get("training_receipt_sha256") == lock.payload.get("training_receipt_sha256"), "candidate identity must bind locked training receipt sha256")
         _require(target, identity.payload.get("adapter_tree_sha256") == lock.payload.get("adapter_tree_sha256"), "candidate identity must bind locked adapter tree sha256")
@@ -1080,6 +1178,65 @@ def _validate_final_evidence(root: Path, target: _Target, evidence: dict[str, An
         _require(target, promotion.payload.get("publication_status") == "ready_for_publication", "promotion preflight must be ready_for_publication")
         if lock.sha256 is not None:
             _require(target, _nested(promotion.payload, "evidence_bindings", "candidate_lock", "sha256") == lock.sha256, "promotion preflight must bind candidate lock sha256")
+
+
+def _validate_locked_candidate_training_binding(
+    target: _Target,
+    *,
+    selection: Any,
+    identity: Any,
+    lock: Any,
+    qualified_training_candidates: dict[str, dict[str, str]],
+) -> None:
+    if (
+        not isinstance(selection, dict)
+        or not isinstance(identity, dict)
+        or not isinstance(lock, dict)
+    ):
+        return
+    selected_candidate_id = selection.get("selected_candidate_id")
+    qualified = (
+        qualified_training_candidates.get(selected_candidate_id)
+        if isinstance(selected_candidate_id, str)
+        else None
+    )
+    _require(
+        target,
+        qualified is not None,
+        "locked candidate must belong to the strict development-qualified training cohort",
+    )
+    if qualified is None or not isinstance(selected_candidate_id, str):
+        return
+    _require(
+        target,
+        lock.get("selected_candidate_id_hash")
+        == _canonical_sha256(selected_candidate_id),
+        "candidate lock selected_candidate_id_hash must replay",
+    )
+    _require(
+        target,
+        identity.get("candidate_id") == selected_candidate_id,
+        "candidate identity must bind the selected candidate identifier",
+    )
+    for field_name in (
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+        "recipe_sha256",
+    ):
+        _require(
+            target,
+            lock.get(field_name) == qualified.get(field_name),
+            f"candidate lock {field_name} must bind the qualified training cohort",
+        )
+    for field_name in (
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+    ):
+        _require(
+            target,
+            identity.get(field_name) == qualified.get(field_name),
+            f"candidate identity {field_name} must bind the qualified training cohort",
+        )
 
 
 def _validate_publication(root: Path, target: _Target, publication: dict[str, Any]) -> None:
