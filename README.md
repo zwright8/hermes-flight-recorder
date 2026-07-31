@@ -519,7 +519,11 @@ The competitive-v3 training-evidence contract records deterministic exposure
 under each qualified candidate so distinct training seeds retain their own
 receipt, ledger, and saved replay validation. Legacy evidence may use one
 top-level shared exposure, but every candidate without that fallback must
-provide its own bundle-local exposure refs.
+provide its own bundle-local exposure refs. Final-stage validation carries the
+qualified cohort forward into candidate selection and requires the selected
+identifier, training receipt, adapter tree, recipe, public identity, and
+candidate lock to describe the same qualified candidate before sealed
+authorization can pass.
 
 ```bash
 .venv/bin/python scripts/build_tau3_development_evaluation.py \
