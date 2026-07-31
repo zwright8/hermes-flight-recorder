@@ -17,6 +17,7 @@ from flightrecorder.tau3_internal_validation import (
 from flightrecorder.tau3_competitive_v3_training_evidence import (
     Tau3CompetitiveV3TrainingEvidenceError,
     build_tau3_competitive_v3_training_evidence,
+    validate_tau3_competitive_v3_training_evidence,
 )
 from tests.test_tau3_competitive_v3 import (
     build_complete_bundle,
@@ -54,6 +55,23 @@ class Tau3CompetitiveV3TrainingEvidenceTests(unittest.TestCase):
                 self.assertEqual(
                     candidate["internal_validation"]["dataset"]["path"],
                     "dataset/valid.jsonl",
+                )
+            replay = validate_tau3_competitive_v3_training_evidence(
+                root / "training-evidence.json"
+            )
+            self.assertTrue(replay["passed"])
+            self.assertEqual(
+                set(replay["qualified_candidates"]),
+                set(CANDIDATES),
+            )
+            for bindings in replay["qualified_candidates"].values():
+                self.assertEqual(
+                    set(bindings),
+                    {
+                        "training_receipt_sha256",
+                        "recipe_sha256",
+                        "adapter_tree_sha256",
+                    },
                 )
 
     def test_rejects_fewer_and_duplicate_candidates(self) -> None:

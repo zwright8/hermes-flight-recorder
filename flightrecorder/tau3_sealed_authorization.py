@@ -82,6 +82,8 @@ def create_tau3_sealed_authorization(
     generator_validation: str | Path | None = None,
     fresh_contamination_replay: str | Path | None = None,
     retired_source_incident_sha256: str | None = None,
+    candidate_selection_report: str | Path | None = None,
+    qualified_training_evidence: str | Path | None = None,
 ) -> dict[str, Any]:
     """Create a public-safe authorization artifact only when every gate passes."""
 
@@ -112,6 +114,8 @@ def create_tau3_sealed_authorization(
             generator_validation=generator_validation,
             fresh_contamination_replay=fresh_contamination_replay,
             retired_source_incident_sha256=retired_source_incident_sha256,
+            candidate_selection_report=candidate_selection_report,
+            qualified_training_evidence=qualified_training_evidence,
         )
     else:
         _reject_v2_evidence_for_legacy_lock(
@@ -121,6 +125,8 @@ def create_tau3_sealed_authorization(
             generator_validation=generator_validation,
             fresh_contamination_replay=fresh_contamination_replay,
             retired_source_incident_sha256=retired_source_incident_sha256,
+            candidate_selection_report=candidate_selection_report,
+            qualified_training_evidence=qualified_training_evidence,
         )
         _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
     _validate_protocol(
@@ -188,6 +194,12 @@ def create_tau3_sealed_authorization(
                 "blind_custody_receipt_sha256": v2_context[
                     "custody_receipt_sha256"
                 ],
+                "candidate_selection_report_sha256": v2_context[
+                    "candidate_selection_report_sha256"
+                ],
+                "qualified_training_evidence_sha256": v2_context[
+                    "qualified_training_evidence_sha256"
+                ],
             }
         )
     return result
@@ -209,6 +221,8 @@ def validate_tau3_sealed_authorization(
     generator_validation_path: str | Path | None = None,
     fresh_contamination_replay_path: str | Path | None = None,
     retired_source_incident_sha256: str | None = None,
+    candidate_selection_report_path: str | Path | None = None,
+    qualified_training_evidence_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Replay authorization bindings before a sealed benchmark arm can start."""
 
@@ -258,6 +272,8 @@ def validate_tau3_sealed_authorization(
             generator_validation=generator_validation_path,
             fresh_contamination_replay=fresh_contamination_replay_path,
             retired_source_incident_sha256=retired_source_incident_sha256,
+            candidate_selection_report=candidate_selection_report_path,
+            qualified_training_evidence=qualified_training_evidence_path,
         )
     else:
         _reject_v2_evidence_for_legacy_lock(
@@ -267,6 +283,8 @@ def validate_tau3_sealed_authorization(
             generator_validation=generator_validation_path,
             fresh_contamination_replay=fresh_contamination_replay_path,
             retired_source_incident_sha256=retired_source_incident_sha256,
+            candidate_selection_report=candidate_selection_report_path,
+            qualified_training_evidence=qualified_training_evidence_path,
         )
         _validate_candidate_lock(lock, protocol_sha256=protocol_sha256)
     _validate_protocol(protocol_payload, protocol_sha256=protocol_sha256, candidate_lock_sha256=lock_sha256, sealed_sha256=sealed_sha256)
@@ -315,7 +333,9 @@ def validate_tau3_sealed_authorization(
         "budget",
     ]
     if v2_context is not None:
-        replay_keys.extend(["protocol_lineage", "blind_custody"])
+        replay_keys.extend(
+            ["protocol_lineage", "blind_custody", "qualification"]
+        )
     for key in replay_keys:
         if auth.get(key) != expected.get(key):
             errors.append(f"{key} binding does not replay")
@@ -345,6 +365,12 @@ def validate_tau3_sealed_authorization(
                 "blind_custody_receipt_sha256": v2_context[
                     "custody_receipt_sha256"
                 ],
+                "candidate_selection_report_sha256": v2_context[
+                    "candidate_selection_report_sha256"
+                ],
+                "qualified_training_evidence_sha256": v2_context[
+                    "qualified_training_evidence_sha256"
+                ],
             }
         )
     return result
@@ -361,6 +387,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generator-validation", type=Path)
     parser.add_argument("--fresh-contamination-replay", type=Path)
     parser.add_argument("--retired-source-incident-sha256")
+    parser.add_argument("--candidate-selection-report", type=Path)
+    parser.add_argument("--qualified-training-evidence", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--created-at")
     return parser
@@ -381,6 +409,8 @@ def main(argv: list[str] | None = None) -> int:
             generator_validation=args.generator_validation,
             fresh_contamination_replay=args.fresh_contamination_replay,
             retired_source_incident_sha256=args.retired_source_incident_sha256,
+            candidate_selection_report=args.candidate_selection_report,
+            qualified_training_evidence=args.qualified_training_evidence,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
@@ -400,6 +430,8 @@ def _validate_v2_protocol_and_custody(
     generator_validation: str | Path | None,
     fresh_contamination_replay: str | Path | None,
     retired_source_incident_sha256: str | None,
+    candidate_selection_report: str | Path | None,
+    qualified_training_evidence: str | Path | None,
 ) -> dict[str, Any]:
     training_path = _required_v2_path(training_protocol, "training protocol")
     lineage_path = _required_v2_path(
@@ -414,6 +446,14 @@ def _validate_v2_protocol_and_custody(
     contamination_path = _required_v2_path(
         fresh_contamination_replay,
         "fresh contamination replay",
+    )
+    selection_path = _required_v2_path(
+        candidate_selection_report,
+        "candidate selection report",
+    )
+    training_evidence_path = _required_v2_path(
+        qualified_training_evidence,
+        "qualified training evidence",
     )
     if (
         not isinstance(retired_source_incident_sha256, str)
@@ -436,6 +476,11 @@ def _validate_v2_protocol_and_custody(
     contamination_record = _read_json_artifact(
         contamination_path,
         "fresh contamination replay",
+    )
+    qualification = _validate_v2_candidate_qualification(
+        lock=lock,
+        candidate_selection_report=selection_path,
+        qualified_training_evidence=training_evidence_path,
     )
     try:
         replay = validate_tau3_benchmark_protocol_lineage(
@@ -470,6 +515,150 @@ def _validate_v2_protocol_and_custody(
         "generator_validation_sha256": generator_record.sha256,
         "fresh_contamination_replay_sha256": contamination_record.sha256,
         "retired_source_incident_sha256": retired_source_incident_sha256,
+        **qualification,
+    }
+
+
+def _validate_v2_candidate_qualification(
+    *,
+    lock: dict[str, Any],
+    candidate_selection_report: Path,
+    qualified_training_evidence: Path,
+) -> dict[str, Any]:
+    selection_record = _read_json_artifact(
+        candidate_selection_report,
+        "candidate selection report",
+    )
+    selection = selection_record.payload
+    selection_schema = check_schema_contract(
+        selection,
+        name_or_id="tau3_candidate_selection_v2",
+    )
+    if selection_schema.get("passed") is not True:
+        raise Tau3SealedAuthorizationError(
+            "candidate selection report violates registered schema: "
+            + "; ".join(
+                str(error)
+                for error in selection_schema.get("errors", [])
+            )
+        )
+    from .tau3_competitive_v3 import (  # noqa: PLC0415
+        _Target,
+        _validate_candidate_selection_quorum,
+    )
+
+    target = _Target(
+        "candidate_selection",
+        str(candidate_selection_report),
+    )
+    _validate_candidate_selection_quorum(target, selection)
+    if target.errors:
+        raise Tau3SealedAuthorizationError(
+            "candidate selection report does not replay: "
+            + "; ".join(target.errors)
+        )
+
+    from .tau3_competitive_v3_training_evidence import (  # noqa: PLC0415
+        Tau3CompetitiveV3TrainingEvidenceError,
+        validate_tau3_competitive_v3_training_evidence,
+    )
+
+    try:
+        training = validate_tau3_competitive_v3_training_evidence(
+            qualified_training_evidence
+        )
+    except (
+        OSError,
+        ValueError,
+        Tau3CompetitiveV3TrainingEvidenceError,
+    ) as exc:
+        raise Tau3SealedAuthorizationError(
+            f"qualified training evidence does not replay: {exc}"
+        ) from exc
+    if training.get("passed") is not True:
+        raise Tau3SealedAuthorizationError(
+            "qualified training evidence does not replay: "
+            + "; ".join(
+                str(error) for error in training.get("errors", [])
+            )
+        )
+
+    if (
+        selection_record.sha256
+        != lock.get("development_selection_report_sha256")
+    ):
+        raise Tau3SealedAuthorizationError(
+            "candidate lock development selection report mismatch"
+        )
+    selected_candidate_id = selection.get("selected_candidate_id")
+    if (
+        not isinstance(selected_candidate_id, str)
+        or lock.get("selected_candidate_id_hash")
+        != _canonical_sha256(selected_candidate_id)
+    ):
+        raise Tau3SealedAuthorizationError(
+            "candidate lock selected candidate identifier does not replay"
+        )
+    qualified_candidates = training.get("qualified_candidates")
+    if not isinstance(qualified_candidates, dict):
+        raise Tau3SealedAuthorizationError(
+            "qualified training evidence returned no candidate cohort"
+        )
+    qualified = qualified_candidates.get(selected_candidate_id)
+    if not isinstance(qualified, dict):
+        raise Tau3SealedAuthorizationError(
+            "locked candidate is outside the qualified training cohort"
+        )
+    for field_name in (
+        "training_receipt_sha256",
+        "adapter_tree_sha256",
+        "recipe_sha256",
+    ):
+        if lock.get(field_name) != qualified.get(field_name):
+            raise Tau3SealedAuthorizationError(
+                "candidate lock "
+                f"{field_name} does not bind qualified training evidence"
+            )
+
+    selected_rows = [
+        candidate
+        for candidate in selection.get("candidates", [])
+        if isinstance(candidate, dict)
+        and candidate.get("candidate_id") == selected_candidate_id
+        and candidate.get("eligible") is True
+    ]
+    if len(selected_rows) != 1:
+        raise Tau3SealedAuthorizationError(
+            "candidate selection report has no unique eligible selected row"
+        )
+    selected_row = selected_rows[0]
+    row_training = _dict(selected_row.get("training_binding"))
+    row_artifacts = _dict(selected_row.get("artifacts"))
+    row_receipt = _dict(row_artifacts.get("training_receipt"))
+    row_identity = _dict(selected_row.get("candidate_identity"))
+    for field_name in ("adapter_tree_sha256", "recipe_sha256"):
+        if row_training.get(field_name) != lock.get(field_name):
+            raise Tau3SealedAuthorizationError(
+                "candidate selection report "
+                f"{field_name} does not bind the candidate lock"
+            )
+    if row_receipt.get("sha256") != lock.get("training_receipt_sha256"):
+        raise Tau3SealedAuthorizationError(
+            "candidate selection report training receipt does not bind "
+            "the candidate lock"
+        )
+    if row_identity.get("sha256") != lock.get("candidate_identity_sha256"):
+        raise Tau3SealedAuthorizationError(
+            "candidate selection report identity does not bind the "
+            "candidate lock"
+        )
+    return {
+        "candidate_selection_report_sha256": selection_record.sha256,
+        "qualified_training_evidence_sha256": str(training["sha256"]),
+        "qualified_candidate_count": len(qualified_candidates),
+        "selected_candidate_id_hash": str(
+            lock["selected_candidate_id_hash"]
+        ),
     }
 
 
@@ -489,6 +678,8 @@ def _reject_v2_evidence_for_legacy_lock(
     generator_validation: str | Path | None,
     fresh_contamination_replay: str | Path | None,
     retired_source_incident_sha256: str | None,
+    candidate_selection_report: str | Path | None,
+    qualified_training_evidence: str | Path | None,
 ) -> None:
     if any(
         value is not None
@@ -499,6 +690,8 @@ def _reject_v2_evidence_for_legacy_lock(
             generator_validation,
             fresh_contamination_replay,
             retired_source_incident_sha256,
+            candidate_selection_report,
+            qualified_training_evidence,
         )
     ):
         raise Tau3SealedAuthorizationError(
@@ -569,6 +762,20 @@ def _authorization_payload_v2(
                 "retired_source_incident_sha256"
             ],
         },
+        "qualification": {
+            "candidate_selection_report_sha256": context[
+                "candidate_selection_report_sha256"
+            ],
+            "qualified_training_evidence_sha256": context[
+                "qualified_training_evidence_sha256"
+            ],
+            "qualified_candidate_count": context[
+                "qualified_candidate_count"
+            ],
+            "selected_candidate_id_hash": context[
+                "selected_candidate_id_hash"
+            ],
+        },
         "sealed_source": {
             "manifest_sha256": sealed_sha256,
             "task_count": REQUIRED_SEALED_TASK_COUNT,
@@ -598,6 +805,7 @@ def _authorization_payload_v2(
             "protocol_binding_valid": True,
             "fresh_protocol_lineage_replayed": True,
             "blind_custody_replayed": True,
+            "qualified_training_cohort_replayed": True,
             "retired_source_not_reused": True,
             "fresh_domain_balance_passed": True,
             "sealed_source_hash_only": True,

@@ -418,6 +418,16 @@ def upgrade_fixture_to_v2(paths: dict[str, Path]) -> None:
                 "fresh_contamination_replay_sha256": _sha("e"),
                 "retired_source_incident_sha256": _sha("f"),
             },
+            "qualification": {
+                "candidate_selection_report_sha256": lock[
+                    "development_selection_report_sha256"
+                ],
+                "qualified_training_evidence_sha256": _sha("2"),
+                "qualified_candidate_count": 2,
+                "selected_candidate_id_hash": lock[
+                    "selected_candidate_id_hash"
+                ],
+            },
         }
     )
     authorization_payload["sealed_source"]["domain_counts"] = {
@@ -429,6 +439,7 @@ def upgrade_fixture_to_v2(paths: dict[str, Path]) -> None:
         {
             "fresh_protocol_lineage_replayed": True,
             "blind_custody_replayed": True,
+            "qualified_training_cohort_replayed": True,
             "retired_source_not_reused": True,
             "fresh_domain_balance_passed": True,
         }
@@ -445,6 +456,10 @@ def upgrade_fixture_to_v2(paths: dict[str, Path]) -> None:
             "training_protocol_sha256": training_protocol_sha256,
             "benchmark_protocol_lineage_sha256": lineage_sha256,
             "blind_custody_receipt_sha256": _sha("d"),
+            "candidate_selection_report_sha256": lock[
+                "development_selection_report_sha256"
+            ],
+            "qualified_training_evidence_sha256": _sha("2"),
             "generator_validation_sha256": _sha("c"),
             "fresh_contamination_replay_sha256": _sha("e"),
             "retired_source_incident_sha256": _sha("f"),
@@ -454,6 +469,7 @@ def upgrade_fixture_to_v2(paths: dict[str, Path]) -> None:
         {
             "fresh_protocol_lineage_binding_replayed": True,
             "blind_custody_binding_replayed": True,
+            "qualified_training_binding_replayed": True,
         }
     )
     _write_json(paths["sealed_grid_completeness"], grid)

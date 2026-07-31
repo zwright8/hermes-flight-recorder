@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+from .path_safety import path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_contract
 from .tau3_competitive_v3 import (
     TRAINING_SCHEMA_VERSION,
@@ -35,6 +36,72 @@ OUTPUT_NAME = "training-evidence.json"
 
 class Tau3CompetitiveV3TrainingEvidenceError(ValueError):
     """Raised when qualified training evidence cannot be assembled safely."""
+
+
+def validate_tau3_competitive_v3_training_evidence(
+    evidence_path: str | Path,
+) -> dict[str, Any]:
+    """Replay one private training-evidence graph and return qualified hashes."""
+
+    supplied = Path(evidence_path).absolute()
+    if path_has_symlink_component(supplied, include_leaf=True):
+        raise Tau3CompetitiveV3TrainingEvidenceError(
+            "training evidence must not contain symlink components"
+        )
+    path = supplied.resolve(strict=True)
+    root = path.parent
+    _require_file(root, path, "training evidence")
+    evidence = _read_json(path, "training evidence")
+    result = _inspect_training_evidence(root, evidence, path)
+    result.update(
+        {
+            "path": "",
+            "size": path.stat().st_size,
+            "sha256": _sha256_file(path),
+        }
+    )
+    return result
+
+
+def _inspect_training_evidence(
+    root: Path,
+    evidence: dict[str, Any],
+    path: Path,
+) -> dict[str, Any]:
+    errors: list[str] = []
+    qualified_candidates: dict[str, dict[str, str]] = {}
+    try:
+        schema = check_schema_contract(
+            evidence,
+            name_or_id="tau3_competitive_v3_training_evidence",
+        )
+    except SchemaRegistryError as exc:
+        errors.append(f"training evidence schema is unavailable: {exc}")
+    else:
+        if schema.get("passed") is not True:
+            errors.append(
+                "training evidence schema check failed: "
+                f"{schema.get('errors')}"
+            )
+    if not errors:
+        target = _Target("competitive_v3_training", str(path))
+        try:
+            qualified_candidates = _validate_training_evidence(
+                root,
+                target,
+                evidence,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"training evidence replay failed: {exc}")
+        errors.extend(target.errors)
+    return {
+        "schema_version": (
+            "hfr.tau3_competitive_v3_training_evidence_validation.v1"
+        ),
+        "passed": not errors,
+        "errors": errors,
+        "qualified_candidates": qualified_candidates,
+    }
 
 
 def build_tau3_competitive_v3_training_evidence(
@@ -303,29 +370,11 @@ def _candidate_evidence(
 
 
 def _replay_evidence(root: Path, evidence: dict[str, Any], path: Path) -> None:
-    try:
-        schema = check_schema_contract(
-            evidence,
-            name_or_id="tau3_competitive_v3_training_evidence",
-        )
-    except SchemaRegistryError as exc:
+    result = _inspect_training_evidence(root, evidence, path)
+    if result["passed"] is not True:
         raise Tau3CompetitiveV3TrainingEvidenceError(
-            f"training evidence schema is unavailable: {exc}"
-        ) from exc
-    if schema.get("passed") is not True:
-        raise Tau3CompetitiveV3TrainingEvidenceError(
-            f"training evidence schema check failed: {schema.get('errors')}"
-        )
-    target = _Target("competitive_v3_training", str(path))
-    try:
-        _validate_training_evidence(root, target, evidence)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise Tau3CompetitiveV3TrainingEvidenceError(
-            f"training evidence replay failed: {exc}"
-        ) from exc
-    if target.errors:
-        raise Tau3CompetitiveV3TrainingEvidenceError(
-            "training evidence replay failed: " + "; ".join(target.errors)
+            "training evidence replay failed: "
+            + "; ".join(str(error) for error in result["errors"])
         )
 
 

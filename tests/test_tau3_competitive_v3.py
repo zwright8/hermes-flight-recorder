@@ -398,6 +398,12 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
                 "blind_custody_receipt_sha256": expected[
                     "blind_custody_receipt_sha256"
                 ],
+                "candidate_selection_report_sha256": expected[
+                    "candidate_selection_report_sha256"
+                ],
+                "qualified_training_evidence_sha256": expected[
+                    "qualified_training_evidence_sha256"
+                ],
             }
             with mock.patch.object(
                 competitive_v3_module,
@@ -421,6 +427,8 @@ class Tau3CompetitiveV3ValidationTests(unittest.TestCase):
                 "custody_receipt_path",
                 "generator_validation_path",
                 "fresh_contamination_replay_path",
+                "candidate_selection_report_path",
+                "qualified_training_evidence_path",
             ):
                 self.assertIsNotNone(kwargs[key])
             self.assertEqual(
@@ -1878,7 +1886,15 @@ def build_final_evidence(root: Path, training_ref: dict[str, str], *, include_au
         "read_only": True,
     }
     identity_ref = write_artifact(root, "final/candidate-identity.json", identity)
-    selection_ref = write_artifact(root, "final/candidate-selection.json", candidate_selection())
+    selection_ref = write_artifact(
+        root,
+        "final/candidate-selection.json",
+        candidate_selection(
+            selected_training_receipt_sha256=selected_receipt_sha,
+            selected_adapter_tree_sha256=adapter_sha,
+            selected_candidate_identity_sha256=identity_ref["sha256"],
+        ),
+    )
     lock_ref = write_artifact(root, "final/candidate-lock.json", candidate_lock(identity_ref["sha256"], selection_ref["sha256"], selected_receipt_sha, adapter_sha))
     protocol_path, sealed_source_path, auth_ref = write_sealed_authorization_graph(root, lock_ref, identity_ref["sha256"], adapter_sha)
     grid_ref = write_artifact(root, "final/sealed-grid.json", sealed_grid(auth_ref["sha256"], lock_ref["sha256"]))
@@ -2012,6 +2028,24 @@ def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
         "training_protocol_sha256": training_protocol_sha256,
         "benchmark_protocol_sha256": benchmark_protocol_sha256,
     }
+    qualified_training_evidence_sha256 = sha256_file(
+        root / "training-evidence.json"
+    )
+    authorization["qualification"] = {
+        "candidate_selection_report_sha256": artifacts[
+            "candidate_selection"
+        ]["sha256"],
+        "qualified_training_evidence_sha256": (
+            qualified_training_evidence_sha256
+        ),
+        "qualified_candidate_count": 2,
+        "selected_candidate_id_hash": lock[
+            "selected_candidate_id_hash"
+        ],
+    }
+    authorization["gates"][
+        "qualified_training_cohort_replayed"
+    ] = True
     write_json(authorization_path, authorization)
     artifacts["sealed_authorization"]["sha256"] = sha256_file(
         authorization_path
@@ -2033,8 +2067,15 @@ def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
             "blind_custody_receipt_sha256": (
                 blind_custody_receipt_sha256
             ),
+            "candidate_selection_report_sha256": artifacts[
+                "candidate_selection"
+            ]["sha256"],
+            "qualified_training_evidence_sha256": (
+                qualified_training_evidence_sha256
+            ),
         }
     )
+    grid["gates"]["qualified_training_binding_replayed"] = True
     write_json(grid_path, grid)
     artifacts["sealed_grid_completeness"]["sha256"] = sha256_file(grid_path)
 
@@ -2086,6 +2127,13 @@ def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
         path = root / "final" / f"{key}.json"
         write_json(path, {"fixture": key})
         input_refs[key] = ref_for(root, path)
+    input_refs["candidate_selection_report"] = artifacts[
+        "candidate_selection"
+    ]
+    input_refs["qualified_training_evidence"] = ref_for(
+        root,
+        root / "training-evidence.json",
+    )
     final["sealed_authorization_validation"].update(input_refs)
     final["sealed_authorization_validation"][
         "retired_source_incident_sha256"
@@ -2104,10 +2152,21 @@ def upgrade_final_fixture_to_v2_stub(root: Path) -> dict[str, str]:
             benchmark_protocol_lineage_sha256
         ),
         "blind_custody_receipt_sha256": blind_custody_receipt_sha256,
+        "candidate_selection_report_sha256": artifacts[
+            "candidate_selection"
+        ]["sha256"],
+        "qualified_training_evidence_sha256": (
+            qualified_training_evidence_sha256
+        ),
     }
 
 
-def candidate_selection() -> dict[str, Any]:
+def candidate_selection(
+    *,
+    selected_training_receipt_sha256: str = "8" * 64,
+    selected_adapter_tree_sha256: str = "b" * 64,
+    selected_candidate_identity_sha256: str = "5" * 64,
+) -> dict[str, Any]:
     return {
         "schema_version": "hfr.tau3_candidate_selection.v2",
         "schema_checked": True,
@@ -2126,7 +2185,20 @@ def candidate_selection() -> dict[str, Any]:
             {
                 "candidate_id": "candidate-a",
                 "eligible": True,
-                "training_binding": {"recipe_sha256": "a" * 64},
+                "artifacts": {
+                    "training_receipt": {
+                        "sha256": selected_training_receipt_sha256,
+                    }
+                },
+                "candidate_identity": {
+                    "sha256": selected_candidate_identity_sha256,
+                },
+                "training_binding": {
+                    "adapter_tree_sha256": (
+                        selected_adapter_tree_sha256
+                    ),
+                    "recipe_sha256": "a" * 64,
+                },
                 "metrics": {
                     "macro_pass1": {"candidate": 1.0, "base": 0.0},
                     "per_domain_pass1": {
@@ -2139,7 +2211,14 @@ def candidate_selection() -> dict[str, Any]:
             {
                 "candidate_id": "candidate-b",
                 "eligible": True,
-                "training_binding": {"recipe_sha256": "b" * 64},
+                "artifacts": {
+                    "training_receipt": {"sha256": "9" * 64}
+                },
+                "candidate_identity": {"sha256": "6" * 64},
+                "training_binding": {
+                    "adapter_tree_sha256": "c" * 64,
+                    "recipe_sha256": "b" * 64,
+                },
                 "metrics": {
                     "macro_pass1": {"candidate": 1.0, "base": 0.0},
                     "per_domain_pass1": {

@@ -79,6 +79,8 @@ class Tau3BenchmarkConfig:
     generator_validation: Path | None = None
     fresh_contamination_replay: Path | None = None
     retired_source_incident_sha256: str | None = None
+    candidate_selection_report: Path | None = None
+    qualified_training_evidence: Path | None = None
     sealed_custodian: Path | None = None
     save_prefix: str = "hfr-benchmark"
     command_timeout_padding_seconds: int = 30
@@ -271,6 +273,26 @@ def run_tau3_benchmark_arm(
         and config.fresh_contamination_replay is not None
         else None
     )
+    candidate_selection_report_ref = (
+        _stage_input_file(
+            config.candidate_selection_report,
+            out,
+            "inputs/qualification/candidate-selection.json",
+            "candidate selection report",
+        )
+        if config.mode == "sealed"
+        and config.candidate_selection_report is not None
+        else None
+    )
+    qualified_training_evidence_ref = (
+        _stage_qualified_training_bundle(
+            config.qualified_training_evidence,
+            out,
+        )
+        if config.mode == "sealed"
+        and config.qualified_training_evidence is not None
+        else None
+    )
     staged_blind_custodian = (
         _stage_executable_file(
             config.sealed_custodian,
@@ -304,7 +326,16 @@ def run_tau3_benchmark_arm(
                 "the sealed benchmark evaluator"
             )
     sealed_authorization = (
-        _sealed_authorization_binding(config, sealed_authorization_ref, out=out, expected_tau_revision=expected_tau_revision)
+        _sealed_authorization_binding(
+            config,
+            sealed_authorization_ref,
+            out=out,
+            expected_tau_revision=expected_tau_revision,
+            candidate_selection_ref=candidate_selection_report_ref,
+            qualified_training_evidence_ref=(
+                qualified_training_evidence_ref
+            ),
+        )
         if config.mode == "sealed"
         else None
     )
@@ -359,6 +390,10 @@ def run_tau3_benchmark_arm(
         "blind_custody_receipt": custody_receipt_ref,
         "blind_generator_validation": generator_validation_ref,
         "fresh_contamination_replay": fresh_contamination_replay_ref,
+        "candidate_selection_report": candidate_selection_report_ref,
+        "qualified_training_evidence": (
+            qualified_training_evidence_ref
+        ),
         "blind_custodian": blind_custodian,
         "retired_source_incident_sha256": (
             config.retired_source_incident_sha256
@@ -669,6 +704,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generator-validation", type=Path)
     parser.add_argument("--fresh-contamination-replay", type=Path)
     parser.add_argument("--retired-source-incident-sha256")
+    parser.add_argument("--candidate-selection-report", type=Path)
+    parser.add_argument("--qualified-training-evidence", type=Path)
     parser.add_argument("--sealed-custodian", type=Path)
     parser.add_argument("--agent-model", required=True)
     parser.add_argument("--agent-api-base", required=True)
@@ -719,6 +756,8 @@ def main(argv: list[str] | None = None) -> int:
                 retired_source_incident_sha256=(
                     args.retired_source_incident_sha256
                 ),
+                candidate_selection_report=args.candidate_selection_report,
+                qualified_training_evidence=args.qualified_training_evidence,
                 sealed_custodian=args.sealed_custodian,
                 seeds=_parse_int_csv(args.seeds, "seeds"),
                 domains=_parse_str_csv(args.domains, "domains"),
@@ -1716,7 +1755,15 @@ def _candidate_lock_record(config: Tau3BenchmarkConfig, staged_ref: dict[str, An
     return dict(staged_ref)
 
 
-def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[str, Any] | None, *, out: Path, expected_tau_revision: str) -> dict[str, Any]:
+def _sealed_authorization_binding(
+    config: Tau3BenchmarkConfig,
+    staged_ref: dict[str, Any] | None,
+    *,
+    out: Path,
+    expected_tau_revision: str,
+    candidate_selection_ref: dict[str, Any] | None = None,
+    qualified_training_evidence_ref: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if config.sealed_authorization is None:
         raise Tau3BenchmarkRunError("sealed mode requires --sealed-authorization")
     if config.candidate_lock is None or config.sealed_task_count_manifest is None:
@@ -1733,6 +1780,18 @@ def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[
         raise Tau3BenchmarkRunError("staged sealed authorization drifted before replay")
     if config.sealed_authorization_sha256 is not None and config.sealed_authorization_sha256 != staged_ref.get("sha256"):
         raise Tau3BenchmarkRunError("sealed authorization sha256 mismatch")
+    candidate_selection_path = _staged_or_original_path(
+        out=out,
+        staged_ref=candidate_selection_ref,
+        original=config.candidate_selection_report,
+        label="candidate selection report",
+    )
+    qualified_training_evidence_path = _staged_or_original_path(
+        out=out,
+        staged_ref=qualified_training_evidence_ref,
+        original=config.qualified_training_evidence,
+        label="qualified training evidence",
+    )
     try:
         record = validate_tau3_sealed_authorization(
             authorization_path=staged_authorization_path,
@@ -1751,6 +1810,10 @@ def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[
             retired_source_incident_sha256=(
                 config.retired_source_incident_sha256
             ),
+            candidate_selection_report_path=candidate_selection_path,
+            qualified_training_evidence_path=(
+                qualified_training_evidence_path
+            ),
         )
     except Tau3SealedAuthorizationError as exc:
         raise Tau3BenchmarkRunError(str(exc)) from exc
@@ -1766,10 +1829,34 @@ def _sealed_authorization_binding(config: Tau3BenchmarkConfig, staged_ref: dict[
         "training_protocol_sha256",
         "benchmark_protocol_lineage_sha256",
         "blind_custody_receipt_sha256",
+        "candidate_selection_report_sha256",
+        "qualified_training_evidence_sha256",
     ):
         if key in record:
             result[key] = record[key]
     return result
+
+
+def _staged_or_original_path(
+    *,
+    out: Path,
+    staged_ref: dict[str, Any] | None,
+    original: Path | None,
+    label: str,
+) -> Path | None:
+    if staged_ref is None:
+        return original
+    path_value = staged_ref.get("path")
+    if not isinstance(path_value, str):
+        raise Tau3BenchmarkRunError(f"staged {label} path is missing")
+    path = _resolve_output_relative_path(path_value, out)
+    if (
+        not path.is_file()
+        or staged_ref.get("sha256") != _sha256(path)
+        or staged_ref.get("size") != path.stat().st_size
+    ):
+        raise Tau3BenchmarkRunError(f"staged {label} drifted before replay")
+    return path
 
 
 def _candidate_identity_record(config: Tau3BenchmarkConfig, staged_ref: dict[str, Any] | None) -> dict[str, Any]:
@@ -2048,6 +2135,8 @@ def _validate_config(config: Tau3BenchmarkConfig) -> None:
         config.generator_validation,
         config.fresh_contamination_replay,
         config.retired_source_incident_sha256,
+        config.candidate_selection_report,
+        config.qualified_training_evidence,
     )
     if config.mode == "development" and any(
         value is not None for value in fresh_lineage_inputs
@@ -2365,6 +2454,135 @@ def _stage_input_file(source: Path, output_root: Path, rel: str, label: str) -> 
     else:
         _copy_file_new(source, destination)
     return {"path": rel, "size": source.stat().st_size, "sha256": source_sha256}
+
+
+def _stage_qualified_training_bundle(
+    evidence_path: Path,
+    output_root: Path,
+) -> dict[str, Any]:
+    if (
+        not evidence_path.is_file()
+        or path_has_symlink_component(evidence_path, include_leaf=True)
+    ):
+        raise Tau3BenchmarkRunError(
+            "qualified training evidence must be a symlink-free file: "
+            f"{evidence_path}"
+        )
+    source_evidence = evidence_path.resolve(strict=True)
+    source_root = source_evidence.parent
+    destination_root = _resolve_output_relative_path(
+        "inputs/qualification",
+        output_root,
+    )
+    from .tau3_competitive_v3_training_evidence import (  # noqa: PLC0415
+        validate_tau3_competitive_v3_training_evidence,
+    )
+
+    source_replay = validate_tau3_competitive_v3_training_evidence(
+        source_evidence
+    )
+    if source_replay.get("passed") is not True:
+        raise Tau3BenchmarkRunError(
+            "qualified training evidence does not replay before staging: "
+            + "; ".join(
+                str(error) for error in source_replay.get("errors", [])
+            )
+        )
+    qualified = source_replay.get("qualified_candidates")
+    if not isinstance(qualified, dict):
+        raise Tau3BenchmarkRunError(
+            "qualified training evidence returned no candidate cohort"
+        )
+    tree_pairs = [
+        (source_root / "dataset", destination_root / "dataset"),
+        (source_root / "evidence", destination_root / "evidence"),
+    ]
+    for candidate_id in sorted(qualified):
+        if (
+            not isinstance(candidate_id, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9._-]*", candidate_id) is None
+        ):
+            raise Tau3BenchmarkRunError(
+                "qualified training evidence returned an unsafe "
+                "candidate identifier"
+            )
+        tree_pairs.append(
+            (
+                source_root / "training/candidates" / candidate_id,
+                destination_root / "training/candidates" / candidate_id,
+            )
+        )
+    for source, destination in tree_pairs:
+        if (
+            not source.is_dir()
+            or path_has_symlink_component(source, include_leaf=True)
+        ):
+            raise Tau3BenchmarkRunError(
+                "qualified training evidence requires a symlink-free "
+                f"conventional directory: {source}"
+            )
+        for item in source.rglob("*"):
+            if item.is_symlink() or path_has_symlink_component(
+                item,
+                include_leaf=True,
+            ):
+                raise Tau3BenchmarkRunError(
+                    "qualified training evidence source tree contains "
+                    f"a symlink: {item}"
+                )
+        before = _fingerprint_tree(source)
+        if destination.exists():
+            if (
+                not destination.is_dir()
+                or path_has_symlink_component(
+                    destination,
+                    include_leaf=True,
+                )
+            ):
+                raise Tau3BenchmarkRunError(
+                    "staged qualified training path is not a "
+                    f"symlink-free directory: {destination}"
+                )
+            for item in destination.rglob("*"):
+                if item.is_symlink() or path_has_symlink_component(
+                    item,
+                    include_leaf=True,
+                ):
+                    raise Tau3BenchmarkRunError(
+                        "staged qualified training tree contains a "
+                        f"symlink: {item}"
+                    )
+        else:
+            shutil.copytree(
+                source,
+                destination,
+                symlinks=False,
+                copy_function=shutil.copy2,
+            )
+        after = _fingerprint_tree(destination)
+        for key in ("file_count", "files", "tree_sha256"):
+            if after[key] != before[key]:
+                raise Tau3BenchmarkRunError(
+                    "staged qualified training directory drifted while "
+                    f"copying: {source}"
+                )
+    evidence_ref = _stage_input_file(
+        source_evidence,
+        output_root,
+        "inputs/qualification/training-evidence.json",
+        "qualified training evidence",
+    )
+    staged_path = _resolve_output_relative_path(
+        str(evidence_ref["path"]),
+        output_root,
+    )
+    replay = validate_tau3_competitive_v3_training_evidence(staged_path)
+    if replay.get("passed") is not True:
+        raise Tau3BenchmarkRunError(
+            "staged qualified training evidence does not replay: "
+            + "; ".join(str(error) for error in replay.get("errors", []))
+        )
+    return evidence_ref
 
 
 def _stage_executable_file(

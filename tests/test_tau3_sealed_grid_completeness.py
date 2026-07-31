@@ -17,6 +17,9 @@ from flightrecorder.tau3_benchmark_protocol_lineage import (
     create_tau3_blind_custody_receipt,
 )
 from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
+from flightrecorder.tau3_competitive_v3_training_evidence import (
+    validate_tau3_competitive_v3_training_evidence,
+)
 import flightrecorder.tau3_sealed_grid_completeness as sealed_grid
 from flightrecorder.tau3_sealed_grid_completeness import (
     REQUIRED_ARMS,
@@ -26,6 +29,10 @@ from flightrecorder.tau3_sealed_grid_completeness import (
     build_tau3_sealed_grid_completeness,
 )
 from tests.test_tau3_benchmark_protocol_lineage import INCIDENT_SHA
+from tests.test_tau3_competitive_v3 import (
+    build_complete_bundle,
+    canonical_sha256,
+)
 
 
 class Tau3SealedGridCompletenessTests(unittest.TestCase):
@@ -70,6 +77,12 @@ class Tau3SealedGridCompletenessTests(unittest.TestCase):
                 generator_validation=fixture["generator_validation"],
                 fresh_contamination_replay=fixture["fresh_contamination_replay"],
                 retired_source_incident_sha256=INCIDENT_SHA,
+                candidate_selection_report=fixture[
+                    "candidate_selection_report"
+                ],
+                qualified_training_evidence=fixture[
+                    "qualified_training_evidence"
+                ],
                 expected_tau_revision="a" * 40,
                 out=root / "v2-completeness.json",
                 created_at="2026-07-30T00:30:00Z",
@@ -145,6 +158,12 @@ class Tau3SealedGridCompletenessTests(unittest.TestCase):
                         "fresh_contamination_replay"
                     ],
                     retired_source_incident_sha256=INCIDENT_SHA,
+                    candidate_selection_report=fixture[
+                        "candidate_selection_report"
+                    ],
+                    qualified_training_evidence=fixture[
+                        "qualified_training_evidence"
+                    ],
                     expected_tau_revision="a" * 40,
                     out=root / "must-fail.json",
                 )
@@ -399,6 +418,24 @@ def build_grid_fixture(root: Path) -> dict[str, Any]:
 
 
 def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
+    qualification_root = root / "qualification"
+    build_complete_bundle(qualification_root)
+    candidate_selection_path = (
+        qualification_root / "final/candidate-selection.json"
+    )
+    qualified_training_evidence_path = (
+        qualification_root / "training-evidence.json"
+    )
+    selection = read_json(candidate_selection_path)
+    selected_candidate_id = str(selection["selected_candidate_id"])
+    selected_row = next(
+        candidate
+        for candidate in selection["candidates"]
+        if candidate["candidate_id"] == selected_candidate_id
+    )
+    qualified = validate_tau3_competitive_v3_training_evidence(
+        qualified_training_evidence_path
+    )["qualified_candidates"][selected_candidate_id]
     tasks_by_domain = {
         "airline": [f"airline-{index}" for index in range(34)],
         "retail": [f"retail-{index}" for index in range(33)],
@@ -555,6 +592,20 @@ def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
     lock.update(
         {
             "schema_version": "hfr.tau3_candidate_lock.v2",
+            "selected_candidate_id_hash": canonical_sha256(
+                selected_candidate_id
+            ),
+            "candidate_identity_sha256": selected_row[
+                "candidate_identity"
+            ]["sha256"],
+            "development_selection_report_sha256": sha256_file(
+                candidate_selection_path
+            ),
+            "training_receipt_sha256": qualified[
+                "training_receipt_sha256"
+            ],
+            "adapter_tree_sha256": qualified["adapter_tree_sha256"],
+            "recipe_sha256": qualified["recipe_sha256"],
             "evaluator_model_contract_sha256": "0" * 64,
             "training_protocol_sha256": sha256_file(training_protocol_path),
             "training_protocol_signature": sha256_file(training_protocol_path),
@@ -579,6 +630,8 @@ def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
         generator_validation=generator_path,
         fresh_contamination_replay=contamination_path,
         retired_source_incident_sha256=INCIDENT_SHA,
+        candidate_selection_report=candidate_selection_path,
+        qualified_training_evidence=qualified_training_evidence_path,
     )
     arm_paths = [
         build_arm(
@@ -612,6 +665,14 @@ def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
                 contamination_path,
                 "fresh-contamination.json",
             ),
+            "candidate_selection_report": (
+                candidate_selection_path,
+                "candidate-selection.json",
+            ),
+            "qualified_training_evidence": (
+                qualified_training_evidence_path,
+                "training-evidence.json",
+            ),
         }
         arm_manifest = read_json(arm_path)
         for key, (source, name) in staged.items():
@@ -625,6 +686,12 @@ def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
                 ),
                 "benchmark_protocol_lineage_sha256": sha256_file(lineage_path),
                 "blind_custody_receipt_sha256": sha256_file(custody_path),
+                "candidate_selection_report_sha256": sha256_file(
+                    candidate_selection_path
+                ),
+                "qualified_training_evidence_sha256": sha256_file(
+                    qualified_training_evidence_path
+                ),
             }
         )
         write_json(arm_path, arm_manifest)
@@ -638,6 +705,8 @@ def build_v2_grid_fixture(root: Path) -> dict[str, Any]:
         "custody_receipt": custody_path,
         "generator_validation": generator_path,
         "fresh_contamination_replay": contamination_path,
+        "candidate_selection_report": candidate_selection_path,
+        "qualified_training_evidence": qualified_training_evidence_path,
         "arm_manifests": arm_paths,
     }
 

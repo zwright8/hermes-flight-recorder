@@ -72,6 +72,22 @@
       ],
       "type": "object"
     },
+    "qualification": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_selection_report_sha256": {"$ref": "#/$defs/sha256"},
+        "qualified_candidate_count": {"minimum": 2, "type": "integer"},
+        "qualified_training_evidence_sha256": {"$ref": "#/$defs/sha256"},
+        "selected_candidate_id_hash": {"$ref": "#/$defs/sha256"}
+      },
+      "required": [
+        "candidate_selection_report_sha256",
+        "qualified_training_evidence_sha256",
+        "qualified_candidate_count",
+        "selected_candidate_id_hash"
+      ],
+      "type": "object"
+    },
     "sealed_source": {
       "additionalProperties": false,
       "properties": {
@@ -145,6 +161,7 @@
         "model_identity_equivalence_refs_present": {"const": true},
         "protocol_binding_valid": {"const": true},
         "public_artifact_contains_no_local_paths": {"const": true},
+        "qualified_training_cohort_replayed": {"const": true},
         "redaction_gate_passed": {"const": true},
         "retired_source_not_reused": {"const": true},
         "safety_gate_passed": {"const": true},
@@ -158,6 +175,7 @@
         "protocol_binding_valid",
         "fresh_protocol_lineage_replayed",
         "blind_custody_replayed",
+        "qualified_training_cohort_replayed",
         "retired_source_not_reused",
         "fresh_domain_balance_passed",
         "sealed_source_hash_only",
@@ -197,6 +215,7 @@
     "protocol",
     "protocol_lineage",
     "blind_custody",
+    "qualification",
     "sealed_source",
     "frozen_contract",
     "model_identity_refs",

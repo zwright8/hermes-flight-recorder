@@ -94,6 +94,8 @@ def build_tau3_sealed_grid_completeness(
     generator_validation: str | Path | None = None,
     fresh_contamination_replay: str | Path | None = None,
     retired_source_incident_sha256: str | None = None,
+    candidate_selection_report: str | Path | None = None,
+    qualified_training_evidence: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write a public-safe completeness artifact for the final sealed 4x4 Tau-3 grid."""
 
@@ -133,6 +135,16 @@ def build_tau3_sealed_grid_completeness(
             else None
         ),
         retired_source_incident_sha256=retired_source_incident_sha256,
+        candidate_selection_report_path=(
+            Path(candidate_selection_report)
+            if candidate_selection_report is not None
+            else None
+        ),
+        qualified_training_evidence_path=(
+            Path(qualified_training_evidence)
+            if qualified_training_evidence is not None
+            else None
+        ),
     )
     candidate_lock_artifact = _read_json_artifact(Path(candidate_lock), "candidate lock")
 
@@ -245,6 +257,16 @@ def build_tau3_sealed_grid_completeness(
                 "blind_custody_receipt_sha256": authorization_replay[
                     "blind_custody_receipt_sha256"
                 ],
+                "candidate_selection_report_sha256": (
+                    authorization_replay[
+                        "candidate_selection_report_sha256"
+                    ]
+                ),
+                "qualified_training_evidence_sha256": (
+                    authorization_replay[
+                        "qualified_training_evidence_sha256"
+                    ]
+                ),
                 "generator_validation_sha256": _dict(
                     authorization.payload.get("blind_custody")
                 ).get("generator_validation_sha256"),
@@ -258,6 +280,7 @@ def build_tau3_sealed_grid_completeness(
         )
         payload["gates"]["fresh_protocol_lineage_binding_replayed"] = True
         payload["gates"]["blind_custody_binding_replayed"] = True
+        payload["gates"]["qualified_training_binding_replayed"] = True
     _assert_public_safe(payload)
     schema = check_schema_contract(payload, name_or_id="tau3_sealed_grid_completeness")
     if schema.get("passed") is not True:
@@ -279,6 +302,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generator-validation", type=Path)
     parser.add_argument("--fresh-contamination-replay", type=Path)
     parser.add_argument("--retired-source-incident-sha256")
+    parser.add_argument("--candidate-selection-report", type=Path)
+    parser.add_argument("--qualified-training-evidence", type=Path)
     parser.add_argument("--expected-tau-revision", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--created-at")
@@ -305,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
             retired_source_incident_sha256=(
                 args.retired_source_incident_sha256
             ),
+            candidate_selection_report=args.candidate_selection_report,
+            qualified_training_evidence=args.qualified_training_evidence,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps(_stable_cli_error(exc), sort_keys=True), file=sys.stderr)
@@ -461,6 +488,7 @@ def _validate_arm_v2_lineage_refs(
     lock = _dict(authorization.get("candidate_lock"))
     lineage = _dict(authorization.get("protocol_lineage"))
     custody = _dict(authorization.get("blind_custody"))
+    qualification = _dict(authorization.get("qualification"))
     expected = (
         (
             "training_protocol",
@@ -486,6 +514,16 @@ def _validate_arm_v2_lineage_refs(
             "fresh_contamination_replay",
             custody.get("fresh_contamination_replay_sha256"),
             "fresh contamination replay",
+        ),
+        (
+            "candidate_selection_report",
+            qualification.get("candidate_selection_report_sha256"),
+            "candidate selection report",
+        ),
+        (
+            "qualified_training_evidence",
+            qualification.get("qualified_training_evidence_sha256"),
+            "qualified training evidence",
         ),
     )
     for key, sha256, label in expected:
@@ -713,6 +751,8 @@ def _replay_authorization(
     generator_validation_path: Path | None,
     fresh_contamination_replay_path: Path | None,
     retired_source_incident_sha256: str | None,
+    candidate_selection_report_path: Path | None,
+    qualified_training_evidence_path: Path | None,
 ) -> dict[str, Any]:
     last_record: dict[str, Any] | None = None
     for arm_id in REQUIRED_ARMS:
@@ -737,6 +777,12 @@ def _replay_authorization(
                 ),
                 retired_source_incident_sha256=(
                     retired_source_incident_sha256
+                ),
+                candidate_selection_report_path=(
+                    candidate_selection_report_path
+                ),
+                qualified_training_evidence_path=(
+                    qualified_training_evidence_path
                 ),
             )
         except Tau3SealedAuthorizationError as exc:
@@ -770,6 +816,12 @@ def _compare_authorization_replay(auth: dict[str, Any], record: dict[str, Any]) 
                 "blind_custody_receipt_sha256": _dict(
                     auth.get("blind_custody")
                 ).get("receipt_sha256"),
+                "candidate_selection_report_sha256": _dict(
+                    auth.get("qualification")
+                ).get("candidate_selection_report_sha256"),
+                "qualified_training_evidence_sha256": _dict(
+                    auth.get("qualification")
+                ).get("qualified_training_evidence_sha256"),
             }
         )
     for key, value in expected.items():
@@ -793,6 +845,8 @@ def _validate_arm_authorization_ref(payload: dict[str, Any], replay: dict[str, A
         "training_protocol_sha256",
         "benchmark_protocol_lineage_sha256",
         "blind_custody_receipt_sha256",
+        "candidate_selection_report_sha256",
+        "qualified_training_evidence_sha256",
     ):
         if key in replay:
             expected[key] = replay[key]

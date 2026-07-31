@@ -433,6 +433,7 @@ def _hash_bindings_replay(artifacts: dict[str, _JsonArtifact]) -> bool:
         return common
     auth_protocol = _dict(auth.get("protocol"))
     auth_lineage = _dict(auth.get("protocol_lineage"))
+    auth_qualification = _dict(auth.get("qualification"))
     return (
         auth.get("schema_version") == "hfr.tau3_sealed_authorization.v2"
         and auth_lock.get("training_protocol_sha256")
@@ -449,6 +450,20 @@ def _hash_bindings_replay(artifacts: dict[str, _JsonArtifact]) -> bool:
         == lock.get("training_protocol_sha256")
         and grid.get("benchmark_protocol_lineage_sha256")
         == lock.get("benchmark_protocol_lineage_sha256")
+        and auth_qualification.get(
+            "candidate_selection_report_sha256"
+        )
+        == lock.get("development_selection_report_sha256")
+        and auth_qualification.get("selected_candidate_id_hash")
+        == lock.get("selected_candidate_id_hash")
+        and grid.get("candidate_selection_report_sha256")
+        == auth_qualification.get(
+            "candidate_selection_report_sha256"
+        )
+        and grid.get("qualified_training_evidence_sha256")
+        == auth_qualification.get(
+            "qualified_training_evidence_sha256"
+        )
     )
 
 

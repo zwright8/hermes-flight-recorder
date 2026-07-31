@@ -19,6 +19,7 @@ from flightrecorder.tau3_benchmark_run import (
     _command_timeout_seconds,
     _development_tasks_by_domain,
     _reviewer_environment,
+    _stage_qualified_training_bundle,
     _tau2_argv,
     run_tau3_benchmark_arm,
 )
@@ -27,9 +28,51 @@ from flightrecorder.tau3_development_screening import (
 )
 from flightrecorder.tau3_sealed_authorization import create_tau3_sealed_authorization
 from flightrecorder.tau3_sealed_authorization import validate_tau3_sealed_authorization
+from flightrecorder.tau3_competitive_v3_training_evidence import (
+    build_tau3_competitive_v3_training_evidence,
+    validate_tau3_competitive_v3_training_evidence,
+)
+from tests.test_tau3_competitive_v3_training_evidence import (
+    CANDIDATES,
+    _prepare_conventional_bundle,
+)
 
 
 class Tau3BenchmarkRunTests(unittest.TestCase):
+    def test_stages_self_contained_qualified_training_graph(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "qualification-source"
+            _prepare_conventional_bundle(source)
+            build_tau3_competitive_v3_training_evidence(
+                source,
+                candidate_ids=list(CANDIDATES),
+            )
+            output = root / "arm"
+            output.mkdir()
+
+            ref = _stage_qualified_training_bundle(
+                source / "training-evidence.json",
+                output,
+            )
+
+            staged = output / str(ref["path"])
+            self.assertTrue(
+                validate_tau3_competitive_v3_training_evidence(staged)[
+                    "passed"
+                ]
+            )
+            self.assertFalse(
+                (output / "inputs/qualification/final").exists()
+            )
+            self.assertEqual(
+                _stage_qualified_training_bundle(
+                    source / "training-evidence.json",
+                    output,
+                ),
+                ref,
+            )
+
     def test_whole_command_timeout_scales_beyond_the_per_task_timeout(self):
         config = Tau3BenchmarkConfig(
             mode="development",
@@ -585,6 +628,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 "benchmark-protocol-lineage",
                 "custody-receipt",
                 "fresh-contamination-replay",
+                "candidate-selection-report",
+                "qualified-training-evidence",
             ):
                 path = root / f"{name}.json"
                 path.write_text("{}\n", encoding="utf-8")
@@ -618,12 +663,42 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                 "blind_custody_receipt_sha256": self._sha256(
                     fresh_inputs[2]
                 ),
+                "candidate_selection_report_sha256": self._sha256(
+                    fresh_inputs[4]
+                ),
+                "qualified_training_evidence_sha256": self._sha256(
+                    fresh_inputs[5]
+                ),
             }
+
+            def stage_qualification(
+                source: Path,
+                output_root: Path,
+            ) -> dict[str, object]:
+                destination = (
+                    output_root
+                    / "inputs"
+                    / "qualification"
+                    / "training-evidence.json"
+                )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+                return {
+                    "path": (
+                        "inputs/qualification/training-evidence.json"
+                    ),
+                    "sha256": self._sha256(destination),
+                    "size": destination.stat().st_size,
+                }
 
             with patch(
                 "flightrecorder.tau3_benchmark_run."
                 "validate_tau3_sealed_authorization",
                 return_value=auth_record,
+            ), patch(
+                "flightrecorder.tau3_benchmark_run."
+                "_stage_qualified_training_bundle",
+                side_effect=stage_qualification,
             ):
                 manifest = run_tau3_benchmark_arm(
                     out_dir=root / "fresh-sealed-out",
@@ -648,6 +723,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         generator_validation=generator_validation,
                         fresh_contamination_replay=fresh_inputs[3],
                         retired_source_incident_sha256="9" * 64,
+                        candidate_selection_report=fresh_inputs[4],
+                        qualified_training_evidence=fresh_inputs[5],
                         sealed_custodian=custodian,
                         timeout_seconds=2,
                     ),
@@ -700,7 +777,7 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
             repo = self._repo(root)
             endpoint = self._endpoint("local/base", 18080)
             placeholders = [
-                root / f"fresh-{index}.json" for index in range(5)
+                root / f"fresh-{index}.json" for index in range(7)
             ]
             for path in placeholders:
                 path.write_text("{}\n", encoding="utf-8")
@@ -727,6 +804,8 @@ class Tau3BenchmarkRunTests(unittest.TestCase):
                         generator_validation=placeholders[3],
                         fresh_contamination_replay=placeholders[4],
                         retired_source_incident_sha256="9" * 64,
+                        candidate_selection_report=placeholders[5],
+                        qualified_training_evidence=placeholders[6],
                     ),
                 )
 

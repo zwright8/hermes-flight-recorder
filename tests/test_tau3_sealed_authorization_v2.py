@@ -21,10 +21,17 @@ from flightrecorder.tau3_sealed_authorization import (
     create_tau3_sealed_authorization,
     validate_tau3_sealed_authorization,
 )
+from flightrecorder.tau3_competitive_v3_training_evidence import (
+    validate_tau3_competitive_v3_training_evidence,
+)
 from tests.test_tau3_benchmark_protocol_lineage import (
     INCIDENT_SHA,
     SOURCE_REVISION,
     _fixture,
+)
+from tests.test_tau3_competitive_v3 import (
+    build_complete_bundle,
+    canonical_sha256,
 )
 
 
@@ -45,6 +52,8 @@ class Tau3SealedAuthorizationV2Tests(unittest.TestCase):
                 generator_validation=fixture["generator"],
                 fresh_contamination_replay=fixture["contamination"],
                 retired_source_incident_sha256=INCIDENT_SHA,
+                candidate_selection_report=fixture["selection"],
+                qualified_training_evidence=fixture["training_evidence"],
             )
 
             self.assertTrue(result["authorized"])
@@ -93,6 +102,8 @@ class Tau3SealedAuthorizationV2Tests(unittest.TestCase):
                 generator_validation_path=fixture["generator"],
                 fresh_contamination_replay_path=fixture["contamination"],
                 retired_source_incident_sha256=INCIDENT_SHA,
+                candidate_selection_report_path=fixture["selection"],
+                qualified_training_evidence_path=fixture["training_evidence"],
             )
             self.assertTrue(replay["authorized"])
             self.assertEqual(
@@ -123,6 +134,8 @@ class Tau3SealedAuthorizationV2Tests(unittest.TestCase):
                     generator_validation=fixture["generator"],
                     fresh_contamination_replay=fixture["contamination"],
                     retired_source_incident_sha256=INCIDENT_SHA,
+                    candidate_selection_report=fixture["selection"],
+                    qualified_training_evidence=fixture["training_evidence"],
                 ),
                 staged_ref,
                 out=out,
@@ -174,6 +187,43 @@ class Tau3SealedAuthorizationV2Tests(unittest.TestCase):
                     generator_validation=fixture["generator"],
                     fresh_contamination_replay=fixture["contamination"],
                     retired_source_incident_sha256=INCIDENT_SHA,
+                    candidate_selection_report=fixture["selection"],
+                    qualified_training_evidence=fixture["training_evidence"],
+                )
+
+            self.assertFalse(fixture["authorization"].exists())
+
+    def test_v2_authorization_rejects_lock_outside_qualified_cohort(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _v2_fixture(Path(tmp))
+            evidence = _read(fixture["training_evidence"])
+            evidence["qualified_candidates"][0]["candidate_id"] = (
+                "candidate-c"
+            )
+            _write(fixture["training_evidence"], evidence)
+
+            with self.assertRaisesRegex(
+                Tau3SealedAuthorizationError,
+                "outside the qualified training cohort",
+            ):
+                create_tau3_sealed_authorization(
+                    candidate_lock=fixture["lock"],
+                    protocol=fixture["benchmark"],
+                    sealed_source_manifest=fixture["sealed"],
+                    out=fixture["authorization"],
+                    created_at="2026-07-30T00:03:00Z",
+                    training_protocol=fixture["training"],
+                    benchmark_protocol_lineage=fixture["lineage"],
+                    custody_receipt=fixture["custody"],
+                    generator_validation=fixture["generator"],
+                    fresh_contamination_replay=fixture["contamination"],
+                    retired_source_incident_sha256=INCIDENT_SHA,
+                    candidate_selection_report=fixture["selection"],
+                    qualified_training_evidence=fixture[
+                        "training_evidence"
+                    ],
                 )
 
             self.assertFalse(fixture["authorization"].exists())
@@ -181,6 +231,25 @@ class Tau3SealedAuthorizationV2Tests(unittest.TestCase):
 
 def _v2_fixture(root: Path) -> dict[str, Path]:
     fixture = _fixture(root)
+    qualification_root = root / "qualification"
+    build_complete_bundle(qualification_root)
+    selection_path = qualification_root / "final/candidate-selection.json"
+    training_evidence_path = qualification_root / "training-evidence.json"
+    selection = _read(selection_path)
+    selected_candidate_id = str(selection["selected_candidate_id"])
+    selected_row = next(
+        candidate
+        for candidate in selection["candidates"]
+        if candidate["candidate_id"] == selected_candidate_id
+    )
+    training_validation = (
+        validate_tau3_competitive_v3_training_evidence(
+            training_evidence_path
+        )
+    )
+    qualified = training_validation["qualified_candidates"][
+        selected_candidate_id
+    ]
     common = {
         "harness_contract": {
             "domains": ["airline", "retail", "telecom"],
@@ -257,15 +326,21 @@ def _v2_fixture(root: Path) -> dict[str, Path]:
         {
             "schema_version": "hfr.tau3_candidate_lock.v2",
             "created_at": "2026-07-30T00:02:30Z",
-            "selected_candidate_id_hash": "4" * 64,
-            "candidate_identity_sha256": "5" * 64,
-            "development_selection_report_sha256": "6" * 64,
+            "selected_candidate_id_hash": canonical_sha256(
+                selected_candidate_id
+            ),
+            "candidate_identity_sha256": selected_row[
+                "candidate_identity"
+            ]["sha256"],
+            "development_selection_report_sha256": _sha256(selection_path),
             "development_benchmark_manifest_sha256": "7" * 64,
-            "training_receipt_sha256": "8" * 64,
+            "training_receipt_sha256": qualified[
+                "training_receipt_sha256"
+            ],
             "endpoint_model_sha256": "9" * 64,
             "evaluator_model_contract_sha256": "a" * 64,
-            "adapter_tree_sha256": "b" * 64,
-            "recipe_sha256": "c" * 64,
+            "adapter_tree_sha256": qualified["adapter_tree_sha256"],
+            "recipe_sha256": qualified["recipe_sha256"],
             "base_identity_sha256": "1" * 64,
             "base_tree_sha256": "d" * 64,
             "dataset_manifest_sha256": "e" * 64,
@@ -287,6 +362,8 @@ def _v2_fixture(root: Path) -> dict[str, Path]:
         "custody": custody,
         "lineage": lineage,
         "lock": lock,
+        "selection": selection_path,
+        "training_evidence": training_evidence_path,
         "authorization": root / "authorization.json",
     }
 

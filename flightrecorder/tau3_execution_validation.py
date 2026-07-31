@@ -1134,6 +1134,8 @@ def _validate_benchmark_arm_refs(
             "blind_custody_receipt",
             "blind_generator_validation",
             "fresh_contamination_replay",
+            "candidate_selection_report",
+            "qualified_training_evidence",
             "retired_source_incident_sha256",
         ):
             _require(prelaunch.target, prelaunch.payload.get(key) == payload.get(key), f"benchmark prelaunch {key} does not match final manifest")
@@ -1241,6 +1243,14 @@ def _validate_benchmark_arm_refs(
                 "fresh_contamination_replay",
                 "sealed_fresh_contamination_replay",
             ),
+            (
+                "candidate_selection_report",
+                "sealed_candidate_selection_report",
+            ),
+            (
+                "qualified_training_evidence",
+                "sealed_qualified_training_evidence",
+            ),
         ):
             if isinstance(payload.get(key), dict):
                 lineage_inputs[key] = _receipt_nested_file(
@@ -1259,6 +1269,8 @@ def _validate_benchmark_arm_refs(
                 "blind_custody_receipt",
                 "blind_generator_validation",
                 "fresh_contamination_replay",
+                "candidate_selection_report",
+                "qualified_training_evidence",
             ):
                 _require(
                     candidate_lock.target,
@@ -1313,6 +1325,12 @@ def _validate_benchmark_arm_refs(
                     fresh_contamination_replay_path=_loaded_path(
                         lineage_inputs.get("fresh_contamination_replay")
                     ),
+                    candidate_selection_report_path=_loaded_path(
+                        lineage_inputs.get("candidate_selection_report")
+                    ),
+                    qualified_training_evidence_path=_loaded_path(
+                        lineage_inputs.get("qualified_training_evidence")
+                    ),
                     retired_source_incident_sha256=(
                         str(payload.get("retired_source_incident_sha256"))
                         if lock_version == CANDIDATE_LOCK_V2_SCHEMA_VERSION
@@ -1342,6 +1360,8 @@ def _validate_benchmark_arm_refs(
                     "training_protocol_sha256",
                     "benchmark_protocol_lineage_sha256",
                     "blind_custody_receipt_sha256",
+                    "candidate_selection_report_sha256",
+                    "qualified_training_evidence_sha256",
                 ):
                     if key in replay:
                         _require(

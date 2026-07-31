@@ -400,12 +400,17 @@ receive the same complete evidence set:
   --generator-validation <blind-generator-validation.json> \
   --fresh-contamination-replay <fresh-contamination-replay.json> \
   --retired-source-incident-sha256 <sha256> \
+  --candidate-selection-report <candidate-selection.json> \
+  --qualified-training-evidence <training-evidence.json> \
   --out <sealed-authorization-v2.json>
 ```
 
 The v2 lock fails closed if a training receipt binds the benchmark protocol,
 if the benchmark protocol changes anything outside the four sealed-source
-fields, or if any lineage/custody artifact is omitted or substituted. Legacy
+fields, if the selected lock row is outside the strict qualified-training
+cohort, or if any lineage, custody, selection, or training artifact is omitted
+or substituted. Authorization independently replays the selection quorum and
+the full training-evidence graph before sealed access. Legacy
 v1 artifacts remain replayable evidence, but they cannot consume v2 evidence
 or prove the fresh-source authorization path. The v2 selection report also
 requires at least two completed qualified candidates with distinct governed
@@ -440,8 +445,16 @@ to exactly equal the domain-labeled fresh sealed manifest.
   --generator-validation <blind-generator-validation.json> \
   --fresh-contamination-replay <fresh-contamination-replay.json> \
   --retired-source-incident-sha256 <sha256> \
+  --candidate-selection-report <candidate-selection.json> \
+  --qualified-training-evidence <training-evidence.json> \
   <frozen-arm-and-loopback-endpoint-arguments>
 ```
+
+For v2 arms, the qualified evidence must use the conventional competitive-v3
+bundle layout (`dataset/`, `evidence/`, and `training/` beside
+`training-evidence.json`). The runner copies that private qualification graph
+into each arm and replays the copied graph before task access, so later
+execution and grid validation do not depend on mutable external paths.
 
 After a governed MLX candidate finishes, qualification requires a separate,
 coverage-complete loss replay over the exact `valid.jsonl` export. The runner

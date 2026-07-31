@@ -1096,6 +1096,8 @@ def _validate_final_evidence(
                     "custody_receipt",
                     "generator_validation",
                     "fresh_contamination_replay",
+                    "candidate_selection_report",
+                    "qualified_training_evidence",
                 ):
                     v2_paths[key] = _load_ref_path(
                         root,
@@ -1142,6 +1144,12 @@ def _validate_final_evidence(
                         if isinstance(retired_source_incident_sha256, str)
                         else None
                     ),
+                    candidate_selection_report_path=v2_paths.get(
+                        "candidate_selection_report"
+                    ),
+                    qualified_training_evidence_path=v2_paths.get(
+                        "qualified_training_evidence"
+                    ),
                 )
                 _require(target, auth_result.get("authorized") is True, "sealed authorization replay must authorize")
                 if v2 and isinstance(grid.payload, dict):
@@ -1158,6 +1166,14 @@ def _validate_final_evidence(
                         (
                             "blind_custody_receipt_sha256",
                             "blind_custody_receipt_sha256",
+                        ),
+                        (
+                            "candidate_selection_report_sha256",
+                            "candidate_selection_report_sha256",
+                        ),
+                        (
+                            "qualified_training_evidence_sha256",
+                            "qualified_training_evidence_sha256",
                         ),
                     ):
                         _require(
