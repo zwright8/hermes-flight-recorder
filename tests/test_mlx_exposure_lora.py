@@ -468,12 +468,28 @@ class MlxExposureLoraTests(unittest.TestCase):
                 max_seq_length=3,
             )
 
-        _, lengths = mlx_exposure_lora._batch_from_indices(
-            Dataset(([1, 2, 3, 4], 2)),
-            [0],
-            batch_size=1,
-            max_seq_length=4,
-        )
+        class FakeArray(list):
+            def tolist(self):
+                return [list(row) if isinstance(row, tuple) else row for row in self]
+
+        mlx = types.ModuleType("mlx")
+        mlx.__path__ = []
+        core = types.ModuleType("mlx.core")
+        core.array = FakeArray
+        mlx.core = core
+        numpy = types.ModuleType("numpy")
+        numpy.int32 = int
+        numpy.zeros = mock.Mock(return_value=mock.MagicMock())
+        with mock.patch.dict(
+            sys.modules,
+            {"mlx": mlx, "mlx.core": core, "numpy": numpy},
+        ):
+            _, lengths = mlx_exposure_lora._batch_from_indices(
+                Dataset(([1, 2, 3, 4], 2)),
+                [0],
+                batch_size=1,
+                max_seq_length=4,
+            )
         self.assertEqual(lengths.tolist(), [[2, 3]])
 
 
