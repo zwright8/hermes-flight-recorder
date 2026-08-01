@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from flightrecorder.tau3_grounded_generation import (
     TAU3_GROUNDED_DATASET_SCHEMA_VERSION,
     Tau3GroundedGenerationError,
     _model_to_json,
+    _tool_result_class,
     build_tau3_grounded_generation_dataset,
     canonical_sha256,
     validate_tau3_grounded_generation_bundle,
@@ -125,16 +127,50 @@ def _scenario(
                     "safe_correction_decision_ordinal": 1,
                 }
             tool_calls = []
-    turns = [
-        {
-            "user": {"content": f"Please handle {behavior}."},
-            "assistant": {
-                "decision_ordinal": 0,
-                "tool_calls": tool_calls,
-                "safe_corrected_target": target,
-            },
-        }
-    ]
+    if behavior in {
+        "empty_result_recovery",
+        "error_result_recovery",
+        "repeated_call_recovery",
+    }:
+        first_call = copy.deepcopy(tool_calls[0])
+        turns = [
+            {
+                "user": {"content": f"Please handle {behavior}."},
+                "assistant": {
+                    "decision_ordinal": 0,
+                    "tool_calls": [first_call],
+                },
+            }
+        ]
+        if behavior == "repeated_call_recovery":
+            turns.append(
+                {
+                    "assistant": {
+                        "decision_ordinal": 1,
+                        "tool_calls": [copy.deepcopy(first_call)],
+                    },
+                }
+            )
+        turns.append(
+            {
+                "assistant": {
+                    "decision_ordinal": 2 if behavior == "repeated_call_recovery" else 1,
+                    "tool_calls": [],
+                    "safe_corrected_target": target,
+                },
+            }
+        )
+    else:
+        turns = [
+            {
+                "user": {"content": f"Please handle {behavior}."},
+                "assistant": {
+                    "decision_ordinal": 0,
+                    "tool_calls": tool_calls,
+                    "safe_corrected_target": target,
+                },
+            }
+        ]
     if unsafe:
         turns.append(
             {
@@ -223,6 +259,12 @@ def _rewrite_bundle_manifest(bundle: Path) -> None:
 
 
 class Tau3GroundedGenerationTests(unittest.TestCase):
+    def test_tool_result_class_recognizes_serialized_empty_containers(self) -> None:
+        for value in (None, [], {}, "null", "[]", "{}", "  {}  "):
+            self.assertEqual(_tool_result_class(value), "empty")
+        self.assertEqual(_tool_result_class('{"error":"not_found"}'), "error")
+        self.assertEqual(_tool_result_class("ordinary non-empty text"), "success")
+
     def test_model_to_json_normalizes_scalar_dates_times_and_enums(self) -> None:
         payload = {
             "date": date(2026, 7, 25),
@@ -496,6 +538,45 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                     out_dir=root / "out",
                     strict_coverage=False,
                 )
+
+    def test_recovery_targets_require_the_claimed_immediate_tool_condition(self) -> None:
+        cases = (
+            ("empty_result_recovery", "success after empty claim"),
+            ("error_result_recovery", "success after error claim"),
+            ("repeated_call_recovery", "single call after repeated claim"),
+        )
+        for behavior, label in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                source = root / "source.jsonl"
+                row = _scenario(
+                    split="train",
+                    domain="airline",
+                    family_index=0,
+                    behavior=behavior,
+                )
+                if behavior in {"empty_result_recovery", "error_result_recovery"}:
+                    row["turns"][0]["assistant"]["tool_calls"] = [
+                        {
+                            "tool_name": "get_record",
+                            "arguments": {"id": "airline-0"},
+                        }
+                    ]
+                else:
+                    recovery = row["turns"][2]
+                    recovery["assistant"]["decision_ordinal"] = 1
+                    row["turns"] = [row["turns"][0], recovery]
+                _write_jsonl(source, [row])
+
+                with self.assertRaisesRegex(
+                    Tau3GroundedGenerationError,
+                    "empty-result|error-result|repeated-call",
+                ):
+                    build_tau3_grounded_generation_dataset(
+                        source=source,
+                        out_dir=root / "out",
+                        strict_coverage=False,
+                    )
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -930,7 +1011,7 @@ class Tau3GroundedGenerationTests(unittest.TestCase):
                 family_index=0,
                 behavior="empty_result_recovery",
             )
-            row["turns"][0]["assistant"]["safe_corrected_target"].update(
+            row["turns"][1]["assistant"]["safe_corrected_target"].update(
                 {
                     "kind": "tool_call",
                     "tool_name": "empty_search",

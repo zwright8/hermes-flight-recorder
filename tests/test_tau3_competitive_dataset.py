@@ -25,6 +25,7 @@ from flightrecorder.tau3_competitive_dataset import (
     _contamination_report_payload_errors,
     _contamination_summary,
     _load_token_counter,
+    _target_export_ordinal,
     _validated_grounded_tool_exemptions,
 )
 from flightrecorder.tau3_exposure import build_tau3_exposure_ledger, validate_tau3_exposure_ledger
@@ -330,18 +331,28 @@ def _grounded_row(
         )
         for index, behavior in enumerate(behaviors)
     ]
-    replay = [
-        {
-            "parent_assistant_decision_ordinal": index,
-            "tool_name": tool_name,
-            "pre_state_sha256": _canonical_sha256(f"pre:{split}:{domain}:{family}:{row_index}:{index}"),
-            "post_state_sha256": _canonical_sha256(f"post:{split}:{domain}:{family}:{row_index}:{index}"),
-            "state_diff": {"change_count": 1, "changed": True, "changes": []},
-            "result_class": "success",
-            "evidence_replayed": True,
-        }
-        for index in range(len(behaviors) + 1)
-    ]
+    replay = []
+    for index in range(len(behaviors) + 1):
+        following_behavior = behaviors[index] if index < len(behaviors) else None
+        result_class = "success"
+        if following_behavior == "empty_result_recovery":
+            result_class = "empty"
+        elif following_behavior == "error_result_recovery":
+            result_class = "exception"
+        replay.append(
+            {
+                "parent_assistant_decision_ordinal": index,
+                "tool_name": tool_name,
+                "pre_state_sha256": _canonical_sha256(f"pre:{split}:{domain}:{family}:{row_index}:{index}"),
+                "post_state_sha256": _canonical_sha256(f"post:{split}:{domain}:{family}:{row_index}:{index}"),
+                "state_diff": {"change_count": 1, "changed": True, "changes": []},
+                "result_class": result_class,
+                "context": {
+                    "repeated_call": following_behavior == "repeated_call_recovery",
+                },
+                "evidence_replayed": True,
+            }
+        )
     metadata = {
         "schema_version": "hfr.tau3_grounded_generation_row.v1",
         "lineage_id": "tau3-grounded-generation-v1",
@@ -592,6 +603,14 @@ def _grounded_validation_patch() -> mock._patch:
 
 
 class Tau3CompetitiveDatasetTests(unittest.TestCase):
+    def test_target_export_ordinal_does_not_collapse_duplicate_targets(self) -> None:
+        first = {"canonical_target_sha256": "a" * 64, "masked": False}
+        second = {"canonical_target_sha256": "a" * 64, "masked": False}
+        row = {"training_targets": [first, second]}
+
+        self.assertEqual(_target_export_ordinal(row, first), 0)
+        self.assertEqual(_target_export_ordinal(row, second), 1)
+
     def test_promotes_strict_grounded_zero_arg_exemption(self) -> None:
         self.assertEqual(
             _validated_grounded_tool_exemptions(
@@ -1662,6 +1681,71 @@ class Tau3CompetitiveDatasetTests(unittest.TestCase):
 
             self.assertFalse(result["passed"])
             self.assertTrue(any("grounded_generation manifest hash" in error for error in result["errors"]))
+
+    def test_grounded_recovery_condition_tamper_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = _write_source_dataset(root)
+            grounded = _write_grounded_bundle(root)
+            contamination = _write_contamination_report(root)
+            tokenizer_config = _write_tokenizer_config(root)
+            out = root / "v3"
+            with _install_fake_transformers(_FakeTokenizer()), _grounded_validation_patch():
+                build_tau3_competitive_dataset(
+                    source_dataset_dir=source,
+                    out_dir=out,
+                    tokenizer_config_path=tokenizer_config,
+                    grounded_generation_bundle=grounded,
+                    contamination_report_path=contamination,
+                )
+            rows = [
+                json.loads(line)
+                for line in (out / "train.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            mutations = {
+                "empty_result_recovery": ("preceding_result_class", "success"),
+                "error_result_recovery": ("preceding_result_class", "success"),
+                "repeated_call_recovery": ("preceding_repeated_call", False),
+            }
+            for behavior, (field, value) in mutations.items():
+                row = next(
+                    candidate
+                    for candidate in rows
+                    if candidate["metadata"]["behavior"] == behavior
+                )
+                row["metadata"][field] = value
+                row["metadata"]["derived_row_sha256"] = _canonical_sha256(
+                    {key: item for key, item in row.items() if key != "metadata"}
+                    | {
+                        "metadata": {
+                            key: item
+                            for key, item in row["metadata"].items()
+                            if key != "derived_row_sha256"
+                        }
+                    }
+                )
+            _write_jsonl(out / "train.jsonl", rows)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            manifest["files"]["train"]["sha256"] = _sha256(out / "train.jsonl")
+            manifest["files"]["train"]["bytes"] = (out / "train.jsonl").stat().st_size
+            _rewrite_manifest(out / "manifest.json", manifest)
+
+            with _install_fake_transformers(_FakeTokenizer()), _grounded_validation_patch():
+                result = validate_tau3_competitive_dataset_bundle(out)
+
+            self.assertFalse(result["passed"])
+            self.assertTrue(
+                any("empty_result_recovery must follow an empty" in error for error in result["errors"]),
+                result["errors"][:30],
+            )
+            self.assertTrue(
+                any("error_result_recovery must follow an error" in error for error in result["errors"]),
+                result["errors"][:30],
+            )
+            self.assertTrue(
+                any("repeated_call_recovery must follow" in error for error in result["errors"]),
+                result["errors"][:30],
+            )
 
     def test_external_grounded_validator_is_used_for_build(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

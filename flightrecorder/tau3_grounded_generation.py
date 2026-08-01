@@ -262,6 +262,14 @@ def _build_row(scenario: _Scenario) -> dict[str, Any]:
                 )
             )
     _assert_training_targets_grounded(training_targets, tool_catalog, tool_history)
+    recovery_errors = _recovery_context_errors(
+        training_targets,
+        tool_history,
+        parent_turns,
+        "source",
+    )
+    if recovery_errors:
+        raise Tau3GroundedGenerationError("; ".join(recovery_errors))
     tool_exemptions = _tool_exemptions(payload, tool_catalog)
     tau_repo = _tau_repo_record(payload)
     metadata = {
@@ -615,8 +623,7 @@ def _replay_call(
     exception = None
     try:
         result = runtime.call(tool_name, copy.deepcopy(args))
-        if result is None or result == [] or result == {}:
-            result_class = "empty"
+        result_class = _tool_result_class(result)
     except Exception as exc:  # deliberate: tool exceptions are evidence.
         result = {"error": exc.__class__.__name__, "message": str(exc)}
         result_class = "exception"
@@ -624,8 +631,6 @@ def _replay_call(
             "type": exc.__class__.__name__,
             "message": str(exc),
         }
-    if isinstance(result, dict) and result.get("error") and result_class != "exception":
-        result_class = "error"
     canonical_result = _canonical_value(result)
     result_sha256 = canonical_sha256(canonical_result)
     expected_result_sha256 = raw_call.get("expected_result_sha256")
@@ -678,6 +683,22 @@ def _replay_call(
         },
         "evidence_replayed": True,
     }
+
+
+def _tool_result_class(result: Any) -> str:
+    """Classify native and JSON-serialized Tau tool results consistently."""
+
+    candidate = result
+    if isinstance(result, str):
+        try:
+            candidate = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            candidate = result
+    if candidate is None or candidate == [] or candidate == {}:
+        return "empty"
+    if isinstance(candidate, dict) and candidate.get("error"):
+        return "error"
+    return "success"
 
 
 def _validate_row(row: Any, context: str, bundle: Path) -> list[str]:
@@ -845,7 +866,97 @@ def _validate_row(row: Any, context: str, bundle: Path) -> list[str]:
     if runtime is not None and canonical_sha256(runtime.state) != metadata.get("final_state_sha256"):
         errors.append(f"{context}.metadata.final_state_sha256 does not replay")
     errors.extend(_target_binding_errors(targets, tool_catalog, replay, context))
+    errors.extend(
+        _recovery_context_errors(
+            targets,
+            replay,
+            trajectory.get("turns"),
+            context,
+        )
+    )
     errors.extend(_completion_claim_errors(row, context))
+    return errors
+
+
+def _recovery_context_errors(
+    targets: Any,
+    replay: Any,
+    turns: Any,
+    context: str,
+) -> list[str]:
+    """Require recovery targets to follow the replay condition they claim."""
+
+    errors: list[str] = []
+    if not isinstance(targets, list) or not isinstance(replay, list):
+        return errors
+    turn_list = turns if isinstance(turns, list) else []
+    turns_by_decision = {
+        assistant.get("decision_ordinal"): turn
+        for turn in turn_list
+        if isinstance(turn, dict)
+        for assistant in [_dict(turn.get("assistant"))]
+        if type(assistant.get("decision_ordinal")) is int
+    }
+    ordered_replay = sorted(
+        (call for call in replay if isinstance(call, dict)),
+        key=lambda call: (
+            int(call.get("parent_assistant_decision_ordinal", -1)),
+            int(call.get("tool_call_ordinal", -1)),
+        ),
+    )
+    for index, target in enumerate(targets):
+        if not isinstance(target, dict) or target.get("masked") is True:
+            continue
+        behavior = target.get("behavior")
+        if behavior not in {
+            "empty_result_recovery",
+            "error_result_recovery",
+            "repeated_call_recovery",
+        }:
+            continue
+        decision = target.get("parent_assistant_decision_ordinal")
+        label = f"{context}.training_targets[{index}]"
+        if type(decision) is not int:
+            continue
+        turn = turns_by_decision.get(decision)
+        if not isinstance(turn, dict):
+            errors.append(f"{label} recovery decision is absent from the parent trajectory")
+            continue
+        user = turn.get("user")
+        if isinstance(user, dict) and str(user.get("content") or "").strip():
+            errors.append(
+                f"{label} recovery must immediately follow tool evidence without an intervening user message"
+            )
+        prior = [
+            call
+            for call in ordered_replay
+            if type(call.get("parent_assistant_decision_ordinal")) is int
+            and call["parent_assistant_decision_ordinal"] < decision
+        ]
+        if not prior:
+            errors.append(f"{label} recovery lacks preceding replayed tool evidence")
+            continue
+        evidence = prior[-1]
+        if evidence.get("parent_assistant_decision_ordinal") != decision - 1:
+            errors.append(f"{label} recovery does not immediately follow the evidence decision")
+        result_class = evidence.get("result_class")
+        if behavior == "empty_result_recovery" and result_class != "empty":
+            errors.append(
+                f"{label} claims empty-result recovery after result_class={result_class!r}"
+            )
+        elif behavior == "error_result_recovery" and result_class not in {
+            "error",
+            "exception",
+        }:
+            errors.append(
+                f"{label} claims error-result recovery after result_class={result_class!r}"
+            )
+        elif behavior == "repeated_call_recovery":
+            call_context = _dict(evidence.get("context"))
+            if call_context.get("repeated_call") is not True:
+                errors.append(
+                    f"{label} claims repeated-call recovery without an identical prior call"
+                )
     return errors
 
 

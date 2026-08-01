@@ -1727,6 +1727,13 @@ def _make_source_row(
     tool_names: list[str],
 ) -> dict[str, Any]:
     source_id = f"v3-{split}-{domain}-{behavior}-{ordinal:03d}"
+    scenario_state = copy.deepcopy(initial_state)
+    if behavior == "empty_result_recovery" and domain == "retail":
+        # Retail has no ordinary lookup that returns an empty collection for a
+        # missing identity.  A reviewed synthetic store with an empty product
+        # catalog makes the zero-argument catalog lookup replay a genuine
+        # empty result without using malformed arguments or hidden fixtures.
+        scenario_state["products"] = {}
     turns: list[dict[str, Any]] = []
     decision_ordinal = 0
     for offset in range(repeat_count):
@@ -1754,8 +1761,74 @@ def _make_source_row(
         arg_cursors[tool_name] = args_index + 1
         args = copy.deepcopy(args_pool[args_index % len(args_pool)])
         tool_calls = [{"tool_name": tool_name, "arguments": args}]
-        if behavior == "repeated_call_recovery":
-            tool_calls.append({"tool_name": tool_name, "arguments": copy.deepcopy(args)})
+        if behavior in {
+            "empty_result_recovery",
+            "error_result_recovery",
+            "repeated_call_recovery",
+        }:
+            if behavior == "empty_result_recovery":
+                tool_name, args = _empty_recovery_call(domain, target_ordinal)
+                tool_calls = [
+                    {
+                        "tool_name": tool_name,
+                        "arguments": args,
+                        "expected_result_class": "empty",
+                    }
+                ]
+            elif behavior == "error_result_recovery":
+                tool_name, args = _error_recovery_call(domain, target_ordinal)
+                tool_calls = [
+                    {
+                        "tool_name": tool_name,
+                        "arguments": args,
+                        "expected_result_class": "exception",
+                    }
+                ]
+            turns.append(
+                {
+                    "user": {
+                        "content": _user_prompt(
+                            domain,
+                            split,
+                            behavior,
+                            target_ordinal,
+                            args,
+                        )
+                    },
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": tool_calls,
+                    },
+                }
+            )
+            decision_ordinal += 1
+            if behavior == "repeated_call_recovery":
+                turns.append(
+                    {
+                        "assistant": {
+                            "decision_ordinal": decision_ordinal,
+                            "tool_calls": copy.deepcopy(tool_calls),
+                        },
+                    }
+                )
+                decision_ordinal += 1
+            turns.append(
+                {
+                    "assistant": {
+                        "decision_ordinal": decision_ordinal,
+                        "tool_calls": [],
+                        "safe_corrected_target": _safe_target(
+                            behavior,
+                            domain=domain,
+                            tool_name=tool_name,
+                            arguments=args,
+                            ordinal=target_ordinal,
+                        ),
+                    },
+                }
+            )
+            decision_ordinal += 1
+            continue
         if behavior == "successful_completion":
             turns.append(
                 {
@@ -1882,7 +1955,7 @@ def _make_source_row(
         "runtime_family": runtime_family,
         "tau_repo": tau_repo.relative_to(_project_root()).as_posix(),
         "system_prompt": system_prompt,
-        "initial_state": copy.deepcopy(initial_state),
+        "initial_state": scenario_state,
         "turns": turns,
         "v2_ordered_evaluation_tool_catalog": copy.deepcopy(v2_tool_catalog),
         "source_generation": {
@@ -1930,6 +2003,33 @@ def _synthetic_target_kind(behavior: str) -> str:
     return "tool"
 
 
+def _empty_recovery_call(domain: str, ordinal: int) -> tuple[str, dict[str, Any]]:
+    if domain == "airline":
+        return (
+            "search_direct_flight",
+            {
+                "origin": "ZZZ",
+                "destination": "YYY",
+                "date": f"2099-{(ordinal % 12) + 1:02d}-{(ordinal % 27) + 1:02d}",
+            },
+        )
+    if domain == "retail":
+        return "list_all_product_types", {}
+    return (
+        "get_customer_by_name",
+        {
+            "full_name": f"Missing Customer {ordinal:03d}",
+            "dob": f"1900-{(ordinal % 12) + 1:02d}-{(ordinal % 27) + 1:02d}",
+        },
+    )
+
+
+def _error_recovery_call(domain: str, ordinal: int) -> tuple[str, dict[str, Any]]:
+    if domain in {"airline", "retail"}:
+        return "calculate", {"expression": f"{ordinal + 1} / 0"}
+    return "get_details_by_id", {"id": f"missing-{ordinal:08d}"}
+
+
 def _select_tool_for_behavior(behavior: str, ordinal: int, tool_names: list[str]) -> str:
     mutations = [name for name in tool_names if _is_mutation_tool(name)]
     reads = [name for name in tool_names if name not in mutations]
@@ -1961,7 +2061,14 @@ def _order_successful_completion_tools(
     return ordered
 
 
-def _safe_target(behavior: str) -> dict[str, Any]:
+def _safe_target(
+    behavior: str,
+    *,
+    domain: str | None = None,
+    tool_name: str | None = None,
+    arguments: dict[str, Any] | None = None,
+    ordinal: int = 0,
+) -> dict[str, Any]:
     wording = {
         "successful_completion": "I completed the confirmed change after verifying the tool result.",
         "clarification_refusal": "I need the missing required detail before I can proceed.",
@@ -1977,6 +2084,34 @@ def _safe_target(behavior: str) -> dict[str, Any]:
         "harmful_mutation_correction": "I will not perform the unsafe change and will offer a policy-compliant alternative.",
         "premature_completion_correction": "I will not claim completion until the required evidence is available.",
     }
+    if behavior in {
+        "empty_result_recovery",
+        "error_result_recovery",
+        "repeated_call_recovery",
+    }:
+        detail = ", ".join(
+            f"{key}={json.dumps(value, sort_keys=True, ensure_ascii=False)}"
+            for key, value in sorted((arguments or {}).items())
+        ) or "the reviewed zero-argument lookup"
+        next_steps = (
+            "ask for corrected details",
+            "use the existing verified evidence",
+            "choose a supported alternate lookup",
+            "explain the limitation and request the missing identifier",
+            "change strategy instead of retrying unchanged",
+            "continue to the next policy-required action",
+            "stop the loop and summarize what is already known",
+            "offer a safe handoff if no supported recovery remains",
+        )
+        condition = {
+            "empty_result_recovery": "returned no matches",
+            "error_result_recovery": "failed",
+            "repeated_call_recovery": "was repeated without adding evidence",
+        }[behavior]
+        wording[behavior] = (
+            f"The {domain or 'Tau'} {tool_name or 'tool'} call for {detail} "
+            f"{condition}; I will {next_steps[ordinal % len(next_steps)]}."
+        )
     return _safe_message_target(behavior, wording[behavior])
 
 
@@ -2104,14 +2239,17 @@ def _replay_source_row(row: dict[str, Any], runtime_factory: RuntimeFactory) -> 
         results: list[Any] = []
         for turn in row["turns"]:
             for call in turn["assistant"]["tool_calls"]:
-                results.append(
-                    _canonical_value(
-                        runtime.call(
-                            call["tool_name"],
-                            copy.deepcopy(call.get("arguments") or {}),
-                        )
+                try:
+                    result = runtime.call(
+                        call["tool_name"],
+                        copy.deepcopy(call.get("arguments") or {}),
                     )
-                )
+                except Exception as exc:  # deterministic failures are recovery evidence
+                    result = {
+                        "exception_type": exc.__class__.__name__,
+                        "message": str(exc),
+                    }
+                results.append(_canonical_value(result))
         replay_hashes.append(
             canonical_sha256(
                 {

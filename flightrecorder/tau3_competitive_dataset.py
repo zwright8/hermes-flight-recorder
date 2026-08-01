@@ -1135,7 +1135,10 @@ def _validate_grounded_row_bindings(
             errors.append("grounded row uses fake runtime")
         parent = str(provenance.get("grounded_parent_row_sha256") or meta.get("parent_row_sha256") or "")
         target_sha = str(provenance.get("grounded_target_sha256") or "")
-        grounded_entry = grounded_by_parent.get((parent, target_sha))
+        target_export_ordinal = provenance.get("grounded_target_export_ordinal")
+        grounded_entry = grounded_by_parent.get(
+            (parent, target_sha, target_export_ordinal)
+        )
         if grounded_entry is None:
             errors.append("grounded row target binding cannot be replayed")
             continue
@@ -1143,6 +1146,10 @@ def _validate_grounded_row_bindings(
             errors.append("grounded row runtime tool catalog binding mismatch")
         if meta.get("behavior") != grounded_entry["behavior"]:
             errors.append("grounded row behavior binding mismatch")
+        if meta.get("preceding_result_class") != grounded_entry["preceding_result_class"]:
+            errors.append("grounded row preceding result class binding mismatch")
+        if meta.get("preceding_repeated_call") is not grounded_entry["preceding_repeated_call"]:
+            errors.append("grounded row repeated-call context binding mismatch")
         if meta.get("canonical_target_sha256") != grounded_entry["competitive_target_sha256"]:
             errors.append("grounded row target hash binding mismatch")
         if (
@@ -1385,8 +1392,8 @@ def _candidate_rows_only(rows_by_split: dict[str, list[dict[str, Any]]]) -> bool
 def _grounded_targets_by_parent(
     grounded_bundle: Path,
     grounded_manifest: dict[str, Any],
-) -> dict[tuple[str, str], dict[str, Any]]:
-    output: dict[tuple[str, str], dict[str, Any]] = {}
+) -> dict[tuple[str, str, Any], dict[str, Any]]:
+    output: dict[tuple[str, str, Any], dict[str, Any]] = {}
     for split in ("train", "validation"):
         for row in _read_grounded_rows(grounded_bundle, grounded_manifest, split):
             metadata = _dict(row.get("metadata"))
@@ -1402,6 +1409,7 @@ def _grounded_targets_by_parent(
                     (
                         str(metadata.get("row_sha256") or ""),
                         str(target.get("canonical_target_sha256") or ""),
+                        refs["target_export_ordinal"],
                     )
                 ] = {
                     "behavior": target.get("behavior"),
@@ -1409,6 +1417,8 @@ def _grounded_targets_by_parent(
                     "competitive_target_sha256": _canonical_sha256(
                         competitive_target["canonical"]
                     ),
+                    "preceding_result_class": refs["preceding_result_class"],
+                    "preceding_repeated_call": refs["preceding_repeated_call"],
                     "mutation_replayed": refs["mutation_replayed"],
                 }
     return output
@@ -1620,6 +1630,7 @@ def _project_grounded_target(
         "canonical_target": target_shape["canonical"],
         "canonical_target_sha256": _canonical_sha256(target_shape["canonical"]),
         "preceding_result_class": replay_refs["preceding_result_class"],
+        "preceding_repeated_call": replay_refs["preceding_repeated_call"],
         "mutation_target": _is_mutation_tool(target_shape["tool_name"]),
         "derived_variant": f"grounded:{target_index}",
         "source_provenance": {
@@ -1868,6 +1879,9 @@ def _grounded_replay_refs(
     evidence_call = mutation_calls[-1] if mutation_calls else (calls[-1] if calls else {})
     prior_evidence_call = prior_calls[-1] if prior_calls else {}
     result_class = str(prior_evidence_call.get("result_class") or "none")
+    preceding_repeated_call = (
+        _dict(prior_evidence_call.get("context")).get("repeated_call") is True
+    )
     mutation_replayed = bool(
         prior_mutation_calls
         if target.get("behavior") == "successful_completion"
@@ -1878,6 +1892,7 @@ def _grounded_replay_refs(
         "post_state": "sha256:" + str(evidence_call.get("post_state_sha256") or ""),
         "tool_replay_sha256": _canonical_sha256(calls),
         "preceding_result_class": result_class,
+        "preceding_repeated_call": preceding_repeated_call,
         "mutation_replayed": mutation_replayed,
         "target_export_ordinal": _target_export_ordinal(row, target),
         "parent_trajectory_export_sha256": _parent_export_hash_for_row(row, eval_context),
@@ -1974,8 +1989,6 @@ def _target_export_ordinal(row: dict[str, Any], target: dict[str, Any]) -> int:
         if not isinstance(candidate, dict) or candidate.get("masked") is True:
             continue
         if candidate is target:
-            return ordinal
-        if candidate.get("canonical_target_sha256") == target.get("canonical_target_sha256"):
             return ordinal
         ordinal += 1
     return int(target.get("parent_assistant_decision_ordinal") or 0)
@@ -2387,6 +2400,27 @@ def _validate_rows(rows_by_split: dict[str, list[dict[str, Any]]]) -> list[str]:
                 errors.append(f"{label}: unsupported domain")
             if meta.get("behavior") not in BEHAVIORS:
                 errors.append(f"{label}: unsupported behavior")
+            if meta.get("source_kind") == "grounded_generation_target":
+                behavior = meta.get("behavior")
+                preceding_result_class = meta.get("preceding_result_class")
+                if behavior == "empty_result_recovery" and preceding_result_class != "empty":
+                    errors.append(
+                        f"{label}: empty_result_recovery must follow an empty replay result"
+                    )
+                elif behavior == "error_result_recovery" and preceding_result_class not in {
+                    "error",
+                    "exception",
+                }:
+                    errors.append(
+                        f"{label}: error_result_recovery must follow an error or exception replay result"
+                    )
+                elif (
+                    behavior == "repeated_call_recovery"
+                    and meta.get("preceding_repeated_call") is not True
+                ):
+                    errors.append(
+                        f"{label}: repeated_call_recovery must follow an identical repeated call"
+                    )
             if meta.get("parent_messages_sha256") and not _is_sha256(
                 meta.get("parent_messages_sha256")
             ):
