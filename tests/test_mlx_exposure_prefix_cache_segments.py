@@ -401,6 +401,291 @@ class ExposurePrefixCacheSegmentMlxTests(unittest.TestCase):
                 0o600,
             )
 
+    def test_non_finite_loss_fails_before_optimizer_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "output"
+            output.mkdir()
+            model = nn.Linear(1, 1)
+            optimizer = optim.Adam(learning_rate=0.01)
+            segmented_lora._RUNTIME_SCHEDULE = self._schedule(
+                {
+                    "enabled": True,
+                    "start": 0,
+                    "end": 2,
+                    "adapter_input": None,
+                    "optimizer_state_input": None,
+                    "optimizer_state_output": output
+                    / "optimizer.safetensors",
+                }
+            )
+
+            def fake_split(tokens, prompt_offset, max_seq_length):
+                del prompt_offset, max_seq_length
+                row_number = int(tokens[0]) - 1
+                return None, tokens, row_number + 2
+
+            def fake_target(model, suffix_inputs, targets, cache):
+                del suffix_inputs, cache
+                gradients = tree_map(
+                    mx.zeros_like,
+                    model.trainable_parameters(),
+                )
+                return mx.array(float("nan")), mx.array(targets), gradients
+
+            with (
+                mock.patch.object(
+                    segmented_lora,
+                    "_assert_dataset_matches_receipt",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "split_supervised_tokens",
+                    side_effect=fake_split,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_materialize_prompt_cache",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_target_value_and_grad",
+                    side_effect=fake_target,
+                ),
+                mock.patch.object(optimizer, "update", wraps=optimizer.update) as update,
+                self.assertRaisesRegex(
+                    ExposurePrefixCacheLoraError,
+                    "non-finite training loss at global microbatch 0",
+                ),
+            ):
+                train_with_exposure_prefix_cache(
+                    model,
+                    optimizer,
+                    self._dataset(),
+                    args=self._args(output / "adapters.safetensors"),
+                )
+
+            update.assert_not_called()
+            self.assertFalse((output / "adapters.safetensors").exists())
+            self.assertFalse((output / "optimizer.safetensors").exists())
+
+    def test_non_finite_accumulated_gradients_fail_before_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "output"
+            output.mkdir()
+            model = nn.Linear(1, 1)
+            optimizer = optim.Adam(learning_rate=0.01)
+            segmented_lora._RUNTIME_SCHEDULE = self._schedule(
+                {
+                    "enabled": True,
+                    "start": 0,
+                    "end": 2,
+                    "adapter_input": None,
+                    "optimizer_state_input": None,
+                    "optimizer_state_output": output
+                    / "optimizer.safetensors",
+                }
+            )
+
+            def fake_split(tokens, prompt_offset, max_seq_length):
+                del prompt_offset, max_seq_length
+                row_number = int(tokens[0]) - 1
+                return None, tokens, row_number + 2
+
+            def fake_target(model, suffix_inputs, targets, cache):
+                del suffix_inputs, cache
+                gradients = tree_map(
+                    lambda parameter: mx.full_like(parameter, float("inf")),
+                    model.trainable_parameters(),
+                )
+                return mx.array(1.0), mx.array(targets), gradients
+
+            with (
+                mock.patch.object(
+                    segmented_lora,
+                    "_assert_dataset_matches_receipt",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "split_supervised_tokens",
+                    side_effect=fake_split,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_materialize_prompt_cache",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_target_value_and_grad",
+                    side_effect=fake_target,
+                ),
+                mock.patch.object(optimizer, "update", wraps=optimizer.update) as update,
+                self.assertRaisesRegex(
+                    ExposurePrefixCacheLoraError,
+                    "accumulated gradients at global microbatch 0 contains "
+                    "non-finite tensor values",
+                ),
+            ):
+                train_with_exposure_prefix_cache(
+                    model,
+                    optimizer,
+                    self._dataset(),
+                    args=self._args(output / "adapters.safetensors"),
+                )
+
+            update.assert_not_called()
+            self.assertFalse((output / "adapters.safetensors").exists())
+            self.assertFalse((output / "optimizer.safetensors").exists())
+
+    def test_non_finite_post_update_model_fails_before_save(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "output"
+            output.mkdir()
+            model = nn.Linear(1, 1)
+            optimizer = optim.Adam(learning_rate=0.01)
+            segmented_lora._RUNTIME_SCHEDULE = self._schedule(
+                {
+                    "enabled": True,
+                    "start": 0,
+                    "end": 2,
+                    "adapter_input": None,
+                    "optimizer_state_input": None,
+                    "optimizer_state_output": output
+                    / "optimizer.safetensors",
+                }
+            )
+
+            def fake_split(tokens, prompt_offset, max_seq_length):
+                del prompt_offset, max_seq_length
+                row_number = int(tokens[0]) - 1
+                return None, tokens, row_number + 2
+
+            def fake_target(model, suffix_inputs, targets, cache):
+                del suffix_inputs, cache
+                gradients = tree_map(
+                    mx.ones_like,
+                    model.trainable_parameters(),
+                )
+                return mx.array(1.0), mx.array(targets), gradients
+
+            def corrupt_update(model, gradients):
+                del gradients
+                model.update(
+                    tree_map(
+                        lambda parameter: mx.full_like(
+                            parameter,
+                            float("nan"),
+                        ),
+                        model.trainable_parameters(),
+                    )
+                )
+
+            with (
+                mock.patch.object(
+                    segmented_lora,
+                    "_assert_dataset_matches_receipt",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "split_supervised_tokens",
+                    side_effect=fake_split,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_materialize_prompt_cache",
+                    return_value=None,
+                ),
+                mock.patch.object(
+                    segmented_lora,
+                    "_target_value_and_grad",
+                    side_effect=fake_target,
+                ),
+                mock.patch.object(
+                    optimizer,
+                    "update",
+                    side_effect=corrupt_update,
+                ),
+                self.assertRaisesRegex(
+                    ExposurePrefixCacheLoraError,
+                    "model parameters after optimizer step 1 contains "
+                    "non-finite tensor values",
+                ),
+            ):
+                train_with_exposure_prefix_cache(
+                    model,
+                    optimizer,
+                    self._dataset(),
+                    args=self._args(output / "adapters.safetensors"),
+                )
+
+            self.assertFalse((output / "adapters.safetensors").exists())
+            self.assertFalse((output / "optimizer.safetensors").exists())
+
+    def test_resumed_segment_rejects_non_finite_adapter_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_dir = root / "input"
+            output_dir = root / "output"
+            input_dir.mkdir()
+            output_dir.mkdir()
+            model = nn.Linear(1, 1)
+            optimizer = optim.Adam(learning_rate=0.01)
+            optimizer.init(model.trainable_parameters())
+            adapter_input = input_dir / "adapters.safetensors"
+            optimizer_input = input_dir / "optimizer.safetensors"
+            weights = dict(tree_flatten(model.trainable_parameters()))
+            first_name = next(iter(weights))
+            weights[first_name] = mx.full_like(
+                weights[first_name],
+                float("nan"),
+            )
+            mx.save_safetensors(str(adapter_input), weights)
+            mx.save_safetensors(
+                str(optimizer_input),
+                dict(tree_flatten(optimizer.state)),
+            )
+            segmented_lora._RUNTIME_SCHEDULE = self._schedule(
+                {
+                    "enabled": True,
+                    "start": 2,
+                    "end": 4,
+                    "adapter_input": adapter_input,
+                    "adapter_input_sha256": _file_sha256(adapter_input),
+                    "optimizer_state_input": optimizer_input,
+                    "optimizer_state_input_sha256": _file_sha256(optimizer_input),
+                    "optimizer_state_output": output_dir
+                    / "optimizer.safetensors",
+                }
+            )
+
+            with (
+                mock.patch.object(
+                    segmented_lora,
+                    "_assert_dataset_matches_receipt",
+                    return_value=None,
+                ),
+                self.assertRaisesRegex(
+                    ExposurePrefixCacheLoraError,
+                    "segment adapter input contains non-finite tensor values",
+                ),
+            ):
+                train_with_exposure_prefix_cache(
+                    model,
+                    optim.Adam(learning_rate=0.01),
+                    self._dataset(),
+                    args=self._args(output_dir / "adapters.safetensors"),
+                )
+
+            self.assertFalse((output_dir / "adapters.safetensors").exists())
+            self.assertFalse((output_dir / "optimizer.safetensors").exists())
+
     def test_segment_outputs_are_create_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

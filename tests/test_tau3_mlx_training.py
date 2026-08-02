@@ -18,6 +18,7 @@ from flightrecorder.tau3_mlx_training import (
     _config_within_bounds,
     _prefix_equivalence_sample_membership,
     _policy_complete_manifest_replays,
+    _replay_telemetry_losses,
     _scan_mlx_data_dir,
     _write_telemetry,
     build_tau3_process_segment_plan,
@@ -77,6 +78,11 @@ elif mode == 'crash':
 elif mode == 'oom':
     print('out of memory while allocating adapter', file=sys.stderr)
     sys.exit(1)
+elif mode == 'nonfinite':
+    print('Iter 2: Train loss nan')
+    os.makedirs(adapter, exist_ok=True)
+    open(os.path.join(adapter, 'adapter_config.json'), 'w').write('{{"r": 16}}\\n')
+    open(os.path.join(adapter, 'adapters.safetensors'), 'wb').write(b'nonfinite-adapter')
 elif mode == 'no_output':
     sys.exit(0)
 elif mode == 'mlx_progress':
@@ -1464,6 +1470,48 @@ class Tau3MlxTrainingRunnerTests(unittest.TestCase):
             self.assertNotIn(100.0, receipt["losses"]["train"])
             self.assertNotIn(59.258, receipt["losses"]["validation"])
 
+    def test_non_finite_loss_forces_crash_even_with_zero_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _install_fake_python(root, "nonfinite")
+            receipt = run_tau3_mlx_training(
+                bundle_dir=_runner_bundle(root),
+                output_dir=root / "out",
+                workspace_root=root,
+                config=Tau3MlxTrainingConfig(iters=2, timeout_seconds=5),
+            )
+
+            self.assertEqual(receipt["terminal_status"], "crash")
+            self.assertFalse(receipt["weights_updated"])
+            self.assertEqual(receipt["losses"]["train"], [1.25])
+            self.assertIn(
+                "Train loss nan",
+                (root / "out/telemetry.jsonl").read_text(encoding="utf-8"),
+            )
+
+    def test_committed_telemetry_replay_rejects_non_finite_loss(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "telemetry.jsonl"
+            _write_jsonl(
+                path,
+                [
+                    {
+                        "time": "2026-08-02T09:19:35Z",
+                        "stream": "stdout",
+                        "text": "Iter 420: Train loss nan",
+                    }
+                ],
+            )
+
+            with self.assertRaisesRegex(
+                Tau3MlxTrainingError,
+                "committed telemetry contains non-finite loss",
+            ):
+                _replay_telemetry_losses(
+                    path,
+                    {"train": [], "validation": []},
+                )
+
     def test_crash_is_classified_without_weights_updated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2531,6 +2579,56 @@ class Tau3MlxProcessSegmentTests(unittest.TestCase):
                     "optimizer_state_output sha256 mismatch" in error
                     for error in validation["errors"]
                 )
+            )
+
+    def test_validator_rejects_non_finite_segment_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            with mock.patch(
+                "flightrecorder.tau3_mlx_training._run_child",
+                side_effect=self._successful_child([]),
+            ):
+                result = _run_process_segments(
+                    command=[
+                        "python",
+                        "--adapter-path",
+                        str(output / "adapter"),
+                    ],
+                    cwd=Path(tmp),
+                    output_dir=output,
+                    final_adapter_dir=output / "adapter",
+                    aggregate_telemetry_path=output / "telemetry.jsonl",
+                    cfg=self._config(),
+                    losses={"train": [], "validation": []},
+                )
+
+            telemetry = (
+                output
+                / result["process_segments"]["segments"][0]["record"][
+                    "telemetry"
+                ]["path"]
+            )
+            telemetry.chmod(0o644)
+            _write_jsonl(
+                telemetry,
+                [
+                    {
+                        "time": "2026-08-02T09:19:35Z",
+                        "stream": "stdout",
+                        "text": "Iter 4: Train loss nan",
+                    }
+                ],
+            )
+
+            validation = validate_tau3_process_segments(
+                result["process_segments"],
+                output_dir=output,
+            )
+            self.assertFalse(validation["passed"])
+            self.assertIn(
+                "segment 0 telemetry contains non-finite loss",
+                validation["errors"],
             )
 
     def test_validator_rejects_receipt_config_policy_drift(self) -> None:

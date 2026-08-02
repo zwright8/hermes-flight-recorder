@@ -50,6 +50,11 @@ LOSS_RE = re.compile(
     r"\b(?P<kind>train|training|valid|validation|val)[_ -]*loss\b\s*[:=]?\s*(?P<loss>[+-]?(?:\d+(?:\.\d*)?|\.\d+))",
     re.IGNORECASE,
 )
+NONFINITE_LOSS_RE = re.compile(
+    r"\b(?:train|training|valid|validation|val)[_ -]*loss\b\s*[:=]?\s*"
+    r"[+-]?(?:nan|inf(?:inity)?)\b",
+    re.IGNORECASE,
+)
 SECRET_RE = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{8,}|hf_[A-Za-z0-9]{8,})\b")
 FORBIDDEN_TOKEN_FRAGMENTS = (
     "--push-to-hub",
@@ -2865,6 +2870,10 @@ def validate_tau3_process_segments(
             errors,
         )
         if telemetry is not None:
+            if _telemetry_has_nonfinite_loss(telemetry):
+                errors.append(
+                    f"segment {index} telemetry contains non-finite loss"
+                )
             telemetry_paths.append(telemetry)
         adapter_output = _validate_bound_file_record(
             record.get("adapter_output"),
@@ -3707,6 +3716,11 @@ def _load_committed_process_segments(
                 f"committed segment {index} adapter tree is unavailable"
             )
         if telemetry is not None:
+            if _telemetry_has_nonfinite_loss(telemetry):
+                errors.append(
+                    f"committed segment {index} telemetry contains "
+                    "non-finite loss"
+                )
             telemetry_paths.append(telemetry)
         telemetry_count += int(record.get("telemetry_event_count") or 0)
         peak_rss_kb = max(
@@ -3783,6 +3797,11 @@ def _replay_telemetry_losses(
         text = event.get("text") if isinstance(event, dict) else None
         if not isinstance(text, str):
             continue
+        if NONFINITE_LOSS_RE.search(text):
+            raise Tau3MlxTrainingError(
+                "committed telemetry contains non-finite loss at "
+                f"{path}:{line_number}"
+            )
         for match in LOSS_RE.finditer(text):
             value = float(match.group("loss"))
             kind = match.group("kind").lower()
@@ -4558,9 +4577,19 @@ def _classify(exit_code: int | None, timed_out: bool, telemetry_path: Path) -> s
     text = telemetry_path.read_text(encoding="utf-8") if telemetry_path.exists() else ""
     if "out of memory" in text.lower() or "oom" in text.lower():
         return "oom"
+    if NONFINITE_LOSS_RE.search(text):
+        return "crash"
     if exit_code == 0:
         return "success"
     return "crash"
+
+
+def _telemetry_has_nonfinite_loss(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    return NONFINITE_LOSS_RE.search(text) is not None
 
 
 def _fingerprint_tree(root: Path) -> dict[str, Any]:

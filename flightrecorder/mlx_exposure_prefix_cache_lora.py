@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import os
 import sys
 import tempfile
@@ -166,6 +167,11 @@ def train_with_exposure_prefix_cache(
                 num_batches=args.val_batches,
                 max_seq_length=args.max_seq_length,
             )
+            if not math.isfinite(validation_loss):
+                raise ExposurePrefixCacheLoraError(
+                    "non-finite validation loss before global microbatch "
+                    f"{iteration - 1}"
+                )
             validation_seconds = time.perf_counter() - validation_started
             print(
                 f"Iter {iteration}: Val loss {validation_loss:.3f}, "
@@ -200,6 +206,18 @@ def train_with_exposure_prefix_cache(
             targets,
             cache,
         )
+        # MLX evaluates lazily. Materialize the loss and gradients against the
+        # pre-update model on every microbatch; otherwise an update-boundary
+        # loss can be evaluated after optimizer mutation and become
+        # nondeterministic or non-finite even when the same hash-bound replay
+        # is numerically stable under eager evaluation.
+        mx.eval(loss_value, supervised_count, gradients)
+        loss_float = float(loss_value.item())
+        if not math.isfinite(loss_float):
+            raise ExposurePrefixCacheLoraError(
+                "non-finite training loss at global microbatch "
+                f"{iteration - 1}"
+            )
         current_targets = int(supervised_count.item())
         if current_targets != int(expected_tokens["supervised_tokens"]):
             raise ExposurePrefixCacheLoraError(
@@ -214,6 +232,15 @@ def train_with_exposure_prefix_cache(
                 gradients,
                 accumulated_gradients,
             )
+        _assert_finite_tensor_tree(
+            accumulated_gradients,
+            label=(
+                "accumulated gradients at global microbatch "
+                f"{iteration - 1}"
+            ),
+            mx=mx,
+            tree_flatten=tree_flatten,
+        )
         update_boundary = iteration % args.grad_accumulation_steps == 0
         if update_boundary:
             if args.grad_accumulation_steps > 1:
@@ -221,13 +248,38 @@ def train_with_exposure_prefix_cache(
                     lambda value: value / args.grad_accumulation_steps,
                     accumulated_gradients,
                 )
+                _assert_finite_tensor_tree(
+                    accumulated_gradients,
+                    label=(
+                        "averaged gradients before optimizer step "
+                        f"{iteration // args.grad_accumulation_steps}"
+                    ),
+                    mx=mx,
+                    tree_flatten=tree_flatten,
+                )
             optimizer.update(model, accumulated_gradients)
             accumulated_gradients = None
             mx.eval(model.trainable_parameters(), optimizer.state)
-        else:
-            mx.eval(loss_value, supervised_count, accumulated_gradients)
+            _assert_finite_tensor_tree(
+                model.trainable_parameters(),
+                label=(
+                    "model parameters after optimizer step "
+                    f"{iteration // args.grad_accumulation_steps}"
+                ),
+                mx=mx,
+                tree_flatten=tree_flatten,
+            )
+            _assert_finite_tensor_tree(
+                optimizer.state,
+                label=(
+                    "optimizer state after optimizer step "
+                    f"{iteration // args.grad_accumulation_steps}"
+                ),
+                mx=mx,
+                tree_flatten=tree_flatten,
+            )
 
-        train_losses.append(float(loss_value.item()))
+        train_losses.append(loss_float)
         target_tokens += current_targets
         prompt_tokens += int(prompt_offset)
         del cache, gradients, loss_value, supervised_count
@@ -240,6 +292,13 @@ def train_with_exposure_prefix_cache(
             trained_target_tokens += target_tokens
             trained_prompt_tokens += prompt_tokens
             learning_rate = float(optimizer.learning_rate.item())
+            if not math.isfinite(average_loss) or not math.isfinite(
+                learning_rate
+            ):
+                raise ExposurePrefixCacheLoraError(
+                    "non-finite training report at global microbatch "
+                    f"{iteration - 1}"
+                )
             iterations_per_second = report_steps / elapsed
             tokens_per_second = target_tokens / elapsed
             peak_memory = mx.get_peak_memory() / 1e9
@@ -304,6 +363,18 @@ def train_with_exposure_prefix_cache(
         raise ExposurePrefixCacheLoraError(
             "cumulative supervised-token counter differs from the exposure ledger"
         )
+    _assert_finite_tensor_tree(
+        model.trainable_parameters(),
+        label="final model parameters",
+        mx=mx,
+        tree_flatten=tree_flatten,
+    )
+    _assert_finite_tensor_tree(
+        optimizer.state,
+        label="final optimizer state",
+        mx=mx,
+        tree_flatten=tree_flatten,
+    )
     if segment["enabled"]:
         actual_optimizer_step = int(optimizer.step.item())
         expected_optimizer_step = (
@@ -509,6 +580,12 @@ def _prepare_segment(
         )
         model.load_weights(list(adapter_weights.items()), strict=False)
         mx.eval(model.trainable_parameters())
+        _assert_finite_tensor_tree(
+            model.trainable_parameters(),
+            label="segment adapter input",
+            mx=mx,
+            tree_flatten=tree_flatten,
+        )
 
     optimizer.init(model.trainable_parameters())
     optimizer_input = segment.get("optimizer_state_input")
@@ -529,6 +606,12 @@ def _prepare_segment(
 
         optimizer.state = tree_unflatten(list(optimizer_state.items()))
         mx.eval(optimizer.state)
+        _assert_finite_tensor_tree(
+            optimizer.state,
+            label="segment optimizer-state input",
+            mx=mx,
+            tree_flatten=tree_flatten,
+        )
     optimizer_step = int(optimizer.step.item())
     expected_step = start // accumulation
     if optimizer_step != expected_step:
@@ -537,6 +620,38 @@ def _prepare_segment(
             f"actual={optimizer_step}, expected={expected_step}"
         )
     return segment
+
+
+def _assert_finite_tensor_tree(
+    value: Any,
+    *,
+    label: str,
+    mx: Any,
+    tree_flatten: Any,
+) -> None:
+    """Fail closed when an MLX tensor tree contains NaN or infinity."""
+
+    # Evaluating only reductions over a lazy tree is insufficient here: MLX
+    # may discard their intermediates and later rebuild the original tree
+    # after optimizer mutation. Pin the exact values before both the finite
+    # checks and any consuming update.
+    mx.eval(value)
+    checks = [
+        (name, mx.all(mx.isfinite(tensor)))
+        for name, tensor in tree_flatten(value)
+    ]
+    if not checks:
+        raise ExposurePrefixCacheLoraError(
+            f"{label} must contain at least one tensor"
+        )
+    mx.eval([check for _, check in checks])
+    non_finite = [name for name, check in checks if not bool(check.item())]
+    if non_finite:
+        rendered = ", ".join(non_finite[:8])
+        suffix = "" if len(non_finite) <= 8 else ", ..."
+        raise ExposurePrefixCacheLoraError(
+            f"{label} contains non-finite tensor values: {rendered}{suffix}"
+        )
 
 
 def _assert_tensor_mapping_matches(
