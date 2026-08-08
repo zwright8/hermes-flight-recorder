@@ -14,6 +14,8 @@
     "files",
     "counts",
     "derivation",
+    "artifact_security",
+    "row_contract",
     "coverage",
     "sealed_access",
     "contamination",
@@ -24,7 +26,7 @@
     "lineage_id": {"const": "tau3-grounded-generation-v1"},
     "passed": {"type": "boolean"},
     "status": {"enum": ["passed", "blocked"]},
-    "blockers": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "maxItems": 4096, "items": {"type": "string"}},
     "source": {
       "type": "object",
       "required": ["path_leaf", "sha256", "training_side_only", "accepted_source_families"],
@@ -48,8 +50,8 @@
       "type": "object",
       "required": ["train", "validation"],
       "properties": {
-        "train": {"type": "integer", "minimum": 0},
-        "validation": {"type": "integer", "minimum": 0}
+        "train": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "validation": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
       }
     },
     "derivation": {
@@ -60,14 +62,95 @@
         "training_side_only",
         "replays_tool_methods",
         "fabricates_success_claims",
-        "negative_or_unsafe_targets_masked"
+        "negative_or_unsafe_targets_masked",
+        "runtime_derived_system_prompt",
+        "ordered_openai_tool_schema_catalog",
+        "full_environment_state_replayed",
+        "chronological_argument_grounding",
+        "policy_confirmation_replayed",
+        "policy_mutation_review_replayed",
+        "confirmation_detail_grounding_replayed",
+        "task_initialization_replayed",
+        "ordered_initial_sync_sequence_replayed",
+        "initial_sync_sequence_sha256_bound",
+        "single_ordered_tool_sequence",
+        "scoped_codex_provenance",
+        "registered_selection_algorithm",
+        "selection_hash_semantics_replayed"
       ],
       "properties": {
         "dependency_free": {"const": true},
         "training_side_only": {"const": true},
         "replays_tool_methods": {"const": true},
         "fabricates_success_claims": {"const": false},
-        "negative_or_unsafe_targets_masked": {"const": true}
+        "negative_or_unsafe_targets_masked": {"const": true},
+        "runtime_derived_system_prompt": {"const": true},
+        "ordered_openai_tool_schema_catalog": {"const": true},
+        "full_environment_state_replayed": {"const": true},
+        "chronological_argument_grounding": {"const": true},
+        "policy_confirmation_replayed": {"const": true},
+        "policy_mutation_review_replayed": {"const": true},
+        "confirmation_detail_grounding_replayed": {"const": true},
+        "task_initialization_replayed": {"const": true},
+        "ordered_initial_sync_sequence_replayed": {"const": true},
+        "initial_sync_sequence_sha256_bound": {"const": true},
+        "single_ordered_tool_sequence": {"const": true},
+        "scoped_codex_provenance": {"const": true},
+        "registered_selection_algorithm": {"const": true},
+        "selection_hash_semantics_replayed": {"const": true},
+        "deterministic_stratified_ordinal_selection": {"const": true},
+        "full_rubric_aggregate_replayed": {"const": true},
+        "supervised_target_token_count_dependency_free": {"const": true}
+      }
+    },
+    "artifact_security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "owner_only_required",
+        "directory_mode",
+        "file_mode",
+        "raw_session_publishable"
+      ],
+      "properties": {
+        "classification": {"const": "sensitive"},
+        "owner_only_required": {"const": true},
+        "directory_mode": {"const": "0700"},
+        "file_mode": {"const": "0600_or_stricter"},
+        "raw_session_publishable": {"const": false}
+      }
+    },
+    "row_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "state_refs_owner_only",
+        "initial_sync_evidence_required",
+        "ordered_initial_sync_sequence_required",
+        "initial_sync_sequence_sha256_required",
+        "per_call_sync_evidence_required",
+        "generation_provenance_required",
+        "selection_receipt_required",
+        "task_initialization_receipt_required",
+        "policy_target_review_required",
+        "confirmation_detail_grounding_required"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_grounded_generation_row.v1"},
+        "state_refs_owner_only": {"const": true},
+        "initial_sync_evidence_required": {"const": true},
+        "ordered_initial_sync_sequence_required": {"const": true},
+        "initial_sync_sequence_sha256_required": {"const": true},
+        "per_call_sync_evidence_required": {"const": true},
+        "generation_provenance_required": {"const": true},
+        "selection_receipt_required": {"const": true},
+        "task_initialization_receipt_required": {"const": true},
+        "policy_target_review_required": {"const": true},
+        "confirmation_detail_grounding_required": {"const": true},
+        "scaled_selection_receipt_required": {"const": true},
+        "generated_family_binding_required": {"const": true}
       }
     },
     "coverage": {
@@ -75,10 +158,28 @@
       "required": ["passed", "blockers", "by_split"],
       "properties": {
         "passed": {"type": "boolean"},
-        "blockers": {"type": "array", "items": {"type": "string"}},
-        "by_split": {"type": "object"}
+        "schema_version": {"type": "string"},
+        "blockers": {"type": "array", "maxItems": 4096, "items": {"type": "string"}},
+        "blocker_count": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "blocker_error_id_count": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "blocker_records": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/blockerRecord"}},
+        "nonwaivable_blockers": {"type": "array", "maxItems": 4096, "items": {"type": "string"}, "uniqueItems": true},
+        "by_split": {"type": "object"},
+        "coverage_profile": {"$ref": "#/$defs/coverageProfile"},
+        "token_count_contract": {"$ref": "#/$defs/tokenCountContract"},
+        "training_handoff_sha256": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          ]
+        },
+        "hash_disjointness": {"$ref": "#/$defs/hashDisjointness"},
+        "coverage_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },
+    "coverage_profile": {"$ref": "#/$defs/coverageProfile"},
+    "training_handoff": {"$ref": "#/$defs/trainingHandoff"},
+    "hash_disjointness": {"$ref": "#/$defs/hashDisjointness"},
     "sealed_access": {
       "type": "object",
       "required": ["payload_accessed", "access_count", "materialized_sealed_fields"],
@@ -103,14 +204,904 @@
     },
     "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "coverage_profile": {
+            "properties": {"profile_id": {"const": "tau3_scaled_full_rubric_v1"}},
+            "required": ["profile_id"]
+          }
+        },
+        "required": ["coverage_profile"]
+      },
+      "then": {
+        "required": ["coverage_profile", "training_handoff", "hash_disjointness"],
+        "properties": {
+          "coverage": {
+            "required": [
+              "schema_version",
+              "coverage_profile",
+              "passed",
+              "blockers",
+              "blocker_count",
+              "blocker_error_id_count",
+              "blocker_records",
+              "nonwaivable_blockers",
+              "by_split",
+              "token_count_contract",
+              "training_handoff_sha256",
+              "token_balance",
+              "telecom_train_example_fraction",
+              "training_example_duplication",
+              "hash_disjointness",
+              "coverage_sha256"
+            ]
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
+    "coverageProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "profile_id", "contract_sha256"],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_coverage_profile.v1"},
+        "profile_id": {"enum": ["tau3_pilot_legacy_v1", "tau3_scaled_full_rubric_v1"]},
+        "contract_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "trainingHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tokenizer", "chat_template", "context_budget", "handoff_sha256"],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_training_handoff.v1"},
+        "tokenizer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identifier", "revision", "identity_sha256"],
+          "properties": {
+            "identifier": {"type": "string", "minLength": 1},
+            "revision": {"type": "string", "minLength": 1},
+            "identity_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "chat_template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identifier", "sha256"],
+          "properties": {
+            "identifier": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "context_budget": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "handoff_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "hashDisjointness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "train_source_split",
+        "validation_source_split",
+        "development_maps_only_to_internal_validation",
+        "dimensions",
+        "canonical_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_split_hash_evidence.v1"},
+        "train_source_split": {"const": "train"},
+        "validation_source_split": {"const": "development"},
+        "development_maps_only_to_internal_validation": {"const": true},
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["task_sha256", "source_family_sha256", "prompt_sha256"],
+          "properties": {
+            "task_sha256": {"$ref": "#/$defs/hashDisjointDimension"},
+            "source_family_sha256": {"$ref": "#/$defs/hashDisjointDimension"},
+            "prompt_sha256": {"$ref": "#/$defs/hashDisjointDimension"}
+          }
+        },
+        "canonical_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "hashDisjointDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train_row_count",
+        "validation_row_count",
+        "train_valid_claim_count",
+        "validation_valid_claim_count",
+        "train_unique_count",
+        "validation_unique_count",
+        "train_set_sha256",
+        "validation_set_sha256",
+        "intersection_count",
+        "intersection_set_sha256",
+        "disjoint",
+        "complete"
+      ],
+      "properties": {
+        "train_row_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "validation_row_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "train_valid_claim_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "validation_valid_claim_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "train_unique_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "validation_unique_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "train_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "validation_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "intersection_count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "intersection_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "disjoint": {"type": "boolean"},
+        "complete": {"type": "boolean"}
+      }
+    },
+    "tokenCountContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "algorithm",
+        "canonicalization",
+        "counted_unit",
+        "admitted_unmasked_canonical_target_only",
+        "dependency_free",
+        "contract_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_supervised_target_token_count.v1"},
+        "algorithm": {"const": "canonical_json_utf8_byte_tokens_v1"},
+        "canonicalization": {"const": "sorted_compact_ascii_json"},
+        "counted_unit": {"const": "utf8_byte"},
+        "admitted_unmasked_canonical_target_only": {"const": true},
+        "dependency_free": {"const": true},
+        "contract_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "blockerRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error_id", "record_sha256"],
+      "properties": {
+        "error_id": {"type": "string", "pattern": "^E_[A-Z0-9_]+$"},
+        "split": {"enum": ["train", "validation"]},
+        "domain": {"enum": ["airline", "retail", "telecom"]},
+        "dimension": {"type": "string"},
+        "identifier_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "observed": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "required": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "toolCoverageExemption": {
+      "oneOf": [
+        {"$ref": "#/$defs/scaledToolCoverageExemption"},
+        {"$ref": "#/$defs/legacyToolCoverageExemption"}
+      ]
+    },
+    "legacyToolCoverageExemption": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["tool_name", "reason", "reviewer"],
+      "properties": {
+        "tool_name": {"type": "string", "minLength": 1},
+        "reason": {"enum": ["zero_arg", "policy_forbidden"]},
+        "reviewer": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["schema_version"]},
+          "then": false
+        }
+      ]
+    },
+    "scaledToolCoverageExemption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "domain",
+        "tool_name",
+        "reason",
+        "scope",
+        "reviewer",
+        "reviewer_artifact_sha256",
+        "reviewer_inference_receipt_sha256",
+        "reviewer_model",
+        "reviewer_reasoning_effort",
+        "independent_review",
+        "review_artifact",
+        "tool_catalog_sha256",
+        "policy_hash",
+        "evidence_sha256",
+        "citation",
+        "receipt_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_tool_coverage_exemption.v1"},
+        "domain": {"enum": ["airline", "retail", "telecom"]},
+        "tool_name": {"type": "string", "minLength": 1},
+        "reason": {"enum": ["zero_arg", "policy_forbidden"]},
+        "scope": {
+          "const": [
+            "canonical_argument_payload_count",
+            "supervised_target_count"
+          ]
+        },
+        "reviewer": {"type": "string", "minLength": 1},
+        "reviewer_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewer_inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewer_model": {"const": "gpt-5.6-sol"},
+        "reviewer_reasoning_effort": {"const": "ultra"},
+        "independent_review": {"const": true},
+        "review_artifact": {"$ref": "#/$defs/toolCoverageExemptionReview"},
+        "tool_catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "citation": {"type": "string", "minLength": 1},
+        "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "toolCoverageExemptionReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "reviewer",
+        "inference_receipt",
+        "review_scope",
+        "independent_review_pass"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_tool_coverage_exemption_review.v1"},
+        "reviewer": {"type": "string", "minLength": 1},
+        "inference_receipt": {"$ref": "#/$defs/toolCoverageExemptionReviewInference"},
+        "review_scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domain",
+            "tool_name",
+            "reason",
+            "scope",
+            "tool_catalog_sha256",
+            "policy_hash",
+            "evidence_sha256",
+            "citation"
+          ],
+          "properties": {
+            "domain": {"enum": ["airline", "retail", "telecom"]},
+            "tool_name": {"type": "string", "minLength": 1},
+            "reason": {"enum": ["zero_arg", "policy_forbidden"]},
+            "scope": {
+              "const": [
+                "canonical_argument_payload_count",
+                "supervised_target_count"
+              ]
+            },
+            "tool_catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "citation": {"type": "string", "minLength": 1}
+          }
+        },
+        "independent_review_pass": {"const": true}
+      }
+    },
+    "toolCoverageExemptionReviewInference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "inference_origin",
+        "model",
+        "reasoning_effort",
+        "native_codex_inference_calls",
+        "provider_accessed",
+        "network_accessed",
+        "prohibited_external_model_provider_calls",
+        "prohibited_external_network_calls"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_tool_coverage_exemption_review_inference.v1"},
+        "inference_origin": {"const": "native_codex"},
+        "model": {"const": "gpt-5.6-sol"},
+        "reasoning_effort": {"const": "ultra"},
+        "native_codex_inference_calls": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "provider_accessed": {"const": true},
+        "network_accessed": {"const": true},
+        "prohibited_external_model_provider_calls": {"const": 0},
+        "prohibited_external_network_calls": {"const": 0}
+      }
+    },
     "file": {
       "type": "object",
-      "required": ["path", "sha256", "bytes"],
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "mode"],
       "properties": {
         "path": {"type": "string", "minLength": 1},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "bytes": {"type": "integer", "minimum": 0}
+        "bytes": {"type": "integer", "minimum": 0},
+        "mode": {"type": "string", "pattern": "^0[246]00$"}
+      }
+    },
+    "generationProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "inference_origin",
+        "generator_model",
+        "reasoning_effort",
+        "native_codex_inference_used",
+        "native_codex_inference_calls",
+        "provider_accessed",
+        "network_accessed",
+        "prohibited_external_model_provider_calls",
+        "prohibited_external_network_calls",
+        "inference_receipt",
+        "controller_receipt",
+        "inference_receipt_sha256",
+        "controller_receipt_sha256",
+        "generated_artifacts_redacted",
+        "raw_session_publishable",
+        "raw_session_owner_only",
+        "raw_session_disposition"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_generation_provenance.v2"},
+        "inference_origin": {"const": "native_codex"},
+        "generator_model": {"const": "gpt-5.6-sol"},
+        "reasoning_effort": {"const": "xhigh"},
+        "native_codex_inference_used": {"const": true},
+        "native_codex_inference_calls": {"type": "integer", "minimum": 1},
+        "provider_accessed": {"const": true},
+        "network_accessed": {"const": true},
+        "prohibited_external_model_provider_calls": {"const": 0},
+        "prohibited_external_network_calls": {"const": 0},
+        "inference_receipt": {"$ref": "#/$defs/inferenceReceipt"},
+        "controller_receipt": {"$ref": "#/$defs/controllerReceipt"},
+        "inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "controller_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "generated_artifacts_redacted": {"const": true},
+        "raw_session_publishable": {"const": false},
+        "raw_session_owner_only": {"const": true},
+        "raw_session_disposition": {
+          "enum": ["not_retained", "retained_owner_only"]
+        }
+      }
+    },
+    "inferenceReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "inference_origin",
+        "generator_model",
+        "reasoning_effort",
+        "native_codex_inference_calls",
+        "provider_accessed",
+        "network_accessed",
+        "prohibited_external_model_provider_calls",
+        "prohibited_external_network_calls",
+        "tau_revision",
+        "system_prompt_sha256",
+        "tool_catalog_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_inference_receipt.v1"},
+        "inference_origin": {"const": "native_codex"},
+        "generator_model": {"const": "gpt-5.6-sol"},
+        "reasoning_effort": {"const": "xhigh"},
+        "native_codex_inference_calls": {"type": "integer", "minimum": 1},
+        "provider_accessed": {"const": true},
+        "network_accessed": {"const": true},
+        "prohibited_external_model_provider_calls": {"const": 0},
+        "prohibited_external_network_calls": {"const": 0},
+        "tau_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "system_prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "tool_catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "controllerReceipt": {
+      "oneOf": [
+        {"$ref": "#/$defs/controllerReceiptV1"},
+        {"$ref": "#/$defs/controllerReceiptV2"}
+      ]
+    },
+    "controllerReceiptV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "controller_origin",
+        "controller_model",
+        "controller_reasoning_effort",
+        "generator_inference_receipt_sha256",
+        "selection_receipt_sha256",
+        "training_started",
+        "scaled_generation_started",
+        "test_split_payload_accessed",
+        "prohibited_external_model_provider_calls",
+        "prohibited_external_network_calls",
+        "source_task_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_generation_controller_receipt.v1"},
+        "controller_origin": {"const": "native_codex"},
+        "controller_model": {"const": "gpt-5.6-sol"},
+        "controller_reasoning_effort": {"const": "xhigh"},
+        "generator_inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selection_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "training_started": {"const": false},
+        "scaled_generation_started": {"const": false},
+        "test_split_payload_accessed": {"const": false},
+        "prohibited_external_model_provider_calls": {"const": 0},
+        "prohibited_external_network_calls": {"const": 0},
+        "source_task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "controllerReceiptV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "controller_origin",
+        "controller_model",
+        "controller_reasoning_effort",
+        "generator_inference_receipt_sha256",
+        "selection_receipt_sha256",
+        "training_started",
+        "scaled_generation_started",
+        "test_split_payload_accessed",
+        "prohibited_external_model_provider_calls",
+        "prohibited_external_network_calls",
+        "source_task_sha256",
+        "coverage_profile_id",
+        "generated_family_identifier",
+        "generation_variant_ordinal"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_generation_controller_receipt.v2"},
+        "controller_origin": {"const": "native_codex"},
+        "controller_model": {"const": "gpt-5.6-sol"},
+        "controller_reasoning_effort": {"const": "xhigh"},
+        "generator_inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selection_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "training_started": {"const": false},
+        "scaled_generation_started": {"const": true},
+        "test_split_payload_accessed": {"const": false},
+        "prohibited_external_model_provider_calls": {"const": 0},
+        "prohibited_external_network_calls": {"const": 0},
+        "source_task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "coverage_profile_id": {"const": "tau3_scaled_full_rubric_v1"},
+        "generated_family_identifier": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "generation_variant_ordinal": {"type": "integer", "minimum": 0}
+      }
+    },
+    "selectionReceipt": {
+      "oneOf": [
+        {"$ref": "#/$defs/selectionReceiptV1"},
+        {"$ref": "#/$defs/selectionReceiptV2"}
+      ]
+    },
+    "selectionReceiptV1": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schema_version",
+        "algorithm",
+        "family_identifier",
+        "family_identifier_semantics",
+        "source",
+        "mapped_grounded_split",
+        "source_file_path",
+        "source_file_sha256",
+        "source_line_number",
+        "canonical_source_row_sha256",
+        "task_id_sha256",
+        "prompt_sha256",
+        "source_family_sha256",
+        "source_revision",
+        "selection_salt",
+        "selection_salt_sha256",
+        "selection_rank_sha256",
+        "task_sha256",
+        "task_initial_state_sha256",
+        "selected_family_sha256",
+        "receipt_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_selection_receipt.v1"},
+        "algorithm": {"const": "sha256_ranked_deterministic_per_domain_split"},
+        "family_identifier": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "family_identifier_semantics": {"const": "content_addressed_sha256"},
+        "source": {"enum": ["train", "development"]},
+        "mapped_grounded_split": {"enum": ["train", "validation"]},
+        "source_file_path": {"type": "string", "minLength": 1},
+        "source_file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_line_number": {"type": "integer", "minimum": 1},
+        "canonical_source_row_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_id_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_family_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "selection_salt": {"type": "string", "minLength": 1},
+        "selection_salt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selection_rank_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_initial_state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selected_family_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "selectionReceiptV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "algorithm",
+        "rank_tie_breaker_contract",
+        "family_identifier",
+        "family_identifier_semantics",
+        "source",
+        "mapped_grounded_split",
+        "source_file_path",
+        "source_file_sha256",
+        "source_line_number",
+        "canonical_source_row_sha256",
+        "task_id_sha256",
+        "prompt_sha256",
+        "source_family_sha256",
+        "source_revision",
+        "campaign_salt",
+        "campaign_salt_sha256",
+        "selection_rank_sha256",
+        "task_sha256",
+        "task_initial_state_sha256",
+        "selection_stratum_definition",
+        "selection_stratum_sha256",
+        "rank_ordinal",
+        "generation_variant_ordinal",
+        "generation_stratum_definition",
+        "generation_stratum_sha256",
+        "generation_recipe",
+        "generation_recipe_sha256",
+        "generated_family_identifier",
+        "selected_family_sha256",
+        "receipt_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_selection_receipt.v2"},
+        "algorithm": {"const": "sha256_ranked_deterministic_stratified_ordinal_v1"},
+        "rank_tie_breaker_contract": {"const": "selection_rank_sha256,task_sha256,canonical_source_row_sha256,source_line_number"},
+        "family_identifier": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "family_identifier_semantics": {"const": "content_addressed_sha256"},
+        "source": {"enum": ["train", "development"]},
+        "mapped_grounded_split": {"enum": ["train", "validation"]},
+        "source_file_path": {"type": "string", "minLength": 1},
+        "source_file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_line_number": {"type": "integer", "minimum": 1},
+        "canonical_source_row_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_id_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_family_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "campaign_salt": {"type": "string", "minLength": 1},
+        "campaign_salt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selection_rank_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "task_initial_state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selection_stratum_definition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "source",
+            "mapped_grounded_split",
+            "domain",
+            "eligible_source_family_sha256"
+          ],
+          "properties": {
+            "schema_version": {"const": "hfr.tau3_selection_stratum.v1"},
+            "source": {"enum": ["train", "development"]},
+            "mapped_grounded_split": {"enum": ["train", "validation"]},
+            "domain": {"enum": ["airline", "retail", "telecom"]},
+            "eligible_source_family_sha256": {
+              "oneOf": [
+                {"type": "null"},
+                {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              ]
+            }
+          }
+        },
+        "selection_stratum_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "rank_ordinal": {"type": "integer", "minimum": 0},
+        "generation_variant_ordinal": {"type": "integer", "minimum": 0},
+        "generation_stratum_definition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "behaviors",
+            "target_tools",
+            "target_action_kinds",
+            "action_classes",
+            "result_context_classes",
+            "sequence_length_bucket",
+            "source_provenance"
+          ],
+          "properties": {
+            "schema_version": {"const": "hfr.tau3_generation_stratum.v1"},
+            "behaviors": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "target_tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "target_action_kinds": {"type": "array", "items": {"enum": ["assistant_message", "tool_call"]}, "uniqueItems": true},
+            "action_classes": {"type": "array", "items": {"enum": ["communication", "lookup", "mutation"]}, "uniqueItems": true},
+            "result_context_classes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "sequence_length_bucket": {"enum": ["one", "two_to_four", "five_to_eight", "nine_or_more"]},
+            "source_provenance": {"enum": ["official_train_derived", "reviewed_synthetic"]}
+          }
+        },
+        "generation_stratum_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "generation_recipe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "sha256"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "generation_recipe_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "generated_family_identifier": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selected_family_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "syncEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "performed",
+        "pre_state_ref",
+        "post_state_ref",
+        "pre_state_sha256",
+        "post_state_sha256",
+        "state_diff"
+      ],
+      "properties": {
+        "performed": {"type": "boolean"},
+        "pre_state_ref": {"$ref": "#/$defs/file"},
+        "post_state_ref": {"$ref": "#/$defs/file"},
+        "pre_state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "post_state_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "state_diff": {"type": "object"}
+      }
+    },
+    "initialSyncEvidence": {
+      "allOf": [{"$ref": "#/$defs/syncEvidence"}],
+      "type": "object",
+      "required": ["sync_count", "sequence_sha256", "steps"],
+      "properties": {
+        "performed": {"const": true},
+        "sync_count": {"type": "integer", "minimum": 1},
+        "sequence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {"$ref": "#/$defs/syncEvidence"},
+              {
+                "type": "object",
+                "required": ["ordinal", "previous_step_sha256", "step_sha256"],
+                "properties": {
+                  "ordinal": {"type": "integer", "minimum": 0},
+                  "performed": {"const": true},
+                  "previous_step_sha256": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                    ]
+                  },
+                  "step_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "policyReviewReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "reviewer",
+        "reviewer_artifact_sha256",
+        "policy_sha256",
+        "canonical_target_sha256",
+        "parent_turn_ordinal",
+        "parent_assistant_decision_ordinal",
+        "allowed",
+        "reason_id",
+        "review_receipt_sha256"
+      ],
+      "properties": {
+        "schema_version": {"const": "hfr.tau3_policy_review.v1"},
+        "reviewer": {"type": "string", "minLength": 1},
+        "reviewer_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "canonical_target_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "parent_turn_ordinal": {"type": "integer", "minimum": 0},
+        "parent_assistant_decision_ordinal": {"type": "integer", "minimum": 0},
+        "allowed": {"type": "boolean"},
+        "reason_id": {"type": "string", "minLength": 1},
+        "review_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "policyReviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256", "artifact", "review_set_sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "review_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "inference_receipt",
+            "reviewer_inference_receipt_sha256",
+            "generator_inference_receipt_sha256",
+            "policy_sha256",
+            "independent_review_pass"
+          ],
+          "properties": {
+            "schema_version": {"const": "hfr.tau3_policy_reviewer_artifact.v1"},
+            "reviewer_inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "generator_inference_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "independent_review_pass": {"const": true},
+            "inference_receipt": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "schema_version",
+                "inference_origin",
+                "model",
+                "reasoning_effort",
+                "native_codex_inference_calls",
+                "provider_accessed",
+                "network_accessed",
+                "prohibited_external_model_provider_calls",
+                "prohibited_external_network_calls"
+              ],
+              "properties": {
+                "schema_version": {"const": "hfr.tau3_policy_review_inference_receipt.v1"},
+                "inference_origin": {"const": "native_codex"},
+                "model": {"const": "gpt-5.6-sol"},
+                "reasoning_effort": {"enum": ["xhigh", "ultra"]},
+                "native_codex_inference_calls": {"type": "integer", "minimum": 1},
+                "provider_accessed": {"const": true},
+                "network_accessed": {"const": true},
+                "prohibited_external_model_provider_calls": {"const": 0},
+                "prohibited_external_network_calls": {"const": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    "confirmationEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "policy_rule",
+        "policy_sha256",
+        "request_decision_ordinal",
+        "arguments_sha256",
+        "action_label",
+        "confirmed_arguments",
+        "required_details",
+        "detail_grounding"
+      ],
+      "properties": {
+        "policy_rule": {"type": "string", "minLength": 1},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "request_decision_ordinal": {"type": "integer", "minimum": 0},
+        "arguments_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "action_label": {"type": "string", "minLength": 1},
+        "confirmed_arguments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["argument_pointer", "argument_label", "value_sha256"],
+            "properties": {
+              "argument_pointer": {"type": "string", "minLength": 1},
+              "argument_label": {"type": "string", "minLength": 1},
+              "value_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        },
+        "required_details": {"type": "array"},
+        "detail_grounding": {"type": "array"}
+      }
+    },
+    "candidateRowEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["initial_state_ref", "final_state_ref", "initial_sync", "training_targets", "tool_replay", "metadata"],
+      "properties": {
+        "initial_state_ref": {"$ref": "#/$defs/file"},
+        "final_state_ref": {"$ref": "#/$defs/file"},
+        "initial_sync": {"$ref": "#/$defs/initialSyncEvidence"},
+        "metadata": {
+          "type": "object",
+          "required": ["generation_provenance", "selection_receipt", "reviewer"],
+          "properties": {
+            "generation_provenance": {"$ref": "#/$defs/generationProvenance"},
+            "selection_receipt": {"$ref": "#/$defs/selectionReceipt"},
+            "reviewer": {"$ref": "#/$defs/policyReviewer"},
+            "generated_family_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "tool_exemptions": {"type": "array", "items": {"$ref": "#/$defs/toolCoverageExemption"}}
+          }
+        },
+        "training_targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "policy_review": {
+                "oneOf": [
+                  {"type": "null"},
+                  {"$ref": "#/$defs/policyReviewReceipt"}
+                ]
+              }
+            }
+          }
+        },
+        "tool_replay": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "pre_state_ref",
+              "pre_sync_state_ref",
+              "post_state_ref",
+              "sync_evidence",
+              "argument_grounding",
+              "tool_mutates_state",
+              "confirmation"
+            ],
+            "properties": {
+              "pre_state_ref": {"$ref": "#/$defs/file"},
+              "pre_sync_state_ref": {"$ref": "#/$defs/file"},
+              "post_state_ref": {"$ref": "#/$defs/file"},
+              "sync_evidence": {"$ref": "#/$defs/syncEvidence"},
+              "argument_grounding": {"type": "array"},
+              "tool_mutates_state": {"type": "boolean"},
+              "confirmation": {
+                "oneOf": [
+                  {"type": "null"},
+                  {"$ref": "#/$defs/confirmationEvidence"}
+                ]
+              }
+            }
+          }
+        }
       }
     }
   }

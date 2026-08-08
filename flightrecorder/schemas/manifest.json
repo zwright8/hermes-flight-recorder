@@ -12,7 +12,7 @@
     {
       "artifact": "tau3_grounded_generation",
       "artifact_schema_version": "hfr.tau3_grounded_generation.v1",
-      "description": "Replayable training-side Tau-3 trajectories grounded in pinned vendored tool execution and content-addressed state transitions.",
+      "description": "Fail-closed training-side Tau-3 trajectories with official task initialization, a canonical SHA-256-bound ordered physical synchronization transcript and per-step hash chain, one runtime-derived prompt/tool sequence, full environment sync replay, chronological grounding, content-bound policy review and confirmation receipts, owner-only artifacts, scoped Codex provenance, exact permitted-source selection replay, and a backward-compatible versioned scaled full-rubric aggregate profile.",
       "filename": "tau3_grounded_generation.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/tau3_grounded_generation.v1.schema.json",
       "name": "tau3_grounded_generation"
